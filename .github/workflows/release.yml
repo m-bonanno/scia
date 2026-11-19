@@ -1,0 +1,125 @@
+name: Release
+
+# develop → vX.Y.Z-beta.N (tag and notes only). main → vX.Y.Z, with the installers attached.
+# Dispatch with `installer_tag` to build the installers of a tag that already exists.
+on:
+  push:
+    branches: [main, develop]
+  workflow_dispatch:
+    inputs:
+      installer_tag:
+        description: 'Build + attach the installers for an EXISTING tag (e.g. v1.2.0 or v1.3.0-beta.2). Blank = normal release run.'
+        required: false
+        default: ''
+
+concurrency:
+  group: ${{ github.event.inputs.installer_tag != '' && format('release-installer-{0}', github.event.inputs.installer_tag) || format('release-{0}', github.ref_name) }}
+  cancel-in-progress: false
+
+permissions: {}
+
+jobs:
+  release:
+    name: Semantic release
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event.inputs.installer_tag == ''
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          fetch-tags: true
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # No install scripts: this job reads commits, it never needs Electron's binary.
+      - run: npm ci --ignore-scripts
+      - name: semantic-release
+        env:
+          HUSKY: '0'
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx --no-install semantic-release
+      - name: Detect the tag this run created
+        id: tag
+        run: |
+          TAG="$(git tag --points-at HEAD | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$' | head -1 || true)"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Tag at HEAD: ${TAG:-none}"
+
+  # A stable only by default: Windows minutes count double on a private repository.
+  installers:
+    name: Installer (${{ matrix.name }})
+    needs: release
+    if: |
+      always() &&
+      (github.event.inputs.installer_tag != '' ||
+       (needs.release.result == 'success' && needs.release.outputs.tag != '' && !contains(needs.release.outputs.tag, '-')))
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Windows
+            os: windows-latest
+            cache: ~/AppData/Local/electron-builder/Cache
+            artefacts: 'Scia-Setup-$V.exe'
+          - name: Linux
+            os: ubuntu-latest
+            cache: ~/.cache/electron-builder
+            artefacts: 'Scia-$V.AppImage Scia-$V.deb'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
+    env:
+      TAG: ${{ github.event.inputs.installer_tag || needs.release.outputs.tag }}
+    steps:
+      - name: Refuse what is not a version tag
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-beta\.[0-9]+)?$ ]] || { echo "::error::'$TAG' is not a version tag"; exit 1; }
+          echo "V=${TAG#v}" >> "$GITHUB_ENV"
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.TAG }}
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: electron-builder version
+        id: builder
+        run: echo "version=$(node -p "require('./node_modules/electron-builder/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache electron-builder's downloads
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ matrix.cache }}
+          key: electron-builder-${{ runner.os }}-${{ steps.builder.outputs.version }}
+      - name: Build
+        run: npm run build
+      # The version is passed in, never derived from git inside the build: package.json stays 0.0.0.
+      - name: Package
+        working-directory: apps/desktop
+        run: npx electron-builder --config electron-builder.yml --publish never -c.extraMetadata.version="$V"
+      # A zero exit code from a packager is not proof.
+      - name: Verify the artefacts exist
+        working-directory: apps/desktop/release
+        run: |
+          for f in ${{ matrix.artefacts }}; do
+            test -s "$f" || { echo "::error::$f is missing or empty"; ls -la; exit 1; }
+          done
+      - name: Attach to the release
+        working-directory: apps/desktop/release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "$TAG" ${{ matrix.artefacts }} --clobber --repo "$GITHUB_REPOSITORY"

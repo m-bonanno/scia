@@ -1,0 +1,56 @@
+name: 🐛 Problema
+description: Qualcosa non funziona come dovrebbe.
+title: 'fix: '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Grazie della segnalazione. **Non incollare link privati o con token** (indirizzi di download personali, chiavi di servizi debrid): descrivi il tipo di link.
+  - type: textarea
+    id: cosa-succede
+    attributes:
+      label: Cosa succede
+      description: Descrivi il problema come lo vedi, con il messaggio esatto se c'è.
+      placeholder: 'Un download da 4 GB si ferma al 99% e resta «In coda».'
+    validations:
+      required: true
+  - type: textarea
+    id: passi
+    attributes:
+      label: Come riprodurlo
+      description: I passaggi, uno per riga.
+      placeholder: |
+        1. Incolla un link a un file grande
+        2. Metti in pausa a metà
+        3. Chiudi e riapri Scia
+    validations:
+      required: true
+  - type: textarea
+    id: atteso
+    attributes:
+      label: Cosa ti aspettavi
+    validations:
+      required: true
+  - type: dropdown
+    id: dove
+    attributes:
+      label: Dove succede
+      options:
+        - App (Windows)
+        - App (Linux)
+        - Estensione del browser
+    validations:
+      required: true
+  - type: input
+    id: versione
+    attributes:
+      label: Versione di Scia
+      description: La trovi in fondo alle Impostazioni.
+      placeholder: '1.2.0'
+  - type: textarea
+    id: log
+    attributes:
+      label: Dettagli tecnici
+      description: Le ultime righe di `logs/main.log` nella cartella dei dati di Scia, se riesci. Togli nomi utente e indirizzi privati.
+      render: text

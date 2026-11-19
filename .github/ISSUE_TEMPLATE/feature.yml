@@ -1,0 +1,38 @@
+name: ✨ Proposta
+description: Una funzione nuova o un miglioramento.
+title: 'feat: '
+labels: ['enhancement']
+body:
+  - type: textarea
+    id: bisogno
+    attributes:
+      label: Il bisogno
+      description: Cosa vuoi fare e oggi non riesci, o riesci con fatica. Il problema, prima della soluzione.
+      placeholder: 'Scarico spesso di notte: vorrei che i download partissero da soli a un certo orario.'
+    validations:
+      required: true
+  - type: textarea
+    id: proposta
+    attributes:
+      label: Come lo immagini
+      description: Se hai un'idea di come dovrebbe funzionare. Scia resta minimale, quindi una funzione nuova deve guadagnarsi il posto.
+  - type: textarea
+    id: fatto
+    attributes:
+      label: Quando è fatto
+      description: Cosa si deve poter verificare perché la richiesta sia chiusa.
+      placeholder: |
+        - [ ] …
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Motore dei download
+        - Interfaccia
+        - Estensione del browser
+        - Servizi debrid
+        - Installazione e aggiornamenti
+        - Sviluppo e CI
+    validations:
+      required: true

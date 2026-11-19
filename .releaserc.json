@@ -1,0 +1,27 @@
+{
+  "branches": [
+    "main",
+    {
+      "name": "develop",
+      "prerelease": "beta",
+      "channel": "beta"
+    }
+  ],
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "angular",
+        "releaseRules": [{ "type": "hotfix", "release": "patch" }]
+      }
+    ],
+    "@semantic-release/release-notes-generator",
+    [
+      "@semantic-release/github",
+      {
+        "successComment": false,
+        "failComment": false
+      }
+    ]
+  ]
+}

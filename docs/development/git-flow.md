@@ -17,14 +17,10 @@
 4. Green `PR Quality Gates` before merging. Locally: `npm run format:check && npm run lint && npm run typecheck && npm test`.
 5. No AI attribution anywhere.
 
-## The first commit
+## What the type of a commit decides
 
-The repository starts on `main`, where the hooks refuse a commit. Once, to create it:
+The title of a PR becomes the commit on `develop`, and semantic-release reads it to choose the next version ([`release-flow.md`](./release-flow.md)): `feat` and `fix` release, `chore`, `docs`, `ci`, `test` and `refactor` do not. A `fix` hidden under `chore` never reaches anyone.
 
-```bash
-git add -A
-HUSKY=0 git commit -m "chore: bootstrap the monorepo"
-git branch develop
-```
+## Repository settings
 
-Then make `develop` the default branch on GitHub.
+Set once, on GitHub: default branch `develop`; squash merge and merge commit allowed, rebase merge off; head branches deleted on merge. Branch protection is refused on a private Free repository: until the repository is public or on a paid plan, the hooks are the protection.
