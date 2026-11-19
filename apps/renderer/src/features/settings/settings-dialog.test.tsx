@@ -29,7 +29,19 @@ describe('SettingsDialog', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
+    delete window.scia;
   });
+
+  function aShell(chooseDownloadFolder: () => Promise<unknown>) {
+    window.scia = {
+      apiToken: 'token',
+      version: '1.0.0',
+      platform: 'win32',
+      revealDownload: vi.fn(async () => undefined),
+      openDownload: vi.fn(async () => undefined),
+      chooseDownloadFolder,
+    };
+  }
 
   it('shows the limits, the folder and how to pair the extension', async () => {
     render(<SettingsDialog open onClose={ignore} onError={ignore} />);
@@ -40,6 +52,41 @@ describe('SettingsDialog', () => {
     expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
     expect(screen.getByText('pairing-code')).toBeInTheDocument();
     expect(screen.getByText(/Paste this code into the extension’s options/)).toBeInTheDocument();
+  });
+
+  it('changes the folder through the desktop shell, naming no path itself, and shows what the engine kept', async () => {
+    const chooseDownloadFolder = vi.fn(async () => true);
+    aShell(chooseDownloadFolder);
+    vi.spyOn(api, 'settings')
+      .mockResolvedValueOnce(settings)
+      .mockResolvedValueOnce({ ...settings, downloadDirectory: '/media/films' });
+    render(<SettingsDialog open onClose={ignore} onError={ignore} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+
+    expect(chooseDownloadFolder).toHaveBeenCalledExactlyOnceWith();
+    expect(await screen.findByText('/media/films')).toBeInTheDocument();
+  });
+
+  it('says so, by the folder, when it could not be changed', async () => {
+    aShell(async () => {
+      throw new Error('Error invoking remote method: the engine refused the folder');
+    });
+    render(<SettingsDialog open onClose={ignore} onError={ignore} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Scia could not use that folder. Choose one it can write to.',
+    );
+    expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
+  });
+
+  it('does not offer to change the folder where there is no desktop shell to show the dialog', async () => {
+    render(<SettingsDialog open onClose={ignore} onError={ignore} />);
+
+    expect(await screen.findByText('/home/me/Downloads')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Change folder' })).not.toBeInTheDocument();
   });
 
   it('raises a limit one step at a time and shows what the engine kept', async () => {

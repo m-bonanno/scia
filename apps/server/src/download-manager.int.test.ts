@@ -164,6 +164,49 @@ describe('DownloadManager', () => {
     expect(await readFile(inDownloads('sample.bin'), 'utf8')).toBe('mine');
   });
 
+  it('sends what is added afterwards to a new folder, and leaves what was added before where it was going', async () => {
+    const first = await host({ fileName: 'first.bin' });
+    const second = await host({ fileName: 'second.bin' });
+    const elsewhere = join(folder.path, 'elsewhere', 'films');
+    const downloads = await open();
+
+    const [before] = downloads.add({ urls: [first.url] });
+    expect((await downloads.setDownloadDirectory(elsewhere)).downloadDirectory).toBe(elsewhere);
+    const [after] = downloads.add({ urls: [second.url] });
+    await until(
+      () =>
+        statusOf(downloads, before!.id) === DownloadStatus.Completed &&
+        statusOf(downloads, after!.id) === DownloadStatus.Completed,
+    );
+
+    expect(Buffer.compare(await readFile(inDownloads('first.bin')), body)).toBe(0);
+    expect(Buffer.compare(await readFile(join(elsewhere, 'second.bin')), body)).toBe(0);
+  });
+
+  it('keeps the chosen folder when the engine stops and starts again', async () => {
+    const elsewhere = join(folder.path, 'elsewhere');
+    const downloads = await open();
+    await downloads.setDownloadDirectory(elsewhere);
+    await downloads.close();
+
+    expect((await open()).settings().downloadDirectory).toBe(elsewhere);
+  });
+
+  it('refuses a folder it cannot use, and changes nothing', async () => {
+    const downloads = await open();
+    const before = downloads.settings().downloadDirectory;
+    await writeFile(join(folder.path, 'a-file'), 'in the way');
+
+    await expect(downloads.setDownloadDirectory('films')).rejects.toThrow(
+      'The folder has to be an absolute path.',
+    );
+    await expect(
+      downloads.setDownloadDirectory(join(folder.path, 'a-file', 'inside')),
+    ).rejects.toThrow('The folder cannot be made or written to.');
+
+    expect(downloads.settings().downloadDirectory).toBe(before);
+  });
+
   it('runs no more downloads at once than the setting allows', async () => {
     const { url } = await host({ chunkDelayMs: 3 });
     const downloads = await open();

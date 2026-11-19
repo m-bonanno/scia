@@ -5,6 +5,7 @@ import {
   addDownloadsSchema,
   API_PREFIX,
   ApiErrorCode,
+  downloadFolderSchema,
   type Health,
   type Pairing,
   settingsPatchSchema,
@@ -153,6 +154,16 @@ export function createApp(deps: AppDeps): Hono {
     return c.json({ data: manager.updateSettings(parsed.data) });
   });
 
+  // The folder is named by main, which showed the person the system's dialog: never among
+  // the settings the page patches.
+  app.put(`${API_PREFIX}/settings/download-directory`, async (c) => {
+    const parsed = downloadFolderSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(400, ApiErrorCode.InvalidRequest, 'Name the folder.');
+    }
+    return c.json({ data: await manager.setDownloadDirectory(parsed.data.directory) });
+  });
+
   app.get(`${API_PREFIX}/extension/pairing`, (c) => {
     const pairing: Pairing = { token: deps.extensionToken, port: deps.port() };
     return c.json({ data: pairing });
@@ -182,8 +193,11 @@ export function createApp(deps: AppDeps): Hono {
 
   app.onError((error, c) => {
     if (error instanceof ManagerError) {
-      return error.refusal === ManagerRefusal.NotFound
-        ? fail(404, ApiErrorCode.NotFound, error.message)
+      if (error.refusal === ManagerRefusal.NotFound) {
+        return fail(404, ApiErrorCode.NotFound, error.message);
+      }
+      return error.refusal === ManagerRefusal.Invalid
+        ? fail(400, ApiErrorCode.InvalidRequest, error.message)
         : fail(409, ApiErrorCode.Conflict, error.message);
     }
     deps.logger.error('request_failed', { path: c.req.path, error: describeFailure(error) });

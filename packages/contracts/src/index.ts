@@ -86,6 +86,11 @@ export const settingsPatchSchema = settingsSchema
   .partial();
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
 
+// The folder new downloads go to. Main names it, on a route of its own: the settings the
+// page patches have no path in them, so no type lets the page send one.
+export const downloadFolderSchema = z.object({ directory: z.string().min(1) });
+export type DownloadFolder = z.infer<typeof downloadFolderSchema>;
+
 // What the person copies into the browser extension to pair it with this app.
 export const pairingSchema = z.object({ token: z.string(), port: z.number().int() });
 export type Pairing = z.infer<typeof pairingSchema>;

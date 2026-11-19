@@ -1,9 +1,10 @@
 import { type Pairing, type Settings, SETTINGS_LIMITS, type SettingsPatch } from '@scia/contracts';
-import { Check, Copy, Minus, Plus, X } from 'lucide-react';
+import { Check, Copy, FolderPen, Minus, Plus, X } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { IconButton } from '@/components/icon-button.tsx';
 import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
+import { FOLDER_NOT_CHANGED } from '@/lib/messages.ts';
 
 interface SettingsDialogProps {
   readonly open: boolean;
@@ -15,6 +16,8 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
   const dialog = useRef<HTMLDialogElement>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pairing, setPairing] = useState<Pairing | null>(null);
+  const [folderRefused, setFolderRefused] = useState(false);
+  const shell = bridge();
 
   useEffect(() => {
     const element = dialog.current;
@@ -37,6 +40,20 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
       current = false;
     };
   }, [open, onError]);
+
+  // The page names no folder: main shows the system's dialog and tells the engine, and the
+  // page reads back what the engine kept.
+  const changeFolder = () => {
+    setFolderRefused(false);
+    shell?.chooseDownloadFolder().then(
+      () => {
+        api.settings().then(setSettings).catch(onError);
+      },
+      () => {
+        setFolderRefused(true);
+      },
+    );
+  };
 
   const change = (patch: SettingsPatch) => {
     api.updateSettings(patch).then(setSettings).catch(onError);
@@ -78,14 +95,26 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
                 change({ connectionsPerDownload });
               }}
             />
-            <div>
-              <p className="text-sm font-medium">Download folder</p>
-              <p
-                className="truncate text-sm text-muted-foreground"
-                title={settings.downloadDirectory}
-              >
-                {settings.downloadDirectory}
-              </p>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Download folder</p>
+                <p
+                  className="truncate text-sm text-muted-foreground"
+                  title={settings.downloadDirectory}
+                >
+                  {settings.downloadDirectory}
+                </p>
+                {folderRefused && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {FOLDER_NOT_CHANGED}
+                  </p>
+                )}
+              </div>
+              {shell !== undefined && (
+                <IconButton label="Change folder" className="shrink-0" onClick={changeFolder}>
+                  <FolderPen size={16} aria-hidden="true" />
+                </IconButton>
+              )}
             </div>
           </section>
         )}

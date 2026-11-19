@@ -6,7 +6,7 @@ Captures of the real app: its page, read over the DevTools protocol while the ap
 | ---------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
 | [`downloads-in-progress.png`](./downloads-in-progress.png)             | The list with data, dark theme: a queued, three running and one finished file |
 | [`downloads-in-progress-light.png`](./downloads-in-progress-light.png) | The same list, light theme                                                    |
-| [`settings.png`](./settings.png)                                       | The Settings dialog, dark theme                                               |
+| [`settings.png`](./settings.png)                                       | The Settings dialog, dark theme, with the button that changes the folder      |
 | [`run-a-program.png`](./run-a-program.png)                             | A finished program whose "Open" was pressed once: the button asks, as "Run"   |
 | [`run-a-program-light.png`](./run-a-program-light.png)                 | The same, light theme                                                         |
 

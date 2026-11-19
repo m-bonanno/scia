@@ -30,6 +30,7 @@ describe('App', () => {
       platform: 'win32',
       revealDownload: vi.fn(async () => undefined),
       openDownload,
+      chooseDownloadFolder: vi.fn(async () => false),
     };
     render(<App />);
 

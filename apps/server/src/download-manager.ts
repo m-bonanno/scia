@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, rename, rm } from 'node:fs/promises';
-import { join } from 'node:path';
+import { access, constants, mkdir, rename, rm } from 'node:fs/promises';
+import { isAbsolute, join } from 'node:path';
 import { type Download, type Settings, type SettingsPatch, type Snapshot } from '@scia/contracts';
 import {
   canPause,
@@ -35,7 +35,11 @@ const DEFAULT_SETTINGS = { maxConcurrentDownloads: 3, connectionsPerDownload: 8 
 const MIN_SEGMENT_BYTES = 1024 * 1024;
 const CHECKPOINT_MS = 5000;
 
-export const ManagerRefusal = { NotFound: 'NOT_FOUND', Conflict: 'CONFLICT' } as const;
+export const ManagerRefusal = {
+  NotFound: 'NOT_FOUND',
+  Conflict: 'CONFLICT',
+  Invalid: 'INVALID_REQUEST',
+} as const;
 export type ManagerRefusal = (typeof ManagerRefusal)[keyof typeof ManagerRefusal];
 
 export class ManagerError extends Error {
@@ -232,6 +236,24 @@ export class DownloadManager {
     };
     this.#changed();
     this.#schedule();
+    return this.#settings;
+  }
+
+  // Where what is added from now on goes. A download already in the list keeps the folder it
+  // was added with. The folder is made if it is not there; one that cannot be made or written
+  // to is refused, and nothing changes.
+  async setDownloadDirectory(directory: string): Promise<Settings> {
+    if (!isAbsolute(directory)) {
+      throw new ManagerError(ManagerRefusal.Invalid, 'The folder has to be an absolute path.');
+    }
+    try {
+      await mkdir(directory, { recursive: true });
+      await access(directory, constants.W_OK);
+    } catch {
+      throw new ManagerError(ManagerRefusal.Invalid, 'The folder cannot be made or written to.');
+    }
+    this.#settings = { ...this.#settings, downloadDirectory: directory };
+    this.#changed();
     return this.#settings;
   }
 
