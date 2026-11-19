@@ -33,7 +33,7 @@ To get the installers of a beta, or to build again those of a stable: **Actions 
 2. Open a PR `develop` → `main`, titled `release: vX.Y.Z` (the number is a forecast; semantic-release decides). Body: the user-facing changes. The team reviews it like any other ([`review-flow.md`](./review-flow.md)); it is merged only on the owner's word.
 3. Merge it with a **merge commit**, never a squash: `main` must contain the very commits semantic-release reads, or the next version is computed wrong.
 4. Wait for the workflow, then **verify the artefact, not the build**: download the installer from the release, install it, launch it with `--user-data-dir=<scratch>`, download a file, read `logs/main.log`.
-5. Merge `main` back into `develop` (a PR, merge commit), so the two branches share the release's merge commit and the next beta is counted from the stable.
+5. Merge `main` back into `develop` (a PR whose head is `main`, merge commit), so the two branches share the release's merge commit and the next beta is counted from the stable. Nobody reviews this PR, and the orchestrating session merges it when CI is green: the "Merging" table of [`review-flow.md`](./review-flow.md) says why. **Before merging it, read the repository's setting** — `gh api repos/<owner>/scia --jq .delete_branch_on_merge` must answer `false` — and never ask for the head to be deleted: the head is `main` ([`git-flow.md`](./git-flow.md), "Repository settings").
 
 ## Rules
 
@@ -46,6 +46,6 @@ To get the installers of a beta, or to build again those of a stable: **Actions 
 ## Not there yet
 
 - **Auto-update.** The app does not look for new versions (roadmap M1). When it does, the installers must be readable without a token: a public releases repository, or the repository made public.
-- **A guard on direct pushes.** GitHub refuses branch protection on a private Free repository, so `main` and `develop` are protected by the husky hooks only. A workflow step that refuses a pushed commit that is not the merge of a green PR is the next line of defence.
+- **A guard on direct pushes.** GitHub refuses branch protection on a private Free repository, so `main` and `develop` are protected by the husky hooks only. The repository becomes public at the first stable release, and the two branches are protected then ([`git-flow.md`](./git-flow.md), "Repository settings"): that PR removes this entry.
 - **Signed installers.** Windows shows SmartScreen's warning for an unsigned `.exe`.
 - **The Linux packages have never been built.** The first stable release is their first run: expect to fix the job.

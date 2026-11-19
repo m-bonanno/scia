@@ -14,6 +14,17 @@ Run it with `/team-review <PR number>`.
 | Product designer  | the PR touches anything a person sees or reads: `apps/renderer/src`, `apps/extension/static`, a string of the interface, `docs/design/`               | `.claude/agents/product-designer.md`  |
 | Product manager   | the PR releases something (`feat`, `fix`, `perf`, `hotfix`, any breaking change, a release into `main`), or it touches `docs/product/` or `README.md` | `.claude/agents/product-manager.md`   |
 
+### A small PR is the tech lead's alone
+
+The owner's decision (#18): the review is complete where it is needed, not everywhere. A PR is **small** when it is one of:
+
+- **documentation only** — every file it changes is Markdown, or is under `docs/` or `.claude/`;
+- **a few lines** — at most 20 changed lines outside specs (`git diff --shortstat origin/develop...HEAD -- . ':!*.test.ts' ':!*.test.tsx'`, insertions plus deletions).
+
+A small PR is reviewed by the tech lead alone, whatever the table above says for its files. The tech lead calls a role in, by name and for a stated reason, when the change needs that eye: a string a person reads → the product designer; a principle, the vision or the state of the roadmap → the product manager; a change of behaviour in an area → its engineer. A role called in reviews as in any other PR, and its verdict counts.
+
+A release into `main` is never small.
+
 ## The gates
 
 One list, for the author before opening the PR, for the tech lead during the review, for CI on GitHub:
@@ -44,7 +55,7 @@ Everything else is non-blocking: a suggestion, a question, something to track. B
 ## Rules
 
 - **Independent.** A reviewer gets its role file, the PR and the issue it closes, never the author's reasoning: an agent handed a conclusion returns it confirmed. What the owner asked for belongs in the issue, where every reviewer reads it.
-- **Read-only.** Reviewers do not edit, commit, push or comment. Each writes its review to a file outside the repository and answers with its verdict; the orchestrating session posts the files as they are and applies the fixes.
+- **Read-only.** Reviewers do not edit, commit, push or comment. Each writes its review to a file outside the repository, in a folder of its own that the other roles are told not to read, and answers with its verdict; the orchestrating session posts the files as they are and applies the fixes.
 - **The team verdict is deterministic**: approved only if no role has a blocking finding, and it holds for one head commit.
 - **Changes requested** → the fix lands on the same branch as new commits, never a force-push. Then: the roles are decided again on the whole diff (a fix can reach a new area); every role that blocked reviews again, resumed so that it checks its own findings; a role that had approved reviews again if the fix changes its area; a role the fix newly involves reviews for the first time; and the tech lead runs the gates again on the new head. Every round is posted.
 - **Nothing unreviewed is merged.** A commit pushed after the approval — a non-blocking finding taken at the last moment — is reviewed before the merge by the tech lead and by every role whose area it changes, and the verdict is posted again for the new head.
@@ -67,6 +78,8 @@ Posted at the end of every round, as its last comment — before the fixes of a 
 
 Follow-ups: #N
 ```
+
+The last line is `Follow-ups: none` when an approving verdict leaves nothing to track, and is left out of a verdict that asks for changes.
 
 ## Merging
 
