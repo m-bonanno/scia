@@ -1,0 +1,23 @@
+#!/usr/bin/env sh
+# husky 9 does not wrap user hooks: HUSKY=0 works only because we check it.
+[ "${HUSKY:-1}" = "0" ] && exit 0
+set -e
+
+# stdin: <local ref> <local sha> <remote ref> <remote sha>, one line per ref.
+. "$(dirname -- "$0")/protected-branch-guard.sh"
+
+while read -r _local_ref _local_sha remote_ref _remote_sha; do
+  case "$remote_ref" in
+    refs/heads/*) branch="${remote_ref#refs/heads/}" ;;
+    *) continue ;;  # tags and anything else are not our business
+  esac
+
+  if is_protected_branch "$branch"; then
+    printf '\n  ⛔ Refusing to push to "%s".\n' "$branch"
+    printf '  It lands through a pull request, never a direct push.\n'
+    protected_branch_help "$branch"
+    exit 1
+  fi
+done
+
+exit 0

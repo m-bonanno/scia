@@ -1,0 +1,26 @@
+{
+  "name": "@scia/desktop",
+  "productName": "Scia",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scia desktop shell — Electron main/preload supervising the local download engine",
+  "author": "Scia",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "build": "node build.mjs",
+    "start": "node build.mjs && electron . --user-data-dir=.dev-profile --port=47822",
+    "dist": "electron-builder --config electron-builder.yml --publish never",
+    "dist:dir": "electron-builder --config electron-builder.yml --dir --publish never",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@scia/contracts": "*",
+    "@scia/core": "*",
+    "@scia/server": "*",
+    "electron": "44.10.1",
+    "electron-builder": "^26.18.0",
+    "electron-log": "^5.4.4",
+    "zod": "^4.6.7"
+  }
+}

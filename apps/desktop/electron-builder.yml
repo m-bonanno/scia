@@ -1,0 +1,54 @@
+# CI injects the version (-c.extraMetadata.version); package.json stays 0.0.0.
+appId: app.scia.desktop
+productName: Scia
+copyright: Copyright © 2026 Scia
+
+directories:
+  output: release
+  buildResources: build
+
+# main and preload are self-contained bundles: no node_modules in the asar.
+files:
+  - dist/**/*
+  - '!dist/**/*.map'
+  - package.json
+npmRebuild: false
+nodeGypRebuild: false
+
+# The installed exe never runs as plain Node (the engine is a utilityProcess), ignores
+# NODE_OPTIONS and loads its code from app.asar only.
+electronFuses:
+  runAsNode: false
+  enableNodeOptionsEnvironmentVariable: false
+  onlyLoadAppFromAsar: true
+
+# Mirrored by src/engine/runtime-layout.ts — change both together.
+extraResources:
+  - from: ../server/dist/server.cjs
+    to: server/server.cjs
+  - from: ../renderer/dist
+    to: renderer
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: true
+  perMachine: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: Scia
+  # The history and the unfinished downloads must survive an uninstall.
+  deleteAppDataOnUninstall: false
+
+linux:
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+  category: Network
+  artifactName: ${productName}-${version}.${ext}

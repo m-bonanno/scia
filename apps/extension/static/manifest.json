@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Scia",
+  "version": "0.0.0",
+  "description": "Manda a Scia i link e i media delle pagine.",
+  "minimum_chrome_version": "120",
+  "permissions": ["contextMenus", "downloads", "storage", "webRequest"],
+  "host_permissions": ["<all_urls>"],
+  "background": { "service_worker": "background.js", "type": "module" },
+  "action": { "default_popup": "popup.html", "default_title": "Scia" },
+  "options_ui": { "page": "options.html", "open_in_tab": true }
+}

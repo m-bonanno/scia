@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+out/
+release/
+*.tsbuildinfo
+
+# Test output
+coverage/
+test-results/
+playwright-report/
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Claude Code local state
+.claude/settings.local.json
+.claude/worktrees/
+
+# PR bodies are per-branch scratch files
+.claude/pr-bodies/*
+!.claude/pr-bodies/README.md
+
+# Local dev data of the engine (apps/server npm run dev)
+.dev/
+
+# Desktop dev profile (npm start in apps/desktop)
+.dev-profile/
+
+# Partial downloads
+*.scia

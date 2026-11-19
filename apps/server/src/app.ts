@@ -1,0 +1,194 @@
+import { createHash, timingSafeEqual } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { extname, join, normalize, sep } from 'node:path';
+import {
+  addDownloadsSchema,
+  API_PREFIX,
+  ApiErrorCode,
+  type Health,
+  type Pairing,
+  settingsPatchSchema,
+  SNAPSHOT_EVENT,
+} from '@scia/contracts';
+import { Hono } from 'hono';
+import { streamSSE } from 'hono/streaming';
+import { type DownloadManager, ManagerError, ManagerRefusal } from './download-manager.ts';
+import { describeFailure, type Logger } from './logger.ts';
+
+// How often a page hears of a running download: four times a second reads as continuous.
+const SNAPSHOT_INTERVAL_MS = 250;
+
+export interface AppDeps {
+  readonly manager: DownloadManager;
+  // The desktop app's own token: every route.
+  readonly apiToken: string;
+  // The browser extension's token: it may add downloads and nothing else (docs/adr/0002).
+  readonly extensionToken: string;
+  readonly version: string;
+  // The port the engine listens on, known only once it does.
+  readonly port: () => number;
+  readonly staticDir: string | undefined;
+  readonly logger: Logger;
+}
+
+const Caller = { App: 'app', Extension: 'extension' } as const;
+type Caller = (typeof Caller)[keyof typeof Caller];
+
+// Everything the browser extension's token opens: adding downloads, and asking whether the
+// token is still the one. It reads nothing and changes nothing else.
+const EXTENSION_ROUTES: ReadonlySet<string> = new Set([
+  `POST ${API_PREFIX}/downloads`,
+  `GET ${API_PREFIX}/extension/check`,
+]);
+
+const MIME: Readonly<Record<string, string>> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json',
+  '.map': 'application/json',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+};
+
+function sameToken(given: string, expected: string): boolean {
+  const digest = (value: string) => createHash('sha256').update(value).digest();
+  return timingSafeEqual(digest(given), digest(expected));
+}
+
+function fail(status: number, code: ApiErrorCode, message: string): Response {
+  return Response.json({ error: { code, message } }, { status });
+}
+
+export function createApp(deps: AppDeps): Hono {
+  const { manager } = deps;
+  const app = new Hono();
+
+  // A page of any site can make the browser call 127.0.0.1 under a host name of its own (DNS
+  // rebinding): only the engine's real address is answered.
+  app.use('*', async (c, next) => {
+    const host = new URL(c.req.url).host;
+    const port = String(deps.port());
+    if (host !== `127.0.0.1:${port}` && host !== `localhost:${port}`) {
+      return fail(403, ApiErrorCode.Forbidden, 'Unknown host.');
+    }
+    await next();
+    return undefined;
+  });
+
+  app.get(`${API_PREFIX}/health`, (c) => {
+    const health: Health = { name: 'scia', version: deps.version };
+    return c.json({ data: health });
+  });
+
+  app.use(`${API_PREFIX}/*`, async (c, next) => {
+    const token = /^Bearer (.+)$/.exec(c.req.header('authorization') ?? '')?.[1];
+    if (token === undefined) {
+      return fail(401, ApiErrorCode.Unauthorized, 'A token is required.');
+    }
+    const caller = sameToken(token, deps.apiToken)
+      ? Caller.App
+      : sameToken(token, deps.extensionToken)
+        ? Caller.Extension
+        : undefined;
+    if (caller === undefined) {
+      return fail(401, ApiErrorCode.Unauthorized, 'Unknown token.');
+    }
+    const route = `${c.req.method} ${c.req.path}`;
+    if (caller === Caller.Extension && !EXTENSION_ROUTES.has(route)) {
+      return fail(403, ApiErrorCode.Forbidden, 'The extension only adds downloads.');
+    }
+    await next();
+    return undefined;
+  });
+
+  app.get(`${API_PREFIX}/downloads`, (c) => c.json({ data: manager.snapshot().downloads }));
+
+  app.post(`${API_PREFIX}/downloads`, async (c) => {
+    const parsed = addDownloadsSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(400, ApiErrorCode.InvalidRequest, 'Give one or more http(s) addresses.');
+    }
+    return c.json({ data: manager.add(parsed.data) }, 201);
+  });
+
+  app.get(`${API_PREFIX}/downloads/:id`, (c) => c.json({ data: manager.find(c.req.param('id')) }));
+
+  app.post(`${API_PREFIX}/downloads/:id/pause`, async (c) =>
+    c.json({ data: await manager.pause(c.req.param('id')) }),
+  );
+
+  app.post(`${API_PREFIX}/downloads/:id/resume`, (c) =>
+    c.json({ data: manager.resume(c.req.param('id')) }),
+  );
+
+  app.delete(`${API_PREFIX}/downloads/:id`, async (c) => {
+    await manager.remove(c.req.param('id'), c.req.query('deleteFile') === 'true');
+    return c.body(null, 204);
+  });
+
+  app.get(`${API_PREFIX}/events`, (c) =>
+    streamSSE(c, async (stream) => {
+      let version = -1;
+      while (!stream.aborted && !stream.closed) {
+        version = await manager.nextChange(version);
+        await stream.writeSSE({
+          event: SNAPSHOT_EVENT,
+          data: JSON.stringify(manager.snapshot()),
+        });
+        await stream.sleep(SNAPSHOT_INTERVAL_MS);
+      }
+    }),
+  );
+
+  app.get(`${API_PREFIX}/settings`, (c) => c.json({ data: manager.settings() }));
+
+  app.patch(`${API_PREFIX}/settings`, async (c) => {
+    const parsed = settingsPatchSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(400, ApiErrorCode.InvalidRequest, 'Not a setting, or out of its range.');
+    }
+    return c.json({ data: manager.updateSettings(parsed.data) });
+  });
+
+  app.get(`${API_PREFIX}/extension/pairing`, (c) => {
+    const pairing: Pairing = { token: deps.extensionToken, port: deps.port() };
+    return c.json({ data: pairing });
+  });
+
+  app.get(`${API_PREFIX}/extension/check`, (c) => c.body(null, 204));
+
+  app.all(`${API_PREFIX}/*`, () => fail(404, ApiErrorCode.NotFound, 'No such route.'));
+
+  // The renderer: its files by name, its page for every other address.
+  app.get('*', async (c) => {
+    const { staticDir } = deps;
+    if (staticDir === undefined) return c.notFound();
+    const requested = join(staticDir, normalize(decodeURIComponent(c.req.path)));
+    const isAsset = requested.startsWith(`${staticDir}${sep}`) && extname(requested) !== '';
+    const file = isAsset ? requested : join(staticDir, 'index.html');
+    try {
+      const body = await readFile(file);
+      return c.body(new Uint8Array(body), 200, {
+        'content-type': MIME[extname(file)] ?? 'application/octet-stream',
+        'cache-control': 'no-cache',
+      });
+    } catch {
+      return c.notFound();
+    }
+  });
+
+  app.onError((error, c) => {
+    if (error instanceof ManagerError) {
+      return error.refusal === ManagerRefusal.NotFound
+        ? fail(404, ApiErrorCode.NotFound, error.message)
+        : fail(409, ApiErrorCode.Conflict, error.message);
+    }
+    deps.logger.error('request_failed', { path: c.req.path, error: describeFailure(error) });
+    return fail(500, ApiErrorCode.InternalError, 'The engine failed on this request.');
+  });
+
+  return app;
+}

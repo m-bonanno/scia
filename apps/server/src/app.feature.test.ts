@@ -1,0 +1,180 @@
+import { join } from 'node:path';
+import { API_PREFIX, ApiErrorCode, DEFAULT_API_PORT } from '@scia/contracts';
+import { DownloadFailure } from '@scia/core';
+import type { Hono } from 'hono';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createApp } from './app.ts';
+import { DownloadManager } from './download-manager.ts';
+import { type RemoteSource, RemoteError } from './remote-source.ts';
+import { JsonStateStore } from './state-store.ts';
+import { scratchFolder, silentLogger } from './testing/scratch.ts';
+
+const APP_TOKEN = 'app-token-0000000000000000';
+const EXTENSION_TOKEN = 'extension-token-00000000000';
+const ORIGIN = `http://127.0.0.1:${String(DEFAULT_API_PORT)}`;
+
+// No network in this layer: every host stays silent until the download is stopped, so a download
+// that was added is still running when the next request arrives.
+const silent: RemoteSource = {
+  probe: (_url, _headers, signal) =>
+    new Promise((_resolve, reject) => {
+      signal.addEventListener('abort', () => {
+        reject(new RemoteError(DownloadFailure.Network, false, 'stopped'));
+      });
+    }),
+  open: () => Promise.reject(new RemoteError(DownloadFailure.Network, false, 'offline')),
+};
+
+describe('the engine API', () => {
+  let folder: Awaited<ReturnType<typeof scratchFolder>>;
+  let manager: DownloadManager;
+  let app: Hono;
+
+  beforeEach(async () => {
+    folder = await scratchFolder();
+    manager = await DownloadManager.open({
+      source: silent,
+      store: new JsonStateStore(join(folder.path, 'state.json')),
+      defaultDirectory: join(folder.path, 'downloads'),
+      logger: silentLogger,
+    });
+    app = createApp({
+      manager,
+      apiToken: APP_TOKEN,
+      extensionToken: EXTENSION_TOKEN,
+      version: '1.2.3',
+      port: () => DEFAULT_API_PORT,
+      staticDir: undefined,
+      logger: silentLogger,
+    });
+  });
+  afterEach(async () => {
+    await manager.close();
+    await folder.remove();
+  });
+
+  function call(path: string, init: RequestInit & { token?: string; origin?: string } = {}) {
+    const { token, origin, ...request } = init;
+    return app.request(`${origin ?? ORIGIN}${API_PREFIX}${path}`, {
+      ...request,
+      headers: {
+        'content-type': 'application/json',
+        ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+      },
+    });
+  }
+
+  async function codeOf(response: Response): Promise<string> {
+    return ((await response.json()) as { error: { code: string } }).error.code;
+  }
+
+  it('says it is Scia without a token, so the extension can look for it', async () => {
+    const response = await call('/health');
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ data: { name: 'scia', version: '1.2.3' } });
+  });
+
+  it('answers nothing else without a token, or with a wrong one', async () => {
+    expect((await call('/downloads')).status).toBe(401);
+    const wrong = await call('/downloads', { token: 'not-the-token' });
+    expect(wrong.status).toBe(401);
+    expect(await codeOf(wrong)).toBe(ApiErrorCode.Unauthorized);
+  });
+
+  it('refuses a request that reached it under another host name', async () => {
+    const response = await call('/health', { origin: 'http://evil.example:47821' });
+
+    expect(response.status).toBe(403);
+  });
+
+  it('adds downloads for the app and lists them', async () => {
+    const added = await call('/downloads', {
+      method: 'POST',
+      token: APP_TOKEN,
+      body: JSON.stringify({ urls: ['https://example.com/a.zip', 'https://example.com/b.zip'] }),
+    });
+
+    expect(added.status).toBe(201);
+    const listed = (await (await call('/downloads', { token: APP_TOKEN })).json()) as {
+      data: { fileName: string }[];
+    };
+    expect(listed.data.map((download) => download.fileName)).toEqual(['a.zip', 'b.zip']);
+  });
+
+  it('lets the extension add downloads and nothing else', async () => {
+    const added = await call('/downloads', {
+      method: 'POST',
+      token: EXTENSION_TOKEN,
+      body: JSON.stringify({
+        urls: ['https://example.com/film.mkv'],
+        referrer: 'https://example.com/page',
+      }),
+    });
+    expect(added.status).toBe(201);
+    expect((await call('/extension/check', { token: EXTENSION_TOKEN })).status).toBe(204);
+    expect((await call('/extension/check', { token: 'an-old-code' })).status).toBe(401);
+
+    for (const path of ['/downloads', '/settings', '/extension/pairing', '/events']) {
+      const response = await call(path, { token: EXTENSION_TOKEN });
+      expect(response.status).toBe(403);
+    }
+  });
+
+  it('refuses what is not an http address', async () => {
+    for (const urls of [[], ['file:///etc/passwd'], ['javascript:alert(1)'], 'https://a.test']) {
+      const response = await call('/downloads', {
+        method: 'POST',
+        token: APP_TOKEN,
+        body: JSON.stringify({ urls }),
+      });
+      expect(response.status).toBe(400);
+    }
+  });
+
+  it('answers 404 for a download it does not have and 409 for a move it cannot make', async () => {
+    expect((await call('/downloads/nope/pause', { method: 'POST', token: APP_TOKEN })).status).toBe(
+      404,
+    );
+    const added = (await (
+      await call('/downloads', {
+        method: 'POST',
+        token: APP_TOKEN,
+        body: JSON.stringify({ urls: ['https://example.com/a.zip'] }),
+      })
+    ).json()) as { data: { id: string }[] };
+    const id = added.data[0]!.id;
+
+    const paused = await call(`/downloads/${id}/pause`, { method: 'POST', token: APP_TOKEN });
+    expect(paused.status).toBe(200);
+    const pausedTwice = await call(`/downloads/${id}/pause`, { method: 'POST', token: APP_TOKEN });
+    expect(pausedTwice.status).toBe(409);
+    expect(await codeOf(pausedTwice)).toBe(ApiErrorCode.Conflict);
+  });
+
+  it('gives the pairing of the extension to the app only', async () => {
+    const response = await call('/extension/pairing', { token: APP_TOKEN });
+
+    expect(await response.json()).toEqual({
+      data: { token: EXTENSION_TOKEN, port: DEFAULT_API_PORT },
+    });
+  });
+
+  it('keeps the settings inside their limits', async () => {
+    const tooMany = await call('/settings', {
+      method: 'PATCH',
+      token: APP_TOKEN,
+      body: JSON.stringify({ connectionsPerDownload: 64 }),
+    });
+    expect(tooMany.status).toBe(400);
+
+    const changed = await call('/settings', {
+      method: 'PATCH',
+      token: APP_TOKEN,
+      body: JSON.stringify({ connectionsPerDownload: 4 }),
+    });
+    expect(
+      ((await changed.json()) as { data: { connectionsPerDownload: number } }).data,
+    ).toMatchObject({ connectionsPerDownload: 4 });
+  });
+});

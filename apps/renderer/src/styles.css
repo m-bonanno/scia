@@ -1,0 +1,127 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/geist';
+
+@theme inline {
+  --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+  --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-hover: var(--surface-hover);
+  --color-tonal: var(--tonal);
+  --color-foreground: var(--foreground);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-overlay: var(--overlay);
+}
+
+@theme {
+  --animate-row-in: row-in 180ms ease-out;
+  --animate-indeterminate: indeterminate 1.6s ease-in-out infinite;
+
+  @keyframes row-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @keyframes indeterminate {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(400%);
+    }
+  }
+}
+
+/* Two themes, one set of tokens: dark here, light where the system asks for it. No `dark:`
+   variant anywhere: a colour that changes with the theme is a token. --background, --foreground
+   and --muted-foreground are mirrored by WINDOW_COLOURS in @scia/contracts/theme, which main
+   paints the window with before the page loads (apps/desktop/src/window-colours.test.ts). */
+:root {
+  color-scheme: dark;
+  --background: #0d0f12;
+  --surface: #15181d;
+  --surface-hover: #1a1e25;
+  --tonal: #242a33;
+  --foreground: #eef0f3;
+  --muted-foreground: #9198a3;
+  --accent: #4fe3c1;
+  --accent-foreground: #06231c;
+  --destructive: #ff8585;
+  --destructive-foreground: #2b0707;
+  --border: #2c333d;
+  --ring: #4fe3c1;
+  --overlay: rgb(0 0 0 / 60%);
+}
+
+@media (prefers-color-scheme: light) {
+  :root {
+    color-scheme: light;
+    --background: #f7f8fa;
+    --surface: #ffffff;
+    --surface-hover: #f1f3f6;
+    --tonal: #e4e8ee;
+    --foreground: #14171c;
+    --muted-foreground: #5b6370;
+    --accent: #0a7f69;
+    --accent-foreground: #ffffff;
+    --destructive: #c62f2f;
+    --destructive-foreground: #ffffff;
+    --border: #d3d9e1;
+    --ring: #0a7f69;
+    --overlay: rgb(20 23 28 / 40%);
+  }
+}
+
+/* The window has no system title bar: the page draws its own, as wide as the window's own
+   buttons leave it (env(titlebar-area-width)), and the whole of it moves the window. */
+@utility title-bar {
+  width: env(titlebar-area-width, 100%);
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+@utility no-drag {
+  -webkit-app-region: no-drag;
+}
+
+@layer base {
+  html {
+    @apply font-sans;
+  }
+  body {
+    @apply bg-background text-foreground antialiased;
+    margin: 0;
+    overflow: hidden;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--tonal) transparent;
+  }
+  button:not(:disabled) {
+    cursor: pointer;
+  }
+  ::selection {
+    background: color-mix(in oklab, var(--accent) 35%, transparent);
+  }
+  /* !important: utilities sit in a later layer and would keep their own durations. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

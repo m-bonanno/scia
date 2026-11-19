@@ -1,0 +1,16 @@
+{
+  "name": "@scia/extension",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Scia browser extension — sends links and detected media to the desktop app",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "@scia/contracts": "*",
+    "@scia/core": "*",
+    "@types/chrome": "^0.3.7"
+  }
+}

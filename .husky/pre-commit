@@ -1,0 +1,25 @@
+#!/usr/bin/env sh
+# `HUSKY=0` is the kill switch for automation (husky 9 does not wrap user
+# hooks, so the variable only works because every hook checks it).
+[ "${HUSKY:-1}" = "0" ] && exit 0
+set -e
+
+# Refuse to commit on a protected branch. Pure shell on purpose: it must hold
+# even on a checkout where `npm install` has not run yet.
+. "$(dirname -- "$0")/protected-branch-guard.sh"
+
+current_branch="$(git rev-parse --abbrev-ref HEAD)"
+
+if is_protected_branch "$current_branch"; then
+  printf '\n  ⛔ Refusing to commit directly on "%s".\n' "$current_branch"
+  protected_branch_help "$current_branch"
+  exit 1
+fi
+
+# Bare `npx lint-staged` would download it when node_modules is missing; warn
+# instead, so a fresh clone can still commit.
+if [ -x node_modules/.bin/lint-staged ]; then
+  npx --no-install lint-staged
+else
+  printf '  ⚠ lint-staged not installed — run `npm install` at the repo root to enable it.\n'
+fi

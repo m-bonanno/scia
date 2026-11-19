@@ -1,0 +1,56 @@
+import type { Download } from '@scia/contracts';
+import { DownloadStatus } from '@scia/core';
+import type { ReactNode } from 'react';
+import { cn } from '@/lib/cn.ts';
+
+const FILL: Readonly<Record<DownloadStatus, string>> = {
+  downloading: 'bg-accent',
+  queued: 'bg-muted-foreground',
+  paused: 'bg-muted-foreground',
+  failed: 'bg-destructive',
+  completed: 'bg-accent',
+};
+
+// The file as a line, each connection filling its own stretch of it where that stretch is: the
+// picture of what «eight connections» means.
+export function SegmentBar({ download }: { readonly download: Download }): ReactNode {
+  const total = download.totalBytes;
+  const fill = FILL[download.status];
+
+  if (total === null || total === 0) {
+    // A size nobody announced: movement without a measure.
+    return (
+      <div
+        className="h-1 overflow-hidden rounded-full bg-tonal"
+        role="progressbar"
+        aria-label="Avanzamento"
+      >
+        {download.status === DownloadStatus.Downloading && (
+          <div className={cn('h-full w-1/4 animate-indeterminate rounded-full', fill)} />
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="relative h-1 overflow-hidden rounded-full bg-tonal"
+      role="progressbar"
+      aria-label="Avanzamento"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.floor((download.downloadedBytes / total) * 100)}
+    >
+      {download.segments.map((segment) => (
+        <div
+          key={segment.start}
+          className={cn('absolute inset-y-0 transition-[width] duration-300 ease-linear', fill)}
+          style={{
+            left: `${String((segment.start / total) * 100)}%`,
+            width: `${String((segment.downloaded / total) * 100)}%`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Scia — Opzioni</title>
+    <link rel="stylesheet" href="ui.css" />
+  </head>
+  <body>
+    <form id="form" class="options">
+      <div>
+        <h1>Collega l’estensione a Scia</h1>
+        <p class="muted">
+          Apri Scia, vai in Impostazioni, copia il codice di «Estensione del browser» e incollalo
+          qui.
+        </p>
+      </div>
+      <label>
+        Codice di collegamento
+        <input id="token" type="text" autocomplete="off" spellcheck="false" />
+      </label>
+      <label>
+        Porta
+        <input id="port" type="number" min="1" max="65535" />
+        <span class="muted" style="font-weight: 400"
+          >Lasciala com’è, se non l’hai cambiata in Scia.</span
+        >
+      </label>
+      <label class="check">
+        <input id="intercept" type="checkbox" />
+        <span>
+          Passa a Scia i download del browser
+          <span class="muted" style="display: block">
+            I file dei siti che richiedono l’accesso possono non partire: Scia non riceve la tua
+            sessione.
+          </span>
+        </span>
+      </label>
+      <div class="actions">
+        <button type="submit">Salva e verifica</button>
+        <p id="result" role="status"></p>
+      </div>
+    </form>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

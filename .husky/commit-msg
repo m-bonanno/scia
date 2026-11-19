@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+[ "${HUSKY:-1}" = "0" ] && exit 0
+set -e
+
+if [ -x node_modules/.bin/commitlint ]; then
+  npx --no-install commitlint --edit "$1"
+else
+  printf '  ⚠ commitlint not installed — run `npm install` at the repo root to enable it.\n'
+fi
