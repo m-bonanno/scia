@@ -1,5 +1,5 @@
 import { Menu, nativeImage, Tray } from 'electron';
-import { TRAY_MENU, TrayCommand } from './engine/tray-presentation.ts';
+import { TRAY_MENU, TrayCommand, trayTooltip } from './engine/tray-presentation.ts';
 
 export interface TrayLog {
   warn(message: string, details: object): void;
@@ -15,7 +15,6 @@ export interface SystemTrayOptions {
 }
 
 export interface SystemTray {
-  setTooltip(text: string): void;
   destroy(): void;
 }
 
@@ -31,10 +30,10 @@ export function createSystemTray(options: SystemTrayOptions): SystemTray | undef
       [TrayCommand.Open]: options.onOpen,
       [TrayCommand.Quit]: options.onQuit,
     };
-    const setTooltip = (text: string) => {
+    const say = (text: string) => {
       if (!tray.isDestroyed()) tray.setToolTip(text);
     };
-    tray.setToolTip('Scia');
+    say(trayTooltip(undefined));
     tray.setContextMenu(
       Menu.buildFromTemplate(
         TRAY_MENU.map((entry) =>
@@ -45,15 +44,18 @@ export function createSystemTray(options: SystemTrayOptions): SystemTray | undef
       ),
     );
     tray.on('click', options.onOpen);
-    // Windows and macOS only: Linux never says the pointer arrived, and keeps the tooltip it
-    // was last given.
+    // The tooltip counts only while the pointer is on the icon, when the count was just read:
+    // left there, it would be a stale number for whoever reaches the icon another way (the
+    // keyboard), or for ever where the pointer never announces itself (Linux has neither event).
     tray.on('mouse-enter', () => {
-      void options.tooltip().then(setTooltip, () => undefined);
+      void options.tooltip().then(say, () => undefined);
+    });
+    tray.on('mouse-leave', () => {
+      say(trayTooltip(undefined));
     });
     // The returned object keeps the tray alive: an unreferenced Tray is collected, and its icon
     // disappears a few minutes after the start.
     return {
-      setTooltip,
       destroy: () => {
         if (!tray.isDestroyed()) tray.destroy();
       },

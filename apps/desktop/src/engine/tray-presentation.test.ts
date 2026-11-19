@@ -7,10 +7,10 @@ describe('trayTooltip', () => {
     expect(trayTooltip(undefined)).toBe('Scia');
   });
 
-  it('says how many downloads run and how many wait', () => {
-    expect(trayTooltip({ downloading: 2, queued: 1 })).toBe('Scia — 2 downloading, 1 queued');
-    expect(trayTooltip({ downloading: 1, queued: 0 })).toBe('Scia — 1 downloading');
-    expect(trayTooltip({ downloading: 0, queued: 3 })).toBe('Scia — 3 queued');
+  it('says how many downloads run and how many wait, as the list’s status line separates them', () => {
+    expect(trayTooltip({ downloading: 2, queued: 1 })).toBe('Scia · 2 downloading · 1 queued');
+    expect(trayTooltip({ downloading: 1, queued: 0 })).toBe('Scia · 1 downloading');
+    expect(trayTooltip({ downloading: 0, queued: 3 })).toBe('Scia · 3 queued');
   });
 });
 

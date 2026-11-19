@@ -33,7 +33,7 @@ export class ServerSupervisor {
   // The first start: its failure is the caller's to show.
   async start(): Promise<number> {
     const server = await this.#options.start();
-    this.#watch(server);
+    await this.#adopt(server);
     return server.port;
   }
 
@@ -42,15 +42,22 @@ export class ServerSupervisor {
     await this.#current?.stop();
   }
 
-  #watch(server: StartedServer): void {
-    this.#current = server;
-    const startedAt = this.#options.now();
-    void server.exited.then((code) => this.#restartAfter(code, this.#options.now() - startedAt));
-  }
-
   // Read anew after every wait: stop() may have been called meanwhile.
   #isStopping(): boolean {
     return this.#stopping;
+  }
+
+  // An engine that finished starting after stop() was asked is stopped, not watched: stop() had
+  // nothing to stop when it ran, and nobody else would.
+  async #adopt(server: StartedServer): Promise<boolean> {
+    if (this.#isStopping()) {
+      await server.stop();
+      return false;
+    }
+    this.#current = server;
+    const startedAt = this.#options.now();
+    void server.exited.then((code) => this.#restartAfter(code, this.#options.now() - startedAt));
+    return true;
   }
 
   async #restartAfter(code: number, ranForMs: number): Promise<void> {
@@ -68,8 +75,7 @@ export class ServerSupervisor {
       if (this.#isStopping()) return;
       try {
         const server = await this.#options.start();
-        this.#watch(server);
-        this.#options.onRestarted(server.port);
+        if (await this.#adopt(server)) this.#options.onRestarted(server.port);
         return;
       } catch (error) {
         this.#options.log.warn('engine_restart_failed', { error: String(error) });

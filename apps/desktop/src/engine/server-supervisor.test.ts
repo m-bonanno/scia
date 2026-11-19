@@ -90,4 +90,27 @@ describe('ServerSupervisor', () => {
     expect(onRestarted).not.toHaveBeenCalled();
     expect(onGaveUp).not.toHaveBeenCalled();
   });
+
+  it('stops an engine that was still starting when it was asked to stop', async () => {
+    let ready: (server: StartedServer) => void = () => undefined;
+    const late = fakeServer(1000);
+    const { supervisor, onRestarted } = supervisorOver([
+      () =>
+        new Promise((resolve) => {
+          ready = resolve;
+        }),
+    ]);
+
+    const starting = supervisor.start();
+    await supervisor.stop();
+    ready(late);
+    await starting;
+
+    // stop() had nothing to stop when it ran: the engine that arrives afterwards is stopped,
+    // and its exit is nobody's cue to start another.
+    expect(late.stops()).toBe(1);
+    late.exit(0);
+    await Promise.resolve();
+    expect(onRestarted).not.toHaveBeenCalled();
+  });
 });

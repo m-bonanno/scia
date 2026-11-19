@@ -8,11 +8,16 @@ import type { EngineAccess } from './engine-access.ts';
 const ID = /^[\w-]{1,64}$/;
 
 // Where a finished download is on disk, asked of the engine by id. The page names a download;
-// it never gives main a path to open.
-export async function completedDownloadPath(id: unknown, engine: EngineAccess): Promise<string> {
+// it never gives main a path to open. Rejects when the engine says nothing within `limitMs`.
+export async function completedDownloadPath(
+  id: unknown,
+  engine: EngineAccess,
+  limitMs: number,
+): Promise<string> {
   if (typeof id !== 'string' || !ID.test(id)) throw new Error('Not a download id.');
   const response = await engine.fetch(`${engine.origin}${API_PREFIX}/downloads/${id}`, {
     headers: { authorization: `Bearer ${engine.apiToken}` },
+    signal: AbortSignal.timeout(limitMs),
   });
   if (!response.ok) throw new Error('The engine does not know this download.');
   const download = z.object({ data: downloadSchema }).parse(await response.json()).data;

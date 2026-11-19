@@ -4,6 +4,7 @@ import { BridgeChannel } from '@scia/contracts/bridge';
 import { DEFAULT_API_PORT } from '@scia/contracts';
 import { app, dialog, Notification, shell } from 'electron';
 import log from 'electron-log/main';
+import { APP_ID } from './engine/app-identity.ts';
 import { CloseOutcome, WindowCloser } from './engine/close-policy.ts';
 import { downloadActivity } from './engine/download-activity.ts';
 import { completedDownloadPath } from './engine/download-location.ts';
@@ -20,12 +21,9 @@ import { startServer } from './server-process.ts';
 import { createSystemTray } from './tray.ts';
 import { appOrigin, MainWindow } from './window.ts';
 
-// Mirrored by `appId` in electron-builder.yml: Windows drops, without a word, the notifications
-// of an app whose two ids differ.
-const APP_ID = 'app.scia.desktop';
-// How long main waits for the engine to say what it is doing. The engine is on this computer:
-// one that has not answered by then is not going to.
-const ACTIVITY_LIMIT_MS = 2000;
+// How long main waits for the engine to answer a question of its own. The engine is on this
+// computer: one that has not answered by then is not going to.
+const ENGINE_ANSWER_LIMIT_MS = 2000;
 
 const launch = parseLaunchOptions(process.argv, process.cwd());
 if (launch.userDataDir !== undefined) {
@@ -73,7 +71,7 @@ async function boot(): Promise<void> {
   // Read anew after every wait: a quit may have begun meanwhile.
   const isQuitting = () => quitting;
   const engine = (): EngineAccess => ({ origin: appOrigin(port), apiToken, fetch });
-  const activity = () => downloadActivity(engine(), ACTIVITY_LIMIT_MS);
+  const activity = () => downloadActivity(engine(), ENGINE_ANSWER_LIMIT_MS);
 
   // Hidden until it has a page: it follows the engine once there is one.
   const window = new MainWindow({
@@ -105,6 +103,7 @@ async function boot(): Promise<void> {
   const closer = new WindowCloser({
     trayAvailable: tray !== undefined,
     quitting: isQuitting,
+    visible: () => window.isVisible(),
     hide: () => {
       window.hide();
     },
@@ -124,8 +123,6 @@ async function boot(): Promise<void> {
     const result = await closer.close();
     if (result.outcome !== CloseOutcome.Hidden) return;
     log.info('window_hidden_to_tray', { ...result.activity });
-    // Where the pointer never announces itself (Linux), this is the tooltip's one update.
-    tray?.setTooltip(trayTooltip(result.activity));
     // Asked in this order: a notice is recorded as shown only where it can be shown.
     if (Notification.isSupported() && (await notices.firstTime(HIDDEN_TO_TRAY_NOTICE.id))) {
       notice = new Notification({
@@ -190,10 +187,12 @@ async function boot(): Promise<void> {
   });
 
   window.answer(BridgeChannel.RevealDownload, async (id) => {
-    shell.showItemInFolder(await completedDownloadPath(id, engine()));
+    shell.showItemInFolder(await completedDownloadPath(id, engine(), ENGINE_ANSWER_LIMIT_MS));
   });
   window.answer(BridgeChannel.OpenDownload, async (id) => {
-    const failure = await shell.openPath(await completedDownloadPath(id, engine()));
+    const failure = await shell.openPath(
+      await completedDownloadPath(id, engine(), ENGINE_ANSWER_LIMIT_MS),
+    );
     if (failure !== '') throw new Error(failure);
   });
 
@@ -204,6 +203,8 @@ async function boot(): Promise<void> {
     giveUp(String(error));
     return;
   }
+  // A quit asked while the engine was starting: the supervisor stopped it, nothing follows.
+  if (isQuitting()) return;
   log.info('engine_ready', { port });
   window.followServer(port);
 }

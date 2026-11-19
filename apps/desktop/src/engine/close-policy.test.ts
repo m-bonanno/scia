@@ -1,24 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { CloseAction, closeAction, CloseOutcome, WindowCloser } from './close-policy.ts';
+import { CloseOutcome, WindowCloser } from './close-policy.ts';
 import type { DownloadActivity } from './download-activity.ts';
-
-describe('closeAction', () => {
-  it('hides the window while something is downloading or waiting, and a tray can bring it back', () => {
-    expect(closeAction({ trayAvailable: true, unfinished: 2 })).toBe(CloseAction.Hide);
-  });
-
-  it('quits when nothing is left to download', () => {
-    expect(closeAction({ trayAvailable: true, unfinished: 0 })).toBe(CloseAction.Quit);
-  });
-
-  it('quits where there is no tray to come back from', () => {
-    expect(closeAction({ trayAvailable: false, unfinished: 5 })).toBe(CloseAction.Quit);
-  });
-
-  it('quits when the engine did not say what it is doing', () => {
-    expect(closeAction({ trayAvailable: true, unfinished: undefined })).toBe(CloseAction.Quit);
-  });
-});
 
 describe('WindowCloser', () => {
   function closing(
@@ -26,12 +8,14 @@ describe('WindowCloser', () => {
       trayAvailable?: boolean;
       activity?: () => Promise<DownloadActivity>;
       quitting?: () => boolean;
+      visible?: () => boolean;
     } = {},
   ) {
     const calls: string[] = [];
     const closer = new WindowCloser({
       trayAvailable: overrides.trayAvailable ?? true,
       quitting: overrides.quitting ?? (() => false),
+      visible: overrides.visible ?? (() => false),
       hide: () => {
         calls.push('hide');
       },
@@ -58,6 +42,12 @@ describe('WindowCloser', () => {
     });
   });
 
+  it('stays hidden for a download that only waits its turn', async () => {
+    const { closer } = closing({ activity: async () => ({ downloading: 0, queued: 1 }) });
+
+    expect((await closer.close()).outcome).toBe(CloseOutcome.Hidden);
+  });
+
   it('quits, once hidden, when nothing is left to download', async () => {
     const { calls, closer } = closing();
 
@@ -77,7 +67,10 @@ describe('WindowCloser', () => {
   });
 
   it('quits without asking where there is no tray to come back from', async () => {
-    const { calls, closer } = closing({ trayAvailable: false });
+    const { calls, closer } = closing({
+      trayAvailable: false,
+      activity: async () => ({ downloading: 5, queued: 0 }),
+    });
 
     expect(await closer.close()).toEqual({ outcome: CloseOutcome.Quit });
     expect(calls).toEqual(['hide', 'quit']);
@@ -102,6 +95,31 @@ describe('WindowCloser', () => {
 
     expect(await closer.close()).toEqual({ outcome: CloseOutcome.Ignored });
     expect(calls).toEqual(['hide', 'ask']);
+  });
+
+  it('leaves alone a window the person brought back while the engine was asked', async () => {
+    let visible = false;
+    const broughtBack = async (activity: DownloadActivity) => {
+      visible = true;
+      return activity;
+    };
+    const idle = closing({
+      visible: () => visible,
+      activity: () => broughtBack({ downloading: 0, queued: 0 }),
+    });
+
+    // Nothing left to download: it would have quit, in front of an open window.
+    expect(await idle.closer.close()).toEqual({ outcome: CloseOutcome.Ignored });
+    expect(idle.calls).toEqual(['hide', 'ask']);
+
+    visible = false;
+    const busy = closing({
+      visible: () => visible,
+      activity: () => broughtBack({ downloading: 2, queued: 0 }),
+    });
+
+    // Still downloading: it would have said "still downloading" to someone looking at it.
+    expect(await busy.closer.close()).toEqual({ outcome: CloseOutcome.Ignored });
   });
 
   it('takes one decision at a time: a second close while the first waits changes nothing', async () => {

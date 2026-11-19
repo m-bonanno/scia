@@ -104,8 +104,14 @@ export class MainWindow {
     if (!this.#window.isDestroyed()) this.#window.hide();
   }
 
+  isVisible(): boolean {
+    return !this.#window.isDestroyed() && this.#window.isVisible();
+  }
+
   focus(): void {
-    if (this.#window.isDestroyed()) return;
+    // Before the engine is ready there is no page to show: the window shows itself once it
+    // has loaded one.
+    if (this.#window.isDestroyed() || this.#port === 0) return;
     if (this.#window.isMinimized()) this.#window.restore();
     this.#window.show();
     this.#window.focus();
