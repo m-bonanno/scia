@@ -183,7 +183,9 @@ async function boot(): Promise<void> {
 
   // Starting Scia again is how a person whose desktop draws no tray gets the window back.
   app.on('second-instance', () => {
-    window.focus();
+    log.info('second_instance');
+    // Not while quitting: the window would show, then vanish with the process.
+    if (!isQuitting()) window.focus();
   });
 
   window.answer(BridgeChannel.RevealDownload, async (id) => {
@@ -203,8 +205,6 @@ async function boot(): Promise<void> {
     giveUp(String(error));
     return;
   }
-  // A quit asked while the engine was starting: the supervisor stopped it, nothing follows.
-  if (isQuitting()) return;
   log.info('engine_ready', { port });
   window.followServer(port);
 }

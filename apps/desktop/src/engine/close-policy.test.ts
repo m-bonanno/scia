@@ -140,7 +140,35 @@ describe('WindowCloser', () => {
       outcome: CloseOutcome.Hidden,
       activity: { downloading: 1, queued: 0 },
     });
-    expect(calls).toEqual(['hide', 'ask']);
+    // The second close hides too — an X always does something — and asks nothing again.
+    expect(calls).toEqual(['hide', 'ask', 'hide']);
+  });
+
+  it('hides again a window brought back and closed again while the engine was asked', async () => {
+    let visible = false;
+    let answer: (activity: DownloadActivity) => void = () => undefined;
+    const closer = new WindowCloser({
+      trayAvailable: true,
+      quitting: () => false,
+      visible: () => visible,
+      hide: () => {
+        visible = false;
+      },
+      quit: () => undefined,
+      activity: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    });
+
+    const first = closer.close();
+    visible = true;
+    await closer.close();
+    answer({ downloading: 1, queued: 0 });
+
+    // The window is hidden again, so the first decision stands: Scia stays in the tray.
+    expect(visible).toBe(false);
+    expect((await first).outcome).toBe(CloseOutcome.Hidden);
   });
 
   it('decides again at the next close', async () => {

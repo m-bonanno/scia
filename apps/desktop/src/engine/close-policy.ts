@@ -32,10 +32,13 @@ export class WindowCloser {
     this.#request = request;
   }
 
-  // One decision at a time: a close that arrives while the engine is being asked changes
-  // nothing, and tells nobody anything twice.
+  // The window hides at every close: an X always does something, also on a window brought
+  // back while an earlier close is still being decided. The decision is one at a time: that
+  // second close asks nothing again, and tells nobody anything twice.
   async close(): Promise<CloseResult> {
-    if (this.#deciding || this.#request.quitting()) return { outcome: CloseOutcome.Ignored };
+    if (this.#request.quitting()) return { outcome: CloseOutcome.Ignored };
+    this.#request.hide();
+    if (this.#deciding) return { outcome: CloseOutcome.Ignored };
     this.#deciding = true;
     try {
       return await this.#decide();
@@ -46,7 +49,6 @@ export class WindowCloser {
 
   async #decide(): Promise<CloseResult> {
     const request = this.#request;
-    request.hide();
     if (!request.trayAvailable) {
       request.quit();
       return { outcome: CloseOutcome.Quit };

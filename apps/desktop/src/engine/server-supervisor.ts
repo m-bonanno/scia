@@ -78,6 +78,8 @@ export class ServerSupervisor {
         if (await this.#adopt(server)) this.#options.onRestarted(server.port);
         return;
       } catch (error) {
+        // A restart cut short by a quit is not a failure to count, or to tell anybody about.
+        if (this.#isStopping()) return;
         this.#options.log.warn('engine_restart_failed', { error: String(error) });
         lastRunMs = 0;
       }

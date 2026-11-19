@@ -1,4 +1,5 @@
 import { Menu, nativeImage, Tray } from 'electron';
+import { PointerTooltip } from './engine/pointer-tooltip.ts';
 import { TRAY_MENU, TrayCommand, trayTooltip } from './engine/tray-presentation.ts';
 
 export interface TrayLog {
@@ -44,14 +45,18 @@ export function createSystemTray(options: SystemTrayOptions): SystemTray | undef
       ),
     );
     tray.on('click', options.onOpen);
-    // The tooltip counts only while the pointer is on the icon, when the count was just read:
-    // left there, it would be a stale number for whoever reaches the icon another way (the
-    // keyboard), or for ever where the pointer never announces itself (Linux has neither event).
+    // The tooltip counts only while the pointer is on the icon, when the count was just read
+    // (engine/pointer-tooltip.ts). Linux has neither event, and keeps the plain name.
+    const pointer = new PointerTooltip({
+      plain: trayTooltip(undefined),
+      read: options.tooltip,
+      say,
+    });
     tray.on('mouse-enter', () => {
-      void options.tooltip().then(say, () => undefined);
+      pointer.entered();
     });
     tray.on('mouse-leave', () => {
-      say(trayTooltip(undefined));
+      pointer.left();
     });
     // The returned object keeps the tray alive: an unreferenced Tray is collected, and its icon
     // disappears a few minutes after the start.

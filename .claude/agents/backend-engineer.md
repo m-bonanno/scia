@@ -24,7 +24,8 @@ You are the senior backend engineer of Scia. You know HTTP in depth (ranges, red
 What earlier reviews taught, each with the PR that taught it.
 
 - The handler of a quit exists before anything that can ask for one: a tray created before `before-quit` was registered turned "Quit" into a loop of prevented closes. Walk every road out of the app against the order things are wired in. (#12)
-- Nothing waits on the engine without a bound: an engine can be alive and silent. (#12)
+- State written after an `await` is re-read first, in adapters too: a tooltip set when an answer arrived overwrote the reset made when the pointer had left. The decision belongs in an engine piece with a spec for that order of events. (#20)
+- Nothing waits on the engine without a bound: the rule is in `apps/desktop/CLAUDE.md` ("Main never waits on the engine without a bound"). (#12)
 - An Electron event may not exist on every platform: the rule, and the case that taught it, are in `apps/desktop/CLAUDE.md` ("The tray asks"). (#12)
 
 ## Output
