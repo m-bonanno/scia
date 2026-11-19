@@ -28,7 +28,7 @@ Claude Code loads the nearest `CLAUDE.md` plus every ancestor. A sub-file **wins
 | [`apps/desktop/CLAUDE.md`](./apps/desktop/CLAUDE.md)     | Electron boundaries, security, supervision, packaging   |
 | [`apps/extension/CLAUDE.md`](./apps/extension/CLAUDE.md) | What the extension may see and send                     |
 
-Runbooks in [`docs/development/`](./docs/development/): [`git-flow.md`](./docs/development/git-flow.md), [`testing.md`](./docs/development/testing.md). Mistakes already paid for: [`.claude/gotchas.md`](./.claude/gotchas.md).
+Runbooks in [`docs/development/`](./docs/development/): [`git-flow.md`](./docs/development/git-flow.md), [`release-flow.md`](./docs/development/release-flow.md), [`testing.md`](./docs/development/testing.md). Mistakes already paid for: [`.claude/gotchas.md`](./.claude/gotchas.md).
 
 ---
 
@@ -90,6 +90,16 @@ Full detail: [`docs/development/git-flow.md`](./docs/development/git-flow.md).
 - **`Closes #N`** in every PR body, written from [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md) to `.claude/pr-bodies/<branch>.md` and passed with `--body-file`.
 - **No AI attribution — ever.** No "Generated with Claude Code", no `Co-Authored-By: Claude`, no AI mention in commits, PR bodies, code or docs.
 
+## Release flow — essentials
+
+Mechanics in [`docs/development/release-flow.md`](./docs/development/release-flow.md).
+
+- **semantic-release owns versioning.** No `version` field in the root `package.json`; `apps/desktop/package.json` stays `0.0.0` and CI injects the real version.
+- Squash merge to `develop` → tag `vX.Y.Z-beta.N`, notes only. Merge commit to `main` → `vX.Y.Z`, with the Windows and Linux installers attached to the GitHub release.
+- The commit type decides the number: `fix`/`perf`/`hotfix` a patch, `feat` a minor, a breaking change a major; `chore`, `docs`, `ci`, `test`, `refactor` release nothing. Choose the type for what the change is to whoever uses Scia.
+- **Verify the artefact, not the build**: download the published installer, install it, launch it on a scratch profile, read its log.
+- Never push a tag by hand, never edit a published one.
+
 ---
 
 ## Documentation discipline
@@ -118,4 +128,4 @@ docs/
 4. **Read `.claude/gotchas.md` before every push**; add an entry in the same PR when a mistake of that kind bites again.
 5. **Keep docs in lock-step**, and keep the roadmap honest — never mark done what is partial.
 6. **Report outcomes faithfully** — failing tests with their output, skipped steps named, what was not verified said plainly.
-7. **Ask before** anything hard to reverse (deleting data, rewriting history) or that reaches other people (a release, a store submission).
+7. **Ask before** anything hard to reverse (deleting data, rewriting history) or that reaches other people (merging a release PR into `main`, a store submission).

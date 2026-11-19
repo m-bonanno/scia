@@ -26,14 +26,6 @@ npm test
 
 Come è fatto il progetto e come ci si lavora: [`CLAUDE.md`](CLAUDE.md). Le decisioni di architettura: [`docs/adr/`](docs/adr/).
 
-### Primo commit
+### Come si contribuisce
 
-Gli hook rifiutano i commit su `main` e `develop`. Il primo, che crea il repository, si fa una volta sola così:
-
-```bash
-git add -A
-HUSKY=0 git commit -m "chore: bootstrap the monorepo"
-git branch develop
-```
-
-Da lì in poi si lavora su `<tipo>/<issue>-<descrizione>` come descritto in [`docs/development/git-flow.md`](docs/development/git-flow.md).
+Si lavora su un ramo `<tipo>/<issue>-<descrizione>` tagliato da `develop`, con commit convenzionali, e si apre una PR verso `develop`: [`docs/development/git-flow.md`](docs/development/git-flow.md). Le versioni le decide semantic-release dai commit: [`docs/development/release-flow.md`](docs/development/release-flow.md).

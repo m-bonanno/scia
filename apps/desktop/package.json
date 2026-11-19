@@ -6,6 +6,7 @@
   "type": "module",
   "description": "Scia desktop shell — Electron main/preload supervising the local download engine",
   "author": "Scia",
+  "homepage": "https://github.com/m-bonanno/scia",
   "main": "dist/main.cjs",
   "scripts": {
     "build": "node build.mjs",

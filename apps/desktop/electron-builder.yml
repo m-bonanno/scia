@@ -51,4 +51,6 @@ linux:
     - target: deb
       arch: [x64]
   category: Network
+  # The .deb needs one; without it electron-builder asks for an e-mail in package.json.
+  maintainer: Scia
   artifactName: ${productName}-${version}.${ext}

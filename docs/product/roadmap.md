@@ -5,6 +5,7 @@ Lo stato è quello vero: una voce è «fatta» solo se è verificata nell'app re
 ## M0 — Fondamenta (fatto)
 
 - Monorepo, strumenti, hook, test su quattro livelli.
+- Repository su GitHub con GitFlow, controlli sulle PR, versioni e note di rilascio automatiche (semantic-release). **Gli installer allegati alle release stabili non sono ancora stati prodotti dalla CI.**
 - Motore: download su più connessioni con segmentazione dinamica, pausa e ripresa, coda, tentativi dopo un'interruzione, nomi sicuri e mai sovrascritti, stato salvato su disco.
 - App Electron: finestra con barra del titolo propria, supervisione del motore, chiusura ordinata, ripresa al riavvio.
 - Interfaccia: aggiunta per incolla, elenco con barra dei segmenti, filtri, impostazioni di base.
