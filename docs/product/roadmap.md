@@ -27,10 +27,10 @@ The state is the real one: an item is "done" only if it was verified in the real
 ## M2 — The whole extension
 
 - Tried in Chrome, Edge, Brave; a version for Firefox.
-- Published in the stores.
-- Downloads behind a login: sending the session's cookies, an explicit choice per site.
+- Published in the stores. Before submitting, each store's policy on downloading media from streaming sites is read, not remembered: with pages, playlists and channels in Scia, what the extension may offer under a store's rules is a question the policy answers.
+- Downloads behind a login: sending the session's cookies, an explicit choice per site. The session comes from the extension only — never a cookie pasted by hand, never a default (the owner, 19 November 2026). The ADR on handing cookies over, which ADR 0002 announces, is still to write and has to record it. So has the ADR on yt-dlp, also to write: yt-dlp can read a browser's cookie store by itself, Scia never asks that of it, and a spec has to hold that.
 - Adaptive streams (HLS, DASH): detection, choice of quality, assembly. Unprotected streams only.
-- **Pages, playlists and channels** (#8): the address of a page, a playlist, a channel or a profile is expanded into the videos it lists, following its pages to the end; the list is shown to confirm, then downloaded. A private playlist, or anything else behind the person's own login, is read with the session of their own browser, on the explicit per-site choice above. How sites are read is an ADR to write: yt-dlp is the candidate (thousands of sites, kept up to date by its community), against writing and maintaining a reader per site; the ADR has to answer the objection ADR 0001 made to aria2 — an external binary to ship, update and supervise per platform. **Needs the owner's word on the "Respect the hosts" principle before it is built** (see the question at the end). It also depends on the adaptive streams and on the session hand-over of this milestone.
+- **Pages, playlists and channels** (#8): the address of a page, a playlist, a channel or a profile is expanded into the videos it lists, following its pages to the end; the list is shown to confirm, then downloaded. A private playlist, or anything else behind the person's own login, is read with the session of their own browser, on the explicit per-site choice above. The owner answered the question this item carried (19 November 2026): yes, as JDownloader does, inside the "Respect the hosts" principle as `CLAUDE.md` states it. Decided with it: sites are read by yt-dlp (thousands of sites, kept up to date by its community), shipped with Scia and updated by it, not by a reader per site written here. The ADR is still to write, and has to answer the objection ADR 0001 made to aria2 — an external binary to ship, update and supervise per platform. yt-dlp can do more than the principle allows — it can work around geographic restrictions: Scia never asks it to, and a spec has to hold that. It depends on the adaptive streams and on the session hand-over of this milestone.
 - A fallback port, and the extension finding the app by itself, when 47821 is taken.
 
 ## M3 — Integrations: debrid services
@@ -58,25 +58,3 @@ Integrations arrive one at a time. Each is visible in three places: an **Integra
 ## Not planned
 
 - macOS. If it is ever shipped, the interface stops naming one platform's keys: the empty list says "press Ctrl+V" (`apps/renderer/src/features/downloads/download-list.tsx`).
-
-## Open question for the owner
-
-**May Scia download what a site lets a person play but forbids them to download?** From a public page as from the person's own account. #8 needs the answer before it is built, and carries this same question until it has one.
-
-The principle today (`CLAUDE.md`, "Respect the hosts"), whole: "Scia downloads what the person has the right to download. No DRM circumvention, no evasion of a site's access controls, connection counts within the limits in settings. A feature that only makes sense against a host's will is not built."
-
-What #8 asks for meets it in two places. The videos of a playlist or of a profile are ones the person can already play; but most streaming sites forbid downloading in their terms, and the first and the last sentence of the principle may be read to cover that. And the tools that read such sites can do more than read: yt-dlp, the candidate, can also work around geographic restrictions, which both answers refuse.
-
-**Yes.** The principle becomes, in `CLAUDE.md`:
-
-> **Respect the hosts.** Scia fetches what the person can already reach: a public file, or what their own account plays in their own browser. No DRM circumvention, no way around a paywall, a login the person does not have, or a geographic restriction. Connection counts within the limits in settings.
-
-and the first line of "What it is not" in `vision.md`:
-
-> It does not circumvent protections: no DRM, no way around a paywall, a login the person does not have, or a geographic restriction. Scia fetches what the person can already reach.
-
-#8 is built inside that line.
-
-**No.** The principle stays as it is. #8 is closed, its item leaves M2 and the clause on pages, playlists and channels leaves `vision.md`. The same reading then has to be applied to what stands on the same line: the media the extension detects in a page (M0, written), the adaptive streams and the downloads behind a login of M2. Each would be kept only for sites that allow downloading, or dropped.
-
-This section is removed once the answer is recorded in `CLAUDE.md`, `vision.md` and #8.

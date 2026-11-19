@@ -39,7 +39,7 @@ Runbooks in [`docs/development/`](./docs/development/): [`git-flow.md`](./docs/d
 - **No patches ("toppe").** A fix that special-cases a platform, hardcodes a value or copies a block is not done. Model the difference as data.
 - **Nothing personal in code.** Folders, limits, tokens, ports — all settings or launch options.
 - **Few comments — the code explains itself.** A comment exists only for a _why_ the code cannot say: a platform quirk, a protocol detail (RFC 6266), a security reason. No JSDoc that paraphrases a signature, no section banners.
-- **Respect the hosts.** Scia downloads what the person has the right to download. No DRM circumvention, no evasion of a site's access controls, connection counts within the limits in settings. A feature that only makes sense against a host's will is not built.
+- **Respect the hosts.** Scia fetches what the person can already reach: a public file, what a page plays to anyone, or what their own account plays in their own browser — with the session they choose to hand over, site by site. That holds also where a site's terms forbid downloading what it lets the person play (the owner's decision, #8). No DRM circumvention and no evasion of a site's access controls, such as a paywall, a login the person does not have, or a geographic restriction. Connection counts within the limits in settings.
 - **Zero infrastructure cost.** GitHub Free, free tiers only. A paid service needs an explicit decision by the owner and an ADR.
 
 ### Test-Driven Development
