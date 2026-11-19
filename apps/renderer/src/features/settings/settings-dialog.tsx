@@ -168,8 +168,8 @@ function PairingSection({
       <div>
         <p className="text-sm font-medium">Browser extension</p>
         <p className="text-sm text-muted-foreground">
-          Copia questo codice nelle opzioni dell’estensione: da quel momento manda a Scia i link e i
-          media delle pagine.
+          Paste this code into the extension’s options. From then on, the extension sends Scia the
+          links and the media of your pages.
         </p>
       </div>
       <div className="flex h-10 items-center gap-1 rounded-xl bg-tonal pr-1 pl-3">

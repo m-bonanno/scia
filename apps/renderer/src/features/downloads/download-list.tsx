@@ -16,7 +16,7 @@ const EMPTY: Readonly<Record<Filter, { readonly title: string; readonly hint: st
     hint: 'Paste a link above, or press Ctrl+V anywhere in the window.',
   },
   active: { title: 'Nothing in progress', hint: 'Downloads you add show up here.' },
-  completed: { title: 'No completed files yet', hint: 'Finished files show up here.' },
+  completed: { title: 'No completed files yet', hint: 'Completed files show up here.' },
 };
 
 export function DownloadList({ downloads, filter, actions }: DownloadListProps): ReactNode {

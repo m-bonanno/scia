@@ -56,7 +56,7 @@ function isMedia(kind: FileKind): kind is MediaKind {
   return kind === FileKind.Video || kind === FileKind.Audio;
 }
 
-// A response worth offering as «media of this page»: a whole video or audio file. Adaptive
+// A response worth offering as "media of this page": a whole video or audio file. Adaptive
 // streams are told apart and left out until Scia can assemble them (docs/product/roadmap.md).
 export function capturableMediaKind(response: ObservedResponse): MediaKind | undefined {
   const type = mediaType(response.contentType);

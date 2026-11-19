@@ -10,8 +10,14 @@ function element<T extends HTMLElement>(id: string, type: new () => T): T {
   return found;
 }
 
+const megabyteCount = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+// The unit never wraps away from its number, as in the app (apps/renderer/src/lib/format.ts).
 function megabytes(bytes: number): string {
-  return `${new Intl.NumberFormat('en-US', { maximumFractionDigits: 1 }).format(bytes / (1024 * 1024))} MB`;
+  return `${megabyteCount.format(bytes / (1024 * 1024))}\u00a0MB`;
 }
 
 const status = element('status', HTMLParagraphElement);

@@ -12,7 +12,7 @@ const FILL: Readonly<Record<DownloadStatus, string>> = {
 };
 
 // The file as a line, each connection filling its own stretch of it where that stretch is: the
-// picture of what «eight connections» means.
+// picture of what "eight connections" means.
 export function SegmentBar({ download }: { readonly download: Download }): ReactNode {
   const total = download.totalBytes;
   const fill = FILL[download.status];

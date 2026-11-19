@@ -15,6 +15,10 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → Grouping depends on the locale's CLDR data, not on intuition: `en-US` writes `1,000`, while `it-IT` leaves a four-digit number ungrouped (`1000`). A spec expects what `Intl` says for the locale in `lib/format.ts`.
 - → The unit is tied to its number with a non-breaking space, written as the escape `\u00a0`, never as the invisible character itself.
 
+## Copy
+
+- → A change of wording or of language is finished when a search of the whole tree for the old words finds nothing (`git grep -nE "[àèéìòù]"` caught what reading the diff did not), and every dialog was opened in the real app: a screen nobody opened is a screen nobody read.
+
 ## Engine
 
 - → A vitest `?raw` import of a `.css` file comes back empty. A spec that needs the stylesheet's text reads it with `node:fs`, from a workspace that has Node types.

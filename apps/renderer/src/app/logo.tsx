@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-// The mark: a download arrow and the wake («scia») it leaves behind.
+// The mark: a download arrow and the wake ("scia") it leaves behind.
 export function Logo({ size = 18 }: { readonly size?: number }): ReactNode {
   return (
     <svg

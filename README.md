@@ -13,14 +13,6 @@ A download manager for Windows and Linux: paste a link, Scia fetches it over sev
 
 What comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
 
-## Integrations
-
-None yet. Scia will connect to outside services one at a time, each listed here when it lands:
-
-| Service   | What it adds                                                        | State   |
-| --------- | ------------------------------------------------------------------- | ------- |
-| AllDebrid | Hoster links are unlocked and downloaded like direct links; magnets | Planned |
-
 ## Development
 
 Node 24 or later.
