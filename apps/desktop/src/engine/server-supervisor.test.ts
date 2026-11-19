@@ -135,8 +135,8 @@ describe('ServerSupervisor', () => {
     fail(new Error('killed with the app'));
     await new Promise((resolve) => setImmediate(resolve));
 
-    // One failure was all the policy allowed: without the check, this is "cannot start" shown
-    // to someone who is quitting.
+    // One failure was all the policy allowed: without the check, this is "Scia has to close"
+    // shown to someone who is quitting.
     expect(onGaveUp).not.toHaveBeenCalled();
   });
 });

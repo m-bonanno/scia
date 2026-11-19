@@ -31,6 +31,7 @@ Anyone who downloads files: they paste a link and want to forget about it. The w
 - **Every data view has its states**: connecting (nothing drawn, no flash), empty (says what is missing and what to do), engine unreachable (says so, keeps the last list), data.
 - **Forgiving.** A finished download leaves the list at one press (the file stays). Unfinished bytes are thrown away only after a second press in place. A failed add never clears what was typed.
 - **Keyboard-complete.** Paste anywhere adds the links; everything pressable is a `button`. A shortcut of the pointer (a double click on a finished row opens its file) only repeats a button that is there.
+- **A capture in `docs/design/` shows the app as it is**: the PR that changes what one shows retakes it, from the real app (`docs/design/README.md`).
 - **The page never names a path.** It names a download by id; main asks the engine where the file is (`lib/bridge.ts`).
 
 ## Copy

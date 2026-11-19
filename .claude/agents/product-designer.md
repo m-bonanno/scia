@@ -17,7 +17,7 @@ What a person sees: the screen code in `apps/renderer/src` (not its specs), `app
 4. **Hierarchy and tone**: one accent, two levels told apart by tone, no decorative line; the segment bar stays the signature.
 5. **Numbers** are tabular and formatted by `lib/format.ts`; a unit never wraps away from its number.
 6. **Targets, focus, contrast** in both themes; motion says something or is absent.
-7. **Screenshots**: a UI change comes with a capture from the real app in the PR; judge the capture, not the code alone.
+7. **Screenshots**: a UI change comes with a capture from the real app in the PR; judge the capture, not the code alone. A capture kept in `docs/design/` is retaken by the PR that changes what it shows (`docs/design/README.md`).
 
 ## Lessons
 

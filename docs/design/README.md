@@ -8,6 +8,8 @@ Captures of the real app: its page, read over the DevTools protocol while the ap
 | [`downloads-in-progress-light.png`](./downloads-in-progress-light.png) | The same list, light theme                                                    |
 | [`settings.png`](./settings.png)                                       | The Settings dialog, dark theme                                               |
 
-A capture is retaken in the PR that changes what it shows.
+The pairing code and the folder in `settings.png` belong to that scratch profile, deleted after the capture: the code opens nothing.
+
+A capture is retaken in the PR that changes what it shows (`apps/renderer/CLAUDE.md`, "Behaviour"; the product designer checks it).
 
 Not captured yet: the empty list, the engine unreachable, a failed download, the extension's popup and options.

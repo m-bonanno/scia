@@ -143,8 +143,8 @@ async function boot(): Promise<void> {
   const giveUp = (failure: EngineFailure, reason: string) => {
     log.error('engine_gave_up', { failure, reason });
     tray?.destroy();
-    const notice = engineFailureNotice(failure, { port: enginePort, logPath });
-    dialog.showErrorBox(notice.title, notice.body);
+    const box = engineFailureNotice(failure, { port: enginePort, logPath });
+    dialog.showErrorBox(box.title, box.body);
     app.exit(1);
   };
 

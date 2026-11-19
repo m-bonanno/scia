@@ -1,5 +1,5 @@
-import type { MediaItem } from './media.ts';
 import { LOCALE } from '@scia/contracts/locale';
+import type { MediaItem } from './media.ts';
 import {
   checkPairing,
   needsPairing,
@@ -51,6 +51,7 @@ async function start(): Promise<void> {
     );
     say(OUTCOME_TEXT[outcome], outcome !== SendOutcome.Sent);
     button.disabled = outcome === SendOutcome.Sent;
+    pair.hidden = !needsPairing(outcome);
   };
 
   pair.addEventListener('click', () => {
