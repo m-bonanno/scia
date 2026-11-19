@@ -14,8 +14,9 @@
 1. Title: `type(scope): description`, lower-case.
 2. Body from `.github/PULL_REQUEST_TEMPLATE.md`, in English, written to `.claude/pr-bodies/<branch>.md` and passed with `gh pr create --body-file`.
 3. `Closes #N` in the body.
-4. Green `PR Quality Gates` before merging. Locally: `npm run format:check && npm run lint && npm run typecheck && npm test`.
-5. No AI attribution anywhere.
+4. Before opening it, locally: `npm run format:check && npm run lint && npm run typecheck && npm test`.
+5. The team reviews it ([`review-flow.md`](./review-flow.md)); it is merged when the team approves and `PR Quality Gates` is green.
+6. No AI attribution anywhere.
 
 ## What the type of a commit decides
 
