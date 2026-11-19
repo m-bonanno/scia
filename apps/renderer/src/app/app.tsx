@@ -9,7 +9,7 @@ import { SettingsDialog } from '@/features/settings/settings-dialog.tsx';
 import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { Connection, useLive } from '@/lib/live.ts';
-import { ENGINE_UNREACHABLE, errorMessage } from '@/lib/messages.ts';
+import { ENGINE_UNREACHABLE, errorMessage, FILE_NOT_OPENED } from '@/lib/messages.ts';
 import { TitleBar } from './title-bar.tsx';
 
 function isTextField(target: EventTarget | null): boolean {
@@ -76,7 +76,9 @@ export function App(): ReactNode {
         shell === undefined
           ? undefined
           : (id) => {
-              shell.openDownload(id).catch(report);
+              shell.openDownload(id).catch(() => {
+                setNotice(FILE_NOT_OPENED);
+              });
             },
     };
   }, [report]);

@@ -2,6 +2,7 @@ import type { Download } from '@scia/contracts';
 import { DownloadStatus, type FileKind } from '@scia/core';
 import {
   AppWindow,
+  ExternalLink,
   File,
   FileArchive,
   FileText,
@@ -58,7 +59,9 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
   return (
     <li
       className="animate-row-in rounded-xl bg-surface px-4 py-3 transition-colors hover:bg-surface-hover"
-      onDoubleClick={() => {
+      onDoubleClick={(event) => {
+        // A double press on one of the row's buttons is that button's, not the row's.
+        if (event.target instanceof Element && event.target.closest('button') !== null) return;
         if (completed) open?.(id);
       }}
     >
@@ -111,6 +114,17 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
               }}
             >
               <RotateCw size={16} aria-hidden="true" />
+            </IconButton>
+          )}
+          {completed && open !== undefined && (
+            <IconButton
+              label="Open"
+              onClick={(event) => {
+                // The second press of a double click would open the file twice.
+                if (event.detail <= 1) open(id);
+              }}
+            >
+              <ExternalLink size={16} aria-hidden="true" />
             </IconButton>
           )}
           {completed && reveal !== undefined && (

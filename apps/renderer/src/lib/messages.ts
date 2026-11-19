@@ -12,6 +12,10 @@ const BY_CODE: Readonly<Record<string, string>> = {
 
 export const ENGINE_UNREACHABLE = 'Scia’s engine is not responding. Trying again…';
 
+// Main says only that it failed. The engine being silent is the rare cause; a file that is no
+// longer where it was downloaded is the common one.
+export const FILE_NOT_OPENED = 'Scia could not open the file. It may have been moved or deleted.';
+
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
     return BY_CODE[error.code] ?? 'Scia could not complete the operation. Try again.';

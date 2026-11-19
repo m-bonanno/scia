@@ -9,6 +9,7 @@ import { CloseOutcome, WindowCloser } from './engine/close-policy.ts';
 import { downloadActivity } from './engine/download-activity.ts';
 import { completedDownloadPath } from './engine/download-location.ts';
 import type { EngineAccess } from './engine/engine-access.ts';
+import { EngineFailure, engineFailureNotice } from './engine/engine-failure.ts';
 import { parseLaunchOptions } from './engine/launch-options.ts';
 import { RestartPolicy } from './engine/restart-policy.ts';
 import { resolveRuntimeLayout } from './engine/runtime-layout.ts';
@@ -47,7 +48,8 @@ async function boot(): Promise<void> {
     scratchProfile: launch.userDataDir !== undefined,
   });
 
-  log.transports.file.resolvePathFn = () => join(layout.logsDir, 'main.log');
+  const logPath = join(layout.logsDir, 'main.log');
+  log.transports.file.resolvePathFn = () => logPath;
   // electron-log's default shows a modal for an uncaught error, which blocks main until someone
   // presses OK: after a close nobody sees it and the app stays alive. The log is enough.
   log.errorHandler.startCatching({ showDialog: false });
@@ -58,10 +60,12 @@ async function boot(): Promise<void> {
 
   // A new token at every launch: nothing that read an old one can call this engine.
   const apiToken = randomBytes(32).toString('hex');
+  // The port the engine is asked to listen on; `port`, below, is the one it says it took.
+  const enginePort = launch.port ?? DEFAULT_API_PORT;
   const env = buildServerEnv({
     layout,
     apiToken,
-    port: launch.port ?? DEFAULT_API_PORT,
+    port: enginePort,
     version: app.getVersion(),
     systemRoot: process.env.SystemRoot,
   });
@@ -136,13 +140,11 @@ async function boot(): Promise<void> {
     }
   }
 
-  const giveUp = (reason: string) => {
-    log.error('engine_gave_up', { reason });
+  const giveUp = (failure: EngineFailure, reason: string) => {
+    log.error('engine_gave_up', { failure, reason });
     tray?.destroy();
-    dialog.showErrorBox(
-      'Scia cannot start',
-      `The download engine does not start. Close other programs that use the local network and open Scia again.\n\nTechnical details: ${join(layout.logsDir, 'main.log')}`,
-    );
+    const box = engineFailureNotice(failure, { port: enginePort, logPath });
+    dialog.showErrorBox(box.title, box.body);
     app.exit(1);
   };
 
@@ -157,7 +159,7 @@ async function boot(): Promise<void> {
       window.followServer(port);
     },
     onGaveUp: () => {
-      giveUp('too many restarts');
+      giveUp(EngineFailure.KeepsStopping, 'too many restarts');
     },
     log,
   });
@@ -202,7 +204,7 @@ async function boot(): Promise<void> {
     port = await supervisor.start();
   } catch (error) {
     if (isQuitting()) return;
-    giveUp(String(error));
+    giveUp(EngineFailure.NeverStarted, String(error));
     return;
   }
   log.info('engine_ready', { port });

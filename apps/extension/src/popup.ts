@@ -1,5 +1,12 @@
+import { LOCALE } from '@scia/contracts/locale';
 import type { MediaItem } from './media.ts';
-import { checkPairing, OUTCOME_TEXT, SendOutcome, sendToScia } from './scia-client.ts';
+import {
+  checkPairing,
+  needsPairing,
+  OUTCOME_TEXT,
+  SendOutcome,
+  sendToScia,
+} from './scia-client.ts';
 import { loadSettings, mediaOfTab } from './storage.ts';
 
 const KIND_LABEL: Readonly<Record<MediaItem['kind'], string>> = { video: 'Video', audio: 'Audio' };
@@ -10,7 +17,7 @@ function element<T extends HTMLElement>(id: string, type: new () => T): T {
   return found;
 }
 
-const megabyteCount = new Intl.NumberFormat('en-US', {
+const megabyteCount = new Intl.NumberFormat(LOCALE, {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 });
@@ -44,6 +51,7 @@ async function start(): Promise<void> {
     );
     say(OUTCOME_TEXT[outcome], outcome !== SendOutcome.Sent);
     button.disabled = outcome === SendOutcome.Sent;
+    pair.hidden = !needsPairing(outcome);
   };
 
   pair.addEventListener('click', () => {
@@ -53,7 +61,7 @@ async function start(): Promise<void> {
   const pairing = await checkPairing(settings);
   if (pairing !== SendOutcome.Sent) {
     say(OUTCOME_TEXT[pairing], true);
-    pair.hidden = pairing === SendOutcome.Unreachable;
+    pair.hidden = !needsPairing(pairing);
     return;
   }
 

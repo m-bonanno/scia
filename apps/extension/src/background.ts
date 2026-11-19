@@ -1,5 +1,5 @@
 import { mediaOf } from './media.ts';
-import { SendOutcome, sendToScia } from './scia-client.ts';
+import { needsPairing, SendOutcome, sendToScia } from './scia-client.ts';
 import { forgetMedia, loadSettings, rememberMedia } from './storage.ts';
 
 const MENU_ID = 'scia-download';
@@ -27,7 +27,7 @@ async function deliver(
   tabId: number | undefined,
 ): Promise<SendOutcome> {
   const outcome = await sendToScia(await loadSettings(), urls, referrer);
-  if (outcome === SendOutcome.NotPaired) await chrome.runtime.openOptionsPage();
+  if (needsPairing(outcome)) await chrome.runtime.openOptionsPage();
   await showOutcome(tabId, outcome);
   return outcome;
 }

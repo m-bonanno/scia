@@ -11,7 +11,11 @@ export const SendOutcome = {
   NotPaired: 'not-paired',
   // Scia is closed, or listens on another port.
   Unreachable: 'unreachable',
-  // Scia answered, and refused the code or the link.
+  // Scia answered, and does not know the code.
+  WrongCode: 'wrong-code',
+  // Nothing to send that Scia can fetch: it takes http and https addresses.
+  Unsupported: 'unsupported',
+  // Scia answered, and refused for a reason that is not the code.
   Refused: 'refused',
 } as const;
 export type SendOutcome = (typeof SendOutcome)[keyof typeof SendOutcome];
@@ -30,6 +34,11 @@ function authorized(pairing: Pairing): Record<string, string> {
   return { 'content-type': 'application/json', authorization: `Bearer ${pairing.token}` };
 }
 
+function answered(response: Response): SendOutcome {
+  if (response.ok) return SendOutcome.Sent;
+  return response.status === 401 ? SendOutcome.WrongCode : SendOutcome.Refused;
+}
+
 // Hands links to the desktop app. The referrer is the page they were on.
 export async function sendToScia(
   pairing: Pairing,
@@ -39,14 +48,14 @@ export async function sendToScia(
 ): Promise<SendOutcome> {
   if (pairing.token === '') return SendOutcome.NotPaired;
   const links = urls.filter(isHttp);
-  if (links.length === 0) return SendOutcome.Refused;
+  if (links.length === 0) return SendOutcome.Unsupported;
   try {
     const response = await fetchFn(`${origin(pairing.port)}${API_PREFIX}/downloads`, {
       method: 'POST',
       headers: authorized(pairing),
       body: JSON.stringify({ urls: links, ...(isHttp(referrer) ? { referrer } : {}) }),
     });
-    return response.ok ? SendOutcome.Sent : SendOutcome.Refused;
+    return answered(response);
   } catch {
     return SendOutcome.Unreachable;
   }
@@ -59,7 +68,7 @@ export async function checkPairing(pairing: Pairing, fetchFn: Fetch = fetch): Pr
     const response = await fetchFn(`${origin(pairing.port)}${API_PREFIX}/extension/check`, {
       headers: authorized(pairing),
     });
-    return response.ok ? SendOutcome.Sent : SendOutcome.Refused;
+    return answered(response);
   } catch {
     return SendOutcome.Unreachable;
   }
@@ -69,5 +78,12 @@ export const OUTCOME_TEXT: Readonly<Record<SendOutcome, string>> = {
   sent: 'Sent to Scia.',
   'not-paired': 'Pair the extension with Scia first.',
   unreachable: 'Scia is not running. Open it and try again.',
-  refused: 'Scia refused the request. Check the pairing code.',
+  'wrong-code': 'Scia does not recognize the pairing code. Copy it again from Scia’s settings.',
+  unsupported: 'Scia downloads http and https links only.',
+  refused: 'Scia refused the request.',
 };
+
+// Whether the way out is the options page, where the code is pasted.
+export function needsPairing(outcome: SendOutcome): boolean {
+  return outcome === SendOutcome.NotPaired || outcome === SendOutcome.WrongCode;
+}

@@ -19,11 +19,9 @@ export function TitleBar({ bytesPerSecond, onOpenSettings }: TitleBarProps): Rea
       <span className="text-sm font-semibold tracking-tight">Scia</span>
       <div className="ml-auto flex items-center gap-2">
         {bytesPerSecond > 0 && (
-          <span
-            className="flex items-center gap-1 text-sm text-muted-foreground tabular-nums"
-            aria-label={`Total speed: ${formatSpeed(bytesPerSecond)}`}
-          >
+          <span className="flex items-center gap-1 text-sm text-muted-foreground tabular-nums">
             <ArrowDown size={14} aria-hidden="true" className="text-accent" />
+            <span className="sr-only">Total speed: </span>
             {formatSpeed(bytesPerSecond)}
           </span>
         )}
