@@ -55,6 +55,10 @@ Integrations arrive one at a time. Each is visible in three places: an **Integra
 - Proxy.
 - History with search: the moment to move from `state.json` to a database.
 
+## Not planned
+
+- macOS. If it is ever shipped, the interface stops naming one platform's keys: the empty list says "press Ctrl+V" (`apps/renderer/src/features/downloads/download-list.tsx`).
+
 ## Open question for the owner
 
 **May Scia download what a site lets a person play but forbids them to download?** From a public page as from the person's own account. #8 needs the answer before it is built, and carries this same question until it has one.

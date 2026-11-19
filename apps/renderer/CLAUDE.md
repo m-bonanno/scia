@@ -21,7 +21,7 @@ Anyone who downloads files: they paste a link and want to forget about it. The w
 - **One accent**, for progress and the primary action. Failure is `destructive`; a paused download is muted, not coloured.
 - **Two levels told apart by tone**: the background and the surface on it. No shadows, no decorative borders. A line survives only where it carries meaning: the focus outline, a field's boundary.
 - **The segment bar is the signature**: each connection fills its own stretch of the file where that stretch is. Do not replace it with a plain bar.
-- **Numbers are `tabular-nums`** and go through `lib/format.ts` (`en-US`, a non-breaking space before the unit). Never `toFixed`, never string concatenation of amounts.
+- **Numbers are `tabular-nums`** and go through `lib/format.ts` (the one `LOCALE` of `@scia/contracts/locale`, a non-breaking space before the unit). Never `toFixed`, never string concatenation of amounts.
 - **Icons: `lucide-react` only.** No emoji. Icon-only buttons are `IconButton`, which requires a label.
 - **Visible focus always**: `focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`. Never a box-shadow ring, never `outline-none` without a replacement.
 - **Motion says something or is not there**: a row arriving, a bar filling. `prefers-reduced-motion` turns it off.
@@ -30,7 +30,7 @@ Anyone who downloads files: they paste a link and want to forget about it. The w
 
 - **Every data view has its states**: connecting (nothing drawn, no flash), empty (says what is missing and what to do), engine unreachable (says so, keeps the last list), data.
 - **Forgiving.** A finished download leaves the list at one press (the file stays). Unfinished bytes are thrown away only after a second press in place. A failed add never clears what was typed.
-- **Keyboard-complete.** Paste anywhere adds the links; everything pressable is a `button`.
+- **Keyboard-complete.** Paste anywhere adds the links; everything pressable is a `button`. A shortcut of the pointer (a double click on a finished row opens its file) only repeats a button that is there.
 - **The page never names a path.** It names a download by id; main asks the engine where the file is (`lib/bridge.ts`).
 
 ## Copy

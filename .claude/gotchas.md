@@ -12,8 +12,9 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 ## Formatting numbers
 
-- → Grouping depends on the locale's CLDR data, not on intuition: `en-US` writes `1,000`, while `it-IT` leaves a four-digit number ungrouped (`1000`). A spec expects what `Intl` says for the locale in `lib/format.ts`.
+- → Grouping depends on the locale's CLDR data, not on intuition: `en-US` writes `1,000`, while `it-IT` leaves a four-digit number ungrouped (`1000`). A spec expects what `Intl` says for the `LOCALE` of `@scia/contracts/locale`.
 - → The unit is tied to its number with a non-breaking space, written as the escape `\u00a0`, never as the invisible character itself.
+- → Testing Library normalises the white space of the text it reads, the non-breaking space included, but not of the string it is asked for: a spec finds a formatted amount with a regular expression (`/^10\.0\sMB\/s$/`), not with the string.
 
 ## Copy
 
@@ -30,3 +31,5 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → A page's `window.close()` destroys the window at once: Electron does not emit a preventable `close` for it. A harness that wants what the X does follows `docs/development/testing.md`, "Proving the real app".
 - → A debugging port answers before the window has a page: a harness waits for a `page` target, not just for the port.
 - → A very long profile path breaks Chromium's GPU cache (`The filename or extension is too long`). Harmless in a scratch folder; a sign to shorten the path, not a bug of the app.
+- → Over the DevTools protocol, Enter presses a focused button only when its `keyDown` carries `text: '
+'`: without it the key arrives and nothing is pressed, and the harness proves nothing while looking as if it had.

@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
-import { checkPairing, sendToScia } from './scia-client.ts';
+import {
+  checkPairing,
+  needsPairing,
+  OUTCOME_TEXT,
+  SendOutcome,
+  sendToScia,
+} from './scia-client.ts';
 
 const pairing = { token: 'code', port: 47821 };
 type Fetch = (url: string, init?: RequestInit) => Promise<Response>;
@@ -42,27 +48,41 @@ describe('sendToScia', () => {
     );
   });
 
-  it('asks nothing of the app before the extension is paired, or with nothing to send', async () => {
+  it('asks nothing of the app before the extension is paired, or with nothing it can fetch', async () => {
     const fetchFn = answering(201);
 
     expect(
       await sendToScia({ token: '', port: 47821 }, ['https://a.test/x'], undefined, fetchFn),
     ).toBe('not-paired');
     expect(await sendToScia(pairing, ['blob:https://a.test/1'], undefined, fetchFn)).toBe(
-      'refused',
+      'unsupported',
     );
     expect(fetchFn).not.toHaveBeenCalled();
   });
 
-  it('tells a closed app from one that refuses', async () => {
+  it('tells a closed app from one that does not know the code, and from one that refuses the links', async () => {
     const closed = vi.fn<Fetch>(async () => {
       throw new TypeError('Failed to fetch');
     });
+    const send = (fetchFn: Fetch) => sendToScia(pairing, ['https://a.test/x'], undefined, fetchFn);
 
-    expect(await sendToScia(pairing, ['https://a.test/x'], undefined, closed)).toBe('unreachable');
-    expect(await sendToScia(pairing, ['https://a.test/x'], undefined, answering(401))).toBe(
-      'refused',
-    );
+    expect(await send(closed)).toBe('unreachable');
+    expect(await send(answering(401))).toBe('wrong-code');
+    expect(await send(answering(400))).toBe('refused');
+  });
+});
+
+describe('what the person is told', () => {
+  const outcomes = Object.values(SendOutcome);
+
+  it('offers to pair only where pairing is the remedy', () => {
+    expect(outcomes.filter(needsPairing)).toEqual(['not-paired', 'wrong-code']);
+  });
+
+  it('names the pairing only where pairing is the remedy', () => {
+    for (const outcome of outcomes) {
+      expect(/pair/i.test(OUTCOME_TEXT[outcome]), outcome).toBe(needsPairing(outcome));
+    }
   });
 });
 
@@ -74,6 +94,7 @@ describe('checkPairing', () => {
     expect(fetchFn).toHaveBeenCalledWith('http://127.0.0.1:47821/api/v1/extension/check', {
       headers: { 'content-type': 'application/json', authorization: 'Bearer code' },
     });
-    expect(await checkPairing(pairing, answering(401))).toBe('refused');
+    expect(await checkPairing(pairing, answering(401))).toBe('wrong-code');
+    expect(await checkPairing(pairing, answering(403))).toBe('refused');
   });
 });

@@ -1,6 +1,7 @@
+import { LOCALE } from '@scia/contracts/locale';
+
 // Every number the person reads goes through here: one locale, a unit that never wraps away
 // from its number.
-const LOCALE = 'en-US';
 const NBSP = '\u00a0';
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
 

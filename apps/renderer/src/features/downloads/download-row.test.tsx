@@ -66,14 +66,55 @@ describe('DownloadRow', () => {
     expect(row.remove).toHaveBeenCalledWith('d1');
   });
 
-  it('does not offer the folder where there is no desktop shell to open it', () => {
+  it('does not offer the folder or the file where there is no desktop shell to open them', () => {
     render(
       <DownloadRow
         download={aDownload({ status: DownloadStatus.Completed })}
-        actions={actions({ reveal: undefined })}
+        actions={actions({ reveal: undefined, open: undefined })}
       />,
     );
 
     expect(screen.queryByRole('button', { name: 'Show in folder' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument();
+  });
+
+  it('opens a finished file from a button, by pointer or by keyboard', async () => {
+    const row = actions();
+    render(
+      <DownloadRow download={aDownload({ status: DownloadStatus.Completed })} actions={row} />,
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+    screen.getByRole('button', { name: 'Open' }).focus();
+    await userEvent.keyboard('{Enter}');
+
+    expect(row.open).toHaveBeenCalledTimes(2);
+    expect(row.open).toHaveBeenLastCalledWith('d1');
+  });
+
+  it('opens the file once, wherever on the row it is double-clicked', async () => {
+    const row = actions();
+    render(
+      <DownloadRow download={aDownload({ status: DownloadStatus.Completed })} actions={row} />,
+    );
+
+    await userEvent.dblClick(screen.getByText('film.mkv'));
+    expect(row.open).toHaveBeenCalledTimes(1);
+
+    await userEvent.dblClick(screen.getByRole('button', { name: 'Open' }));
+    expect(row.open).toHaveBeenCalledTimes(2);
+
+    await userEvent.dblClick(screen.getByRole('button', { name: 'Show in folder' }));
+    expect(row.open).toHaveBeenCalledTimes(2);
+  });
+
+  it('has nothing to open before the file is whole', async () => {
+    const row = actions();
+    render(<DownloadRow download={aDownload()} actions={row} />);
+
+    await userEvent.dblClick(screen.getByText('film.mkv'));
+
+    expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument();
+    expect(row.open).not.toHaveBeenCalled();
   });
 });
