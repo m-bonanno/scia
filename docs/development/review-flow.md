@@ -1,18 +1,18 @@
 # Review flow
 
-Every pull request is reviewed by a team of senior roles before it is merged. The reviews run locally, in Claude Code, each as an independent agent; their text is posted on the PR, so the history of why something was approved or sent back stays with the PR.
+Every pull request is reviewed by a team of senior roles before it is merged, with one exception named under "Merging". The reviews run locally, in Claude Code, each as an independent agent; their text is posted on the PR, so the history of why something was approved or sent back stays with the PR.
 
 Run it with `/team-review <PR number>`.
 
 ## The team
 
-| Role              | Reviews when                                                                                                                            | Definition                            |
-| ----------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Tech lead         | **always** — and owns `.github/`, `scripts/`, root tooling, `.claude/`, ADRs, runbooks                                                  | `.claude/agents/tech-lead.md`         |
-| Backend engineer  | the PR touches `packages/core`, `packages/contracts`, `apps/server`, `apps/desktop`                                                     | `.claude/agents/backend-engineer.md`  |
-| Frontend engineer | the PR touches `apps/renderer`, `apps/extension`                                                                                        | `.claude/agents/frontend-engineer.md` |
-| Product designer  | the PR touches anything a person sees or reads: `apps/renderer/src`, `apps/extension/static`, a string of the interface, `docs/design/` | `.claude/agents/product-designer.md`  |
-| Product manager   | the PR's type releases (`feat`, `fix`, `perf`, `hotfix`), or it touches `docs/product/` or `README.md`                                  | `.claude/agents/product-manager.md`   |
+| Role              | Reviews when                                                                                                                                          | Definition                            |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Tech lead         | **always** — and owns `.github/`, `scripts/`, root tooling, `.claude/`, ADRs, runbooks                                                                | `.claude/agents/tech-lead.md`         |
+| Backend engineer  | the PR touches `packages/core`, `packages/contracts`, `apps/server`, `apps/desktop`                                                                   | `.claude/agents/backend-engineer.md`  |
+| Frontend engineer | the PR touches `apps/renderer`, `apps/extension`                                                                                                      | `.claude/agents/frontend-engineer.md` |
+| Product designer  | the PR touches anything a person sees or reads: `apps/renderer/src`, `apps/extension/static`, a string of the interface, `docs/design/`               | `.claude/agents/product-designer.md`  |
+| Product manager   | the PR releases something (`feat`, `fix`, `perf`, `hotfix`, any breaking change, a release into `main`), or it touches `docs/product/` or `README.md` | `.claude/agents/product-manager.md`   |
 
 ## The gates
 
@@ -46,15 +46,15 @@ Everything else is non-blocking: a suggestion, a question, something to track. B
 - **Independent.** A reviewer gets its role file, the PR and the issue it closes, never the author's reasoning: an agent handed a conclusion returns it confirmed. What the owner asked for belongs in the issue, where every reviewer reads it.
 - **Read-only.** Reviewers do not edit, commit, push or comment. Each writes its review to a file outside the repository and answers with its verdict; the orchestrating session posts the files as they are and applies the fixes.
 - **The team verdict is deterministic**: approved only if no role has a blocking finding, and it holds for one head commit.
-- **Changes requested** → the fix lands on the same branch as new commits, never a force-push. Then: the roles are decided again on the whole diff (a fix can reach a new area); every role that blocked reviews again, resumed so that it checks its own findings; a role the fix newly involves reviews for the first time; and the tech lead runs the gates again on the new head. Every round is posted.
-- **Nothing unreviewed is merged.** A commit pushed after the approval — a non-blocking finding taken at the last moment — is reviewed by the tech lead before the merge, and the verdict is posted again for the new head.
-- **Non-blocking findings are not lost**: taken in the same PR when they are in its scope and cheap, otherwise collected in a follow-up issue, opened before the verdict and linked from it.
+- **Changes requested** → the fix lands on the same branch as new commits, never a force-push. Then: the roles are decided again on the whole diff (a fix can reach a new area); every role that blocked reviews again, resumed so that it checks its own findings; a role that had approved reviews again if the fix changes its area; a role the fix newly involves reviews for the first time; and the tech lead runs the gates again on the new head. Every round is posted.
+- **Nothing unreviewed is merged.** A commit pushed after the approval — a non-blocking finding taken at the last moment — is reviewed before the merge by the tech lead and by every role whose area it changes, and the verdict is posted again for the new head.
+- **Non-blocking findings are not lost**: taken in the same PR when they are in its scope and cheap, otherwise collected in a follow-up issue, opened before the approving verdict and linked from it. A verdict that asks for changes names none: its findings are still being fixed.
 - **A blocking finding the author contests goes to the owner.** The orchestrating session never overrules a reviewer; it fixes, or it asks.
 - **Every review teaches.** A blocking finding that a checklist would have prevented becomes a line under "Lessons" in that role's file, or an entry in `.claude/gotchas.md`, in the PR that fixes it.
 
 ## The team verdict
 
-Always posted, as the last comment before a merge or a new round:
+Posted at the end of every round, as its last comment — before the fixes of a new round as before a merge:
 
 ```markdown
 ## Team verdict
@@ -70,11 +70,11 @@ Follow-ups: #N
 
 ## Merging
 
-| Pull request                                 | Merged when                                               | How                                          |
-| -------------------------------------------- | --------------------------------------------------------- | -------------------------------------------- |
-| A work branch into `develop`                 | the team approves its head and CI is green                | **squash**, the PR title becoming the commit |
-| `develop` into `main` (a release)            | the team approves, CI is green, **and the owner says so** | **merge commit**, never a squash             |
-| `main` back into `develop` (after a release) | CI is green; it carries nothing new to review             | **merge commit**, never a squash             |
+| Pull request                                 | Merged when                                                                                                                           | How                                          |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| A work branch into `develop`                 | the team approves its head and CI is green                                                                                            | **squash**, the PR title becoming the commit |
+| `develop` into `main` (a release)            | the team approves, CI is green, **and the owner says so**                                                                             | **merge commit**, never a squash             |
+| `main` back into `develop` (after a release) | CI is green. The one PR nobody reviews: it carries only what was reviewed on its way into `main`. The orchestrating session merges it | **merge commit**, never a squash             |
 
 The two merge commits are what lets semantic-release count the next version from the last one ([`release-flow.md`](./release-flow.md)): squashing either breaks the count.
 

@@ -15,7 +15,7 @@
 2. Body from `.github/PULL_REQUEST_TEMPLATE.md`, in English, written to `.claude/pr-bodies/<branch>.md` and passed with `gh pr create --body-file`.
 3. `Closes #N` in the body.
 4. Before opening it, run the gates locally: the list is in [`review-flow.md`](./review-flow.md#the-gates).
-5. The team reviews it ([`review-flow.md`](./review-flow.md)); it is merged when the team approves and `PR Quality Gates` is green.
+5. The team reviews it. When it is merged, how, and on whose word depends on the kind of PR: the "Merging" table of [`review-flow.md`](./review-flow.md).
 6. No AI attribution anywhere.
 
 ## What the type of a commit decides

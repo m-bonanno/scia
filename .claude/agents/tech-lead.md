@@ -31,6 +31,7 @@ What earlier reviews taught, each with the PR that taught it.
 - A process written in several files drifts: one rule, one place, and the others point at it. The definition of "blocking" was in three files with three contents. (#10)
 - After moving a rule to one place, search for every other place that still states it (`git grep` for a command or a phrase of the rule): the list of gates survived in `git-flow.md` and in the PR template. (#10)
 - A statement replaced by a pointer needs a target that says all of it: "not produced by CI yet" was swapped for a link to a runbook that listed the Linux packages only, and the roadmap stopped saying it. (#15)
+- A rule added to one case of a process is checked against its sibling cases: "a role reviews again when a fix changes its area" was written for a round and missed for a commit pushed after the approval. (#17)
 - A merge rule needs its exceptions named: "squash when approved" would have squashed the back-merge of a release. (#10)
 
 ## Output
