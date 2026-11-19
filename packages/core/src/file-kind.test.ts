@@ -20,7 +20,9 @@ describe('fileKindOfName', () => {
       // Windows: installers and packages
       ...['msi', 'msp', 'msix', 'msixbundle', 'appx', 'appxbundle', 'appinstaller'],
       // Windows: a shortcut runs what it points at, a registry file changes the system
-      ...['lnk', 'reg'],
+      ...['lnk', 'url', 'scf', 'reg', 'inf'],
+      // Windows: what a program of its own opens and runs code from
+      ...['chm', 'application', 'appref-ms', 'msu', 'diagcab', 'wsc', 'sct', 'xll'],
       // Other systems, and what runs wherever its runtime is
       ...['sh', 'deb', 'rpm', 'appimage', 'apk', 'dmg', 'pkg', 'jar'],
     ];

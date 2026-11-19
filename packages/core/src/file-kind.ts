@@ -19,14 +19,16 @@ const EXTENSIONS: Readonly<Record<Exclude<FileKind, 'other'>, readonly string[]>
   document: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'txt', 'epub'],
   // What a system runs, installs, or lets change it, at a press: the interface asks once more
   // before opening one. Drawn from what Windows hands to a program of its own without asking
-  // (PATHEXT, and the kinds its shell runs: scripts, shortcuts, installers, registry files),
+  // (PATHEXT, and the kinds its shell runs: scripts, shortcuts, installers, registry files,
+  // what a program of its own opens and runs code from),
   // plus the packages of the other systems. A document that can carry macros is not here: its
   // program asks, and the system's mark makes it.
   program: [
     ...['exe', 'com', 'scr', 'pif', 'cpl', 'msc'],
     ...['bat', 'cmd', 'ps1', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh', 'hta'],
     ...['msi', 'msp', 'msix', 'msixbundle', 'appx', 'appxbundle', 'appinstaller'],
-    ...['lnk', 'reg'],
+    ...['lnk', 'url', 'scf', 'reg', 'inf'],
+    ...['chm', 'application', 'appref-ms', 'msu', 'diagcab', 'wsc', 'sct', 'xll'],
     ...['sh', 'deb', 'rpm', 'appimage', 'apk', 'dmg', 'pkg', 'jar'],
   ],
 };

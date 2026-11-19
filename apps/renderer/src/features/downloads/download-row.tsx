@@ -17,7 +17,7 @@ import {
   X,
 } from 'lucide-react';
 import { type ReactNode, useRef } from 'react';
-import { ConfirmButton } from '@/components/confirm-button.tsx';
+import { ConfirmButton, type ConfirmButtonHandle } from '@/components/confirm-button.tsx';
 import { IconButton } from '@/components/icon-button.tsx';
 import { cn } from '@/lib/cn.ts';
 import { SegmentBar } from './segment-bar.tsx';
@@ -55,7 +55,7 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
   const failed = status === DownloadStatus.Failed;
   const program = download.kind === FileKind.Program;
   const { open, reveal } = actions;
-  const openButton = useRef<HTMLButtonElement>(null);
+  const openButton = useRef<ConfirmButtonHandle>(null);
 
   return (
     <li
@@ -64,9 +64,8 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
         // A double press on one of the row's buttons is that button's, not the row's.
         if (event.target instanceof Element && event.target.closest('button') !== null) return;
         // The shortcut is one press of "Open", whatever that press does: it opens a file, and
-        // asks before a program.
-        openButton.current?.focus();
-        openButton.current?.click();
+        // asks before a program. It never answers: a second double click runs nothing.
+        openButton.current?.press();
       }}
     >
       <div className="flex items-center gap-3">

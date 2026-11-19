@@ -1,7 +1,7 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { ConfirmButton } from './confirm-button.tsx';
+import { ConfirmButton, type ConfirmButtonHandle } from './confirm-button.tsx';
 
 function aButton(onConfirm: () => void, confirmLabel: string | undefined = 'Run') {
   return (
@@ -44,6 +44,20 @@ describe('ConfirmButton', () => {
     expect(screen.getByRole('button', { name: 'Run' })).toHaveFocus();
   });
 
+  it('refuses the repeats of Enter alone: a held Tab walks on through it', async () => {
+    render(
+      <>
+        <button type="button">Before</button>
+        {aButton(vi.fn())}
+      </>,
+    );
+    screen.getByRole('button', { name: 'Before' }).focus();
+
+    await userEvent.keyboard('{Tab>2/}');
+
+    expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus();
+  });
+
   it('takes a double click as one press', async () => {
     const onConfirm = vi.fn();
     render(aButton(onConfirm));
@@ -79,6 +93,42 @@ describe('ConfirmButton', () => {
 
     expect(screen.getByRole('button', { name: 'Open' })).toBeInTheDocument();
     expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  // Quick presses on a list whose rows leave: each lands on the button that slid under the
+  // pointer, which has seen none of the presses before it.
+  it('counts a press as repeated only if it saw the one before: the second click of a double click begun elsewhere is a first press', () => {
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmButton label="Remove from list" confirmLabel={undefined} onConfirm={onConfirm}>
+        <svg aria-hidden="true" />
+      </ConfirmButton>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Remove from list' }), { detail: 2 });
+
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('never answers its own question when pressed from elsewhere', async () => {
+    const onConfirm = vi.fn();
+    const handle: { current: ConfirmButtonHandle | null } = { current: null };
+    render(
+      <ConfirmButton ref={handle} label="Open" confirmLabel="Run" onConfirm={onConfirm}>
+        <svg aria-hidden="true" />
+      </ConfirmButton>,
+    );
+
+    act(() => {
+      handle.current?.press();
+    });
+    expect(screen.getByRole('button', { name: 'Run' })).toHaveFocus();
+    act(() => {
+      handle.current?.press();
+    });
+
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument();
   });
 
   it('with nothing to ask, does it at the first press — once, however the press is repeated', async () => {

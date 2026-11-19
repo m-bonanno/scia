@@ -100,6 +100,8 @@ describe('DownloadRow', () => {
 
     await userEvent.dblClick(screen.getByText('film.mkv'));
     expect(row.open).toHaveBeenCalledTimes(1);
+    // The shortcut is a press of the button: the focus goes where the press went.
+    expect(screen.getByRole('button', { name: 'Open' })).toHaveFocus();
 
     await userEvent.dblClick(screen.getByRole('button', { name: 'Open' }));
     expect(row.open).toHaveBeenCalledTimes(2);
@@ -130,6 +132,16 @@ describe('DownloadRow', () => {
 
     expect(row.open).not.toHaveBeenCalled();
     expect(screen.getByRole('button', { name: 'Run' })).toHaveFocus();
+  });
+
+  it('does not answer the question at a second double click on the row', async () => {
+    const row = actions();
+    render(<DownloadRow download={aProgram()} actions={row} />);
+
+    await userEvent.dblClick(screen.getByText('setup.exe'));
+    await userEvent.dblClick(screen.getByText('setup.exe'));
+
+    expect(row.open).not.toHaveBeenCalled();
   });
 
   it('does not run a program on a double click on its button', async () => {

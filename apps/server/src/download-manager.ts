@@ -53,7 +53,7 @@ export interface ManagerDeps {
   readonly store: StateStore;
   readonly defaultDirectory: string;
   readonly logger: Logger;
-  // What marks a finished file as come from the network; the running system's by default.
+  // What marks a finished file as coming from the network; the running system's by default.
   readonly markDownloaded?: MarkDownloaded;
   readonly now?: () => number;
   readonly newId?: () => string;

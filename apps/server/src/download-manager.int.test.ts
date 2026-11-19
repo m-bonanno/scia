@@ -6,6 +6,7 @@ import { DownloadFailure, DownloadStatus } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DownloadManager, type ManagerDeps, PART_SUFFIX } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
+import { markerFor } from './origin-mark.ts';
 import { JsonStateStore } from './state-store.ts';
 import {
   type RangeServer,
@@ -70,7 +71,7 @@ describe('DownloadManager', () => {
     expect(finished.completedAt).not.toBeNull();
   });
 
-  it('marks a file as come from the network before it appears under its name', async () => {
+  it('marks a file as coming from the network before it appears under its name', async () => {
     const { url } = await host({ fileName: 'setup.exe' });
     const marked: { path: string; alreadyNamed: boolean }[] = [];
     const downloads = await open({
@@ -83,6 +84,30 @@ describe('DownloadManager', () => {
     await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
 
     expect(marked).toEqual([{ path: inDownloads(`setup.exe${PART_SUFFIX}`), alreadyNamed: false }]);
+  });
+
+  it('looks at the name only after the mark: a file that takes the name meanwhile is left alone', async () => {
+    const { url } = await host({ fileName: 'setup.exe' });
+    const downloads = await open({
+      // While the mark is being written, someone else puts a file of that name in the folder.
+      markDownloaded: async (path) => {
+        await markerFor(process.platform)(path);
+        await writeFile(inDownloads('setup.exe'), 'not ours');
+      },
+    });
+
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(await readFile(inDownloads('setup.exe'), 'utf8')).toBe('not ours');
+    expect(downloads.find(added!.id).fileName).toBe('setup (1).exe');
+    expect(Buffer.compare(await readFile(inDownloads('setup (1).exe')), body)).toBe(0);
+    if (process.platform === 'win32') {
+      // The mark went with the part file to the name it found free.
+      expect(await readFile(`${inDownloads('setup (1).exe')}:Zone.Identifier`, 'utf8')).toBe(
+        '[ZoneTransfer]\r\nZoneId=3\r\n',
+      );
+    }
   });
 
   it('keeps a file whose disk refuses the mark, and says so in the log', async () => {
