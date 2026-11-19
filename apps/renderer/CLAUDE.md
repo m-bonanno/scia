@@ -32,12 +32,12 @@ Anyone who downloads files: they paste a link and want to forget about it. The w
 - **Forgiving.** A finished download leaves the list at one press (the file stays). Unfinished bytes are thrown away only after a second press in place, and a downloaded program is run only after a second press too (`components/confirm-button.tsx`). The button turns, in place, into the word of what it is about to do, and stays one element, so the focus stays on it. A press is one press however it is repeated: while the button asks, no later click of a burst is the answer, and neither are the repeats of Enter held down — of Enter alone, a held Tab walks on. When it has nothing to ask, a later click is refused only by the button that saw the one before it, so quick presses clear a list. A failed add never clears what was typed.
 - **Keyboard-complete.** Paste anywhere adds the links; everything pressable is a `button`. A shortcut of the pointer (a double click on a finished row is one press of its "Open": it opens a file, and makes a program's button ask — it moves the focus there, and never answers the question) only repeats a button that is there.
 - **A capture in `docs/design/` shows the app as it is**: the PR that changes what one shows retakes it, from the real app (`docs/design/README.md`).
-- **The page never names a path.** It names a download by id; main asks the engine where the file is (`lib/bridge.ts`). It names no folder either: to change where downloads go it asks main, which shows the system's dialog and tells the engine, and then it reads the settings again.
+- **The page never names a path.** It names a download by id; main asks the engine where the file is (`lib/bridge.ts`). It names no folder either: to change where downloads go it asks main, which shows the system's dialog and tells the engine, and then it reads the settings again — whatever main answered, and also when main failed. An answer from main is checked like any answer from outside (`isFolderChange`).
 
 ## Copy
 
 - **English, sentence case.** Buttons start with a verb (_Download_, _Resume_); headings are nouns.
-- **Errors: the fact, then the remedy where there is one.** _The file is no longer at this address._ No blame, no _Oops_.
+- **Errors: the fact, then the remedy where there is one.** _The file is no longer at this address._ No blame, no _Oops_. A sentence that names a cause is shown for that cause alone: the caller is told which it was, as data.
 - API errors arrive as `error.code`; the text lives in `lib/messages.ts`. A download's failure is a `DownloadFailure` code, turned into text in `features/downloads/status-line.ts`.
 
 ## Code

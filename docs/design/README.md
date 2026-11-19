@@ -14,4 +14,4 @@ The pairing code and the folder in `settings.png` belong to that scratch profile
 
 A capture is retaken in the PR that changes what it shows (`apps/renderer/CLAUDE.md`, "Behaviour"; the product designer checks it).
 
-Not captured yet: the empty list, the engine unreachable, a failed download, the extension's popup and options.
+Not captured yet: Settings in the light theme and with a folder refused, the empty list, the engine unreachable, a failed download, the extension's popup and options.

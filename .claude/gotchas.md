@@ -20,8 +20,11 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 - → A change of wording or of language is finished when a search of the whole tree for the old words finds nothing (`git grep -nE "[àèéìòù]"` caught what reading the diff did not), and every dialog was opened in the real app: a screen nobody opened is a screen nobody read.
 
+- → A sentence that names a cause is shown for that cause alone. One `catch` around a call that rejects in five ways said "choose a folder Scia can write to" to someone whose engine was restarting and who had chosen nothing: try a `catch` against every way the call rejects, and have the callee say which it was, as data (#38).
+
 ## Specs
 
+- → What a component that stays mounted remembers is still there when it is shown again: Settings is never unmounted, and a refusal said in one visit greeted the next. Clear it when it opens, with a spec that closes and opens (#38).
 - → A fix found while proving something else in the real app is still a rule without a spec: the run shows it once, and nothing holds it afterwards. Its spec is written, and seen failing against the old code, before the PR is opened: the message for a file that does not open went to review held only by a harness (#21).
 
 - → `userEvent.dblClick` on a button that its first press replaces sends the second press to the element that is gone: the spec passes whatever the code does. In a browser the second press lands on the replacement, as a click whose `detail` is 2 — fire that (`fireEvent.click(button, { detail: 2 })`), and say what a harness proves: one that sends `clickCount: 2` over the DevTools protocol proves what the page does with a second press, not that a hand produces one (#32: a double click on the cross deleted unfinished bytes, and its spec would have been green).
@@ -40,6 +43,7 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 ## Engine
 
+- → A question to the system is tried for its "no", on the system it will run on: `access(folder, W_OK)` has none on Windows, where it says yes for every folder that exists — read-only attribute, denying access list, `C:\Program Files`. What has to be possible is proven by doing it: make a file, remove it (#38).
 - → A name from a host that decides something is read as the system reads it, not as Scia numbers a copy: `setup.tar.exe` and a bare `.cmd` were not programs to a function that took `.tar.exe` as one extension and a leading dot as none. And a list that is a safety rule is drawn from the system (`PATHEXT`, `assoc`/`ftype`), not from memory: `vbs`, `js`, `hta`, `pif`, `lnk` run at a press (#32).
 - → A vitest `?raw` import of a `.css` file comes back empty. A spec that needs the stylesheet's text reads it with `node:fs`, from a workspace that has Node types.
 - → Two downloads added together race for the plain file name: a spec must not assume which one gets `name.ext` and which `name (1).ext`.

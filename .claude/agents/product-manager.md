@@ -24,6 +24,8 @@ What earlier reviews taught, each with the PR that taught it.
 
 - A "done" added to the roadmap needs its evidence in the same PR; a sentence that is not a translation is not part of a translation. (#4)
 
+- A "refused" in an issue is checked against what a person can actually choose: the system's dialog hands over only folders that exist, and those were never refused on Windows — the specs held a path no dialog can produce (#38).
+
 - A roadmap line says "done" only for what someone saw: a script that proves the window hides does not prove an icon is drawn. (#12)
 
 ## Output

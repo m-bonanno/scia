@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readdir, readFile, writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { join, sep } from 'node:path';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DownloadManager, type ManagerDeps, PART_SUFFIX } from './download-manager.ts';
@@ -13,7 +13,7 @@ import {
   type RangeServerOptions,
   startRangeServer,
 } from './testing/range-server.ts';
-import { scratchFolder, silentLogger, until } from './testing/scratch.ts';
+import { refusingFiles, scratchFolder, silentLogger, until } from './testing/scratch.ts';
 
 const MIB = 1024 * 1024;
 const body = randomBytes(4 * MIB + 7);
@@ -205,6 +205,36 @@ describe('DownloadManager', () => {
     ).rejects.toThrow('The folder cannot be made or written to.');
 
     expect(downloads.settings().downloadDirectory).toBe(before);
+  });
+
+  it('refuses a folder that is there and takes no file, and leaves nothing of its own in it', async () => {
+    const locked = join(folder.path, 'locked');
+    await mkdir(locked);
+    const unlock = await refusingFiles(locked);
+    const downloads = await open();
+    const before = downloads.settings().downloadDirectory;
+
+    try {
+      await expect(downloads.setDownloadDirectory(locked)).rejects.toThrow(
+        'The folder cannot be made or written to.',
+      );
+    } finally {
+      await unlock();
+    }
+
+    expect(downloads.settings().downloadDirectory).toBe(before);
+    expect(await readdir(locked)).toEqual([]);
+  });
+
+  it('keeps the folder as the system names it, whatever way it was written', async () => {
+    const downloads = await open();
+    const elsewhere = join(folder.path, 'elsewhere');
+
+    const kept = await downloads.setDownloadDirectory(`${elsewhere}${sep}films${sep}..${sep}`);
+
+    expect(kept.downloadDirectory).toBe(elsewhere);
+    // The path is read before anything is made: nothing is left of the detour.
+    expect(await readdir(elsewhere)).toEqual([]);
   });
 
   it('runs no more downloads at once than the setting allows', async () => {

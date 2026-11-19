@@ -6,3 +6,18 @@ export const BridgeChannel = {
   ChooseDownloadFolder: 'settings.chooseDownloadFolder',
 } as const;
 export type BridgeChannel = (typeof BridgeChannel)[keyof typeof BridgeChannel];
+
+// What main answers to `chooseDownloadFolder`: what became of the folder. Anything that is not
+// about the folder — an engine that fails or is silent — is a rejection, not one of these.
+export const FolderChange = {
+  Changed: 'changed',
+  // The person closed the dialog without choosing.
+  Kept: 'kept',
+  // The engine cannot make the folder that was chosen, or cannot write to it.
+  Refused: 'refused',
+} as const;
+export type FolderChange = (typeof FolderChange)[keyof typeof FolderChange];
+
+export function isFolderChange(value: unknown): value is FolderChange {
+  return Object.values(FolderChange).some((change) => change === value);
+}

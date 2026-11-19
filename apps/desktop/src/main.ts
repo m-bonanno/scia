@@ -7,7 +7,7 @@ import log from 'electron-log/main';
 import { APP_ID } from './engine/app-identity.ts';
 import { CloseOutcome, WindowCloser } from './engine/close-policy.ts';
 import { downloadActivity } from './engine/download-activity.ts';
-import { chooseDownloadFolder } from './engine/download-folder.ts';
+import { chooseDownloadFolder, oneAtATime } from './engine/download-folder.ts';
 import { completedDownloadPath } from './engine/download-location.ts';
 import type { EngineAccess } from './engine/engine-access.ts';
 import { EngineFailure, engineFailureNotice } from './engine/engine-failure.ts';
@@ -201,8 +201,15 @@ async function boot(): Promise<void> {
     if (failure !== '') throw new Error(failure);
   });
 
-  window.answer(BridgeChannel.ChooseDownloadFolder, () =>
-    chooseDownloadFolder((current) => window.pickFolder(current), engine(), ENGINE_ANSWER_LIMIT_MS),
+  window.answer(
+    BridgeChannel.ChooseDownloadFolder,
+    oneAtATime(() =>
+      chooseDownloadFolder(
+        (current) => window.pickFolder(current),
+        engine(),
+        ENGINE_ANSWER_LIMIT_MS,
+      ),
+    ),
   );
 
   try {

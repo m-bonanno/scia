@@ -16,9 +16,10 @@ export const ENGINE_UNREACHABLE = 'Scia’s engine is not responding. Trying aga
 // longer where it was downloaded is the common one.
 export const FILE_NOT_OPENED = 'Scia could not open the file. It may have been moved or deleted.';
 
-// Main says only that the folder was not changed: the engine refuses one it cannot make or
-// write to, and that is the cause a person can do something about.
-export const FOLDER_NOT_CHANGED = 'Scia could not use that folder. Choose one it can write to.';
+// Said only when main answers that the engine refused the folder the person chose: one it
+// cannot make, or cannot write to. Any other failure of that ask is not about a folder.
+export const FOLDER_REFUSED =
+  'Scia could not use the folder you chose. Choose one it can write to.';
 
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
