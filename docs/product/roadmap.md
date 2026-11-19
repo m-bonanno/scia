@@ -13,11 +13,12 @@ The state is the real one: an item is "done" only if it was verified in the real
 
 ## M1 — Daily use
 
-**The first stable release waits for the whole of this milestone** (the owner, 19 November 2026), and ships for Windows only: Linux comes after it, below. The order, decided the same day: the mark on downloaded files and the second press before a program is run (#22); what the review of the tray left that needs no hands (#13); then choosing the folder, the speed limit, the notification when a download ends and automatic updates — alternating, in small PRs, with AllDebrid (M3, #7), so that neither waits for the other to be whole; the rest of the milestone follows in the same alternation.
+**The first stable release waits for the whole of this milestone and for AllDebrid (M3, #7)** (the owner, 19 November 2026), and ships for Windows only: Linux comes after it, below. The repository becomes public shortly before it — when this milestone is nearly whole — so that automatic updates are proven on a beta with installers first (#28). The order, decided the same day: the mark on downloaded files and the second press before a program is run (#22); what the review of the tray left that needs no hands (#13); then choosing the folder, the speed limit, the notification when a download ends and automatic updates — alternating, in small PRs, with AllDebrid (M3, #7), so that neither waits for the other to be whole; the rest of the milestone follows in the same alternation.
 
 - Tray icon: closing the window does not stop the downloads (#6). **Written, covered by specs, and verified by script in the real app on Windows** (the window hides, the download goes on, a second launch brings it back, closing with nothing left quits). **Not done until someone has seen it**: the icon on a taskbar, its click, its menu, its tooltip and the notification have never been looked at or pressed (#13).
 - When the last download of a hidden Scia ends or fails, nothing says so yet: it stays in the tray. Decided (19 November 2026): a notification says it, and Scia stays in the tray until it is quit from its menu. To be built with the notification item below.
 - A file Scia downloads is marked as coming from the network — on Windows the zone only, never the address it came from — and a downloaded program asks for a second press before it is run (#22). **Written, covered by specs, and seen in the real app on Windows**: the stream is on the finished file; a double click and a key held down run nothing, they make the button ask; and after the second press Windows itself asks before a marked script is run ([ADR 0003](../adr/0003-the-mark-of-a-downloaded-file.md)). Not seen (#33): a marked `.exe`, installer or document (the files run were scripts); a disk without streams (held by a spec with a mark that refuses, never tried on a real one); a hand on the mouse and on the keys (the presses were sent by a script). Linux: no mark is written there.
+- A file that could not be marked — on a disk without streams — says so on its row, discreetly (#34). Decided by the owner, not built. It is listed in this milestone by the author: the owner decided the line, not which release waits for it.
 - Choosing the folder, default and per download.
 - Speed limit, global and per download.
 - A notification when a download ends; "Open" and "Show in folder" are already there.
@@ -43,7 +44,7 @@ M3 does not wait for M2: a hoster link pasted into Scia needs nothing from it. O
 
 Integrations arrive one at a time. Each is visible in three places: an **Integrations** section in Settings that lists the services and shows which are connected; the Integrations table in the README; the release notes of the version that brings it (`feat(integrations): …`).
 
-- **AllDebrid** (#7), connected once in Settings (API key kept by the operating system). From then on **a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically**, with nothing else to do — as a direct link would be. It has to be built and proven against a simulated service; the verification with a real account is the owner's, who pastes their own key into Settings. **A question for the owner before the first AllDebrid PR** (#7): whether a hoster's wait or cap is an access control in the sense of "Respect the hosts".
+- **AllDebrid** (#7), connected once in Settings (API key kept by the operating system). From then on **a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically**, with nothing else to do — as a direct link would be. It has to be built and proven against a simulated service; the verification with a real account is the owner's, who pastes their own key into Settings. The owner answered the question this item carried (19 November 2026): a debrid service is lawful under "Respect the hosts" — the person pays the service, the service fetches the file with accounts of its own, and Scia downloads the link it is given. The first PR of #7 has to say so in the principle.
 - A download that went through a service says so in its row.
 - A link that expires during a long download is unlocked again without losing the bytes.
 - A link that unlocks into several files shows the list before downloading.
@@ -61,7 +62,9 @@ Integrations arrive one at a time. Each is visible in three places: an **Integra
 
 ## After the first stable release
 
-- Linux: the packages (AppImage, deb) built and tried on a clean machine, the tray on a desktop that draws one and on one that does not — nothing of the tray has been tried there, and its tooltip cannot follow the downloads (#13). Until then Scia is untried and unpackaged on Linux. The Release workflow builds the Linux packages on a stable tag: whether that job waits too is decided with the first release PR.
+In this order (the owner, 19 November 2026): Linux first, before the rest of M2 to M4 goes on; other languages after M4.
+
+- Linux: the packages (AppImage, deb) built and tried on a clean machine, the tray on a desktop that draws one and on one that does not — nothing of the tray has been tried there, and its tooltip cannot follow the downloads (#13). Until then Scia is untried and unpackaged on Linux. The Release workflow builds the Linux packages on a stable tag today: that job is to be turned off until Linux is tried (the owner's decision), in a PR of its own before the release PR (#28).
 - The interface in other languages (i18n), a feature of its own. Italian will be the first one added.
 
 ## Not planned

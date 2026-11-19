@@ -35,7 +35,7 @@ To get the installers of a beta, or to build again those of a stable: **Actions 
 4. Wait for the workflow, then **verify the artefact, not the build**: download the installer from the release, install it, launch it with `--user-data-dir=<scratch>`, download a file, read `logs/main.log`.
 5. Merge `main` back into `develop` (a PR whose head is `main`, merge commit), so the two branches share the release's merge commit and the next beta is counted from the stable. Nobody reviews this PR, and the orchestrating session merges it when CI is green: the "Merging" table of [`review-flow.md`](./review-flow.md) says why. **Before merging it, read the repository's setting** — `gh api repos/{owner}/{repo} --jq .delete_branch_on_merge`, run from the clone as it is written, must answer `false` or `main` must be protected — and never ask for the head to be deleted: the head is `main` ([`git-flow.md`](./git-flow.md), "Repository settings").
 
-**The first stable release only**: before step 2, the repository is made public and `main` and `develop` are protected ([`git-flow.md`](./git-flow.md), "Repository settings"), so that step 5 cannot delete `main` whatever the setting says. The PR that records it removes the entry on direct pushes under "Not there yet".
+**Before the first stable release**: shortly before it — when M1 is nearly whole, so that automatic updates are proven on a beta with installers — the repository is made public, with its licence in place (MIT, the owner's choice), and `main` and `develop` are protected ([`git-flow.md`](./git-flow.md), "Repository settings"), so that step 5 cannot delete `main` whatever the setting says. The PR that records it removes the entry on direct pushes under "Not there yet".
 
 ## Rules
 
@@ -47,8 +47,8 @@ To get the installers of a beta, or to build again those of a stable: **Actions 
 
 ## Not there yet
 
-- **Auto-update.** The app does not look for new versions (roadmap M1). When it does, the installers must be readable without a token: a public releases repository, or the repository made public.
-- **A guard on direct pushes.** GitHub refuses branch protection on a private Free repository, so `main` and `develop` are protected by the husky hooks only. The repository becomes public at the first stable release, and the two branches are protected then ([`git-flow.md`](./git-flow.md), "Repository settings", and "Releasing" above).
+- **Auto-update.** The app does not look for new versions (roadmap M1). When it does, the installers must be readable without a token: the repository is made public shortly before the first stable release for this (#28).
+- **A guard on direct pushes.** GitHub refuses branch protection on a private Free repository, so `main` and `develop` are protected by the husky hooks only. The repository becomes public shortly before the first stable release, and the two branches are protected then ([`git-flow.md`](./git-flow.md), "Repository settings", and "Releasing" above).
 - **Signed installers.** Windows shows SmartScreen's warning for an unsigned `.exe`.
-- **Linux waits, the job does not yet.** The first stable release ships for Windows only (roadmap, "After the first stable release"), while the installers job builds the Linux packages on every stable tag: whether it waits too is decided with the first release PR.
+- **Linux waits, the job does not yet.** The first stable release ships for Windows only (roadmap, "After the first stable release"), while the installers job builds the Linux packages on every stable tag: the job is to be turned off until Linux is tried (the owner's decision, #28), in a PR of its own before the release PR.
 - **No installer has come out of CI, and the Linux packages have never been built anywhere.** The installers job has never run: the first stable release is its first run — expect to fix it.

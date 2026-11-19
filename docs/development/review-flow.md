@@ -91,6 +91,8 @@ The last line is `Follow-ups: none` when an approving verdict leaves nothing to 
 | `develop` into `main` (a release)            | the team approves, CI is green, **and the owner says so**                                                                             | **merge commit**, never a squash             |
 | `main` back into `develop` (after a release) | CI is green. The one PR nobody reviews: it carries only what was reviewed on its way into `main`. The orchestrating session merges it | **merge commit**, never a squash             |
 
+**From the day the repository is public and its branches are protected** ([`git-flow.md`](./git-flow.md), "Repository settings"), every row of this table also needs the owner's approved review on GitHub: the team's verdict is then what the owner reads before approving, not what merges.
+
 The two merge commits are what lets semantic-release count the next version from the last one ([`release-flow.md`](./release-flow.md)): squashing either breaks the count.
 
 ## What a review looks like
