@@ -10,9 +10,17 @@ A download manager for Windows and Linux: paste a link, Scia fetches it over sev
 - Pauses and resumes from the bytes it already has, even after the app was closed and opened again.
 - Closing the window with downloads running keeps Scia downloading from the system tray (Windows; Linux not yet tried); with nothing left, closing quits.
 - Keeps a queue: how many downloads at once and how many connections per download are settings.
-- Takes links and media from the browser through the extension (`apps/extension`).
+- Takes links and media from the browser through the extension (`apps/extension`) — written and tested in its logic, not yet tried in a real browser.
 
 What comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
+
+## Integrations
+
+None yet. Scia will connect to outside services one at a time, each listed here when it lands.
+
+| Service   | What it adds                                                        | State        |
+| --------- | ------------------------------------------------------------------- | ------------ |
+| AllDebrid | Hoster links are unlocked and downloaded like direct links; magnets | Planned (#7) |
 
 ## Development
 
