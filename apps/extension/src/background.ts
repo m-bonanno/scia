@@ -35,7 +35,7 @@ async function deliver(
 chrome.runtime.onInstalled.addListener(() => {
   chrome.contextMenus.create({
     id: MENU_ID,
-    title: 'Scarica con Scia',
+    title: 'Download with Scia',
     contexts: ['link', 'video', 'audio', 'image'],
   });
 });

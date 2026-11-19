@@ -22,7 +22,7 @@ The extension must hand links to the desktop app. The app listens on `127.0.0.1`
 | Permission                  | For                                                           | Lets it see                       |
 | --------------------------- | ------------------------------------------------------------- | --------------------------------- |
 | `webRequest` + `<all_urls>` | Noticing the video and audio files a page loads               | Response headers of every request |
-| `contextMenus`              | «Scarica con Scia» on a link, a video, an audio, an image     | The link that was clicked         |
+| `contextMenus`              | "Download with Scia" on a link, a video, an audio, an image   | The link that was clicked         |
 | `downloads`                 | Passing the browser's downloads to Scia, when the person asks | The browser's download list       |
 | `storage`                   | The pairing token, the port, the per-tab list of media        | —                                 |
 

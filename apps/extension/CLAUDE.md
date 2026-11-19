@@ -15,4 +15,4 @@ A Manifest V3 extension for Chromium browsers. It hands the desktop app links an
 
 ## Trying it
 
-`npm run build -w @scia/extension`, then in `chrome://extensions` turn on developer mode and «Load unpacked» → `apps/extension/dist`. Pair it from the app's settings.
+`npm run build -w @scia/extension`, then in `chrome://extensions` turn on developer mode and "Load unpacked" → `apps/extension/dist`. Pair it from the app's settings.

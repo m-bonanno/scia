@@ -1,10 +1,11 @@
-// Every number the person reads goes through here: Italian separators, a unit that never wraps
-// away from its number.
+// Every number the person reads goes through here: one locale, a unit that never wraps away
+// from its number.
+const LOCALE = 'en-US';
 const NBSP = '\u00a0';
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
 
-const whole = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 0 });
-const oneDecimal = new Intl.NumberFormat('it-IT', {
+const whole = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });
+const oneDecimal = new Intl.NumberFormat(LOCALE, {
   minimumFractionDigits: 1,
   maximumFractionDigits: 1,
 });
@@ -17,7 +18,7 @@ export function formatBytes(bytes: number): string {
     value /= 1024;
     unit += 1;
   }
-  // «1,2 GB» but «340 MB» and «12 KB»: a decimal only where it says something.
+  // "1.2 GB" but "340 MB" and "12 KB": a decimal only where it says something.
   const text = unit >= 2 && value < 100 ? oneDecimal.format(value) : whole.format(value);
   return `${text}${NBSP}${UNITS[unit] ?? 'B'}`;
 }
@@ -35,11 +36,11 @@ export function formatDuration(seconds: number): string {
   if (hours < 24) {
     return `${String(hours)}${NBSP}h ${String(minutes % 60).padStart(2, '0')}${NBSP}min`;
   }
-  return `${String(Math.floor(hours / 24))}${NBSP}g ${String(hours % 24)}${NBSP}h`;
+  return `${String(Math.floor(hours / 24))}${NBSP}d ${String(hours % 24)}${NBSP}h`;
 }
 
 export function formatPercent(done: number, total: number): string {
   if (total <= 0) return '0%';
-  // Never «100%» while a byte is missing.
+  // Never "100%" while a byte is missing.
   return `${String(Math.min(done >= total ? 100 : 99, Math.floor((done / total) * 100)))}%`;
 }

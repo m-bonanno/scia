@@ -18,7 +18,7 @@ export function splitExtension(name: string): NameParts {
   if (dot <= 0 || name.length - dot > LONGEST_EXTENSION + 1) return { stem: name, extension: '' };
   const stem = name.slice(0, dot);
   const extension = name.slice(dot);
-  // «archive.tar.gz» is one extension to whoever numbers a copy.
+  // "archive.tar.gz" is one extension to whoever numbers a copy.
   if (stem.toLowerCase().endsWith('.tar') && stem.length > 4) {
     return { stem: stem.slice(0, -4), extension: `${stem.slice(-4)}${extension}` };
   }
@@ -56,7 +56,7 @@ export function fileNameFromUrl(url: string): string {
   try {
     decoded = decodeURIComponent(segment);
   } catch {
-    // A stray «%» is not an encoding: the segment stays as it is written.
+    // A stray "%" is not an encoding: the segment stays as it is written.
   }
   return sanitizeFileName(lastPathSegment(decoded));
 }
@@ -70,7 +70,7 @@ function unquote(value: string): string {
     : trimmed;
 }
 
-// RFC 6266: «filename*» carries the encoded name and wins over the plain «filename».
+// RFC 6266: "filename*" carries the encoded name and wins over the plain "filename".
 export function fileNameFromContentDisposition(header: string): string | undefined {
   const extended = /filename\*\s*=\s*[\w-]*'[^']*'([^;]+)/i.exec(header)?.[1];
   if (extended !== undefined) {
@@ -86,7 +86,7 @@ export function fileNameFromContentDisposition(header: string): string | undefin
   return name === '' ? undefined : sanitizeFileName(name);
 }
 
-// «film.mkv», then «film (1).mkv», «film (2).mkv»…
+// "film.mkv", then "film (1).mkv", "film (2).mkv"…
 export function uniqueFileName(name: string, isTaken: (candidate: string) => boolean): string {
   if (!isTaken(name)) return name;
   const { stem, extension } = splitExtension(name);

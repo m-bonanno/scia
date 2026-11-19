@@ -38,8 +38,8 @@ export function AddBar({ onAdd }: AddBarProps): ReactNode {
         onChange={(event) => {
           setText(event.target.value);
         }}
-        aria-label="Link da scaricare"
-        placeholder="Incolla uno o più link"
+        aria-label="Links to download"
+        placeholder="Paste one or more links"
         autoFocus
         spellCheck={false}
         autoComplete="off"
@@ -50,7 +50,7 @@ export function AddBar({ onAdd }: AddBarProps): ReactNode {
         disabled={links.length === 0 || busy}
         className="h-9 shrink-0 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-foreground transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40"
       >
-        {links.length > 1 ? `Scarica ${String(links.length)} file` : 'Scarica'}
+        {links.length > 1 ? `Download ${String(links.length)} files` : 'Download'}
       </button>
     </form>
   );

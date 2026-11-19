@@ -10,8 +10,14 @@ function element<T extends HTMLElement>(id: string, type: new () => T): T {
   return found;
 }
 
+const megabyteCount = new Intl.NumberFormat('en-US', {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
+// The unit never wraps away from its number, as in the app (apps/renderer/src/lib/format.ts).
 function megabytes(bytes: number): string {
-  return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 }).format(bytes / (1024 * 1024))} MB`;
+  return `${megabyteCount.format(bytes / (1024 * 1024))}\u00a0MB`;
 }
 
 const status = element('status', HTMLParagraphElement);
@@ -52,16 +58,10 @@ async function start(): Promise<void> {
   }
 
   if (media.length === 0) {
-    say(
-      'Nessun video o audio in questa pagina. Per un link, usa il tasto destro: «Scarica con Scia».',
-    );
+    say('No video or audio on this page. For a link, right-click it: “Download with Scia”.');
     return;
   }
-  say(
-    media.length === 1
-      ? '1 file in questa pagina'
-      : `${String(media.length)} file in questa pagina`,
-  );
+  say(media.length === 1 ? '1 file on this page' : `${String(media.length)} files on this page`);
 
   // Latest first: what just started playing is what the person came for.
   for (const item of media.toReversed()) {
@@ -80,7 +80,7 @@ async function start(): Promise<void> {
         : `${KIND_LABEL[item.kind]} · ${megabytes(item.size)}`;
     text.append(name, details);
     const button = document.createElement('button');
-    button.textContent = 'Scarica';
+    button.textContent = 'Download';
     button.addEventListener('click', () => {
       void send([item], button);
     });

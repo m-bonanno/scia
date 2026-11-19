@@ -51,9 +51,9 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
     >
       <div className="flex items-center justify-between py-3 pr-3 pl-6">
         <h2 id="settings-title" className="text-base font-semibold">
-          Impostazioni
+          Settings
         </h2>
-        <IconButton label="Chiudi" onClick={onClose}>
+        <IconButton label="Close" onClick={onClose}>
           <X size={16} aria-hidden="true" />
         </IconButton>
       </div>
@@ -61,8 +61,8 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
         {settings !== null && (
           <section className="flex flex-col gap-4">
             <Stepper
-              label="Download contemporanei"
-              hint="Gli altri aspettano in coda il loro turno."
+              label="Simultaneous downloads"
+              hint="The others wait in the queue for their turn."
               value={settings.maxConcurrentDownloads}
               {...SETTINGS_LIMITS.maxConcurrentDownloads}
               onChange={(maxConcurrentDownloads) => {
@@ -70,8 +70,8 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
               }}
             />
             <Stepper
-              label="Connessioni per download"
-              hint="Più connessioni, più velocità, finché il server lo consente."
+              label="Connections per download"
+              hint="More connections, more speed, as far as the server allows."
               value={settings.connectionsPerDownload}
               {...SETTINGS_LIMITS.connectionsPerDownload}
               onChange={(connectionsPerDownload) => {
@@ -79,7 +79,7 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
               }}
             />
             <div>
-              <p className="text-sm font-medium">Cartella dei download</p>
+              <p className="text-sm font-medium">Download folder</p>
               <p
                 className="truncate text-sm text-muted-foreground"
                 title={settings.downloadDirectory}
@@ -90,7 +90,7 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
           </section>
         )}
         {pairing !== null && <PairingSection pairing={pairing} onError={onError} />}
-        <p className="text-sm text-muted-foreground">Scia {bridge()?.version ?? 'sviluppo'}</p>
+        <p className="text-sm text-muted-foreground">Scia {bridge()?.version ?? 'development'}</p>
       </div>
     </dialog>
   );
@@ -117,7 +117,7 @@ function Stepper({ label, hint, value, min, max, onChange }: StepperProps): Reac
       </div>
       <div className="flex shrink-0 items-center gap-1" role="group" aria-labelledby={labelId}>
         <IconButton
-          label="Riduci"
+          label="Decrease"
           disabled={value <= min}
           onClick={() => {
             onChange(value - 1);
@@ -129,7 +129,7 @@ function Stepper({ label, hint, value, min, max, onChange }: StepperProps): Reac
           {value}
         </output>
         <IconButton
-          label="Aumenta"
+          label="Increase"
           disabled={value >= max}
           onClick={() => {
             onChange(value + 1);
@@ -166,16 +166,16 @@ function PairingSection({
   return (
     <section className="flex flex-col gap-2">
       <div>
-        <p className="text-sm font-medium">Estensione del browser</p>
+        <p className="text-sm font-medium">Browser extension</p>
         <p className="text-sm text-muted-foreground">
-          Copia questo codice nelle opzioni dell’estensione: da quel momento manda a Scia i link e i
-          media delle pagine.
+          Paste this code into the extension’s options. From then on, the extension sends Scia the
+          links and the media of your pages.
         </p>
       </div>
       <div className="flex h-10 items-center gap-1 rounded-xl bg-tonal pr-1 pl-3">
         <code className="min-w-0 flex-1 truncate text-sm">{pairing.token}</code>
         <IconButton
-          label={copied ? 'Copiato' : 'Copia il codice'}
+          label={copied ? 'Copied' : 'Copy the code'}
           onClick={() => {
             navigator.clipboard
               .writeText(pairing.token)

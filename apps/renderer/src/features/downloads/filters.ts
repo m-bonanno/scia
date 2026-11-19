@@ -5,12 +5,12 @@ export const Filter = { All: 'all', Active: 'active', Completed: 'completed' } a
 export type Filter = (typeof Filter)[keyof typeof Filter];
 
 export const FILTER_LABELS: Readonly<Record<Filter, string>> = {
-  all: 'Tutti',
-  active: 'In corso',
-  completed: 'Completati',
+  all: 'All',
+  active: 'In progress',
+  completed: 'Completed',
 };
 
-// «In corso» is everything not finished: a paused or failed download still asks for attention.
+// "In progress" is everything not finished: a paused or failed download still asks for attention.
 export function matchesFilter(filter: Filter, status: DownloadStatus): boolean {
   if (filter === Filter.All) return true;
   const completed = status === DownloadStatus.Completed;

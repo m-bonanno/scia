@@ -12,7 +12,7 @@ const FILL: Readonly<Record<DownloadStatus, string>> = {
 };
 
 // The file as a line, each connection filling its own stretch of it where that stretch is: the
-// picture of what «eight connections» means.
+// picture of what "eight connections" means.
 export function SegmentBar({ download }: { readonly download: Download }): ReactNode {
   const total = download.totalBytes;
   const fill = FILL[download.status];
@@ -23,7 +23,7 @@ export function SegmentBar({ download }: { readonly download: Download }): React
       <div
         className="h-1 overflow-hidden rounded-full bg-tonal"
         role="progressbar"
-        aria-label="Avanzamento"
+        aria-label="Progress"
       >
         {download.status === DownloadStatus.Downloading && (
           <div className={cn('h-full w-1/4 animate-indeterminate rounded-full', fill)} />
@@ -36,7 +36,7 @@ export function SegmentBar({ download }: { readonly download: Download }): React
     <div
       className="relative h-1 overflow-hidden rounded-full bg-tonal"
       role="progressbar"
-      aria-label="Avanzamento"
+      aria-label="Progress"
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.floor((download.downloadedBytes / total) * 100)}

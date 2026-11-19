@@ -61,7 +61,7 @@ function nameOf(answer: Answer): string | undefined {
   const named =
     disposition === undefined ? undefined : fileNameFromContentDisposition(headerText(disposition));
   if (named !== undefined) return named;
-  // «download.php?id=5» that lands on «…/setup.exe»: the second is the file's name.
+  // "download.php?id=5" that lands on "…/setup.exe": the second is the file's name.
   const landed = answer.redirected ? fileNameFromUrl(answer.url) : FALLBACK_FILE_NAME;
   return landed === FALLBACK_FILE_NAME ? undefined : landed;
 }

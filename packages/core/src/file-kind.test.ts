@@ -11,7 +11,7 @@ describe('fileKindOfName', () => {
     expect(fileKindOfName('photo.webp')).toBe(FileKind.Image);
   });
 
-  it('answers «other» for what it does not know', () => {
+  it('answers "other" for what it does not know', () => {
     expect(fileKindOfName('README')).toBe(FileKind.Other);
     expect(fileKindOfName('data.xyz')).toBe(FileKind.Other);
   });

@@ -19,7 +19,7 @@ describe('SseParser', () => {
     ]);
   });
 
-  it('joins the lines of a long data field and names an unnamed event «message»', () => {
+  it('joins the lines of a long data field and names an unnamed event "message"', () => {
     expect(new SseParser().push('data: one\r\ndata: two\r\n\r\n')).toEqual([
       { event: 'message', data: 'one\ntwo' },
     ]);

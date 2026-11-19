@@ -10,7 +10,7 @@ interface FilterTabsProps {
 
 export function FilterTabs({ filter, counts, onChange }: FilterTabsProps): ReactNode {
   return (
-    <div className="flex items-center gap-1" role="group" aria-label="Filtra i download">
+    <div className="flex items-center gap-1" role="group" aria-label="Filter downloads">
       {Object.values(Filter).map((option) => (
         <button
           key={option}

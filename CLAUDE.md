@@ -24,7 +24,7 @@ Claude Code loads the nearest `CLAUDE.md` plus every ancestor. A sub-file **wins
 | `CLAUDE.md` (this)                                       | Cross-cutting: principles, TDD, git/PR, docs discipline |
 | [`packages/core/CLAUDE.md`](./packages/core/CLAUDE.md)   | The pure domain                                         |
 | [`apps/server/CLAUDE.md`](./apps/server/CLAUDE.md)       | The engine: ports, adapters, the API, its tokens        |
-| [`apps/renderer/CLAUDE.md`](./apps/renderer/CLAUDE.md)   | UX canon, visual rules, Italian copy                    |
+| [`apps/renderer/CLAUDE.md`](./apps/renderer/CLAUDE.md)   | UX canon, visual rules, copy                            |
 | [`apps/desktop/CLAUDE.md`](./apps/desktop/CLAUDE.md)     | Electron boundaries, security, supervision, packaging   |
 | [`apps/extension/CLAUDE.md`](./apps/extension/CLAUDE.md) | What the extension may see and send                     |
 
@@ -108,15 +108,15 @@ Mechanics in [`docs/development/release-flow.md`](./docs/development/release-flo
 
 ```
 docs/
-├── product/       # vision, roadmap (Italian)
-├── design/        # screenshots and, later, the design system (Italian)
+├── product/       # vision, roadmap
+├── design/        # screenshots and, later, the design system
 ├── adr/           # architecture decision records, numbered, never rewritten — superseded
-└── development/   # runbooks (English)
+└── development/   # runbooks
 ```
 
 **A doc update is required in the same PR** when the change alters: an API route, payload or status code (the contract in `packages/contracts` too); a persisted shape (`state.json`); what the extension may see or send; an architectural decision (new dependency class, new process, new port) → a new ADR; the roadmap's state.
 
-**Language**: UI copy, product and design docs in **Italian**. Code, identifiers, commits, PR bodies, code comments, ADRs and runbooks in **English**.
+**Language**: everything is written in **English** — the interface of the app and of the extension, docs, code, identifiers, comments, commits, issues and PR bodies. A translation of the interface is a feature of its own (i18n), not a second language sprinkled in the code.
 
 ---
 
