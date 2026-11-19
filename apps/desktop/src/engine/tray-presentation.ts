@@ -31,6 +31,6 @@ export function trayTooltip(activity: DownloadActivity | undefined): string {
 // no word looks like a crash, and a download that goes on unseen looks like a leak.
 export const HIDDEN_TO_TRAY_NOTICE = {
   id: 'hidden-to-tray',
-  title: 'Scia keeps downloading',
-  body: 'It is in the system tray. Right-click its icon to quit.',
+  title: 'Scia is still downloading',
+  body: 'Click its icon in the system tray to open it, right-click to quit.',
 } as const;

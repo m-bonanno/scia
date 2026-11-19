@@ -15,10 +15,15 @@ export function unfinished(activity: DownloadActivity): number {
 }
 
 // Asked of the engine when main needs it (the window closing, the pointer on the tray icon),
-// never on a timer. Rejects when the engine does not answer as expected.
-export async function downloadActivity(engine: EngineAccess): Promise<DownloadActivity> {
+// never on a timer. Rejects when the engine refuses, answers something else, or says nothing
+// within `limitMs`: an engine can be alive and silent, and whoever asked must not wait on it.
+export async function downloadActivity(
+  engine: EngineAccess,
+  limitMs: number,
+): Promise<DownloadActivity> {
   const response = await engine.fetch(`${engine.origin}${API_PREFIX}/downloads`, {
     headers: { authorization: `Bearer ${engine.apiToken}` },
+    signal: AbortSignal.timeout(limitMs),
   });
   if (!response.ok) throw new Error('The engine did not list its downloads.');
   const downloads = z.object({ data: z.array(downloadSchema) }).parse(await response.json()).data;

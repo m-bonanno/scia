@@ -2,5 +2,8 @@
 export interface EngineAccess {
   readonly origin: string;
   readonly apiToken: string;
-  readonly fetch: (url: string, init: { headers: Record<string, string> }) => Promise<Response>;
+  readonly fetch: (
+    url: string,
+    init: { headers: Record<string, string>; signal?: AbortSignal },
+  ) => Promise<Response>;
 }

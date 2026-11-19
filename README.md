@@ -8,7 +8,7 @@ A download manager for Windows and Linux: paste a link, Scia fetches it over sev
 
 - Downloads any http/https link over several connections in parallel, handing work over when one finishes before the others.
 - Pauses and resumes from the bytes it already has, even after the app was closed and opened again.
-- Keeps downloading from the system tray when the window is closed, and quits when there is nothing left to download.
+- Closing the window with downloads running keeps Scia downloading from the system tray (Windows; Linux not yet tried); with nothing left, closing quits.
 - Keeps a queue: how many downloads at once and how many connections per download are settings.
 - Takes links and media from the browser through the extension (`apps/extension`).
 
