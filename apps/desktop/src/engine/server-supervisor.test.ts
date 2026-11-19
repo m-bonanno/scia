@@ -24,7 +24,7 @@ function fakeServer(port: number): FakeServer {
   };
 }
 
-function supervisorOver(starts: (() => Promise<StartedServer>)[]) {
+function supervisorOver(starts: (() => Promise<StartedServer>)[], maxFailures = 2) {
   const onRestarted = vi.fn();
   const onGaveUp = vi.fn();
   const supervisor = new ServerSupervisor({
@@ -33,7 +33,7 @@ function supervisorOver(starts: (() => Promise<StartedServer>)[]) {
       return next === undefined ? Promise.reject(new Error('no more engines')) : next();
     },
     policy: new RestartPolicy({
-      maxFailures: 2,
+      maxFailures,
       healthyAfterMs: 60_000,
       firstDelayMs: 1,
       longestDelayMs: 1,
@@ -88,6 +88,55 @@ describe('ServerSupervisor', () => {
 
     expect(first.stops()).toBe(1);
     expect(onRestarted).not.toHaveBeenCalled();
+    expect(onGaveUp).not.toHaveBeenCalled();
+  });
+
+  it('stops an engine that was still starting when it was asked to stop', async () => {
+    let ready: (server: StartedServer) => void = () => undefined;
+    const late = fakeServer(1000);
+    const { supervisor } = supervisorOver([
+      () =>
+        new Promise((resolve) => {
+          ready = resolve;
+        }),
+    ]);
+
+    const starting = supervisor.start();
+    await supervisor.stop();
+    ready(late);
+    await starting;
+
+    // stop() had nothing to stop when it ran: the engine that arrives afterwards is stopped.
+    expect(late.stops()).toBe(1);
+  });
+
+  it('does not give up on a restart that fails after it was asked to stop', async () => {
+    const first = fakeServer(1000);
+    let fail: (error: Error) => void = () => undefined;
+    const { supervisor, onGaveUp } = supervisorOver(
+      [
+        async () => first,
+        () =>
+          new Promise((_resolve, reject) => {
+            fail = reject;
+          }),
+      ],
+      1,
+    );
+    await supervisor.start();
+    first.exit(1);
+    // The restart is in flight when the app quits.
+    await vi.waitFor(() => {
+      expect(fail).not.toBe(undefined);
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    await supervisor.stop();
+
+    fail(new Error('killed with the app'));
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // One failure was all the policy allowed: without the check, this is "cannot start" shown
+    // to someone who is quitting.
     expect(onGaveUp).not.toHaveBeenCalled();
   });
 });

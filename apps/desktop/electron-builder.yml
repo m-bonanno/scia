@@ -1,5 +1,5 @@
 # CI injects the version (-c.extraMetadata.version); package.json stays 0.0.0.
-# Mirrored by APP_ID in src/main.ts — change both together.
+# Kept equal to APP_ID of src/engine/app-identity.ts by its spec — change both together.
 appId: app.scia.desktop
 productName: Scia
 copyright: Copyright © 2026 Scia

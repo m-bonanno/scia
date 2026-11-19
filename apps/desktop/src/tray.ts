@@ -1,5 +1,6 @@
 import { Menu, nativeImage, Tray } from 'electron';
-import { TRAY_MENU, TrayCommand } from './engine/tray-presentation.ts';
+import { PointerTooltip } from './engine/pointer-tooltip.ts';
+import { TRAY_MENU, TrayCommand, trayTooltip } from './engine/tray-presentation.ts';
 
 export interface TrayLog {
   warn(message: string, details: object): void;
@@ -15,7 +16,6 @@ export interface SystemTrayOptions {
 }
 
 export interface SystemTray {
-  setTooltip(text: string): void;
   destroy(): void;
 }
 
@@ -31,10 +31,10 @@ export function createSystemTray(options: SystemTrayOptions): SystemTray | undef
       [TrayCommand.Open]: options.onOpen,
       [TrayCommand.Quit]: options.onQuit,
     };
-    const setTooltip = (text: string) => {
+    const say = (text: string) => {
       if (!tray.isDestroyed()) tray.setToolTip(text);
     };
-    tray.setToolTip('Scia');
+    say(trayTooltip(undefined));
     tray.setContextMenu(
       Menu.buildFromTemplate(
         TRAY_MENU.map((entry) =>
@@ -45,15 +45,22 @@ export function createSystemTray(options: SystemTrayOptions): SystemTray | undef
       ),
     );
     tray.on('click', options.onOpen);
-    // Windows and macOS only: Linux never says the pointer arrived, and keeps the tooltip it
-    // was last given.
+    // The tooltip counts only while the pointer is on the icon, when the count was just read
+    // (engine/pointer-tooltip.ts). Linux has neither event, and keeps the plain name.
+    const pointer = new PointerTooltip({
+      plain: trayTooltip(undefined),
+      read: options.tooltip,
+      say,
+    });
     tray.on('mouse-enter', () => {
-      void options.tooltip().then(setTooltip, () => undefined);
+      pointer.entered();
+    });
+    tray.on('mouse-leave', () => {
+      pointer.left();
     });
     // The returned object keeps the tray alive: an unreferenced Tray is collected, and its icon
     // disappears a few minutes after the start.
     return {
-      setTooltip,
       destroy: () => {
         if (!tray.isDestroyed()) tray.destroy();
       },

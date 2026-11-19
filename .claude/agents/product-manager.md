@@ -24,6 +24,8 @@ What earlier reviews taught, each with the PR that taught it.
 
 - A "done" added to the roadmap needs its evidence in the same PR; a sentence that is not a translation is not part of a translation. (#4)
 
+- A roadmap line says "done" only for what someone saw: a script that proves the window hides does not prove an icon is drawn. (#12)
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.
