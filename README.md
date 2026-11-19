@@ -18,9 +18,9 @@ What comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
 
 None yet. Scia will connect to outside services one at a time, each listed here when it lands.
 
-| Service   | What it adds                                                        | State        |
-| --------- | ------------------------------------------------------------------- | ------------ |
-| AllDebrid | Hoster links are unlocked and downloaded like direct links; magnets | Planned (#7) |
+| Service   | What it adds                                               | State        |
+| --------- | ---------------------------------------------------------- | ------------ |
+| AllDebrid | Hoster links are unlocked and downloaded like direct links | Planned (#7) |
 
 ## Development
 

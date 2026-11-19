@@ -5,7 +5,7 @@ The state is the real one: an item is "done" only if it was verified in the real
 ## M0 — Foundations (done)
 
 - Monorepo, tooling, hooks, tests on four layers.
-- Repository on GitHub with GitFlow, checks on PRs, automatic versions and release notes (semantic-release). The Windows installer builds locally and the packaged app starts and quits cleanly on a scratch profile. **The installers attached to stable releases have not been produced by CI yet, and the Linux packages have never been built.**
+- Repository on GitHub with GitFlow, checks on PRs, automatic versions and release notes (semantic-release). The Windows installer builds locally, and the app it is made from starts and quits cleanly on a scratch profile; the installer itself has not been run. What CI has not produced yet is listed in `docs/development/release-flow.md`, "Not there yet".
 - Engine: downloads over several connections with dynamic segmentation, pause and resume, a queue, retries after an interruption, safe names that never overwrite, state saved on disk.
 - Electron app: a window with its own title bar, supervision of the engine, orderly quit, resume after a restart.
 - Interface: adding by paste, a list with the segment bar, filters, basic settings.
@@ -24,18 +24,20 @@ The state is the real one: an item is "done" only if it was verified in the real
 - E2E suite with Playwright on the real app.
 - To measure: the wait caused by zero-filling on NTFS for very large files (ADR 0001).
 
+M2, M3 and M4 are themes, not a sequence: AllDebrid (M3) depends on nothing in M2 and may start first.
+
 ## M2 — The whole extension
 
 - Tried in Chrome, Edge, Brave; a version for Firefox.
 - Published in the stores.
 - Downloads behind a login: sending the session's cookies, an explicit choice per site.
 - Adaptive streams (HLS, DASH): detection, choice of quality, assembly. Unprotected streams only.
-- **Pages, playlists and channels** (#8): the address of a page, a playlist, a channel or a profile is expanded into the videos it lists, following its pages to the end; the list is shown to confirm, then downloaded. A private playlist, or anything else behind the person's own login, is read with the session of their own browser, on the explicit per-site choice above. How sites are read is an ADR to write: yt-dlp is the candidate (thousands of sites, kept up to date by its community), against writing and maintaining a reader per site. **Needs the owner's word on the "Respect the hosts" principle before it is built** (see the note at the end).
+- **Pages, playlists and channels** (#8): the address of a page, a playlist, a channel or a profile is expanded into the videos it lists, following its pages to the end; the list is shown to confirm, then downloaded. A private playlist, or anything else behind the person's own login, is read with the session of their own browser, on the explicit per-site choice above. How sites are read is an ADR to write: yt-dlp is the candidate (thousands of sites, kept up to date by its community), against writing and maintaining a reader per site; the ADR has to answer the objection ADR 0001 made to aria2 — an external binary to ship, update and supervise per platform. **Needs the owner's word on the "Respect the hosts" principle before it is built** (see the question at the end). It also depends on the adaptive streams and on the session hand-over of this milestone.
 - A fallback port, and the extension finding the app by itself, when 47821 is taken.
 
 ## M3 — Integrations: debrid services
 
-Integrations arrive one at a time. Each is visible in three places: an **Integrations** section in Settings that lists the services and shows which are connected and working; the Integrations table in the README; the release notes of the version that brings it (`feat(integrations): …`).
+Integrations arrive one at a time. Each is visible in three places: an **Integrations** section in Settings that lists the services and shows which are connected; the Integrations table in the README; the release notes of the version that brings it (`feat(integrations): …`).
 
 - **AllDebrid** (#7), connected once in Settings (API key kept by the operating system). From then on **a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically**, with nothing else to do — as a direct link would be.
 - A download that went through a service says so in its row.
@@ -55,4 +57,13 @@ Integrations arrive one at a time. Each is visible in three places: an **Integra
 
 ## Open question for the owner
 
-"Respect the hosts" (`CLAUDE.md`) says: no evasion of a site's access controls, and a feature that only makes sense against a host's will is not built. Expanding a playlist or a profile of a streaming site into its videos, with the person's own session, is not evasion — the person can already play every one of them — but most such sites forbid downloading in their terms. The principle has to say which side of that line Scia stands on before #8 is built. The proposed wording: Scia fetches what the person can already reach — a public file, or what their own account plays in their own browser; no DRM circumvention, no way around a paywall or a login the person does not have, no shared accounts.
+**May Scia download, with the person's own login, what a site lets them play but forbids them to download?** #8 needs the answer before it is built, and carries this same question until it has one.
+
+The principle today (`CLAUDE.md`, "Respect the hosts"), whole: "Scia downloads what the person has the right to download. No DRM circumvention, no evasion of a site's access controls, connection counts within the limits in settings. A feature that only makes sense against a host's will is not built."
+
+What #8 asks for meets it in two places. The videos of a playlist or of a profile are ones the person's own account can already play; but most streaming sites forbid downloading in their terms, which is what "the right to download" and "against a host's will" are about. And the tools that read such sites can do more than read: yt-dlp, the candidate, can also work around geographic restrictions, which is evasion under any reading and would have to be off.
+
+- **Yes.** The first and the last sentence of the principle are replaced, in `CLAUDE.md` and in "What it is not" of `vision.md`, by: "Scia fetches what the person can already reach — a public file, or what their own account plays in their own browser. No DRM circumvention, no way around a paywall, a login the person does not have, or a geographic restriction." #8 is built inside that line.
+- **No.** The principle stays as it is. #8 is narrowed to sites whose terms allow downloading, or closed, and its item leaves M2.
+
+This section is removed once the answer is recorded in `CLAUDE.md`, `vision.md` and #8.
