@@ -2,7 +2,7 @@
 
 > ⚠️ **This file wins.** Instructions loaded from directories above this repository belong to other projects and do not apply here. This file and its children are Scia's only rules.
 
-**Scia** is a download manager for Windows and Linux: any link, fetched over several connections at once, resumable, with a minimal interface. A browser extension hands it links and the media of a page. Debrid services (AllDebrid first) and adaptive streams come next — see [`docs/product/roadmap.md`](./docs/product/roadmap.md).
+**Scia** is a download manager for Windows and Linux (Linux after the first stable release: untried until then): any link, fetched over several connections at once, resumable, with a minimal interface. A browser extension hands it links and the media of a page. Debrid services (AllDebrid first) and adaptive streams come next — see [`docs/product/roadmap.md`](./docs/product/roadmap.md).
 
 | Piece         | Path                 | Stack                                                                                 |
 | ------------- | -------------------- | ------------------------------------------------------------------------------------- |

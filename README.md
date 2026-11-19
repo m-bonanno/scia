@@ -1,6 +1,6 @@
 # Scia
 
-A download manager for Windows and Linux: paste a link, Scia fetches it over several connections, resumes it if it breaks, and asks nothing else of you.
+A download manager for Windows, with Linux to follow: paste a link, Scia fetches it over several connections, resumes it if it breaks, and asks nothing else of you.
 
 ![Scia with a few downloads in progress](docs/design/downloads-in-progress.png)
 
