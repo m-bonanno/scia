@@ -24,4 +24,11 @@ The title of a PR becomes the commit on `develop`, and semantic-release reads it
 
 ## Repository settings
 
-Set once, on GitHub: default branch `develop`; squash merge and merge commit allowed, rebase merge off; head branches deleted on merge. Branch protection is refused on a private Free repository: until the repository is public or on a paid plan, the hooks are the protection.
+Set once, on GitHub: default branch `develop`; squash merge and merge commit allowed, rebase merge off; head branches **not** deleted on merge.
+
+- **Why not deleted**: the back-merge of a release is a PR whose head is `main`, and a repository that deletes head branches would delete `main` with it. A work branch is deleted by whoever merges it, at the merge (`git push origin --delete <branch>`, or the button on the PR) — never with a flag on the back-merge.
+- **Branch protection** is refused on a private Free repository: until the repository is public, the hooks are the protection. The owner's decision (#18): **the repository becomes public at the first stable release, and `main` and `develop` are protected then** — no deletion, no force-push, no push that is not the merge of a PR (what "protected" means here is the author's reading of the decision, to confirm when it is set). Deletion on merge is off until then; whether it goes back on, once `main` cannot be deleted, is decided in the PR that records the protection.
+
+## The two PRs that have no issue
+
+A release (`develop` → `main`) and its back-merge (`main` → `develop`) close no issue and have no `<type>/<issue>-…` branch: their heads are `develop` and `main` themselves. The rule on branch names and `Closes #N` does not apply to them. They are titled `release: vX.Y.Z` and `chore: merge main back into develop after vX.Y.Z`; how each is merged, and by whom, is the "Merging" table of [`review-flow.md`](./review-flow.md).
