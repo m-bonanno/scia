@@ -2,16 +2,30 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { BridgeChannel } from '@scia/contracts/bridge';
 import { DEFAULT_API_PORT } from '@scia/contracts';
-import { app, dialog, shell } from 'electron';
+import { app, dialog, Notification, shell } from 'electron';
 import log from 'electron-log/main';
-import { completedDownloadPath, type EngineAccess } from './engine/download-location.ts';
+import { CloseOutcome, WindowCloser } from './engine/close-policy.ts';
+import { downloadActivity } from './engine/download-activity.ts';
+import { completedDownloadPath } from './engine/download-location.ts';
+import type { EngineAccess } from './engine/engine-access.ts';
 import { parseLaunchOptions } from './engine/launch-options.ts';
 import { RestartPolicy } from './engine/restart-policy.ts';
 import { resolveRuntimeLayout } from './engine/runtime-layout.ts';
 import { buildServerEnv } from './engine/server-env.ts';
 import { ServerSupervisor } from './engine/server-supervisor.ts';
+import { ShownNotices } from './engine/shown-notices.ts';
+import { HIDDEN_TO_TRAY_NOTICE, trayTooltip } from './engine/tray-presentation.ts';
+import { NoticeFile } from './notice-file.ts';
 import { startServer } from './server-process.ts';
+import { createSystemTray } from './tray.ts';
 import { appOrigin, MainWindow } from './window.ts';
+
+// Mirrored by `appId` in electron-builder.yml: Windows drops, without a word, the notifications
+// of an app whose two ids differ.
+const APP_ID = 'app.scia.desktop';
+// How long main waits for the engine to say what it is doing. The engine is on this computer:
+// one that has not answered by then is not going to.
+const ACTIVITY_LIMIT_MS = 2000;
 
 const launch = parseLaunchOptions(process.argv, process.cwd());
 if (launch.userDataDir !== undefined) {
@@ -41,6 +55,9 @@ async function boot(): Promise<void> {
   log.errorHandler.startCatching({ showDialog: false });
   log.info('boot', { version: app.getVersion(), packaged: app.isPackaged, pid: process.pid });
 
+  // Windows shows a notification only for an app that says who it is.
+  if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
+
   // A new token at every launch: nothing that read an old one can call this engine.
   const apiToken = randomBytes(32).toString('hex');
   const env = buildServerEnv({
@@ -51,6 +68,13 @@ async function boot(): Promise<void> {
     systemRoot: process.env.SystemRoot,
   });
 
+  let port = 0;
+  let quitting = false;
+  // Read anew after every wait: a quit may have begun meanwhile.
+  const isQuitting = () => quitting;
+  const engine = (): EngineAccess => ({ origin: appOrigin(port), apiToken, fetch });
+  const activity = () => downloadActivity(engine(), ACTIVITY_LIMIT_MS);
+
   // Hidden until it has a page: it follows the engine once there is one.
   const window = new MainWindow({
     apiToken,
@@ -58,10 +82,66 @@ async function boot(): Promise<void> {
     platform: process.platform,
     devTools: !app.isPackaged,
     log,
+    onCloseRequested: () => {
+      void closeRequested();
+    },
   });
-  let port = 0;
+
+  const tray = createSystemTray({
+    iconPath: join(__dirname, 'assets', 'tray.png'),
+    onOpen: () => {
+      window.focus();
+    },
+    onQuit: () => {
+      app.quit();
+    },
+    tooltip: async () => trayTooltip(await activity().catch(() => undefined)),
+    log,
+  });
+  const notices = new ShownNotices(new NoticeFile(layout.noticesPath));
+
+  // The window goes at once; then Scia stays in the tray while it has downloads to finish, and
+  // quits otherwise (engine/close-policy.ts).
+  const closer = new WindowCloser({
+    trayAvailable: tray !== undefined,
+    quitting: isQuitting,
+    hide: () => {
+      window.hide();
+    },
+    quit: () => {
+      app.quit();
+    },
+    activity: () =>
+      activity().catch((error: unknown) => {
+        log.warn('activity_unknown', { error: String(error) });
+        throw error;
+      }),
+  });
+  // Kept while it is on screen: a notification nobody holds is collected, and its click is lost.
+  let notice: Notification | undefined;
+
+  async function closeRequested(): Promise<void> {
+    const result = await closer.close();
+    if (result.outcome !== CloseOutcome.Hidden) return;
+    log.info('window_hidden_to_tray', { ...result.activity });
+    // Where the pointer never announces itself (Linux), this is the tooltip's one update.
+    tray?.setTooltip(trayTooltip(result.activity));
+    // Asked in this order: a notice is recorded as shown only where it can be shown.
+    if (Notification.isSupported() && (await notices.firstTime(HIDDEN_TO_TRAY_NOTICE.id))) {
+      notice = new Notification({
+        title: HIDDEN_TO_TRAY_NOTICE.title,
+        body: HIDDEN_TO_TRAY_NOTICE.body,
+      });
+      notice.on('click', () => {
+        window.focus();
+      });
+      notice.show();
+    }
+  }
+
   const giveUp = (reason: string) => {
     log.error('engine_gave_up', { reason });
+    tray?.destroy();
     dialog.showErrorBox(
       'Scia cannot start',
       `The download engine does not start. Close other programs that use the local network and open Scia again.\n\nTechnical details: ${join(layout.logsDir, 'main.log')}`,
@@ -85,16 +165,30 @@ async function boot(): Promise<void> {
     log,
   });
 
-  try {
-    port = await supervisor.start();
-  } catch (error) {
-    giveUp(String(error));
-    return;
-  }
-  log.info('engine_ready', { port });
-  window.followServer(port);
+  // Everything that can ask for a quit, or bring the window back, is wired before the first
+  // wait: the tray exists from this moment, and the engine can take a minute to start.
 
-  const engine = (): EngineAccess => ({ origin: appOrigin(port), apiToken, fetch });
+  // Quitting never hangs and never goes through the window: the window hides at once, the
+  // engine is asked to stop and write its state (server-process.ts bounds the wait), then the
+  // process ends. Electron's own quit — closing every window — is refused every time, or the
+  // close handler, which prevents a close, would cancel the quit and be asked again.
+  app.on('before-quit', (event) => {
+    event.preventDefault();
+    if (quitting) return;
+    quitting = true;
+    window.hide();
+    tray?.destroy();
+    void supervisor.stop().finally(() => {
+      log.info('quit');
+      app.exit(0);
+    });
+  });
+
+  // Starting Scia again is how a person whose desktop draws no tray gets the window back.
+  app.on('second-instance', () => {
+    window.focus();
+  });
+
   window.answer(BridgeChannel.RevealDownload, async (id) => {
     shell.showItemInFolder(await completedDownloadPath(id, engine()));
   });
@@ -103,24 +197,13 @@ async function boot(): Promise<void> {
     if (failure !== '') throw new Error(failure);
   });
 
-  app.on('second-instance', () => {
-    window.focus();
-  });
-  app.on('window-all-closed', () => {
-    app.quit();
-  });
-
-  // Closing never hangs: the window goes at once, the engine is asked to stop and write its
-  // state (server-process.ts bounds the wait), then the process ends.
-  let quitting = false;
-  app.on('before-quit', (event) => {
-    if (quitting) return;
-    quitting = true;
-    event.preventDefault();
-    window.hide();
-    void supervisor.stop().finally(() => {
-      log.info('quit');
-      app.exit(0);
-    });
-  });
+  try {
+    port = await supervisor.start();
+  } catch (error) {
+    if (isQuitting()) return;
+    giveUp(String(error));
+    return;
+  }
+  log.info('engine_ready', { port });
+  window.followServer(port);
 }

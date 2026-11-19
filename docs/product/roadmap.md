@@ -13,7 +13,8 @@ The state is the real one: an item is "done" only if it was verified in the real
 
 ## M1 — Daily use
 
-- Tray icon: closing the window does not stop the downloads.
+- Tray icon: closing the window does not stop the downloads (#6). **Written, covered by specs, and verified by script in the real app on Windows** (the window hides, the download goes on, a second launch brings it back, closing with nothing left quits). **Not done until someone has seen it**: the icon on a taskbar, its click, its menu, its tooltip and the notification have never been looked at or pressed, and nothing has been tried on Linux, where the tooltip cannot follow the downloads (#13).
+- When the last download of a hidden Scia ends or fails, nothing says so: it stays in the tray. To settle with the notification item below.
 - Choosing the folder, default and per download.
 - Speed limit, global and per download.
 - A notification when a download ends; "Open" and "Show in folder" are already there.

@@ -28,6 +28,7 @@ describe('resolveRuntimeLayout', () => {
     const layout = resolveRuntimeLayout({ ...input, isPackaged: true });
     expect(layout.dataDir).toBe(join('profile', 'Scia', 'engine'));
     expect(layout.logsDir).toBe(join('profile', 'Scia', 'logs'));
+    expect(layout.noticesPath).toBe(join('profile', 'Scia', 'notices.json'));
   });
 
   it('downloads into the system folder, or into the profile of a scratch run', () => {

@@ -25,3 +25,4 @@ Until the E2E suite exists, a change to the shell (boot, window, bridge, quit) o
 2. Do the thing; then read `apps/desktop/.dev-profile/logs/main.log`. A healthy-looking window has hidden a dead subsystem before: **read the log**.
 3. For a download, point it at a local host rather than someone's server.
 4. To drive the window from a script, add `--remote-debugging-port=<n>` and speak the DevTools protocol to it. Such harnesses are not committed.
+5. To close the window as its X does, send it the system's close message (`(Get-Process -Id <pid>).CloseMainWindow()` on Windows): the page's own `window.close()` and the protocol's `Browser.close` are different roads, and neither is the person's.

@@ -23,7 +23,9 @@ You are the senior backend engineer of Scia. You know HTTP in depth (ranges, red
 
 What earlier reviews taught, each with the PR that taught it.
 
-- None yet.
+- The handler of a quit exists before anything that can ask for one: a tray created before `before-quit` was registered turned "Quit" into a loop of prevented closes. Walk every road out of the app against the order things are wired in. (#12)
+- Nothing waits on the engine without a bound: an engine can be alive and silent. (#12)
+- Read an Electron event's `@platform` before relying on it: `mouse-enter` on a tray is Windows and macOS only. (#12)
 
 ## Output
 

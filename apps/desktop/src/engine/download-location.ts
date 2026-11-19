@@ -2,15 +2,10 @@ import { join } from 'node:path';
 import { API_PREFIX, downloadSchema } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
 import { z } from 'zod';
+import type { EngineAccess } from './engine-access.ts';
 
 // An id is the engine's own (a UUID): anything else never reaches a request's path.
 const ID = /^[\w-]{1,64}$/;
-
-export interface EngineAccess {
-  readonly origin: string;
-  readonly apiToken: string;
-  readonly fetch: (url: string, init: { headers: Record<string, string> }) => Promise<Response>;
-}
 
 // Where a finished download is on disk, asked of the engine by id. The page names a download;
 // it never gives main a path to open.
