@@ -18,6 +18,7 @@ import {
 } from '@scia/core';
 import { DownloadTask } from './download-task.ts';
 import { describeFailure, type Logger } from './logger.ts';
+import { type MarkDownloaded, markerFor } from './origin-mark.ts';
 import {
   DiskError,
   RemoteError,
@@ -52,6 +53,8 @@ export interface ManagerDeps {
   readonly store: StateStore;
   readonly defaultDirectory: string;
   readonly logger: Logger;
+  // What marks a finished file as come from the network; the running system's by default.
+  readonly markDownloaded?: MarkDownloaded;
   readonly now?: () => number;
   readonly newId?: () => string;
   readonly checkpointMs?: number;
@@ -90,9 +93,11 @@ export class DownloadManager {
   #checkpoint: ReturnType<typeof setInterval> | undefined;
   #checkpointing = false;
   #closed = false;
+  readonly #markDownloaded: MarkDownloaded;
 
   constructor(deps: ManagerDeps, records: DownloadRecord[], settings: Settings) {
     this.#deps = deps;
+    this.#markDownloaded = deps.markDownloaded ?? markerFor(process.platform);
     this.#records = records;
     this.#settings = settings;
   }
@@ -479,11 +484,23 @@ export class DownloadManager {
         await rename(part, join(record.directory, `${free}${PART_SUFFIX}`));
         record.fileName = free;
       }
+      await this.#mark(partPathOf(record));
       await rename(partPathOf(record), join(record.directory, record.fileName));
     } catch (error) {
       throw new DiskError('The finished file could not be put in place.', { cause: error });
     }
     record.status = DownloadStatus.Completed;
     record.completedAt = new Date(this.#now()).toISOString();
+  }
+
+  // Marked while it is still the part file, so that the file never stands under its name
+  // without its mark. A disk without streams (FAT, some shares) refuses: the file is whole all
+  // the same, and the log says the mark is missing.
+  async #mark(path: string): Promise<void> {
+    try {
+      await this.#markDownloaded(path);
+    } catch (error) {
+      this.#deps.logger.warn('mark_refused', { path, error: describeFailure(error) });
+    }
   }
 }

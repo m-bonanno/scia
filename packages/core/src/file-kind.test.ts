@@ -11,6 +11,12 @@ describe('fileKindOfName', () => {
     expect(fileKindOfName('photo.webp')).toBe(FileKind.Image);
   });
 
+  it('counts as a program what the system would run at a press', () => {
+    for (const name of ['run.bat', 'run.cmd', 'run.ps1', 'run.com', 'saver.scr', 'app.msix']) {
+      expect(fileKindOfName(name), name).toBe(FileKind.Program);
+    }
+  });
+
   it('answers "other" for what it does not know', () => {
     expect(fileKindOfName('README')).toBe(FileKind.Other);
     expect(fileKindOfName('data.xyz')).toBe(FileKind.Other);

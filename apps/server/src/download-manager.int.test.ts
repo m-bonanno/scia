@@ -4,7 +4,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { DownloadManager } from './download-manager.ts';
+import { DownloadManager, type ManagerDeps, PART_SUFFIX } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
 import { JsonStateStore } from './state-store.ts';
 import {
@@ -40,13 +40,14 @@ describe('DownloadManager', () => {
     return server;
   }
 
-  async function open(): Promise<DownloadManager> {
+  async function open(overrides: Partial<ManagerDeps> = {}): Promise<DownloadManager> {
     manager = await DownloadManager.open({
       source,
       store: new JsonStateStore(join(folder.path, 'data', 'state.json')),
       defaultDirectory: join(folder.path, 'downloads'),
       logger: silentLogger,
       retryDelayMs: () => 1,
+      ...overrides,
     });
     return manager;
   }
@@ -68,6 +69,58 @@ describe('DownloadManager', () => {
     expect(finished.totalBytes).toBe(body.length);
     expect(finished.completedAt).not.toBeNull();
   });
+
+  it('marks a file as come from the network before it appears under its name', async () => {
+    const { url } = await host({ fileName: 'setup.exe' });
+    const marked: { path: string; alreadyNamed: boolean }[] = [];
+    const downloads = await open({
+      markDownloaded: async (path) => {
+        marked.push({ path, alreadyNamed: existsSync(inDownloads('setup.exe')) });
+      },
+    });
+
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(marked).toEqual([{ path: inDownloads(`setup.exe${PART_SUFFIX}`), alreadyNamed: false }]);
+  });
+
+  it('keeps a file whose disk refuses the mark, and says so in the log', async () => {
+    const { url } = await host({ fileName: 'Film.mkv' });
+    const warned: string[] = [];
+    const downloads = await open({
+      logger: {
+        ...silentLogger,
+        warn: (event) => {
+          warned.push(event);
+        },
+      },
+      markDownloaded: async () => {
+        throw new Error('This disk has no streams.');
+      },
+    });
+
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
+    expect(warned).toContain('mark_refused');
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'on Windows, leaves on a finished file the zone it came from and nothing else',
+    async () => {
+      const { url } = await host({ fileName: 'setup.exe' });
+      const downloads = await open();
+
+      const [added] = downloads.add({ urls: [url] });
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+      expect(await readFile(`${inDownloads('setup.exe')}:Zone.Identifier`, 'utf8')).toBe(
+        '[ZoneTransfer]\r\nZoneId=3\r\n',
+      );
+    },
+  );
 
   it('never overwrites a file already in the folder', async () => {
     const { url } = await host();

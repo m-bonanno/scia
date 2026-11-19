@@ -17,7 +17,24 @@ const EXTENSIONS: Readonly<Record<Exclude<FileKind, 'other'>, readonly string[]>
   image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif', 'heic', 'tiff'],
   archive: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'zst', 'tgz', 'iso', 'tar.gz', 'tar.xz'],
   document: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'txt', 'epub'],
-  program: ['exe', 'msi', 'deb', 'rpm', 'appimage', 'apk', 'dmg', 'pkg', 'bat', 'sh'],
+  // What a system runs at a press: the interface asks once more before opening one.
+  program: [
+    'exe',
+    'msi',
+    'msix',
+    'com',
+    'scr',
+    'bat',
+    'cmd',
+    'ps1',
+    'sh',
+    'deb',
+    'rpm',
+    'appimage',
+    'apk',
+    'dmg',
+    'pkg',
+  ],
 };
 
 const KIND_OF_EXTENSION = new Map<string, FileKind>(

@@ -1,5 +1,5 @@
-import { DownloadStatus } from '@scia/core';
-import { render, screen } from '@testing-library/react';
+import { DownloadStatus, FileKind } from '@scia/core';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DownloadRow, type RowActions } from './download-row.tsx';
@@ -106,6 +106,47 @@ describe('DownloadRow', () => {
 
     await userEvent.dblClick(screen.getByRole('button', { name: 'Show in folder' }));
     expect(row.open).toHaveBeenCalledTimes(2);
+  });
+
+  const aProgram = () =>
+    aDownload({ status: DownloadStatus.Completed, kind: FileKind.Program, fileName: 'setup.exe' });
+
+  it('asks once more before running a program, in place', async () => {
+    const row = actions();
+    render(<DownloadRow download={aProgram()} actions={row} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+    expect(row.open).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    expect(row.open).toHaveBeenCalledExactlyOnceWith('d1');
+  });
+
+  // In a browser the second press of a double click lands on the button that took the place
+  // of the first: it arrives there as a click that says it is the second.
+  const secondPressOfADoubleClick = { detail: 2 };
+
+  it('does not run a program on a double click, on its name or on its button', async () => {
+    const row = actions();
+    render(<DownloadRow download={aProgram()} actions={row} />);
+
+    await userEvent.dblClick(screen.getByText('setup.exe'));
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }), secondPressOfADoubleClick);
+
+    expect(row.open).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument();
+  });
+
+  it('does not throw unfinished bytes away on a double click', async () => {
+    const row = actions();
+    render(<DownloadRow download={aDownload()} actions={row} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel and delete' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }), secondPressOfADoubleClick);
+
+    expect(row.remove).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
   });
 
   it('has nothing to open before the file is whole', async () => {
