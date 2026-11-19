@@ -4,8 +4,9 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { DownloadManager } from './download-manager.ts';
+import { DownloadManager, type ManagerDeps, PART_SUFFIX } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
+import { markerFor } from './origin-mark.ts';
 import { JsonStateStore } from './state-store.ts';
 import {
   type RangeServer,
@@ -40,13 +41,14 @@ describe('DownloadManager', () => {
     return server;
   }
 
-  async function open(): Promise<DownloadManager> {
+  async function open(overrides: Partial<ManagerDeps> = {}): Promise<DownloadManager> {
     manager = await DownloadManager.open({
       source,
       store: new JsonStateStore(join(folder.path, 'data', 'state.json')),
       defaultDirectory: join(folder.path, 'downloads'),
       logger: silentLogger,
       retryDelayMs: () => 1,
+      ...overrides,
     });
     return manager;
   }
@@ -68,6 +70,85 @@ describe('DownloadManager', () => {
     expect(finished.totalBytes).toBe(body.length);
     expect(finished.completedAt).not.toBeNull();
   });
+
+  it('marks a file as coming from the network before it appears under its name', async () => {
+    const { url } = await host({ fileName: 'setup.exe' });
+    const marked: { path: string; alreadyNamed: boolean }[] = [];
+    const downloads = await open({
+      markDownloaded: async (path) => {
+        marked.push({ path, alreadyNamed: existsSync(inDownloads('setup.exe')) });
+      },
+    });
+
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(marked).toEqual([{ path: inDownloads(`setup.exe${PART_SUFFIX}`), alreadyNamed: false }]);
+  });
+
+  it('looks at the name only after the mark: a file that takes the name meanwhile is left alone', async () => {
+    const { url } = await host({ fileName: 'setup.exe' });
+    const downloads = await open({
+      // While the mark is being written, someone else puts a file of that name in the folder.
+      markDownloaded: async (path) => {
+        await markerFor(process.platform)(path);
+        await writeFile(inDownloads('setup.exe'), 'not ours');
+      },
+    });
+
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(await readFile(inDownloads('setup.exe'), 'utf8')).toBe('not ours');
+    expect(downloads.find(added!.id).fileName).toBe('setup (1).exe');
+    expect(Buffer.compare(await readFile(inDownloads('setup (1).exe')), body)).toBe(0);
+    if (process.platform === 'win32') {
+      // The mark went with the part file to the name it found free.
+      expect(await readFile(`${inDownloads('setup (1).exe')}:Zone.Identifier`, 'utf8')).toBe(
+        '[ZoneTransfer]\r\nZoneId=3\r\n',
+      );
+    }
+  });
+
+  it('keeps a file whose disk refuses the mark, and says so in the log', async () => {
+    const { url } = await host({ fileName: 'Film.mkv' });
+    const warned: { event: string; details: object | undefined }[] = [];
+    const downloads = await open({
+      logger: {
+        ...silentLogger,
+        warn: (event, details) => {
+          warned.push({ event, details });
+        },
+      },
+      markDownloaded: async () => {
+        throw new Error('This disk has no streams.');
+      },
+    });
+
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
+    // Named by its id, as every other event of a download: the engine adds no path of its own.
+    expect(warned.map((warning) => warning.event)).toEqual(['mark_refused']);
+    expect(warned[0]?.details).toMatchObject({ id: added!.id });
+    expect(JSON.stringify(warned)).not.toContain('Film.mkv');
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'on Windows, leaves on a finished file the zone it came from and nothing else',
+    async () => {
+      const { url } = await host({ fileName: 'setup.exe' });
+      const downloads = await open();
+
+      const [added] = downloads.add({ urls: [url] });
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+      expect(await readFile(`${inDownloads('setup.exe')}:Zone.Identifier`, 'utf8')).toBe(
+        '[ZoneTransfer]\r\nZoneId=3\r\n',
+      );
+    },
+  );
 
   it('never overwrites a file already in the folder', async () => {
     const { url } = await host();

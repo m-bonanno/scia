@@ -1,5 +1,5 @@
-import { DownloadStatus } from '@scia/core';
-import { render, screen } from '@testing-library/react';
+import { DownloadStatus, FileKind } from '@scia/core';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DownloadRow, type RowActions } from './download-row.tsx';
@@ -100,12 +100,102 @@ describe('DownloadRow', () => {
 
     await userEvent.dblClick(screen.getByText('film.mkv'));
     expect(row.open).toHaveBeenCalledTimes(1);
+    // The shortcut is a press of the button: the focus goes where the press went.
+    expect(screen.getByRole('button', { name: 'Open' })).toHaveFocus();
 
     await userEvent.dblClick(screen.getByRole('button', { name: 'Open' }));
     expect(row.open).toHaveBeenCalledTimes(2);
 
     await userEvent.dblClick(screen.getByRole('button', { name: 'Show in folder' }));
     expect(row.open).toHaveBeenCalledTimes(2);
+  });
+
+  const aProgram = () =>
+    aDownload({ status: DownloadStatus.Completed, kind: FileKind.Program, fileName: 'setup.exe' });
+
+  it('asks once more before running a program, in place', async () => {
+    const row = actions();
+    render(<DownloadRow download={aProgram()} actions={row} />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+    expect(row.open).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Run' }));
+
+    expect(row.open).toHaveBeenCalledExactlyOnceWith('d1');
+  });
+
+  it('takes a double click on a program\'s row as one press of its "Open": it asks, and waits', async () => {
+    const row = actions();
+    render(<DownloadRow download={aProgram()} actions={row} />);
+
+    await userEvent.dblClick(screen.getByText('setup.exe'));
+
+    expect(row.open).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Run' })).toHaveFocus();
+  });
+
+  // "Run" is wider than "Open": it grows over the strip beside it, where the double click
+  // that made it ask may have been. A third press of that burst lands on it, saying it is the
+  // third — of a burst the button saw none of.
+  it('does not answer the question with a later press of the burst that asked it', async () => {
+    const row = actions();
+    render(<DownloadRow download={aProgram()} actions={row} />);
+
+    await userEvent.dblClick(screen.getByText('setup.exe'));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }), { detail: 3 });
+
+    expect(row.open).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument();
+  });
+
+  it('does not run a program on a double click on its button', async () => {
+    const row = actions();
+    render(<DownloadRow download={aProgram()} actions={row} />);
+
+    await userEvent.dblClick(screen.getByRole('button', { name: 'Open' }));
+
+    expect(row.open).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument();
+  });
+
+  it('runs a program from the keyboard at the second press of Enter, never at one held down', async () => {
+    const row = actions();
+    render(<DownloadRow download={aProgram()} actions={row} />);
+    screen.getByRole('button', { name: 'Open' }).focus();
+
+    await userEvent.keyboard('{Enter>5/}');
+    expect(row.open).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Run' })).toHaveFocus();
+
+    await userEvent.keyboard('{Enter}');
+    expect(row.open).toHaveBeenCalledExactlyOnceWith('d1');
+    expect(screen.getByRole('button', { name: 'Open' })).toHaveFocus();
+  });
+
+  it('does not throw unfinished bytes away on a double click, or at a key held down', async () => {
+    const row = actions();
+    render(<DownloadRow download={aDownload()} actions={row} />);
+
+    await userEvent.dblClick(screen.getByRole('button', { name: 'Cancel and delete' }));
+    expect(row.remove).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('film.mkv'));
+    screen.getByRole('button', { name: 'Cancel and delete' }).focus();
+    await userEvent.keyboard('{Enter>5/}');
+    expect(row.remove).not.toHaveBeenCalled();
+  });
+
+  it('opens a file once at a key held down', async () => {
+    const row = actions();
+    render(
+      <DownloadRow download={aDownload({ status: DownloadStatus.Completed })} actions={row} />,
+    );
+    screen.getByRole('button', { name: 'Open' }).focus();
+
+    await userEvent.keyboard('{Enter>5/}');
+
+    expect(row.open).toHaveBeenCalledTimes(1);
   });
 
   it('has nothing to open before the file is whole', async () => {

@@ -24,6 +24,14 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 - → A fix found while proving something else in the real app is still a rule without a spec: the run shows it once, and nothing holds it afterwards. Its spec is written, and seen failing against the old code, before the PR is opened: the message for a file that does not open went to review held only by a harness (#21).
 
+- → `userEvent.dblClick` on a button that its first press replaces sends the second press to the element that is gone: the spec passes whatever the code does. In a browser the second press lands on the replacement, as a click whose `detail` is 2 — fire that (`fireEvent.click(button, { detail: 2 })`), and say what a harness proves: one that sends `clickCount: 2` over the DevTools protocol proves what the page does with a second press, not that a hand produces one (#32: a double click on the cross deleted unfinished bytes, and its spec would have been green).
+- → A guard written for the pointer is tried on the keyboard's twin: a key held down repeats the press, as clicks whose `detail` is 0, and one gesture asks and answers itself. `userEvent.keyboard('{Enter>5/}')` is the spec; `event.repeat` is the guard, for the key that presses and no other: refusing every repeat stopped a held Tab on the first such button of the list (#32: a held Enter ran "Run" and deleted unfinished bytes; then its fix broke Tab).
+- → A guard put in a shared component reaches every user of it: "ignore the second click of a double click", right for a button that asks, swallowed the quick presses of someone clearing finished rows, each landing on the cross that slid under the pointer (#32). Ask what each user of the component does with the gesture.
+- → A spec is seen failing against the code it replaces, also when the code came first: the order "mark, then look at the name" was fixed in one round and claimed "by specs" with none; the spec written in the next was run against the old order before it was believed (#32).
+- → "By specs" in a test plan is checked by deleting what the line claims is held: with `autoFocus` removed, the suite was still green (#32).
+
+- → A control that changes size or place when it is pressed is tried with the pointer where the control will be, not only where it was: "Run" is wider than "Open", grew under a double click made beside it, and the next click of that burst answered it (#32).
+
 ## Docs and runbooks
 
 - → Where a document of state — the roadmap, the README, a runbook's "Not there yet" — names what vouches for something (an ADR, a spec, a run, a record), the present is for what exists: "the ADR records it", "a spec holds that" for one still to write is a "done" nobody did. Write "has to" (#29, twice in one PR, the second time in the commit that fixed the first). A bare participle does the same: "Built and proven against a simulated service" reads as done beside lines where "Written, covered by specs" means it (#31). A planned item written in the present ("Choosing the folder") is not this.
@@ -32,6 +40,7 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 ## Engine
 
+- → A name from a host that decides something is read as the system reads it, not as Scia numbers a copy: `setup.tar.exe` and a bare `.cmd` were not programs to a function that took `.tar.exe` as one extension and a leading dot as none. And a list that is a safety rule is drawn from the system (`PATHEXT`, `assoc`/`ftype`), not from memory: `vbs`, `js`, `hta`, `pif`, `lnk` run at a press (#32).
 - → A vitest `?raw` import of a `.css` file comes back empty. A spec that needs the stylesheet's text reads it with `node:fs`, from a workspace that has Node types.
 - → Two downloads added together race for the plain file name: a spec must not assume which one gets `name.ext` and which `name (1).ext`.
 - → `IncomingMessage` must be destroyed, or drained, on every path that does not read it to the end: a redirect, a refused status. Otherwise the socket stays busy.
@@ -42,3 +51,4 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → A debugging port answers before the window has a page: a harness waits for a `page` target, not just for the port.
 - → A very long profile path breaks Chromium's GPU cache (`The filename or extension is too long`). Harmless in a scratch folder; a sign to shorten the path, not a bug of the app.
 - → Over the DevTools protocol, Enter presses a focused button only when its `keyDown` carries `text: '\r'`: without it the key arrives and nothing is pressed, and the harness proves nothing while looking as if it had.
+- → A real double click over the DevTools protocol is two `mousePressed`/`mouseReleased` pairs at the same point with `clickCount` 1, then 2: `element.click()` from the page arrives with `detail` 0 and takes the roads a pointer never takes.

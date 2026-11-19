@@ -1,5 +1,5 @@
 import type { Download } from '@scia/contracts';
-import { DownloadStatus, type FileKind } from '@scia/core';
+import { DownloadStatus, FileKind } from '@scia/core';
 import {
   AppWindow,
   ExternalLink,
@@ -16,7 +16,8 @@ import {
   RotateCw,
   X,
 } from 'lucide-react';
-import { type ReactNode, useEffect, useState } from 'react';
+import { type ReactNode, useRef } from 'react';
+import { ConfirmButton, type ConfirmButtonHandle } from '@/components/confirm-button.tsx';
 import { IconButton } from '@/components/icon-button.tsx';
 import { cn } from '@/lib/cn.ts';
 import { SegmentBar } from './segment-bar.tsx';
@@ -31,8 +32,6 @@ const KIND_ICON: Readonly<Record<FileKind, LucideIcon>> = {
   program: AppWindow,
   other: File,
 };
-
-const CONFIRM_FOR_MS = 3000;
 
 export interface RowActions {
   readonly pause: (id: string) => void;
@@ -54,7 +53,9 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
   const Icon = KIND_ICON[download.kind];
   const completed = status === DownloadStatus.Completed;
   const failed = status === DownloadStatus.Failed;
+  const program = download.kind === FileKind.Program;
   const { open, reveal } = actions;
+  const openButton = useRef<ConfirmButtonHandle>(null);
 
   return (
     <li
@@ -62,7 +63,9 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
       onDoubleClick={(event) => {
         // A double press on one of the row's buttons is that button's, not the row's.
         if (event.target instanceof Element && event.target.closest('button') !== null) return;
-        if (completed) open?.(id);
+        // The shortcut is one press of "Open", whatever that press does: it opens a file, and
+        // asks before a program. It never answers: a second double click runs nothing.
+        openButton.current?.press();
       }}
     >
       <div className="flex items-center gap-3">
@@ -117,15 +120,17 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
             </IconButton>
           )}
           {completed && open !== undefined && (
-            <IconButton
+            <ConfirmButton
+              ref={openButton}
               label="Open"
-              onClick={(event) => {
-                // The second press of a double click would open the file twice.
-                if (event.detail <= 1) open(id);
+              // A program is what its system runs at a press: the button asks once more.
+              confirmLabel={program ? 'Run' : undefined}
+              onConfirm={() => {
+                open(id);
               }}
             >
               <ExternalLink size={16} aria-hidden="true" />
-            </IconButton>
+            </ConfirmButton>
           )}
           {completed && reveal !== undefined && (
             <IconButton
@@ -137,12 +142,17 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
               <FolderOpen size={16} aria-hidden="true" />
             </IconButton>
           )}
-          <RemoveButton
-            completed={completed}
-            onRemove={() => {
+          <ConfirmButton
+            label={completed ? 'Remove from list' : 'Cancel and delete'}
+            // A finished download only leaves the list; an unfinished one loses its bytes.
+            confirmLabel={completed ? undefined : 'Delete'}
+            destructive
+            onConfirm={() => {
               actions.remove(id);
             }}
-          />
+          >
+            <X size={16} aria-hidden="true" />
+          </ConfirmButton>
         </div>
       </div>
       {!completed && (
@@ -151,56 +161,5 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
         </div>
       )}
     </li>
-  );
-}
-
-interface RemoveButtonProps {
-  readonly completed: boolean;
-  readonly onRemove: () => void;
-}
-
-// A finished download only leaves the list, so one press is enough. An unfinished one loses its
-// bytes: the button asks once more, in place, and goes back by itself.
-function RemoveButton({ completed, onRemove }: RemoveButtonProps): ReactNode {
-  const [armed, setArmed] = useState(false);
-
-  useEffect(() => {
-    if (!armed) return undefined;
-    const timer = setTimeout(() => {
-      setArmed(false);
-    }, CONFIRM_FOR_MS);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [armed]);
-
-  if (armed) {
-    return (
-      <button
-        type="button"
-        autoFocus
-        onClick={onRemove}
-        onBlur={() => {
-          setArmed(false);
-        }}
-        className="h-8 rounded-lg bg-destructive px-2.5 text-sm font-semibold text-destructive-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >
-        Delete
-      </button>
-    );
-  }
-  return (
-    <IconButton
-      label={completed ? 'Remove from list' : 'Cancel and delete'}
-      onClick={() => {
-        if (completed) {
-          onRemove();
-        } else {
-          setArmed(true);
-        }
-      }}
-    >
-      <X size={16} aria-hidden="true" />
-    </IconButton>
   );
 }

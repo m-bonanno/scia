@@ -9,4 +9,5 @@ The domain: how a file is split into segments and split again while it downloads
 - **Enums are `as const` objects** with a type of the same name (`DownloadStatus`, `FileKind`): `erasableSyntaxOnly` forbids `enum`, and the values cross the wire as strings.
 - **Immutable values.** A `Segment` is replaced, never mutated; a function returns a new array.
 - **Every exported function has a spec** that reads as the rule it implements, edge cases included (the empty file, the size that does not divide, the reserved device name).
+- **A name from a host that decides something is read as the system will read it.** `fileKindOfName` takes the last extension, whatever stands before it, and a list that is a safety rule — what counts as a program — is drawn from the system (`PATHEXT`, what its shell runs), not from memory.
 - A concept used by two apps belongs here; a concept used by one stays in that app until a second caller exists.
