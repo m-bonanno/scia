@@ -13,16 +13,16 @@ The state is the real one: an item is "done" only if it was verified in the real
 
 ## M1 — Daily use
 
-**The first stable release waits for the whole of this milestone** (the owner, 19 November 2026), and ships for Windows only: Linux comes after it, below. The order, decided the same day: the mark on downloaded files and the second press before a program is run (#22); what the review of the tray left that needs no hands (#13); then choosing the folder, the speed limit, the notification when a download ends and automatic updates — alternating, in small PRs, with AllDebrid (M3, #7), so that neither waits for the other to be whole.
+**The first stable release waits for the whole of this milestone** (the owner, 19 November 2026), and ships for Windows only: Linux comes after it, below. The order, decided the same day: the mark on downloaded files and the second press before a program is run (#22); what the review of the tray left that needs no hands (#13); then choosing the folder, the speed limit, the notification when a download ends and automatic updates — alternating, in small PRs, with AllDebrid (M3, #7), so that neither waits for the other to be whole; the rest of the milestone follows in the same alternation.
 
-- Tray icon: closing the window does not stop the downloads (#6). **Written, covered by specs, and verified by script in the real app on Windows** (the window hides, the download goes on, a second launch brings it back, closing with nothing left quits). **Not done until someone has seen it**: the icon on a taskbar, its click, its menu, its tooltip and the notification have never been looked at or pressed, and nothing has been tried on Linux, where the tooltip cannot follow the downloads (#13).
-- When the last download of a hidden Scia ends or fails, nothing says so yet: it stays in the tray. Decided (19 November 2026): a notification says it, and Scia stays in the tray until it is quit from its menu. Built with the notification item below.
+- Tray icon: closing the window does not stop the downloads (#6). **Written, covered by specs, and verified by script in the real app on Windows** (the window hides, the download goes on, a second launch brings it back, closing with nothing left quits). **Not done until someone has seen it**: the icon on a taskbar, its click, its menu, its tooltip and the notification have never been looked at or pressed (#13).
+- When the last download of a hidden Scia ends or fails, nothing says so yet: it stays in the tray. Decided (19 November 2026): a notification says it, and Scia stays in the tray until it is quit from its menu. To be built with the notification item below.
 - A file Scia downloads is marked as coming from the network — on Windows the zone only, never the address it came from — and a downloaded program asks for a second press before it is run (#22). **Not built yet**: today such a file carries no mark, and one press runs it.
 - Choosing the folder, default and per download.
 - Speed limit, global and per download.
 - A notification when a download ends; "Open" and "Show in folder" are already there.
 - Clipboard watching (optional): a copied link is offered.
-- Icon and identity of the app, starting from the mark Scia has; the owner sees it before it is used.
+- Icon and identity of the app, starting from the mark Scia has; the owner is to see it before it is used.
 - The Windows installer (NSIS) tried on a clean machine.
 - Automatic updates.
 - E2E suite with Playwright on the real app.
@@ -30,8 +30,8 @@ The state is the real one: an item is "done" only if it was verified in the real
 
 ## M2 — The whole extension
 
-- Tried in Chrome and Brave first — the owner's browsers — then Edge; a version for Firefox.
-- Published in the stores. Each store's policy on downloading media from streaming sites is read, not remembered — and before pages, playlists and channels are built, not at the moment of submitting: the media the extension detects, the adaptive streams and #8 all stand on what it says.
+- Tried in Chrome and Brave first — the owner's choice (#23) — then Edge; a version for Firefox.
+- Published in the stores. Each store's policy on downloading media from streaming sites has to be read, not remembered — and before pages, playlists and channels are built, not at the moment of submitting: the media the extension detects, the adaptive streams and #8 all stand on what it says.
 - Downloads behind a login: sending the session's cookies, an explicit choice per site. The session comes from the extension only — never a cookie pasted by hand, never a default (the owner, 19 November 2026). The ADR on handing cookies over, which ADR 0002 announces, is still to write and has to record it. So has the ADR on yt-dlp, also to write: yt-dlp can read a browser's cookie store by itself, Scia never asks that of it, and a spec has to hold that.
 - Adaptive streams (HLS, DASH): detection, choice of quality, assembly. Unprotected streams only.
 - **Pages, playlists and channels** (#8): the address of a page, a playlist, a channel or a profile is expanded into the videos it lists, following its pages to the end; the list is shown to confirm, then downloaded. A private playlist, or anything else behind the person's own login, is read with the session of their own browser, on the explicit per-site choice above. The owner answered the question this item carried (19 November 2026): yes, as JDownloader does, inside the "Respect the hosts" principle as `CLAUDE.md` states it. Decided with it: sites are read by yt-dlp (thousands of sites, kept up to date by its community), shipped with Scia and updated by it, not by a reader per site written here. The ADR is still to write, and has to answer the objection ADR 0001 made to aria2 — an external binary to ship, update and supervise per platform. yt-dlp can do more than the principle allows — it can work around geographic restrictions: Scia never asks it to, and a spec has to hold that. It depends on the adaptive streams and on the session hand-over of this milestone.
@@ -43,7 +43,7 @@ M3 does not wait for M2: a hoster link pasted into Scia needs nothing from it. O
 
 Integrations arrive one at a time. Each is visible in three places: an **Integrations** section in Settings that lists the services and shows which are connected; the Integrations table in the README; the release notes of the version that brings it (`feat(integrations): …`).
 
-- **AllDebrid** (#7), connected once in Settings (API key kept by the operating system). From then on **a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically**, with nothing else to do — as a direct link would be. Built and proven against a simulated service; verified with a real account by the owner, who pastes their own key into Settings.
+- **AllDebrid** (#7), connected once in Settings (API key kept by the operating system). From then on **a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically**, with nothing else to do — as a direct link would be. It has to be built and proven against a simulated service; the verification with a real account is the owner's, who pastes their own key into Settings. **A question for the owner before the first AllDebrid PR** (#7): whether a hoster's wait or cap is an access control in the sense of "Respect the hosts".
 - A download that went through a service says so in its row.
 - A link that expires during a long download is unlocked again without losing the bytes.
 - A link that unlocks into several files shows the list before downloading.
@@ -61,8 +61,8 @@ Integrations arrive one at a time. Each is visible in three places: an **Integra
 
 ## After the first stable release
 
-- Linux: the packages (AppImage, deb) built and tried on a clean machine, the tray on a desktop that draws one and on one that does not (#13). Until then Scia is untried and unpackaged on Linux. The Release workflow builds the Linux packages on a stable tag: whether that job waits too is decided with the first release PR.
-- The interface in other languages (i18n), a feature of its own. Italian is the first one added.
+- Linux: the packages (AppImage, deb) built and tried on a clean machine, the tray on a desktop that draws one and on one that does not — nothing of the tray has been tried there, and its tooltip cannot follow the downloads (#13). Until then Scia is untried and unpackaged on Linux. The Release workflow builds the Linux packages on a stable tag: whether that job waits too is decided with the first release PR.
+- The interface in other languages (i18n), a feature of its own. Italian will be the first one added.
 
 ## Not planned
 
