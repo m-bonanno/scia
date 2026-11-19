@@ -33,8 +33,7 @@ _What this PR deliberately does not do._
 
 ## Test plan
 
-- [ ] `npm run format:check && npm run lint && npm run typecheck`
-- [ ] `npm test` (unit + integration + feature) — green
+- [ ] The gates, all of them (`docs/development/review-flow.md`) — green: _N tests passed_
 - [ ] Real-runtime evidence _(shell, boot, quit, packaging)_: _what ran, what the log says_
 - [ ] Keyboard-only path checked _(UI changes)_
 - [ ] Both themes checked _(UI changes)_
