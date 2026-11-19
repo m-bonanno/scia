@@ -8,6 +8,8 @@ export interface RuntimeLayout {
   readonly logsDir: string;
   // Where downloads land until the person chooses another folder.
   readonly downloadDir: string;
+  // The notices this computer was already shown (engine/shown-notices.ts).
+  readonly noticesPath: string;
 }
 
 export interface LayoutInput {
@@ -26,6 +28,7 @@ export function resolveRuntimeLayout(input: LayoutInput): RuntimeLayout {
   const data = {
     dataDir: join(input.userDataDir, 'engine'),
     logsDir: join(input.userDataDir, 'logs'),
+    noticesPath: join(input.userDataDir, 'notices.json'),
     downloadDir: input.scratchProfile ? join(input.userDataDir, 'downloads') : input.downloadsDir,
   };
   if (input.isPackaged) {

@@ -15,6 +15,8 @@ export interface MainWindowOptions {
   // Developer tools only where there is a developer.
   readonly devTools: boolean;
   readonly log: WindowLog;
+  // The person closed the window: main decides whether Scia hides or quits.
+  readonly onCloseRequested: () => void;
 }
 
 export function appOrigin(port: number): string {
@@ -71,6 +73,12 @@ export class MainWindow {
     );
     this.#window.once('ready-to-show', () => {
       this.#window.show();
+    });
+    // Closing is a question, not an order. A quit ends the process without closing the window
+    // (main.ts), so nothing here has to tell the two apart.
+    this.#window.on('close', (event) => {
+      event.preventDefault();
+      options.onCloseRequested();
     });
   }
 

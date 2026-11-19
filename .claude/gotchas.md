@@ -27,5 +27,6 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 ## Electron
 
+- → A page's `window.close()` destroys the window at once: Electron does not emit a preventable `close` for it. A harness that wants what the X does sends the window the system's close message (on Windows, `(Get-Process -Id <pid>).CloseMainWindow()`).
 - → A debugging port answers before the window has a page: a harness waits for a `page` target, not just for the port.
 - → A very long profile path breaks Chromium's GPU cache (`The filename or extension is too long`). Harmless in a scratch folder; a sign to shorten the path, not a bug of the app.

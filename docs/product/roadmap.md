@@ -13,7 +13,7 @@ The state is the real one: an item is "done" only if it was verified in the real
 
 ## M1 — Daily use
 
-- Tray icon: closing the window does not stop the downloads.
+- ~~Tray icon: closing the window does not stop the downloads.~~ **Done on Windows** (#6): with downloads running or waiting, closing hides the window and Scia goes on from the tray; with nothing left it quits. Verified in the real app by sending the window the system's close message; the tray icon's own click, menu and tooltip have not been tried by hand, and Linux has not been tried at all.
 - Choosing the folder, default and per download.
 - Speed limit, global and per download.
 - A notification when a download ends; "Open" and "Show in folder" are already there.

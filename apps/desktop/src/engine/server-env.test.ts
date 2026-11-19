@@ -7,6 +7,7 @@ const layout = {
   dataDir: 'data',
   logsDir: 'logs',
   downloadDir: 'downloads',
+  noticesPath: 'notices.json',
 };
 
 describe('buildServerEnv', () => {
