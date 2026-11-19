@@ -28,7 +28,7 @@ Claude Code loads the nearest `CLAUDE.md` plus every ancestor. A sub-file **wins
 | [`apps/desktop/CLAUDE.md`](./apps/desktop/CLAUDE.md)     | Electron boundaries, security, supervision, packaging   |
 | [`apps/extension/CLAUDE.md`](./apps/extension/CLAUDE.md) | What the extension may see and send                     |
 
-Runbooks in [`docs/development/`](./docs/development/): [`git-flow.md`](./docs/development/git-flow.md), [`release-flow.md`](./docs/development/release-flow.md), [`testing.md`](./docs/development/testing.md). Mistakes already paid for: [`.claude/gotchas.md`](./.claude/gotchas.md).
+Runbooks in [`docs/development/`](./docs/development/): [`git-flow.md`](./docs/development/git-flow.md), [`review-flow.md`](./docs/development/review-flow.md), [`release-flow.md`](./docs/development/release-flow.md), [`testing.md`](./docs/development/testing.md). Mistakes already paid for: [`.claude/gotchas.md`](./.claude/gotchas.md).
 
 ---
 
@@ -90,6 +90,15 @@ Full detail: [`docs/development/git-flow.md`](./docs/development/git-flow.md).
 - **`Closes #N`** in every PR body, written from [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md) to `.claude/pr-bodies/<branch>.md` and passed with `--body-file`.
 - **No AI attribution — ever.** No "Generated with Claude Code", no `Co-Authored-By: Claude`, no AI mention in commits, PR bodies, code or docs.
 
+## The team — review and merge
+
+The rule is [`docs/development/review-flow.md`](./docs/development/review-flow.md); run it with `/team-review <PR>`. In short:
+
+- **Every PR is reviewed locally by a team of senior roles** — tech lead (always), backend engineer, frontend engineer, product designer, product manager — each an independent agent defined in `.claude/agents/`, chosen by the files the PR touches and by its type. Their reviews are posted on the PR.
+- **The author runs the gates before opening the PR**, the tech lead runs them again on the commit under review, CI runs them a third time.
+- **A work branch is squash-merged into `develop` when the team approves its head commit and CI is green.** What is blocking, what happens after a fix, and the two merges that are never squashed (a release into `main`, and `main` back into `develop`) are in the runbook.
+- **`develop` → `main` is merged only on the owner's word.**
+
 ## Release flow — essentials
 
 Mechanics in [`docs/development/release-flow.md`](./docs/development/release-flow.md).
@@ -125,7 +134,8 @@ docs/
 1. **Propose the branch name (with issue number) before starting**, and work only on that branch.
 2. **Test first**, in every layer the change touches; prove runtime changes against the real runtime.
 3. **Respect the local canon** of the area you are in (the sub-files above).
-4. **Read `.claude/gotchas.md` before every push**; add an entry in the same PR when a mistake of that kind bites again.
-5. **Keep docs in lock-step**, and keep the roadmap honest — never mark done what is partial.
-6. **Report outcomes faithfully** — failing tests with their output, skipped steps named, what was not verified said plainly.
-7. **Ask before** anything hard to reverse (deleting data, rewriting history) or that reaches other people (merging a release PR into `main`, a store submission).
+4. **Have the team review every PR** (`/team-review`) and merge a work branch into `develop` only on its approval with CI green; never merge into `main` without the owner's word.
+5. **Read `.claude/gotchas.md` before every push**; add an entry in the same PR when a mistake of that kind bites again.
+6. **Keep docs in lock-step**, and keep the roadmap honest — never mark done what is partial.
+7. **Report outcomes faithfully** — failing tests with their output, skipped steps named, what was not verified said plainly.
+8. **Ask before** anything hard to reverse (deleting data, rewriting history) or that reaches other people (merging a release PR into `main`, a store submission).

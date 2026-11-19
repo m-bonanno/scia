@@ -30,7 +30,7 @@ To get the installers of a beta, or to build again those of a stable: **Actions 
 ## Releasing
 
 1. `develop` is green and holds what the release should contain.
-2. Open a PR `develop` → `main`, titled `release: vX.Y.Z` (the number is a forecast; semantic-release decides). Body: the user-facing changes.
+2. Open a PR `develop` → `main`, titled `release: vX.Y.Z` (the number is a forecast; semantic-release decides). Body: the user-facing changes. The team reviews it like any other ([`review-flow.md`](./review-flow.md)); it is merged only on the owner's word.
 3. Merge it with a **merge commit**, never a squash: `main` must contain the very commits semantic-release reads, or the next version is computed wrong.
 4. Wait for the workflow, then **verify the artefact, not the build**: download the installer from the release, install it, launch it with `--user-data-dir=<scratch>`, download a file, read `logs/main.log`.
 5. Merge `main` back into `develop` (a PR, merge commit), so the two branches share the release's merge commit and the next beta is counted from the stable.
