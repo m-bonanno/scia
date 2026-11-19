@@ -1,9 +1,11 @@
 import { type Pairing, type Settings, SETTINGS_LIMITS, type SettingsPatch } from '@scia/contracts';
-import { Check, Copy, Minus, Plus, X } from 'lucide-react';
+import { FolderChange, isFolderChange } from '@scia/contracts/bridge';
+import { Check, Copy, FolderPen, Minus, Plus, X } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import { IconButton } from '@/components/icon-button.tsx';
 import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
+import { FOLDER_REFUSED } from '@/lib/messages.ts';
 
 interface SettingsDialogProps {
   readonly open: boolean;
@@ -15,12 +17,16 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
   const dialog = useRef<HTMLDialogElement>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [pairing, setPairing] = useState<Pairing | null>(null);
+  const [folderRefused, setFolderRefused] = useState(false);
+  const shell = bridge();
 
   useEffect(() => {
     const element = dialog.current;
     if (element === null) return;
     if (open && !element.open) element.showModal();
     if (!open && element.open) element.close();
+    // What was said of a folder belongs to the visit in which it was chosen.
+    setFolderRefused(false);
   }, [open]);
 
   useEffect(() => {
@@ -37,6 +43,25 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
       current = false;
     };
   }, [open, onError]);
+
+  // The page names no folder: main shows the system's dialog and tells the engine, and the
+  // page reads back what the engine kept.
+  // Main answers what became of the folder; it fails for what is not about a folder (an engine
+  // that is silent, or restarting). Either way the settings are read again: an engine that
+  // answered main too late may have taken the folder all the same.
+  const changeFolder = () => {
+    setFolderRefused(false);
+    shell
+      ?.chooseDownloadFolder()
+      .then((change) => {
+        if (!isFolderChange(change)) throw new Error('Main did not say what became of the folder.');
+        setFolderRefused(change === FolderChange.Refused);
+      })
+      .catch(onError)
+      .then(() => api.settings())
+      .then(setSettings)
+      .catch(onError);
+  };
 
   const change = (patch: SettingsPatch) => {
     api.updateSettings(patch).then(setSettings).catch(onError);
@@ -78,19 +103,31 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
                 change({ connectionsPerDownload });
               }}
             />
-            <div>
-              <p className="text-sm font-medium">Download folder</p>
-              <p
-                className="truncate text-sm text-muted-foreground"
-                title={settings.downloadDirectory}
-              >
-                {settings.downloadDirectory}
-              </p>
+            <div className="flex items-start justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Download folder</p>
+                <output
+                  className="block truncate text-sm text-muted-foreground"
+                  title={settings.downloadDirectory}
+                >
+                  {settings.downloadDirectory}
+                </output>
+                {folderRefused && (
+                  <p role="alert" className="text-sm text-destructive">
+                    {FOLDER_REFUSED}
+                  </p>
+                )}
+              </div>
+              {shell !== undefined && (
+                <IconButton label="Change folder" className="shrink-0" onClick={changeFolder}>
+                  <FolderPen size={16} aria-hidden="true" />
+                </IconButton>
+              )}
             </div>
           </section>
         )}
         {pairing !== null && <PairingSection pairing={pairing} onError={onError} />}
-        <p className="text-sm text-muted-foreground">Scia {bridge()?.version ?? 'development'}</p>
+        <p className="text-sm text-muted-foreground">Scia {shell?.version ?? 'development'}</p>
       </div>
     </dialog>
   );

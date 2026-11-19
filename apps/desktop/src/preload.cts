@@ -20,5 +20,8 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke(BridgeChannel.RevealDownload, id) as Promise<unknown>,
     openDownload: (id: string) =>
       ipcRenderer.invoke(BridgeChannel.OpenDownload, id) as Promise<unknown>,
+    // The page asks and names nothing: main shows the system's folder dialog.
+    chooseDownloadFolder: () =>
+      ipcRenderer.invoke(BridgeChannel.ChooseDownloadFolder) as Promise<unknown>,
   }),
 );

@@ -160,6 +160,43 @@ describe('the engine API', () => {
     });
   });
 
+  it('takes a new download folder from the app alone, and only one it can use', async () => {
+    const wanted = join(folder.path, 'elsewhere');
+    const put = (token: string | undefined, body: unknown) =>
+      call('/settings/download-directory', {
+        method: 'PUT',
+        ...(token === undefined ? {} : { token }),
+        body: JSON.stringify(body),
+      });
+
+    expect((await put(undefined, { directory: wanted })).status).toBe(401);
+    expect((await put(EXTENSION_TOKEN, { directory: wanted })).status).toBe(403);
+    for (const refused of [{ directory: 'elsewhere' }, { directory: '' }, {}]) {
+      const response = await put(APP_TOKEN, refused);
+      expect(response.status, JSON.stringify(refused)).toBe(400);
+      expect(await codeOf(response)).toBe('INVALID_REQUEST');
+    }
+
+    const changed = await put(APP_TOKEN, { directory: wanted });
+    expect(changed.status).toBe(200);
+    expect(
+      ((await changed.json()) as { data: { downloadDirectory: string } }).data.downloadDirectory,
+    ).toBe(wanted);
+    expect(manager.settings().downloadDirectory).toBe(wanted);
+  });
+
+  it('does not let the page name a folder among the settings it changes', async () => {
+    const before = manager.settings().downloadDirectory;
+
+    await call('/settings', {
+      method: 'PATCH',
+      token: APP_TOKEN,
+      body: JSON.stringify({ downloadDirectory: join(folder.path, 'elsewhere') }),
+    });
+
+    expect(manager.settings().downloadDirectory).toBe(before);
+  });
+
   it('keeps the settings inside their limits', async () => {
     const tooMany = await call('/settings', {
       method: 'PATCH',

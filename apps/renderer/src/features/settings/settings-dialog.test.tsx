@@ -29,7 +29,19 @@ describe('SettingsDialog', () => {
   });
   afterEach(() => {
     vi.restoreAllMocks();
+    delete window.scia;
   });
+
+  function aShell(chooseDownloadFolder: () => Promise<unknown>) {
+    window.scia = {
+      apiToken: 'token',
+      version: '1.0.0',
+      platform: 'win32',
+      revealDownload: vi.fn(async () => undefined),
+      openDownload: vi.fn(async () => undefined),
+      chooseDownloadFolder,
+    };
+  }
 
   it('shows the limits, the folder and how to pair the extension', async () => {
     render(<SettingsDialog open onClose={ignore} onError={ignore} />);
@@ -40,6 +52,113 @@ describe('SettingsDialog', () => {
     expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
     expect(screen.getByText('pairing-code')).toBeInTheDocument();
     expect(screen.getByText(/Paste this code into the extension’s options/)).toBeInTheDocument();
+  });
+
+  it('changes the folder through the desktop shell, naming no path itself, and shows what the engine kept', async () => {
+    const chooseDownloadFolder = vi.fn(async () => 'changed');
+    aShell(chooseDownloadFolder);
+    vi.spyOn(api, 'settings')
+      .mockResolvedValueOnce(settings)
+      .mockResolvedValueOnce({ ...settings, downloadDirectory: '/media/films' });
+    render(<SettingsDialog open onClose={ignore} onError={ignore} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+
+    expect(chooseDownloadFolder).toHaveBeenCalledExactlyOnceWith();
+    expect(await screen.findByText('/media/films')).toBeInTheDocument();
+  });
+
+  it('says so, by the folder, when the engine refused the one that was chosen', async () => {
+    aShell(async () => 'refused');
+    const onError = vi.fn();
+    render(<SettingsDialog open onClose={ignore} onError={onError} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Scia could not use the folder you chose. Choose one it can write to.',
+    );
+    expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('does not blame a folder when main failed before or after the dialog: it says what failed, and reads the folder again', async () => {
+    const failure = new Error('Error invoking remote method: the engine said nothing');
+    aShell(async () => {
+      throw failure;
+    });
+    const read = vi
+      .spyOn(api, 'settings')
+      .mockResolvedValueOnce(settings)
+      // The engine may have taken the folder after main stopped waiting for its answer.
+      .mockResolvedValueOnce({ ...settings, downloadDirectory: '/media/films' });
+    const onError = vi.fn();
+    render(<SettingsDialog open onClose={ignore} onError={onError} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+
+    expect(await screen.findByText('/media/films')).toBeInTheDocument();
+    expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('takes an answer it does not know, and a folder it cannot read again, as failures to report', async () => {
+    aShell(async () => 'something else');
+    const unread = new Error('the engine is restarting');
+    vi.spyOn(api, 'settings').mockResolvedValueOnce(settings).mockRejectedValueOnce(unread);
+    const onError = vi.fn();
+    render(<SettingsDialog open onClose={ignore} onError={onError} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+
+    await vi.waitFor(() => {
+      expect(onError).toHaveBeenCalledTimes(2);
+    });
+    expect(onError).toHaveBeenLastCalledWith(unread);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
+  });
+
+  it('says nothing when the person closed the dialog without choosing', async () => {
+    aShell(async () => 'kept');
+    const onError = vi.fn();
+    render(<SettingsDialog open onClose={ignore} onError={onError} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+
+    expect(await screen.findByText('/home/me/Downloads')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(onError).not.toHaveBeenCalled();
+  });
+
+  it('forgets a refusal when Settings is closed, and when the folder is asked for again', async () => {
+    const chooseDownloadFolder = vi
+      .fn<() => Promise<unknown>>()
+      .mockResolvedValueOnce('refused')
+      .mockResolvedValueOnce('refused')
+      .mockResolvedValueOnce('kept');
+    aShell(chooseDownloadFolder);
+    const { rerender } = render(<SettingsDialog open onClose={ignore} onError={ignore} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    rerender(<SettingsDialog open={false} onClose={ignore} onError={ignore} />);
+    rerender(<SettingsDialog open onClose={ignore} onError={ignore} />);
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Change folder' }));
+    await screen.findByText('/home/me/Downloads');
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('does not offer to change the folder where there is no desktop shell to show the dialog', async () => {
+    render(<SettingsDialog open onClose={ignore} onError={ignore} />);
+
+    expect(await screen.findByText('/home/me/Downloads')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Change folder' })).not.toBeInTheDocument();
   });
 
   it('raises a limit one step at a time and shows what the engine kept', async () => {

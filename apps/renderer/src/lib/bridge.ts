@@ -8,6 +8,8 @@ export interface SciaBridge {
   // Main asks the engine where the file is: the page never sends a path.
   revealDownload(id: string): Promise<unknown>;
   openDownload(id: string): Promise<unknown>;
+  // Main shows the system's folder dialog and tells the engine: the page sends no path.
+  chooseDownloadFolder(): Promise<unknown>;
 }
 
 declare global {

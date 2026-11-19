@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { ResolvedTheme, WINDOW_COLOURS } from '@scia/contracts/theme';
-import { BrowserWindow, type IpcMainInvokeEvent, ipcMain, nativeTheme } from 'electron';
+import { BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, nativeTheme } from 'electron';
 import { guardPermissions } from './engine/page-permissions.ts';
 import { hasIntegratedTitleBar, titleBarOverlay, windowFrameOptions } from './engine/title-bar.ts';
 
@@ -106,6 +106,17 @@ export class MainWindow {
 
   isVisible(): boolean {
     return !this.#window.isDestroyed() && this.#window.isVisible();
+  }
+
+  // The system's own folder dialog, over this window, opened on `current`. Undefined when the
+  // person closes it without choosing.
+  async pickFolder(current: string): Promise<string | undefined> {
+    const { canceled, filePaths } = await dialog.showOpenDialog(this.#window, {
+      title: 'Download folder',
+      defaultPath: current,
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    return canceled ? undefined : filePaths[0];
   }
 
   focus(): void {
