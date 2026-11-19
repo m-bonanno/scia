@@ -30,6 +30,8 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → A spec is seen failing against the code it replaces, also when the code came first: the order "mark, then look at the name" was fixed in one round and claimed "by specs" with none; the spec written in the next was run against the old order before it was believed (#32).
 - → "By specs" in a test plan is checked by deleting what the line claims is held: with `autoFocus` removed, the suite was still green (#32).
 
+- → A control that changes size or place when it is pressed is tried with the pointer where the control will be, not only where it was: "Run" is wider than "Open", grew under a double click made beside it, and the next click of that burst answered it (#32).
+
 ## Docs and runbooks
 
 - → Where a document of state — the roadmap, the README, a runbook's "Not there yet" — names what vouches for something (an ADR, a spec, a run, a record), the present is for what exists: "the ADR records it", "a spec holds that" for one still to write is a "done" nobody did. Write "has to" (#29, twice in one PR, the second time in the commit that fixed the first). A bare participle does the same: "Built and proven against a simulated service" reads as done beside lines where "Written, covered by specs" means it (#31). A planned item written in the present ("Choosing the folder") is not this.
