@@ -10,7 +10,7 @@ People who download big files, or many: ISO images, videos, archives, programs. 
 
 1. **Fast.** Several connections per file, redistributed while the download runs; no pointless waiting.
 2. **Reliable.** A dropped connection is not a lost download. Closing the app does not lose the bytes already fetched. A file already on disk is never overwritten.
-3. **Any link.** Direct links today; the media of a page through the extension; hoster links through a debrid service (AllDebrid first): once the service is connected, a hoster link pasted into Scia is unlocked and downloaded with nothing else to do. Adaptive streams when Scia can assemble them; whole pages, playlists, channels or profiles expanded into their videos — the public ones, and, with the session handed over from the person's own browser, the ones only their account shows.
+3. **Any link.** Direct links today; the media of a page through the extension; hoster links through a debrid service (AllDebrid first): once the service is connected, a hoster link pasted into Scia is unlocked and downloaded with nothing else to do. Adaptive streams when Scia can assemble them; whole pages, playlists, channels or profiles expanded into their videos — the public ones, and, with the session handed over by the extension from the person's own browser, the ones only their account shows.
 4. **Minimal.** One window, one field, one list. Every extra feature has to earn its place.
 
 ## What it is not

@@ -20,6 +20,8 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 - → A change of wording or of language is finished when a search of the whole tree for the old words finds nothing (`git grep -nE "[àèéìòù]"` caught what reading the diff did not), and every dialog was opened in the real app: a screen nobody opened is a screen nobody read.
 
+- → A document of state speaks in the present only of what exists. "The ADR records it", "a spec holds that" for an ADR or a spec still to write is a "done" nobody did: write "has to" (#29, twice in one PR, the second time in the commit that fixed the first).
+
 ## Specs
 
 - → A fix found while proving something else in the real app is still a rule without a spec: the run shows it once, and nothing holds it afterwards. Its spec is written, and seen failing against the old code, before the PR is opened: the message for a file that does not open went to review held only by a harness (#21).
