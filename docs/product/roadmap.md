@@ -5,7 +5,7 @@ The state is the real one: an item is "done" only if it was verified in the real
 ## M0 — Foundations (done)
 
 - Monorepo, tooling, hooks, tests on four layers.
-- Repository on GitHub with GitFlow, checks on PRs, automatic versions and release notes (semantic-release). The Windows installer builds locally, and the app it is made from starts and quits cleanly on a scratch profile; the installer itself has not been run. What CI has not produced yet is listed in `docs/development/release-flow.md`, "Not there yet".
+- Repository on GitHub with GitFlow, checks on PRs, automatic versions and release notes (semantic-release). The Windows installer builds locally, and the app it is made from starts and quits cleanly on a scratch profile; the installer itself has not been run. **No installer has been produced by CI yet, and the Linux packages have never been built** (`docs/development/release-flow.md`, "Not there yet").
 - Engine: downloads over several connections with dynamic segmentation, pause and resume, a queue, retries after an interruption, safe names that never overwrite, state saved on disk.
 - Electron app: a window with its own title bar, supervision of the engine, orderly quit, resume after a restart.
 - Interface: adding by paste, a list with the segment bar, filters, basic settings.
@@ -24,8 +24,6 @@ The state is the real one: an item is "done" only if it was verified in the real
 - E2E suite with Playwright on the real app.
 - To measure: the wait caused by zero-filling on NTFS for very large files (ADR 0001).
 
-M2, M3 and M4 are themes, not a sequence: AllDebrid (M3) depends on nothing in M2 and may start first.
-
 ## M2 — The whole extension
 
 - Tried in Chrome, Edge, Brave; a version for Firefox.
@@ -36,6 +34,8 @@ M2, M3 and M4 are themes, not a sequence: AllDebrid (M3) depends on nothing in M
 - A fallback port, and the extension finding the app by itself, when 47821 is taken.
 
 ## M3 — Integrations: debrid services
+
+M3 does not wait for M2: a hoster link pasted into Scia needs nothing from it. Only the link sent by the extension leans on an extension that has not been tried in a browser yet.
 
 Integrations arrive one at a time. Each is visible in three places: an **Integrations** section in Settings that lists the services and shows which are connected; the Integrations table in the README; the release notes of the version that brings it (`feat(integrations): …`).
 
@@ -57,13 +57,22 @@ Integrations arrive one at a time. Each is visible in three places: an **Integra
 
 ## Open question for the owner
 
-**May Scia download, with the person's own login, what a site lets them play but forbids them to download?** #8 needs the answer before it is built, and carries this same question until it has one.
+**May Scia download what a site lets a person play but forbids them to download?** From a public page as from the person's own account. #8 needs the answer before it is built, and carries this same question until it has one.
 
 The principle today (`CLAUDE.md`, "Respect the hosts"), whole: "Scia downloads what the person has the right to download. No DRM circumvention, no evasion of a site's access controls, connection counts within the limits in settings. A feature that only makes sense against a host's will is not built."
 
-What #8 asks for meets it in two places. The videos of a playlist or of a profile are ones the person's own account can already play; but most streaming sites forbid downloading in their terms, which is what "the right to download" and "against a host's will" are about. And the tools that read such sites can do more than read: yt-dlp, the candidate, can also work around geographic restrictions, which is evasion under any reading and would have to be off.
+What #8 asks for meets it in two places. The videos of a playlist or of a profile are ones the person can already play; but most streaming sites forbid downloading in their terms, and the first and the last sentence of the principle may be read to cover that. And the tools that read such sites can do more than read: yt-dlp, the candidate, can also work around geographic restrictions, which both answers refuse.
 
-- **Yes.** The first and the last sentence of the principle are replaced, in `CLAUDE.md` and in "What it is not" of `vision.md`, by: "Scia fetches what the person can already reach — a public file, or what their own account plays in their own browser. No DRM circumvention, no way around a paywall, a login the person does not have, or a geographic restriction." #8 is built inside that line.
-- **No.** The principle stays as it is. #8 is narrowed to sites whose terms allow downloading, or closed, and its item leaves M2.
+**Yes.** The principle becomes, in `CLAUDE.md`:
+
+> **Respect the hosts.** Scia fetches what the person can already reach: a public file, or what their own account plays in their own browser. No DRM circumvention, no way around a paywall, a login the person does not have, or a geographic restriction. Connection counts within the limits in settings.
+
+and the first line of "What it is not" in `vision.md`:
+
+> It does not circumvent protections: no DRM, no way around a paywall, a login the person does not have, or a geographic restriction. Scia fetches what the person can already reach.
+
+#8 is built inside that line.
+
+**No.** The principle stays as it is. #8 is closed, its item leaves M2 and the clause on pages, playlists and channels leaves `vision.md`. The same reading then has to be applied to what stands on the same line: the media the extension detects in a page (M0, written), the adaptive streams and the downloads behind a login of M2. Each would be kept only for sites that allow downloading, or dropped.
 
 This section is removed once the answer is recorded in `CLAUDE.md`, `vision.md` and #8.
