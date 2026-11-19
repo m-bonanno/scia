@@ -31,5 +31,4 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → A page's `window.close()` destroys the window at once: Electron does not emit a preventable `close` for it. A harness that wants what the X does follows `docs/development/testing.md`, "Proving the real app".
 - → A debugging port answers before the window has a page: a harness waits for a `page` target, not just for the port.
 - → A very long profile path breaks Chromium's GPU cache (`The filename or extension is too long`). Harmless in a scratch folder; a sign to shorten the path, not a bug of the app.
-- → Over the DevTools protocol, Enter presses a focused button only when its `keyDown` carries `text: '
-'`: without it the key arrives and nothing is pressed, and the harness proves nothing while looking as if it had.
+- → Over the DevTools protocol, Enter presses a focused button only when its `keyDown` carries `text: '\r'`: without it the key arrives and nothing is pressed, and the harness proves nothing while looking as if it had.
