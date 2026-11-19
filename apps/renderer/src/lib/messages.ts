@@ -1,20 +1,20 @@
 import { ApiErrorCode } from '@scia/contracts';
 import { ApiError } from './api.ts';
 
-// Errors: the fact, then the remedy. No blame, no «Ops».
+// Errors: the fact, then the remedy. No blame, no "Oops".
 const BY_CODE: Readonly<Record<string, string>> = {
-  [ApiErrorCode.InvalidRequest]:
-    'Non vedo indirizzi http o https validi in quello che hai inserito.',
-  [ApiErrorCode.NotFound]: 'Questo download non è più in elenco.',
-  [ApiErrorCode.Conflict]: 'Il download ha già cambiato stato. Riprova tra un istante.',
-  [ApiErrorCode.Unauthorized]: 'Scia non riconosce questa finestra. Chiudi e riapri l’app.',
+  [ApiErrorCode.InvalidRequest]: 'No valid http or https addresses in what you entered.',
+  [ApiErrorCode.NotFound]: 'This download is no longer in the list.',
+  [ApiErrorCode.Conflict]: 'The download has already changed state. Try again in a moment.',
+  [ApiErrorCode.Unauthorized]:
+    'Scia does not recognise this window. Close the app and open it again.',
 };
 
-export const ENGINE_UNREACHABLE = 'Il motore di Scia non risponde. Nuovo tentativo in corso…';
+export const ENGINE_UNREACHABLE = 'Scia’s engine is not responding. Trying again…';
 
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    return BY_CODE[error.code] ?? 'Scia non è riuscita a completare l’operazione. Riprova.';
+    return BY_CODE[error.code] ?? 'Scia could not complete the operation. Try again.';
   }
   return ENGINE_UNREACHABLE;
 }

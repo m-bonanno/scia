@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Scia",
   "version": "0.0.0",
-  "description": "Manda a Scia i link e i media delle pagine.",
+  "description": "Sends links and the media of a page to Scia.",
   "minimum_chrome_version": "120",
   "permissions": ["contextMenus", "downloads", "storage", "webRequest"],
   "host_permissions": ["<all_urls>"],

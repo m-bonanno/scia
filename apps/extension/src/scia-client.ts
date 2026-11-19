@@ -66,8 +66,8 @@ export async function checkPairing(pairing: Pairing, fetchFn: Fetch = fetch): Pr
 }
 
 export const OUTCOME_TEXT: Readonly<Record<SendOutcome, string>> = {
-  sent: 'Inviato a Scia.',
-  'not-paired': 'Collega prima l’estensione a Scia.',
-  unreachable: 'Scia non è in esecuzione. Aprila e riprova.',
-  refused: 'Scia ha rifiutato la richiesta. Controlla il codice di collegamento.',
+  sent: 'Sent to Scia.',
+  'not-paired': 'Pair the extension with Scia first.',
+  unreachable: 'Scia is not running. Open it and try again.',
+  refused: 'Scia refused the request. Check the pairing code.',
 };

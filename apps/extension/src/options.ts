@@ -36,7 +36,7 @@ async function save(): Promise<void> {
   const outcome = await checkPairing(settings);
   result.textContent =
     outcome === SendOutcome.Sent
-      ? 'Collegata: Scia risponde e riconosce il codice.'
+      ? 'Paired: Scia answers and recognises the code.'
       : OUTCOME_TEXT[outcome];
   result.className = outcome === SendOutcome.Sent ? 'muted' : 'problem';
 }

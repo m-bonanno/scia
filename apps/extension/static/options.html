@@ -1,42 +1,40 @@
 <!doctype html>
-<html lang="it">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Scia — Opzioni</title>
+    <title>Scia — Options</title>
     <link rel="stylesheet" href="ui.css" />
   </head>
   <body>
     <form id="form" class="options">
       <div>
-        <h1>Collega l’estensione a Scia</h1>
+        <h1>Pair the extension with Scia</h1>
         <p class="muted">
-          Apri Scia, vai in Impostazioni, copia il codice di «Estensione del browser» e incollalo
-          qui.
+          Open Scia, go to Settings, copy the code under “Browser extension” and paste it here.
         </p>
       </div>
       <label>
-        Codice di collegamento
+        Pairing code
         <input id="token" type="text" autocomplete="off" spellcheck="false" />
       </label>
       <label>
-        Porta
+        Port
         <input id="port" type="number" min="1" max="65535" />
         <span class="muted" style="font-weight: 400"
-          >Lasciala com’è, se non l’hai cambiata in Scia.</span
+          >Leave it as it is unless you changed it in Scia.</span
         >
       </label>
       <label class="check">
         <input id="intercept" type="checkbox" />
         <span>
-          Passa a Scia i download del browser
+          Send the browser’s downloads to Scia
           <span class="muted" style="display: block">
-            I file dei siti che richiedono l’accesso possono non partire: Scia non riceve la tua
-            sessione.
+            Files from sites that need a login may not start: Scia does not receive your session.
           </span>
         </span>
       </label>
       <div class="actions">
-        <button type="submit">Salva e verifica</button>
+        <button type="submit">Save and check</button>
         <p id="result" role="status"></p>
       </div>
     </form>

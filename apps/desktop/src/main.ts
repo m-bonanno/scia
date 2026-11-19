@@ -63,8 +63,8 @@ async function boot(): Promise<void> {
   const giveUp = (reason: string) => {
     log.error('engine_gave_up', { reason });
     dialog.showErrorBox(
-      'Scia non riesce ad avviarsi',
-      `Il motore dei download non parte. Chiudi gli altri programmi che usano la rete locale e riapri Scia.\n\nDettagli tecnici: ${join(layout.logsDir, 'main.log')}`,
+      'Scia cannot start',
+      `The download engine does not start. Close other programs that use the local network and open Scia again.\n\nTechnical details: ${join(layout.logsDir, 'main.log')}`,
     );
     app.exit(1);
   };

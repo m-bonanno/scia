@@ -8,54 +8,56 @@ const SEPARATOR = ' · ';
 function failureText(download: Download): string {
   switch (download.failure) {
     case DownloadFailure.HttpStatus:
-      if (download.failureStatus === 404) return 'Il file non esiste più a questo indirizzo.';
+      if (download.failureStatus === 404) return 'The file is no longer at this address.';
       if (download.failureStatus === 401 || download.failureStatus === 403) {
-        return 'Il server rifiuta l’accesso a questo file.';
+        return 'The server denies access to this file.';
       }
       return download.failureStatus === null
-        ? 'Il server ha rifiutato la richiesta. Riprova più tardi.'
-        : `Il server ha risposto con un errore (${String(download.failureStatus)}). Riprova più tardi.`;
+        ? 'The server refused the request. Try again later.'
+        : `The server answered with an error (${String(download.failureStatus)}). Try again later.`;
     case DownloadFailure.Disk:
-      return 'Impossibile scrivere il file. Controlla lo spazio libero e la cartella, poi riprova.';
+      return 'The file could not be written. Check the free space and the folder, then try again.';
     case DownloadFailure.Incomplete:
-      return 'Il server ha chiuso il trasferimento prima della fine. Riprova.';
+      return 'The server closed the transfer before the end. Try again.';
     case DownloadFailure.Network:
     case null:
-      return 'Connessione interrotta. Riprova.';
+      return 'Connection interrupted. Try again.';
   }
 }
 
 function progressText(download: Download): string {
   const done = formatBytes(download.downloadedBytes);
-  return download.totalBytes === null ? done : `${done} di ${formatBytes(download.totalBytes)}`;
+  return download.totalBytes === null ? done : `${done} of ${formatBytes(download.totalBytes)}`;
 }
 
 // The one line under a file's name: where it is, how fast, how long. Facts first.
 export function statusLine(download: Download): string {
   switch (download.status) {
     case DownloadStatus.Queued:
-      return 'In coda';
+      return 'Queued';
     case DownloadStatus.Completed:
-      return [formatBytes(download.totalBytes ?? download.downloadedBytes), 'Completato'].join(
+      return [formatBytes(download.totalBytes ?? download.downloadedBytes), 'Completed'].join(
         SEPARATOR,
       );
     case DownloadStatus.Failed:
       return failureText(download);
     case DownloadStatus.Paused:
       return [
-        'In pausa',
+        'Paused',
         progressText(download),
-        ...(download.resumable || download.downloadedBytes === 0 ? [] : ['ripartirà dall’inizio']),
+        ...(download.resumable || download.downloadedBytes === 0
+          ? []
+          : ['will restart from the beginning']),
       ].join(SEPARATOR);
     case DownloadStatus.Downloading: {
-      if (download.totalBytes === null && download.downloadedBytes === 0) return 'Connessione…';
+      if (download.totalBytes === null && download.downloadedBytes === 0) return 'Connecting…';
       return [
         ...(download.totalBytes === null
           ? []
           : [formatPercent(download.downloadedBytes, download.totalBytes)]),
         progressText(download),
         formatSpeed(download.bytesPerSecond),
-        ...(download.etaSeconds === null ? [] : [`ancora ${formatDuration(download.etaSeconds)}`]),
+        ...(download.etaSeconds === null ? [] : [`${formatDuration(download.etaSeconds)} left`]),
       ].join(SEPARATOR);
     }
   }

@@ -24,7 +24,7 @@ Claude Code loads the nearest `CLAUDE.md` plus every ancestor. A sub-file **wins
 | `CLAUDE.md` (this)                                       | Cross-cutting: principles, TDD, git/PR, docs discipline |
 | [`packages/core/CLAUDE.md`](./packages/core/CLAUDE.md)   | The pure domain                                         |
 | [`apps/server/CLAUDE.md`](./apps/server/CLAUDE.md)       | The engine: ports, adapters, the API, its tokens        |
-| [`apps/renderer/CLAUDE.md`](./apps/renderer/CLAUDE.md)   | UX canon, visual rules, Italian copy                    |
+| [`apps/renderer/CLAUDE.md`](./apps/renderer/CLAUDE.md)   | UX canon, visual rules, copy                            |
 | [`apps/desktop/CLAUDE.md`](./apps/desktop/CLAUDE.md)     | Electron boundaries, security, supervision, packaging   |
 | [`apps/extension/CLAUDE.md`](./apps/extension/CLAUDE.md) | What the extension may see and send                     |
 
@@ -39,7 +39,7 @@ Runbooks in [`docs/development/`](./docs/development/): [`git-flow.md`](./docs/d
 - **No patches ("toppe").** A fix that special-cases a platform, hardcodes a value or copies a block is not done. Model the difference as data.
 - **Nothing personal in code.** Folders, limits, tokens, ports — all settings or launch options.
 - **Few comments — the code explains itself.** A comment exists only for a _why_ the code cannot say: a platform quirk, a protocol detail (RFC 6266), a security reason. No JSDoc that paraphrases a signature, no section banners.
-- **Respect the hosts.** Scia downloads what the person has the right to download. No DRM circumvention, no evasion of a site's access controls, connection counts within the limits in settings. A feature that only makes sense against a host's will is not built.
+- **Respect the hosts.** Scia fetches what the person can already reach: a public file, or what their own account plays in their own browser. No DRM circumvention, no way around a paywall or a login the person does not have, no shared accounts, connection counts within the limits in settings.
 - **Zero infrastructure cost.** GitHub Free, free tiers only. A paid service needs an explicit decision by the owner and an ADR.
 
 ### Test-Driven Development
@@ -108,15 +108,15 @@ Mechanics in [`docs/development/release-flow.md`](./docs/development/release-flo
 
 ```
 docs/
-├── product/       # vision, roadmap (Italian)
-├── design/        # screenshots and, later, the design system (Italian)
+├── product/       # vision, roadmap
+├── design/        # screenshots and, later, the design system
 ├── adr/           # architecture decision records, numbered, never rewritten — superseded
-└── development/   # runbooks (English)
+└── development/   # runbooks
 ```
 
 **A doc update is required in the same PR** when the change alters: an API route, payload or status code (the contract in `packages/contracts` too); a persisted shape (`state.json`); what the extension may see or send; an architectural decision (new dependency class, new process, new port) → a new ADR; the roadmap's state.
 
-**Language**: UI copy, product and design docs in **Italian**. Code, identifiers, commits, PR bodies, code comments, ADRs and runbooks in **English**.
+**Language**: everything is written in **English** — the interface of the app and of the extension, docs, code, identifiers, comments, commits, issues and PR bodies. A translation of the interface is a feature of its own (i18n), not a second language sprinkled in the code.
 
 ---
 

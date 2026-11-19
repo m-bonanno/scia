@@ -12,11 +12,11 @@ interface DownloadListProps {
 
 const EMPTY: Readonly<Record<Filter, { readonly title: string; readonly hint: string }>> = {
   all: {
-    title: 'Nessun download',
-    hint: 'Incolla un link qui sopra, oppure premi Ctrl+V in qualsiasi punto della finestra.',
+    title: 'No downloads',
+    hint: 'Paste a link above, or press Ctrl+V anywhere in the window.',
   },
-  active: { title: 'Niente in corso', hint: 'I download che aggiungi compaiono qui.' },
-  completed: { title: 'Ancora nessun file completato', hint: 'I file finiti compaiono qui.' },
+  active: { title: 'Nothing in progress', hint: 'Downloads you add show up here.' },
+  completed: { title: 'No completed files yet', hint: 'Finished files show up here.' },
 };
 
 export function DownloadList({ downloads, filter, actions }: DownloadListProps): ReactNode {

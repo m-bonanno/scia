@@ -85,7 +85,7 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
         <div className="flex shrink-0 items-center gap-0.5">
           {(status === DownloadStatus.Downloading || status === DownloadStatus.Queued) && (
             <IconButton
-              label="Metti in pausa"
+              label="Pause"
               onClick={() => {
                 actions.pause(id);
               }}
@@ -95,7 +95,7 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
           )}
           {status === DownloadStatus.Paused && (
             <IconButton
-              label="Riprendi"
+              label="Resume"
               onClick={() => {
                 actions.resume(id);
               }}
@@ -105,7 +105,7 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
           )}
           {failed && (
             <IconButton
-              label="Riprova"
+              label="Retry"
               onClick={() => {
                 actions.resume(id);
               }}
@@ -115,7 +115,7 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
           )}
           {completed && reveal !== undefined && (
             <IconButton
-              label="Mostra nella cartella"
+              label="Show in folder"
               onClick={() => {
                 reveal(id);
               }}
@@ -171,13 +171,13 @@ function RemoveButton({ completed, onRemove }: RemoveButtonProps): ReactNode {
         }}
         className="h-8 rounded-lg bg-destructive px-2.5 text-sm font-semibold text-destructive-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        Elimina
+        Delete
       </button>
     );
   }
   return (
     <IconButton
-      label={completed ? 'Togli dall’elenco' : 'Annulla ed elimina'}
+      label={completed ? 'Remove from list' : 'Cancel and delete'}
       onClick={() => {
         if (completed) {
           onRemove();

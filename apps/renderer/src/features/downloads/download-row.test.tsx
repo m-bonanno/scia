@@ -23,7 +23,7 @@ describe('DownloadRow', () => {
 
     expect(screen.getByText('film.mkv')).toBeInTheDocument();
     expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '42');
-    await userEvent.click(screen.getByRole('button', { name: 'Metti in pausa' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Pause' }));
 
     expect(row.pause).toHaveBeenCalledWith('d1');
   });
@@ -33,10 +33,10 @@ describe('DownloadRow', () => {
     const { rerender } = render(
       <DownloadRow download={aDownload({ status: DownloadStatus.Paused })} actions={row} />,
     );
-    await userEvent.click(screen.getByRole('button', { name: 'Riprendi' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Resume' }));
 
     rerender(<DownloadRow download={aDownload({ status: DownloadStatus.Failed })} actions={row} />);
-    await userEvent.click(screen.getByRole('button', { name: 'Riprova' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(row.resume).toHaveBeenCalledTimes(2);
   });
@@ -45,9 +45,9 @@ describe('DownloadRow', () => {
     const row = actions();
     render(<DownloadRow download={aDownload()} actions={row} />);
 
-    await userEvent.click(screen.getByRole('button', { name: 'Annulla ed elimina' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel and delete' }));
     expect(row.remove).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole('button', { name: 'Elimina' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }));
 
     expect(row.remove).toHaveBeenCalledWith('d1');
   });
@@ -59,8 +59,8 @@ describe('DownloadRow', () => {
     );
 
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Mostra nella cartella' }));
-    await userEvent.click(screen.getByRole('button', { name: 'Togli dall’elenco' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Show in folder' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Remove from list' }));
 
     expect(row.reveal).toHaveBeenCalledWith('d1');
     expect(row.remove).toHaveBeenCalledWith('d1');
@@ -74,6 +74,6 @@ describe('DownloadRow', () => {
       />,
     );
 
-    expect(screen.queryByRole('button', { name: 'Mostra nella cartella' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Show in folder' })).not.toBeInTheDocument();
   });
 });

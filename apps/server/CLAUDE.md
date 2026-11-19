@@ -25,7 +25,7 @@ state-store        state.json, written whole and renamed into place
 - **Two tokens, two scopes** ([ADR 0002](../../docs/adr/0002-browser-extension-pairing.md)): the app's token (new at every launch) opens every route; the extension's token (persisted, shown in settings) opens `EXTENSION_ROUTES` and nothing else. A new route is app-only unless the ADR is amended.
 - **Only the engine's own host is answered** (`127.0.0.1:<port>` or `localhost:<port>`), and no CORS header is ever sent: a web page can neither read the API nor reach it under another name.
 - **The environment is the configuration** (`config.ts`): `SCIA_*` variables given by main, never a file beside the executable.
-- **Errors cross the API as `{ error: { code, message } }`** with a code from `ApiErrorCode`; the Italian text lives in the renderer.
+- **Errors cross the API as `{ error: { code, message } }`** with a code from `ApiErrorCode`; the text a person reads lives in the renderer.
 
 ## Testing
 

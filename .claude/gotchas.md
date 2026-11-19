@@ -12,7 +12,8 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 ## Formatting numbers
 
-- → `Intl.NumberFormat('it-IT')` does not group a four-digit number: `1000`, not `1.000`; grouping starts at `10.000`. Specs expect what CLDR says.
+- → Grouping depends on the locale's CLDR data, not on intuition: `en-US` writes `1,000`, while `it-IT` leaves a four-digit number ungrouped (`1000`). A spec expects what `Intl` says for the locale in `lib/format.ts`.
+- → The unit is tied to its number with a non-breaking space, written as the escape `\u00a0`, never as the invisible character itself.
 
 ## Engine
 

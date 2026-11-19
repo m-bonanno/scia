@@ -1,20 +1,20 @@
-# Scia — visione
+# Scia — vision
 
-Scia è un gestore di download per chi vuole incollare un link e dimenticarsene.
+Scia is a download manager for people who want to paste a link and forget about it.
 
-## Per chi
+## Who it is for
 
-Chi scarica file grandi o tanti file: immagini ISO, video, archivi, programmi. Oggi usa il browser (lento, fragile) oppure strumenti potenti ma pesanti e pieni di opzioni.
+People who download big files, or many: ISO images, videos, archives, programs. Today they use the browser (slow, fragile) or tools that are powerful but heavy and full of options.
 
-## Cosa promette
+## What it promises
 
-1. **Veloce.** Più connessioni per file, ridistribuite mentre il download procede; nessuna attesa inutile.
-2. **Affidabile.** Una connessione che cade non è un download perso. Chiudere l'app non è perdere i byte scaricati. Un file già presente non viene mai sovrascritto.
-3. **Qualsiasi link.** Link diretti oggi; i media delle pagine tramite l'estensione; i link degli hoster tramite un servizio debrid (AllDebrid per primo); i flussi adattivi quando Scia saprà ricomporli.
-4. **Minimale.** Una finestra, un campo, un elenco. Ogni funzione in più deve guadagnarsi il posto.
+1. **Fast.** Several connections per file, redistributed while the download runs; no pointless waiting.
+2. **Reliable.** A dropped connection is not a lost download. Closing the app does not lose the bytes already fetched. A file already on disk is never overwritten.
+3. **Any link.** Direct links today; the media of a page through the extension; hoster links through a debrid service (AllDebrid first): once the service is connected, a hoster link pasted into Scia is unlocked and downloaded with nothing else to do. Adaptive streams when Scia can assemble them, and whole playlists or channels expanded into their videos.
+4. **Minimal.** One window, one field, one list. Every extra feature has to earn its place.
 
-## Cosa non è
+## What it is not
 
-- Non aggira protezioni: niente DRM, niente accessi che il sito non concede. Scia scarica quello che la persona ha il diritto di scaricare.
-- Non è un client torrent. I magnet arriveranno solo attraverso un servizio debrid che li trasforma in link.
-- Non raccoglie dati: l'app parla con i server da cui scarica, l'estensione parla solo con l'app.
+- It does not circumvent protections: no DRM, no way around a paywall or a login the person does not have. Scia fetches what the person can already reach: a public file, or what their own account plays in their own browser.
+- It is not a torrent client. Magnets will arrive only through a debrid service that turns them into links.
+- It collects nothing: the app talks to the servers it downloads from, the extension talks only to the app.

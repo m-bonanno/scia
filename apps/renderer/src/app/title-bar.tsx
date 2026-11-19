@@ -21,13 +21,13 @@ export function TitleBar({ bytesPerSecond, onOpenSettings }: TitleBarProps): Rea
         {bytesPerSecond > 0 && (
           <span
             className="flex items-center gap-1 text-sm text-muted-foreground tabular-nums"
-            aria-label={`Velocità totale: ${formatSpeed(bytesPerSecond)}`}
+            aria-label={`Total speed: ${formatSpeed(bytesPerSecond)}`}
           >
             <ArrowDown size={14} aria-hidden="true" className="text-accent" />
             {formatSpeed(bytesPerSecond)}
           </span>
         )}
-        <IconButton label="Impostazioni" className="no-drag" onClick={onOpenSettings}>
+        <IconButton label="Settings" className="no-drag" onClick={onOpenSettings}>
           <Settings size={16} aria-hidden="true" />
         </IconButton>
       </div>
