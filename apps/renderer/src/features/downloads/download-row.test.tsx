@@ -1,5 +1,5 @@
 import { DownloadStatus, FileKind } from '@scia/core';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { DownloadRow, type RowActions } from './download-row.tsx';
@@ -134,14 +134,18 @@ describe('DownloadRow', () => {
     expect(screen.getByRole('button', { name: 'Run' })).toHaveFocus();
   });
 
-  it('does not answer the question at a second double click on the row', async () => {
+  // "Run" is wider than "Open": it grows over the strip beside it, where the double click
+  // that made it ask may have been. A third press of that burst lands on it, saying it is the
+  // third — of a burst the button saw none of.
+  it('does not answer the question with a later press of the burst that asked it', async () => {
     const row = actions();
     render(<DownloadRow download={aProgram()} actions={row} />);
 
     await userEvent.dblClick(screen.getByText('setup.exe'));
-    await userEvent.dblClick(screen.getByText('setup.exe'));
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }), { detail: 3 });
 
     expect(row.open).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Run' })).toBeInTheDocument();
   });
 
   it('does not run a program on a double click on its button', async () => {

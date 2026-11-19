@@ -110,6 +110,42 @@ describe('ConfirmButton', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
+  it('while it asks, takes no later press of a burst as the answer, whoever saw the burst begin', () => {
+    const onConfirm = vi.fn();
+    const handle: { current: ConfirmButtonHandle | null } = { current: null };
+    render(
+      <ConfirmButton ref={handle} label="Open" confirmLabel="Run" onConfirm={onConfirm}>
+        <svg aria-hidden="true" />
+      </ConfirmButton>,
+    );
+
+    act(() => {
+      handle.current?.press();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }), { detail: 2 });
+    fireEvent.click(screen.getByRole('button', { name: 'Run' }), { detail: 3 });
+
+    expect(onConfirm).not.toHaveBeenCalled();
+  });
+
+  it('forgets a press after a moment: it is not the beginning of a burst that comes later', () => {
+    vi.useFakeTimers();
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmButton label="Remove from list" confirmLabel={undefined} onConfirm={onConfirm}>
+        <svg aria-hidden="true" />
+      </ConfirmButton>,
+    );
+    const button = screen.getByRole('button', { name: 'Remove from list' });
+
+    fireEvent.click(button, { detail: 1 });
+    vi.advanceTimersByTime(5000);
+    // The second press of a burst begun on the row above, long after this button's own press.
+    fireEvent.click(button, { detail: 2 });
+
+    expect(onConfirm).toHaveBeenCalledTimes(2);
+  });
+
   it('never answers its own question when pressed from elsewhere', async () => {
     const onConfirm = vi.fn();
     const handle: { current: ConfirmButtonHandle | null } = { current: null };

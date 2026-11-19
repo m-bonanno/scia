@@ -3,6 +3,8 @@ import { cn } from '@/lib/cn.ts';
 import { FOCUS_RING, ICON_BUTTON } from './button-styles.ts';
 
 const CONFIRM_FOR_MS = 3000;
+// Longer than the longest time a system counts two clicks as one double click.
+const BURST_MS = 1000;
 
 export interface ConfirmButtonHandle {
   // One press from elsewhere — a double click on the row the button is in. It takes the focus,
@@ -28,9 +30,11 @@ interface ConfirmButtonProps {
 // or when the focus leaves it. It is one element all along, so the focus stays on it.
 //
 // A press is one press however it is repeated, or one gesture would ask and answer itself:
-// - the later clicks of a double click do nothing — when this button saw the click before
-//   them. A click that says it is the second, on a button that saw no first, is the next
-//   press of someone clearing a list whose rows slide under the pointer;
+// - the later clicks of a burst do nothing while the button asks, whoever saw the burst begin:
+//   the button grows when it asks, and may grow under a pointer that was double-clicking
+//   beside it. When it does not ask, they do nothing if this button saw the click before
+//   them, a moment ago: a click that says it is the second, on a button that saw no first,
+//   is the next press of someone clearing a list whose rows slide under the pointer;
 // - the repeats of Enter held down do nothing. Of Enter alone: a held Tab must walk on.
 export function ConfirmButton({
   label,
@@ -45,7 +49,7 @@ export function ConfirmButton({
   if (armed && confirmLabel === undefined) setArmed(false);
   const asking = armed && confirmLabel !== undefined;
   const element = useRef<HTMLButtonElement>(null);
-  const lastClick = useRef(0);
+  const lastClick = useRef({ detail: 0, at: 0 });
 
   useImperativeHandle(
     ref,
@@ -89,9 +93,11 @@ export function ConfirmButton({
         if (event.repeat && event.key === 'Enter') event.preventDefault();
       }}
       onClick={(event) => {
-        const repeated = event.detail > 1 && lastClick.current === event.detail - 1;
-        lastClick.current = event.detail;
-        if (repeated) return;
+        const now = Date.now();
+        const sawTheOneBefore =
+          lastClick.current.detail === event.detail - 1 && now - lastClick.current.at < BURST_MS;
+        lastClick.current = { detail: event.detail, at: now };
+        if (event.detail > 1 && (asking || sawTheOneBefore)) return;
         if (confirmLabel !== undefined && !armed) {
           setArmed(true);
           return;
