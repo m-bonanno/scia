@@ -92,23 +92,12 @@ Full detail: [`docs/development/git-flow.md`](./docs/development/git-flow.md).
 
 ## The team — review and merge
 
-Full detail: [`docs/development/review-flow.md`](./docs/development/review-flow.md). Run it with `/review <PR>`.
+The rule is [`docs/development/review-flow.md`](./docs/development/review-flow.md); run it with `/team-review <PR>`. In short:
 
-Every PR is reviewed locally by a team of senior roles, each an independent agent with a fresh context; their reviews are posted on the PR.
-
-| Role              | Reviews when the PR touches                                                   | Definition                            |
-| ----------------- | ----------------------------------------------------------------------------- | ------------------------------------- |
-| Tech lead         | always — and owns `.github/`, `scripts/`, tooling, `.claude/`, ADRs, runbooks | `.claude/agents/tech-lead.md`         |
-| Backend engineer  | `packages/core`, `packages/contracts`, `apps/server`, `apps/desktop`          | `.claude/agents/backend-engineer.md`  |
-| Frontend engineer | `apps/renderer`, `apps/extension`                                             | `.claude/agents/frontend-engineer.md` |
-| Product designer  | anything a person sees or reads, `docs/design/`                               | `.claude/agents/product-designer.md`  |
-| Product manager   | every `feat` and `fix`; `docs/product/`, `README.md`                          | `.claude/agents/product-manager.md`   |
-
-- **The author runs every gate the diff touches before opening the PR**; the tech lead runs them all again in the review; CI runs them a third time.
-- **The team verdict is deterministic**: approved only if no role has a blocking finding. Blocking is a fact — a broken rule, a bug, a security hole, a red gate, an untrue claim in the PR body, a point of the issue not delivered — never a taste.
-- **Changes requested** → new commits on the same branch, and the roles that blocked review again.
-- **Approved and CI green** → squash merge into `develop`. **`develop` → `main` is merged only on the owner's word**, as a merge commit.
-- **Every review teaches**: a blocking finding a checklist would have prevented becomes a line under "Lessons" in that role's file, or an entry in `.claude/gotchas.md`.
+- **Every PR is reviewed locally by a team of senior roles** — tech lead (always), backend engineer, frontend engineer, product designer, product manager — each an independent agent defined in `.claude/agents/`, chosen by the files the PR touches and by its type. Their reviews are posted on the PR.
+- **The author runs the gates before opening the PR**, the tech lead runs them again on the commit under review, CI runs them a third time.
+- **A work branch is squash-merged into `develop` when the team approves its head commit and CI is green.** What is blocking, what happens after a fix, and the two merges that are never squashed (a release into `main`, and `main` back into `develop`) are in the runbook.
+- **`develop` → `main` is merged only on the owner's word.**
 
 ## Release flow — essentials
 
@@ -145,7 +134,7 @@ docs/
 1. **Propose the branch name (with issue number) before starting**, and work only on that branch.
 2. **Test first**, in every layer the change touches; prove runtime changes against the real runtime.
 3. **Respect the local canon** of the area you are in (the sub-files above).
-4. **Have the team review every PR** (`/review`) and merge into `develop` only on its approval with CI green; never merge into `main` without the owner's word.
+4. **Have the team review every PR** (`/team-review`) and merge a work branch into `develop` only on its approval with CI green; never merge into `main` without the owner's word.
 5. **Read `.claude/gotchas.md` before every push**; add an entry in the same PR when a mistake of that kind bites again.
 6. **Keep docs in lock-step**, and keep the roadmap honest — never mark done what is partial.
 7. **Report outcomes faithfully** — failing tests with their output, skipped steps named, what was not verified said plainly.

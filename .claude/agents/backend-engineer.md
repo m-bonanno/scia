@@ -27,4 +27,4 @@ What earlier reviews taught, each with the PR that taught it.
 
 ## Output
 
-Follow the format in `docs/development/review-flow.md`.
+Follow the format in `docs/development/review-flow.md`, which also says what is blocking.

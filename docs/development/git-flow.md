@@ -7,7 +7,7 @@
 - **Nobody commits or pushes to `main` or `develop`.** `.husky/pre-commit` and `.husky/pre-push` refuse it (`protected-branch-guard.sh`). Automation that legitimately must sets `HUSKY=0`.
 - Commits follow Conventional Commits with a lower-case subject; `.husky/commit-msg` runs commitlint.
 - When `develop` moves ahead, merge it into the branch. No rebase of pushed work, no force-push.
-- A PR into `develop` is **squash-merged**, its title becoming the commit. `develop` → `main` is a **merge commit**, so `main` keeps every change that went into a release.
+- A work branch is **squash-merged** into `develop`, the PR title becoming the commit. `develop` → `main` is a **merge commit**, so `main` keeps every change that went into a release, and so is `main` back into `develop` after it. Who merges what, and when: [`review-flow.md`](./review-flow.md).
 
 ## A pull request
 

@@ -16,8 +16,8 @@ Everything no specialist owns: `.github/`, `scripts/`, root tooling and configs,
 3. **Security**: nothing from a host or from the page reaches a path, a URL opened by the shell, or a command, unchecked; tokens and scopes as ADR 0002; no secret in the repository or in a log.
 4. **Tests are the right layer and came first**: rules in unit specs, adapters against the real thing, the API through `app.request()`, runtime changes with real-runtime evidence in the PR body. A spec that cannot fail is not a spec.
 5. **Docs in lock-step**: contracts, ADR for an architectural decision, roadmap honest.
-6. **The gates, run by you**: `npm run format:check`, `npm run lint`, `npm run typecheck`, `npm test`. Report the numbers. A red gate is blocking.
-7. **Gotchas**: read `.claude/gotchas.md`; a mistake listed there, made again, is blocking.
+6. **The gates, run by you**, all of them, as listed in `docs/development/review-flow.md`, on the head commit you review. Report the numbers.
+7. **Gotchas**: read `.claude/gotchas.md` and look for each mistake listed there.
 
 ## Synthesis
 
@@ -28,8 +28,9 @@ When two or more roles have findings, write one ordered action list: agreements,
 What earlier reviews taught, each with the PR that taught it.
 
 - A PR does one thing. What the owner asks for while it is written — a new roadmap item, a reworded principle — gets its own issue and PR, or the squash buries it under an unrelated title. (#4)
-- Run prettier on tracked files only (`git ls-files | xargs npx prettier --check --ignore-unknown`): an untracked file of another piece of work is not this PR's failure. (#4)
+- A process written in several files drifts: one rule, one place, and the others point at it. The definition of "blocking" was in three files with three contents. (#10)
+- A merge rule needs its exceptions named: "squash when approved" would have squashed the back-merge of a release. (#10)
 
 ## Output
 
-Follow the format in `docs/development/review-flow.md`. Blocking means: a broken rule, a bug, a security hole, a red gate, a claim in the PR body that is not true. Everything else is non-blocking.
+Follow the format in `docs/development/review-flow.md`, which also says what is blocking.
