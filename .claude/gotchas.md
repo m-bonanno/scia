@@ -24,6 +24,11 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 - → A fix found while proving something else in the real app is still a rule without a spec: the run shows it once, and nothing holds it afterwards. Its spec is written, and seen failing against the old code, before the PR is opened: the message for a file that does not open went to review held only by a harness (#21).
 
+## Runbooks
+
+- → A rule added to a process is checked against every other rule that decides the same thing: size was added to how the roles of a review are chosen, and the rule on a commit pushed after the approval still chose them by area alone (#27 — the slip of #17, a second time). Search the runbook for the thing decided ("role", "reviews again"), not for the words of the new rule.
+- → "No code changed" is not a reason to skip a gate: the five are run on every head, and the PR body carries their numbers (#27).
+
 ## Engine
 
 - → A vitest `?raw` import of a `.css` file comes back empty. A spec that needs the stylesheet's text reads it with `node:fs`, from a workspace that has Node types.

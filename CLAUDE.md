@@ -83,11 +83,11 @@ While working, run the gates your diff touches — but **all** layers of a touch
 
 Full detail: [`docs/development/git-flow.md`](./docs/development/git-flow.md).
 
-- **GitFlow**: `main` ← `develop` ← `<type>/<issue>-<kebab-description>`. The issue number is mandatory. Default branch is `develop`.
+- **GitFlow**: `main` ← `develop` ← `<type>/<issue>-<kebab-description>`. The issue number is mandatory — but for a release and its back-merge, the two PRs that have no issue. Default branch is `develop`.
 - **Never commit or push to `main` or `develop`.** The husky `pre-commit`/`pre-push` hooks refuse it.
 - **Conventional commits**, lower-case subject (commitlint), on commits **and** PR titles.
 - **A work branch is squash-merged** into `develop`. `develop` → `main`, and `main` back into `develop` after it, are **merge commits**.
-- **`Closes #N`** in every PR body, written from [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md) to `.claude/pr-bodies/<branch>.md` and passed with `--body-file`.
+- **`Closes #N`** in every PR body but those two, written from [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md) to `.claude/pr-bodies/<branch>.md` and passed with `--body-file`.
 - **No AI attribution — ever.** No "Generated with Claude Code", no `Co-Authored-By: Claude`, no AI mention in commits, PR bodies, code or docs.
 
 ## The team — review and merge
