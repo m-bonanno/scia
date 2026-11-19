@@ -50,4 +50,5 @@ To get the installers of a beta, or to build again those of a stable: **Actions 
 - **Auto-update.** The app does not look for new versions (roadmap M1). When it does, the installers must be readable without a token: a public releases repository, or the repository made public.
 - **A guard on direct pushes.** GitHub refuses branch protection on a private Free repository, so `main` and `develop` are protected by the husky hooks only. The repository becomes public at the first stable release, and the two branches are protected then ([`git-flow.md`](./git-flow.md), "Repository settings", and "Releasing" above).
 - **Signed installers.** Windows shows SmartScreen's warning for an unsigned `.exe`.
+- **Linux waits, the job does not yet.** The first stable release ships for Windows only (roadmap, "After the first stable release"), while the installers job builds the Linux packages on every stable tag: whether it waits too is decided with the first release PR.
 - **No installer has come out of CI, and the Linux packages have never been built anywhere.** The installers job has never run: the first stable release is its first run — expect to fix it.

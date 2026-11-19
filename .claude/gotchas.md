@@ -20,15 +20,14 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 - → A change of wording or of language is finished when a search of the whole tree for the old words finds nothing (`git grep -nE "[àèéìòù]"` caught what reading the diff did not), and every dialog was opened in the real app: a screen nobody opened is a screen nobody read.
 
-- → A document of state speaks in the present only of what exists. "The ADR records it", "a spec holds that" for an ADR or a spec still to write is a "done" nobody did: write "has to" (#29, twice in one PR, the second time in the commit that fixed the first).
-
 ## Specs
 
 - → A fix found while proving something else in the real app is still a rule without a spec: the run shows it once, and nothing holds it afterwards. Its spec is written, and seen failing against the old code, before the PR is opened: the message for a file that does not open went to review held only by a harness (#21).
 
-## Runbooks
+## Docs and runbooks
 
-- → A rule added to a process is checked against every other rule that decides the same thing: size was added to how the roles of a review are chosen, and the rule on a commit pushed after the approval still chose them by area alone (#27 — the slip of #17, a second time). Search the runbook for the thing decided ("role", "reviews again"), not for the words of the new rule.
+- → Where a document of state — the roadmap, the README, a runbook's "Not there yet" — names what vouches for something (an ADR, a spec, a run, a record), the present is for what exists: "the ADR records it", "a spec holds that" for one still to write is a "done" nobody did. Write "has to" (#29, twice in one PR, the second time in the commit that fixed the first). A bare participle does the same: "Built and proven against a simulated service" reads as done beside lines where "Written, covered by specs" means it (#31). A planned item written in the present ("Choosing the folder") is not this.
+- → A rule added to a process is checked against every other rule that decides the same thing: size was added to how the roles of a review are chosen, and the rule on a commit pushed after the approval still chose them by area alone (#27 — the slip of #17, a second time). Search the runbook for the thing decided ("role", "reviews again"), not for the words of the new rule. The roadmap is no different: "Linux comes after the first stable release" was added above a line that still listed Linux among what that release waits for (#31).
 - → "No code changed" is not a reason to skip a gate: the five are run on every head, and the PR body carries their numbers (#27).
 
 ## Engine
