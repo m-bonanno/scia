@@ -15,6 +15,6 @@ People who download big files, or many: ISO images, videos, archives, programs. 
 
 ## What it is not
 
-- It does not circumvent protections: no DRM, and no evasion of a site's access controls — no way around a paywall, a login the person does not have, or a geographic restriction. Scia fetches what the person can already reach. What a site lets them play, Scia may download, also where the site's terms forbid downloading: the owner's decision of 19 November 2026 (#8), and the line Scia does not go beyond.
+- It does not circumvent protections: no DRM, and no evasion of a site's access controls, such as a paywall, a login the person does not have, or a geographic restriction. Inside that line Scia fetches what the person can already reach — also where a site's terms forbid downloading what it lets them play: the owner's decision of 19 November 2026 (#8). The principle, whole, is "Respect the hosts" in `CLAUDE.md`.
 - It is not a torrent client. Magnets will arrive only through a debrid service that turns them into links.
 - It collects nothing: the app talks to the servers it downloads from, the extension talks only to the app.
