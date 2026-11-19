@@ -477,6 +477,8 @@ export class DownloadManager {
 
   async #finish(record: DownloadRecord): Promise<void> {
     const part = partPathOf(record);
+    // Before the name is looked at: nothing waits between "is it free?" and the rename.
+    await this.#mark(record);
     try {
       // Someone may have put a file of this name in the folder while the download ran.
       if (existsSync(join(record.directory, record.fileName))) {
@@ -484,7 +486,6 @@ export class DownloadManager {
         await rename(part, join(record.directory, `${free}${PART_SUFFIX}`));
         record.fileName = free;
       }
-      await this.#mark(partPathOf(record));
       await rename(partPathOf(record), join(record.directory, record.fileName));
     } catch (error) {
       throw new DiskError('The finished file could not be put in place.', { cause: error });
@@ -496,11 +497,11 @@ export class DownloadManager {
   // Marked while it is still the part file, so that the file never stands under its name
   // without its mark. A disk without streams (FAT, some shares) refuses: the file is whole all
   // the same, and the log says the mark is missing.
-  async #mark(path: string): Promise<void> {
+  async #mark(record: DownloadRecord): Promise<void> {
     try {
-      await this.#markDownloaded(path);
+      await this.#markDownloaded(partPathOf(record));
     } catch (error) {
-      this.#deps.logger.warn('mark_refused', { path, error: describeFailure(error) });
+      this.#deps.logger.warn('mark_refused', { id: record.id, error: describeFailure(error) });
     }
   }
 }

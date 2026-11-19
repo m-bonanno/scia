@@ -87,12 +87,12 @@ describe('DownloadManager', () => {
 
   it('keeps a file whose disk refuses the mark, and says so in the log', async () => {
     const { url } = await host({ fileName: 'Film.mkv' });
-    const warned: string[] = [];
+    const warned: { event: string; details: object | undefined }[] = [];
     const downloads = await open({
       logger: {
         ...silentLogger,
-        warn: (event) => {
-          warned.push(event);
+        warn: (event, details) => {
+          warned.push({ event, details });
         },
       },
       markDownloaded: async () => {
@@ -104,7 +104,10 @@ describe('DownloadManager', () => {
     await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
 
     expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
-    expect(warned).toContain('mark_refused');
+    // Named by its id, as every other event of a download: the engine adds no path of its own.
+    expect(warned.map((warning) => warning.event)).toEqual(['mark_refused']);
+    expect(warned[0]?.details).toMatchObject({ id: added!.id });
+    expect(JSON.stringify(warned)).not.toContain('Film.mkv');
   });
 
   it.runIf(process.platform === 'win32')(

@@ -1,4 +1,4 @@
-import { fileNameFromUrl, splitExtension } from './file-name.ts';
+import { fileNameFromUrl } from './file-name.ts';
 
 export const FileKind = {
   Video: 'video',
@@ -15,25 +15,19 @@ const EXTENSIONS: Readonly<Record<Exclude<FileKind, 'other'>, readonly string[]>
   video: ['mp4', 'mkv', 'webm', 'avi', 'mov', 'wmv', 'flv', 'm4v', 'mpg', 'mpeg', '3gp'],
   audio: ['mp3', 'flac', 'wav', 'm4a', 'aac', 'ogg', 'opus', 'wma'],
   image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'svg', 'bmp', 'avif', 'heic', 'tiff'],
-  archive: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'zst', 'tgz', 'iso', 'tar.gz', 'tar.xz'],
+  archive: ['zip', 'rar', '7z', 'tar', 'gz', 'bz2', 'xz', 'zst', 'tgz', 'iso'],
   document: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'odt', 'ods', 'txt', 'epub'],
-  // What a system runs at a press: the interface asks once more before opening one.
+  // What a system runs, installs, or lets change it, at a press: the interface asks once more
+  // before opening one. Drawn from what Windows hands to a program of its own without asking
+  // (PATHEXT, and the kinds its shell runs: scripts, shortcuts, installers, registry files),
+  // plus the packages of the other systems. A document that can carry macros is not here: its
+  // program asks, and the system's mark makes it.
   program: [
-    'exe',
-    'msi',
-    'msix',
-    'com',
-    'scr',
-    'bat',
-    'cmd',
-    'ps1',
-    'sh',
-    'deb',
-    'rpm',
-    'appimage',
-    'apk',
-    'dmg',
-    'pkg',
+    ...['exe', 'com', 'scr', 'pif', 'cpl', 'msc'],
+    ...['bat', 'cmd', 'ps1', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh', 'hta'],
+    ...['msi', 'msp', 'msix', 'msixbundle', 'appx', 'appxbundle', 'appinstaller'],
+    ...['lnk', 'reg'],
+    ...['sh', 'deb', 'rpm', 'appimage', 'apk', 'dmg', 'pkg', 'jar'],
   ],
 };
 
@@ -43,9 +37,17 @@ const KIND_OF_EXTENSION = new Map<string, FileKind>(
   ),
 );
 
+// A system decides what to do with a file from its last extension, whatever stands before it
+// ("holiday.jpg.scr", "setup.tar.exe", a bare ".cmd"), and Windows first drops the dots and
+// spaces a name ends with. A host chooses the name: the kind is read as the system will.
+function lastExtension(name: string): string {
+  const read = name.replace(/[. ]+$/, '');
+  const dot = read.lastIndexOf('.');
+  return dot < 0 ? '' : read.slice(dot + 1).toLowerCase();
+}
+
 export function fileKindOfName(name: string): FileKind {
-  const extension = splitExtension(name).extension.slice(1).toLowerCase();
-  return KIND_OF_EXTENSION.get(extension) ?? FileKind.Other;
+  return KIND_OF_EXTENSION.get(lastExtension(name)) ?? FileKind.Other;
 }
 
 // What the browser extension saw of a response while a page loaded.

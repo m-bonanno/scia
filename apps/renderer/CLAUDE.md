@@ -29,8 +29,8 @@ Anyone who downloads files: they paste a link and want to forget about it. The w
 ## Behaviour
 
 - **Every data view has its states**: connecting (nothing drawn, no flash), empty (says what is missing and what to do), engine unreachable (says so, keeps the last list), data.
-- **Forgiving.** A finished download leaves the list at one press (the file stays). Unfinished bytes are thrown away only after a second press in place, and a downloaded program is run only after one (`components/confirm-button.tsx`): the button turns into the word of what it is about to do, and the second press of a double click is not a confirmation. A failed add never clears what was typed.
-- **Keyboard-complete.** Paste anywhere adds the links; everything pressable is a `button`. A shortcut of the pointer (a double click on a finished row opens its file — not a program, which asks on its button) only repeats a button that is there.
+- **Forgiving.** A finished download leaves the list at one press (the file stays). Unfinished bytes are thrown away only after a second press in place, and a downloaded program is run only after a second press too (`components/confirm-button.tsx`). The button turns, in place, into the word of what it is about to do, and stays one element, so the focus stays on it. A press is one press however it is repeated: the second click of a double click and the repeats of a key held down are not a confirmation. A failed add never clears what was typed.
+- **Keyboard-complete.** Paste anywhere adds the links; everything pressable is a `button`. A shortcut of the pointer (a double click on a finished row is one press of its "Open": it opens a file, and makes a program's button ask) only repeats a button that is there.
 - **A capture in `docs/design/` shows the app as it is**: the PR that changes what one shows retakes it, from the real app (`docs/design/README.md`).
 - **The page never names a path.** It names a download by id; main asks the engine where the file is (`lib/bridge.ts`).
 

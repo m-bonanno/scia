@@ -9,7 +9,7 @@ A download manager for Windows, with Linux to follow: paste a link, Scia fetches
 - Downloads any http/https link over several connections in parallel, handing work over when one finishes before the others.
 - Pauses and resumes from the bytes it already has, even after the app was closed and opened again.
 - Keeps downloading from the system tray when the window is closed with downloads running or waiting (Windows; Linux not yet tried); closing it with nothing left quits.
-- Marks what it downloads as come from the network, as a browser does, so that Windows asks before running it; and asks for a second press itself before running a downloaded program.
+- Marks what it downloads as coming from the network, as a browser does, so that Windows can ask before running it (Windows; seen with a script, not yet with a program or a document); and asks for a second press itself before running a downloaded program.
 - Keeps a queue: how many downloads at once and how many connections per download are settings.
 - Takes links and media from the browser through the extension (`apps/extension`) — written and tested in its logic, not yet tried in a real browser.
 

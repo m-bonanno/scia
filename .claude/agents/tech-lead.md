@@ -33,6 +33,7 @@ What earlier reviews taught, each with the PR that taught it.
 - A statement replaced by a pointer needs a target that says all of it: "not produced by CI yet" was swapped for a link to a runbook that listed the Linux packages only, and the roadmap stopped saying it. (#15)
 - A rule added to one case of a process is checked against its sibling cases: "a role reviews again when a fix changes its area" was written for a round and missed for a commit pushed after the approval. (#17)
 - A claim of proof names its kind — a spec, a run of the app, a reading of the code — and is checked as that kind: "proven by specs" was written for something only the order of the wiring held. (#12)
+- A ticked line of the test plan that says "by specs" is checked by deleting what it claims to hold; "the armed button takes the focus" was held by no spec (#32, the slip of #12 again).
 - A merge rule needs its exceptions named: "squash when approved" would have squashed the back-merge of a release. (#10)
 
 ## Output

@@ -11,10 +11,34 @@ describe('fileKindOfName', () => {
     expect(fileKindOfName('photo.webp')).toBe(FileKind.Image);
   });
 
-  it('counts as a program what the system would run at a press', () => {
-    for (const name of ['run.bat', 'run.cmd', 'run.ps1', 'run.com', 'saver.scr', 'app.msix']) {
-      expect(fileKindOfName(name), name).toBe(FileKind.Program);
+  it('counts as a program what a system runs, installs or lets change it at a press', () => {
+    const extensions = [
+      // Windows: programs and what is run as one
+      ...['exe', 'com', 'scr', 'pif', 'cpl', 'msc'],
+      // Windows: scripts, by its own hosts
+      ...['bat', 'cmd', 'ps1', 'vbs', 'vbe', 'js', 'jse', 'wsf', 'wsh', 'hta'],
+      // Windows: installers and packages
+      ...['msi', 'msp', 'msix', 'msixbundle', 'appx', 'appxbundle', 'appinstaller'],
+      // Windows: a shortcut runs what it points at, a registry file changes the system
+      ...['lnk', 'reg'],
+      // Other systems, and what runs wherever its runtime is
+      ...['sh', 'deb', 'rpm', 'appimage', 'apk', 'dmg', 'pkg', 'jar'],
+    ];
+
+    for (const extension of extensions) {
+      expect(fileKindOfName(`file.${extension}`), extension).toBe(FileKind.Program);
     }
+  });
+
+  it('reads the kind as the system does: from the last extension, whatever stands before it', () => {
+    expect(fileKindOfName('setup.tar.exe')).toBe(FileKind.Program);
+    expect(fileKindOfName('holiday.jpg.scr')).toBe(FileKind.Program);
+    expect(fileKindOfName('.cmd')).toBe(FileKind.Program);
+    expect(fileKindOfName('SETUP.EXE')).toBe(FileKind.Program);
+    // Windows drops the dots and spaces a name ends with before it reads the extension.
+    expect(fileKindOfName('setup.exe. .')).toBe(FileKind.Program);
+    expect(fileKindOfName('backup.tar.xz')).toBe(FileKind.Archive);
+    expect(fileKindOfName('a-very-long-extension.exeexeexeexe')).toBe(FileKind.Other);
   });
 
   it('answers "other" for what it does not know', () => {

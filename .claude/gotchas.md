@@ -24,7 +24,9 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 - → A fix found while proving something else in the real app is still a rule without a spec: the run shows it once, and nothing holds it afterwards. Its spec is written, and seen failing against the old code, before the PR is opened: the message for a file that does not open went to review held only by a harness (#21).
 
-- → `userEvent.dblClick` on a button that its first press replaces sends the second press to the element that is gone: the spec passes whatever the code does. In a browser the second press lands on the replacement, as a click whose `detail` is 2 — fire that (`fireEvent.click(button, { detail: 2 })`), and prove it once with a real pointer (#22: a double click on the cross deleted unfinished bytes, and its spec would have been green).
+- → `userEvent.dblClick` on a button that its first press replaces sends the second press to the element that is gone: the spec passes whatever the code does. In a browser the second press lands on the replacement, as a click whose `detail` is 2 — fire that (`fireEvent.click(button, { detail: 2 })`), and say what a harness proves: one that sends `clickCount: 2` over the DevTools protocol proves what the page does with a second press, not that a hand produces one (#22: a double click on the cross deleted unfinished bytes, and its spec would have been green).
+- → A guard written for the pointer is tried on the keyboard's twin: a key held down repeats the press, as clicks whose `detail` is 0, and one gesture asks and answers itself. `userEvent.keyboard('{Enter>5/}')` is the spec; `event.repeat` is the guard (#32: a held Enter ran "Run" and deleted unfinished bytes).
+- → "By specs" in a test plan is checked by deleting what the line claims is held: with `autoFocus` removed, the suite was still green (#32).
 
 ## Docs and runbooks
 
@@ -34,6 +36,7 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 ## Engine
 
+- → A name from a host that decides something is read as the system reads it, not as Scia numbers a copy: `setup.tar.exe` and a bare `.cmd` were not programs to a function that took `.tar.exe` as one extension and a leading dot as none. And a list that is a safety rule is drawn from the system (`PATHEXT`, `assoc`/`ftype`), not from memory: `vbs`, `js`, `hta`, `pif`, `lnk` run at a press (#32).
 - → A vitest `?raw` import of a `.css` file comes back empty. A spec that needs the stylesheet's text reads it with `node:fs`, from a workspace that has Node types.
 - → Two downloads added together race for the plain file name: a spec must not assume which one gets `name.ext` and which `name (1).ext`.
 - → `IncomingMessage` must be destroyed, or drained, on every path that does not read it to the end: a redirect, a refused status. Otherwise the socket stays busy.
