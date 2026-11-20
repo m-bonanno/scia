@@ -18,12 +18,14 @@ const PAGE_NOT_DOWNLOADED: Readonly<Record<PageFailure, string>> = {
     'The video on this page is protected. Scia does not download protected videos.',
   [PageFailure.VideoUnavailable]:
     'The site says this video cannot be played. It may be private, removed, or not available in your country.',
-  // A stream, or picture and sound as two files: the sentence is true of both.
-  [PageFailure.FormatUnsupported]:
-    'The site offers this video only in a form Scia cannot download yet.',
+  // DASH, picture and sound as two files, or a stream that changes partway — the page may offer
+  // another form beside it: the sentence is true of all of them.
+  [PageFailure.FormatUnsupported]: 'The site offers this video in a form Scia cannot download yet.',
   // A list of videos, of tracks, of episodes: the sentence names none of them.
   [PageFailure.Playlist]:
     'This page lists several items, not one video. Add the link of one of them.',
+  // Recording a live stream comes later (#121).
+  [PageFailure.Live]: 'This video is a live stream. Scia does not record live streams yet.',
   // Busy, in maintenance, too many requests, or no answer in time: waiting mends all of them.
   [PageFailure.SiteBusy]: 'The site did not answer properly. Try again later.',
   // An error Scia does not know, a reader that could not start or said nothing it understands:
@@ -83,6 +85,18 @@ function failureText(download: Download): string {
   return linkNotUnlockedMessage(download.failure, download.via);
 }
 
+// How far it is: by its bytes, or — a stream, whose size is not known before — by its pieces.
+function percentText(download: Download): string[] {
+  const { timeline } = download;
+  if (timeline !== null) {
+    const doneMs = timeline.segments.reduce((sum, piece) => sum + piece.downloaded, 0);
+    return [formatPercent(doneMs, timeline.totalMs)];
+  }
+  return download.totalBytes === null
+    ? []
+    : [formatPercent(download.downloadedBytes, download.totalBytes)];
+}
+
 function progressText(download: Download): string {
   const done = formatBytes(download.downloadedBytes);
   return download.totalBytes === null ? done : `${done} of ${formatBytes(download.totalBytes)}`;
@@ -111,6 +125,7 @@ export function statusLine(download: Download): string {
     case DownloadStatus.Paused:
       return [
         'Paused',
+        ...(download.timeline === null ? [] : percentText(download)),
         progressText(download),
         ...(download.resumable || download.downloadedBytes === 0
           ? []
@@ -123,9 +138,7 @@ export function statusLine(download: Download): string {
         return service === undefined ? 'Connecting…' : `Unlocking through ${service}…`;
       }
       return [
-        ...(download.totalBytes === null
-          ? []
-          : [formatPercent(download.downloadedBytes, download.totalBytes)]),
+        ...percentText(download),
         progressText(download),
         formatSpeed(download.bytesPerSecond),
         ...(download.etaSeconds === null ? [] : [`${formatDuration(download.etaSeconds)} left`]),

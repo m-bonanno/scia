@@ -13,6 +13,7 @@ import {
   type RangeServerOptions,
   startRangeServer,
 } from './testing/range-server.ts';
+import { type FolderServer, startFolderServer } from './testing/folder-server.ts';
 import { scratchFolder, silentLogger, until } from './testing/scratch.ts';
 
 const MIB = 1024 * 1024;
@@ -167,11 +168,11 @@ describe('DownloadManager and a link that is a page', () => {
     expect(Buffer.compare(await readFile(inDownloads('Signed.mp4')), video)).toBe(0);
   });
 
-  it('says a video offered only as a stream is not one it can fetch yet', async () => {
+  it('says a video offered only as DASH is not one it can fetch yet', async () => {
     const site = await host({ body: page, contentType: 'text/html' });
     const { reader } = aReader(async () => ({
       title: 'Stream',
-      formats: [formatAt('https://cdn.example/index.m3u8', { protocol: 'm3u8_native' })],
+      formats: [formatAt('https://cdn.example/manifest.mpd', { protocol: 'http_dash_segments' })],
     }));
     const downloads = await open({ pageReader: reader });
 
@@ -375,6 +376,230 @@ describe('DownloadManager and a link that is a page', () => {
     expect(asked).toEqual([site.url, site.url]);
     expect(again.find(added!.id).media).toEqual({ ext: 'mp4', height: 1080 });
     expect(Buffer.compare(await readFile(inDownloads('Clip.mp4')), video)).toBe(0);
+  });
+
+  it('loads a state written before streams: no timeline, a source with no kind', async () => {
+    const stateFile = join(folder.path, 'data', 'state.json');
+    const downloads = await open();
+    downloads.add({ urls: ['http://127.0.0.1:9/old.html'] });
+    await downloads.pause(downloads.snapshot().downloads[0]!.id);
+    await downloads.close();
+    manager = undefined;
+    const state = JSON.parse(await readFile(stateFile, 'utf8')) as {
+      downloads: Record<string, unknown>[];
+    };
+    const record = state.downloads[0]!;
+    delete record.timeline;
+    record.video = {
+      media: { ext: 'mp4', height: 720 },
+      source: { url: 'https://cdn.example/v.mp4', headers: {} },
+    };
+    await writeFile(stateFile, JSON.stringify(state));
+
+    const loaded = await new JsonStateStore(stateFile).load();
+
+    expect(loaded?.downloads[0]?.timeline).toBeNull();
+    expect(loaded?.downloads[0]?.video?.source?.kind).toBe('file');
+  });
+
+  describe('a video offered as an HLS stream', () => {
+    const FIXTURES = join(import.meta.dirname, 'testing', 'hls');
+    let streams: FolderServer | undefined;
+    afterEach(async () => {
+      await streams?.close();
+      streams = undefined;
+    });
+    const fragments = (bytes: Buffer) => {
+      const types: string[] = [];
+      for (let at = 0; at + 8 <= bytes.length; at += bytes.readUInt32BE(at)) {
+        types.push(bytes.subarray(at + 4, at + 8).toString('latin1'));
+        if (bytes.readUInt32BE(at) < 8) break;
+      }
+      return types;
+    };
+
+    it('downloads the stream as one mp4, says how far it is by its pieces, and keeps none of them', async () => {
+      const site = await host({ body: page, contentType: 'text/html' });
+      streams = await startFolderServer({ root: FIXTURES });
+      const { reader } = aReader(async () => ({
+        title: 'A stream',
+        formats: [
+          formatAt(`${streams!.url}/ts/index.m3u8`, { protocol: 'm3u8_native', height: 720 }),
+        ],
+      }));
+      const downloads = await open({ pageReader: reader });
+
+      const [added] = downloads.add({ urls: [site.url] });
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+      const done = downloads.find(added!.id);
+      expect(done.fileName).toBe('A stream.mp4');
+      expect(done.media).toEqual({ ext: 'mp4', height: 720 });
+      expect(done.timeline?.totalMs).toBe(3000);
+      expect(
+        done.timeline?.segments.every((piece) => piece.downloaded === piece.end - piece.start),
+      ).toBe(true);
+      const mp4 = await readFile(inDownloads('A stream.mp4'));
+      // The file's size, not the pieces': MPEG-TS loses its packets' weight in the mp4.
+      expect(done.totalBytes).toBe(mp4.length);
+      expect(done.downloadedBytes).toBe(mp4.length);
+      expect(fragments(mp4).slice(0, 2)).toEqual(['ftyp', 'moov']);
+      expect(await readdir(join(folder.path, 'downloads'))).toEqual(['A stream.mp4']);
+    });
+
+    it('goes on with the pieces it has after a pause and a restart', async () => {
+      const site = await host({ body: page, contentType: 'text/html' });
+      streams = await startFolderServer({ root: FIXTURES, delayMs: 150 });
+      const { reader, asked } = aReader(async () => ({
+        title: 'Paused stream',
+        formats: [formatAt(`${streams!.url}/fmp4/index.m3u8`, { protocol: 'm3u8_native' })],
+      }));
+      const first = await open({ pageReader: reader });
+      const [added] = first.add({ urls: [site.url] });
+      await until(() =>
+        (first.find(added!.id).timeline?.segments ?? []).some((piece) => piece.downloaded > 0),
+      );
+      await first.pause(added!.id);
+      await first.close();
+      manager = undefined;
+      const piecesBefore = streams.asked.filter((path) => path.endsWith('.m4s')).length;
+
+      const again = await open({ pageReader: reader });
+      expect(again.find(added!.id).timeline?.segments.some((piece) => piece.downloaded > 0)).toBe(
+        true,
+      );
+      again.resume(added!.id);
+      await until(() => statusOf(again, added!.id) === DownloadStatus.Completed);
+
+      expect(asked).toEqual([site.url]);
+      expect(
+        streams.asked.filter((path) => path.endsWith('.m4s')).length - piecesBefore,
+      ).toBeLessThan(3);
+      const parts = await Promise.all(
+        ['init.mp4', 'segment0.m4s', 'segment1.m4s', 'segment2.m4s'].map((name) =>
+          readFile(join(FIXTURES, 'fmp4', name)),
+        ),
+      );
+      expect(
+        Buffer.compare(await readFile(inDownloads('Paused stream.mp4')), Buffer.concat(parts)),
+      ).toBe(0);
+      // Its init segment counted with its pieces.
+      expect(again.find(added!.id).totalBytes).toBe(Buffer.concat(parts).length);
+    });
+
+    it('shows what it kept while a resumed stream reads its playlist again', async () => {
+      const site = await host({ body: page, contentType: 'text/html' });
+      streams = await startFolderServer({ root: FIXTURES, delayMs: 150 });
+      const { reader } = aReader(async () => ({
+        title: 'Kept',
+        formats: [formatAt(`${streams!.url}/fmp4/index.m3u8`, { protocol: 'm3u8_native' })],
+      }));
+      const first = await open({ pageReader: reader });
+      const [added] = first.add({ urls: [site.url] });
+      await until(() =>
+        (first.find(added!.id).timeline?.segments ?? []).some((piece) => piece.downloaded > 0),
+      );
+      await first.pause(added!.id);
+      await first.close();
+      manager = undefined;
+
+      const again = await open({ pageReader: reader });
+      const askedBefore = streams.asked.filter((path) => path.endsWith('.m3u8')).length;
+      again.resume(added!.id);
+      // The task has asked for its playlist again, which the host holds for 150 ms.
+      await until(
+        () => streams!.asked.filter((path) => path.endsWith('.m3u8')).length > askedBefore,
+      );
+
+      // The playlist is still on its way: the row says what was kept, not nothing.
+      expect(again.find(added!.id).status).toBe(DownloadStatus.Downloading);
+      expect(again.find(added!.id).downloadedBytes).toBeGreaterThan(0);
+      expect(again.find(added!.id).timeline?.segments.some((piece) => piece.downloaded > 0)).toBe(
+        true,
+      );
+    });
+
+    it('removes its own pieces when a stream comes back as a file on a retry', async () => {
+      const site = await host({ body: page, contentType: 'text/html' });
+      streams = await startFolderServer({ root: FIXTURES, delayMs: 150 });
+      const files = await host({ body: video });
+      let offered: PageFormat[] = [
+        formatAt(`${streams.url}/fmp4/index.m3u8`, { protocol: 'm3u8_native' }),
+      ];
+      const { reader } = aReader(async () => ({ title: 'Became a file', formats: offered }));
+      const downloads = await open({ pageReader: reader });
+      const [added] = downloads.add({ urls: [site.url] });
+      await until(() =>
+        (downloads.find(added!.id).timeline?.segments ?? []).some((piece) => piece.downloaded > 0),
+      );
+      await streams.close();
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+      const pieces = join(folder.path, 'downloads', 'Became a file.mp4.scia.pieces');
+      expect((await readdir(pieces)).some((name) => name.endsWith('.piece'))).toBe(true);
+
+      offered = [formatAt(files.url)];
+      downloads.resume(added!.id);
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+      expect(await readdir(join(folder.path, 'downloads'))).toEqual(['Became a file.mp4']);
+      expect(downloads.find(added!.id).timeline).toBeNull();
+      expect(Buffer.compare(await readFile(inDownloads('Became a file.mp4')), video)).toBe(0);
+    });
+
+    it("leaves another download's pieces alone when a file of the same name is added", async () => {
+      const site = await host({ body: page, contentType: 'text/html' });
+      streams = await startFolderServer({ root: FIXTURES, delayMs: 150 });
+      const plain = await startRangeServer({ body: video });
+      servers.push(plain);
+      const { reader } = aReader(async (url) =>
+        url === site.url
+          ? {
+              title: 'sample',
+              formats: [formatAt(`${streams!.url}/fmp4/index.m3u8`, { protocol: 'm3u8_native' })],
+            }
+          : undefined,
+      );
+      const downloads = await open({ pageReader: reader });
+      const [stream] = downloads.add({ urls: [site.url] });
+      await until(() =>
+        (downloads.find(stream!.id).timeline?.segments ?? []).some((piece) => piece.downloaded > 0),
+      );
+      await downloads.pause(stream!.id);
+      const pieces = join(folder.path, 'downloads', 'sample.mp4.scia.pieces');
+      const kept = await readdir(pieces);
+
+      // A file whose name from its address is the stream's.
+      const [file] = downloads.add({ urls: [plain.url.replace('sample.bin', 'sample.mp4')] });
+      await until(() => statusOf(downloads, file!.id) === DownloadStatus.Completed);
+
+      expect(await readdir(pieces)).toEqual(kept);
+    });
+
+    it('throws away what it had of a quality the page no longer offers when it reads it again', async () => {
+      const site = await host({ body: page, contentType: 'text/html' });
+      streams = await startFolderServer({ root: FIXTURES, delayMs: 150 });
+      let height = 720;
+      const { reader } = aReader(async () => ({
+        title: 'Changed',
+        formats: [formatAt(`${streams!.url}/fmp4/index.m3u8`, { protocol: 'm3u8_native', height })],
+      }));
+      const downloads = await open({ pageReader: reader });
+      const [added] = downloads.add({ urls: [site.url] });
+      await until(() =>
+        (downloads.find(added!.id).timeline?.segments ?? []).some((piece) => piece.downloaded > 0),
+      );
+      await streams.close();
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+
+      streams = await startFolderServer({ root: FIXTURES });
+      height = 1080;
+      downloads.resume(added!.id);
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+      // Every piece asked of the new host: none of the old quality was kept.
+      expect(streams.asked.filter((path) => path.endsWith('.m4s'))).toHaveLength(3);
+      expect(downloads.find(added!.id).media).toEqual({ ext: 'mp4', height: 1080 });
+    });
   });
 
   it('fetches every page as it stands when there is no reader of sites', async () => {

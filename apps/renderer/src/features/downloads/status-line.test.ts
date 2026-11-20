@@ -184,6 +184,36 @@ describe('statusLine', () => {
     ).toBe('1,000\u00a0MB · Completed · WEBM');
   });
 
+  it('says how far a stream is by its pieces, its size so far and how long is left', () => {
+    const stream = (overrides: Partial<Download>) =>
+      statusLine(
+        aDownload({
+          totalBytes: null,
+          downloadedBytes: 6 * MIB,
+          etaSeconds: 5,
+          media: { ext: 'mp4', height: 720 },
+          timeline: {
+            totalMs: 3000,
+            segments: [
+              { start: 0, end: 1000, downloaded: 1000 },
+              { start: 1000, end: 2000, downloaded: 1000 },
+              { start: 2000, end: 3000, downloaded: 0 },
+            ],
+          },
+          ...overrides,
+        }),
+      );
+
+    expect(stream({})).toBe('66% · 6.0\u00a0MB · 10.0\u00a0MB/s · 5\u00a0s left · MP4\u00a0720p');
+    expect(stream({ status: DownloadStatus.Paused })).toBe(
+      'Paused · 66% · 6.0\u00a0MB · MP4\u00a0720p',
+    );
+    // Once made, its size is the mp4’s, which the engine read from the file.
+    expect(stream({ status: DownloadStatus.Completed, totalBytes: 5 * MIB })).toBe(
+      '5.0\u00a0MB · Completed · MP4\u00a0720p',
+    );
+  });
+
   it('says the address the site gave for a video stopped working, and that trying again reads the page for a new one', () => {
     const failed = (overrides: Partial<Download>) =>
       statusLine(
@@ -217,13 +247,14 @@ describe('statusLine', () => {
       'The video on this page is protected. Scia does not download protected videos.',
     ],
     [PageFailure.SiteBusy, 'The site did not answer properly. Try again later.'],
+    [PageFailure.Live, 'This video is a live stream. Scia does not record live streams yet.'],
     [
       PageFailure.VideoUnavailable,
       'The site says this video cannot be played. It may be private, removed, or not available in your country.',
     ],
     [
       PageFailure.FormatUnsupported,
-      'The site offers this video only in a form Scia cannot download yet.',
+      'The site offers this video in a form Scia cannot download yet.',
     ],
     [
       PageFailure.Playlist,

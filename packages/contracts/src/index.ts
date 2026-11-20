@@ -43,6 +43,14 @@ export const mediaSchema = z.object({
   height: z.number().int().positive().nullable(),
 });
 
+const milliseconds = z.number().int().nonnegative();
+
+// The pieces of a stream on a line of time, in milliseconds.
+export const timelineSchema = z.object({
+  totalMs: milliseconds,
+  segments: z.array(z.object({ start: milliseconds, end: milliseconds, downloaded: milliseconds })),
+});
+
 export const downloadSchema = z.object({
   id: z.string(),
   url: z.string(),
@@ -66,6 +74,9 @@ export const downloadSchema = z.object({
   // The video of a page, as the site offers it: the link was a page, and this is what is
   // fetched instead. Null for a link that is fetched as it stands.
   media: mediaSchema.nullable(),
+  // A video fetched as the pieces of a stream: how long it lasts and how far it is, in
+  // milliseconds, each piece a segment of that line — its size in bytes is not known before.
+  timeline: timelineSchema.nullable(),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });

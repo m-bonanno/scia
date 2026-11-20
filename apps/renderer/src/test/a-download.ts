@@ -22,6 +22,7 @@ export function aDownload(overrides: Partial<Download> = {}): Download {
     failureStatus: null,
     via: null,
     media: null,
+    timeline: null,
     createdAt: '2026-11-19T10:00:00.000Z',
     completedAt: null,
     ...overrides,

@@ -7,3 +7,4 @@ export * from './queue.ts';
 export * from './segments.ts';
 export * from './service.ts';
 export * from './speed.ts';
+export * from './hls.ts';

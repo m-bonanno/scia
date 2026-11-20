@@ -1,6 +1,6 @@
 # ADR 0009 — The video of a page is found by yt-dlp and downloaded by the engine
 
-- **Status**: accepted
+- **Status**: accepted; its plan for pieces 2 and 3 — a shipped ffmpeg — superseded by [ADR 0010](./0010-a-stream-made-into-an-mp4-inside-scia.md)
 - **Date**: 2026-11-20
 
 ## Context

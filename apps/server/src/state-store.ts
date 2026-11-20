@@ -1,7 +1,13 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
-import { IntegrationId, mediaSchema, segmentSchema, settingsSchema } from '@scia/contracts';
+import {
+  IntegrationId,
+  mediaSchema,
+  segmentSchema,
+  settingsSchema,
+  timelineSchema,
+} from '@scia/contracts';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
 import { z } from 'zod';
 
@@ -33,7 +39,14 @@ export const recordSchema = z.object({
   video: z
     .object({
       media: mediaSchema,
-      source: z.object({ url: z.string(), headers: z.record(z.string(), z.string()) }).nullable(),
+      source: z
+        .object({
+          url: z.string(),
+          headers: z.record(z.string(), z.string()),
+          // One file, or the playlist of an HLS stream. A state written before streams has files.
+          kind: z.enum(['file', 'hls']).catch('file'),
+        })
+        .nullable(),
     })
     .nullable()
     .catch(null),
@@ -41,6 +54,9 @@ export const recordSchema = z.object({
   // load — a container a later version no longer takes — so that the page is read again for it,
   // never fetched into its file as a page.
   fromPage: z.boolean().catch(false),
+  // How far a stream's pieces are, kept for the row while it does not run. The pieces on disk are
+  // the truth: what is there is not asked for again.
+  timeline: timelineSchema.nullable().catch(null),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });

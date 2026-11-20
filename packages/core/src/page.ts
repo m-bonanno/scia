@@ -7,12 +7,14 @@ export const PageFailure = {
   // The site says the video cannot be played from here: removed, private, behind a login the
   // person has not handed over, or not in this country. Scia does not get around any of them.
   VideoUnavailable: 'PAGE_UNAVAILABLE',
-  // The site offers the video only in forms Scia does not download yet: a stream, or picture and
-  // sound as two files (#89).
+  // The video, in the form Scia would fetch, is one it does not download yet: DASH, picture and
+  // sound as two files (#99), or a stream that changes partway (#123).
   FormatUnsupported: 'PAGE_FORMAT_UNSUPPORTED',
   // The page lists several items — a playlist, a channel, an album — which Scia does not expand
   // yet (#8).
   Playlist: 'PAGE_PLAYLIST',
+  // The video is a live stream, which Scia does not record yet (#121).
+  Live: 'PAGE_LIVE',
   // The site did not answer properly — busy, in maintenance, too many requests — or not in time:
   // what waiting can mend.
   SiteBusy: 'PAGE_SITE_BUSY',

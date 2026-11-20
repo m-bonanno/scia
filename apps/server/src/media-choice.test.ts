@@ -26,11 +26,10 @@ describe('chooseMedia', () => {
     expect(chosen.info).toEqual({ ext: 'mp4', height: 1080 });
   });
 
-  it('leaves aside a picture with no sound, a sound with no picture, and a stream', () => {
+  it('leaves aside a picture with no sound, a sound with no picture, and DASH', () => {
     const chosen = chooseMedia([
       file({ url: 'https://cdn.example/video-only.mp4', height: 2160, acodec: 'none' }),
       file({ url: 'https://cdn.example/audio-only.m4a', height: null, vcodec: 'none' }),
-      file({ url: 'https://cdn.example/index.m3u8', height: 1080, protocol: 'm3u8_native' }),
       file({ url: 'https://cdn.example/dash', height: 1080, protocol: 'http_dash_segments' }),
       file({ url: 'https://cdn.example/480.mp4', height: 480 }),
     ]);
@@ -70,6 +69,30 @@ describe('chooseMedia', () => {
     ).toBe('https://cdn.example/second.mp4');
   });
 
+  it('takes an HLS stream, which it makes into an mp4, when it has more lines than any file', () => {
+    const chosen = chooseMedia([
+      file({ url: 'https://cdn.example/480.mp4', height: 480 }),
+      file({ url: 'https://cdn.example/1080/index.m3u8', protocol: 'm3u8_native', height: 1080 }),
+      file({ url: 'https://cdn.example/dash', protocol: 'http_dash_segments', height: 2160 }),
+    ]);
+
+    expect(chosen).toEqual({
+      url: 'https://cdn.example/1080/index.m3u8',
+      headers: {},
+      kind: 'hls',
+      info: { ext: 'mp4', height: 1080 },
+    });
+  });
+
+  it('takes a file over a stream of as many lines: it is fetched as it stands', () => {
+    const chosen = chooseMedia([
+      file({ url: 'https://cdn.example/720.mp4' }),
+      file({ url: 'https://cdn.example/720/index.m3u8', protocol: 'm3u8' }),
+    ]);
+
+    expect([chosen.url, chosen.kind]).toEqual(['https://cdn.example/720.mp4', 'file']);
+  });
+
   it('puts a format of unknown height below every known one', () => {
     expect(
       chooseMedia([
@@ -100,11 +123,10 @@ describe('chooseMedia', () => {
     );
   });
 
-  it('says a video offered only as a stream, or as picture and sound apart, is not one it can fetch yet, and not that the page is unreadable', () => {
+  it('says a video offered only as DASH, or as picture and sound apart, is not one it can fetch yet, and not that the page is unreadable', () => {
     const streams = () =>
       chooseMedia([
-        file({ protocol: 'm3u8_native' }),
-        file({ protocol: 'm3u8' }),
+        file({ protocol: 'http_dash_segments' }),
         file({ protocol: 'https', acodec: 'none' }),
       ]);
     const apart = () =>

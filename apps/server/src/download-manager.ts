@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { type Download, type Settings, type SettingsPatch, type Snapshot } from '@scia/contracts';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
@@ -17,13 +17,15 @@ import {
   PageFailure,
   planSegments,
   sanitizeFileName,
+  type Segment,
   SpeedMeter,
   uniqueFileName,
 } from '@scia/core';
 import { DownloadTask } from './download-task.ts';
+import { HlsTask, piecesOf, type Timeline } from './hls-task.ts';
 import type { LinkResolver } from './link-resolver.ts';
 import { describeFailure, type Logger } from './logger.ts';
-import { chooseMedia, PageError } from './media-choice.ts';
+import { chooseMedia, type MediaKind, PageError } from './media-choice.ts';
 import { type MarkDownloaded, markerFor } from './origin-mark.ts';
 import type { PageReader } from './page-reader.ts';
 import {
@@ -96,7 +98,7 @@ type StopIntent = (typeof StopIntent)[keyof typeof StopIntent];
 interface Running {
   readonly controller: AbortController;
   readonly meter: SpeedMeter;
-  task: DownloadTask | undefined;
+  task: DownloadTask | HlsTask | undefined;
   intent: StopIntent | undefined;
   settled: Promise<void>;
 }
@@ -105,7 +107,9 @@ interface Running {
 interface Located {
   readonly url: string;
   readonly headers: RequestHeaders;
-  readonly remote: RemoteFile;
+  // What the host said of the file; nothing for a stream, whose playlist the task reads.
+  readonly remote: RemoteFile | null;
+  readonly kind: MediaKind;
 }
 
 // The page a link was on is said to the host of that link, never to the host a service sent
@@ -119,6 +123,39 @@ function headersOf(record: DownloadRecord): RequestHeaders {
 // that refused at load — what its name ends with.
 function containerOf(record: DownloadRecord): string {
   return record.video?.media.ext ?? record.fileName.slice(record.fileName.lastIndexOf('.') + 1);
+}
+
+interface Progress {
+  readonly downloadedBytes: number;
+  readonly segments: Segment[];
+  readonly timeline: Timeline | null;
+  // Of a stream, the bytes of its whole pieces; of a file, its bytes.
+  readonly wholeBytes?: number;
+}
+
+// A stream's task says nothing until it has read its playlist: the record says what was kept,
+// so that the row does not drop to nothing on a resume.
+function progressOf(task: DownloadTask | HlsTask | undefined): Progress | undefined {
+  if (task === undefined) return undefined;
+  if (task instanceof HlsTask) {
+    const progress = task.progress();
+    return progress.timeline === null ? undefined : { ...progress, segments: [] };
+  }
+  return { ...task.progress(), timeline: null };
+}
+
+// What is left to fetch: of a file's size, or — for a stream, whose size is not known — what the
+// pieces already fetched say of the rest, at the same bytes per second of video.
+function bytesLeft(
+  totalBytes: number | null,
+  downloadedBytes: number,
+  timeline: Timeline | null,
+): number | null {
+  if (totalBytes !== null) return totalBytes - downloadedBytes;
+  if (timeline === null) return null;
+  const doneMs = timeline.segments.reduce((sum, piece) => sum + piece.downloaded, 0);
+  if (doneMs === 0) return null;
+  return Math.round((downloadedBytes * (timeline.totalMs - doneMs)) / doneMs);
 }
 
 function partPathOf(record: DownloadRecord): string {
@@ -219,6 +256,7 @@ export class DownloadManager {
         unlockedUrl: null,
         video: null,
         fromPage: false,
+        timeline: null,
         createdAt: new Date(this.#now()).toISOString(),
         completedAt: null,
       };
@@ -271,6 +309,8 @@ export class DownloadManager {
     if (record.named) {
       if (record.status !== DownloadStatus.Completed) {
         await rm(partPathOf(record), { force: true });
+        // A stream's pieces, kept beside its part file.
+        await rm(piecesOf(partPathOf(record)), { recursive: true, force: true });
       } else if (deleteFile) {
         await rm(join(record.directory, record.fileName), { force: true });
       }
@@ -359,8 +399,15 @@ export class DownloadManager {
 
   #view(record: DownloadRecord): Download {
     const running = this.#running.get(record.id);
-    const progress = running?.task?.progress() ?? record;
+    const progress = progressOf(running?.task) ?? record;
     const bytesPerSecond = running?.meter.bytesPerSecond(this.#now()) ?? 0;
+    const left = bytesLeft(
+      record.totalBytes,
+      'wholeBytes' in progress
+        ? (progress.wholeBytes ?? progress.downloadedBytes)
+        : progress.downloadedBytes,
+      progress.timeline,
+    );
     return {
       id: record.id,
       url: record.url,
@@ -371,16 +418,14 @@ export class DownloadManager {
       totalBytes: record.totalBytes,
       downloadedBytes: progress.downloadedBytes,
       bytesPerSecond,
-      etaSeconds:
-        record.totalBytes === null || running === undefined
-          ? null
-          : etaSeconds(record.totalBytes - progress.downloadedBytes, bytesPerSecond),
+      etaSeconds: left === null || running === undefined ? null : etaSeconds(left, bytesPerSecond),
       resumable: record.resumable,
       segments: progress.segments,
       failure: record.failure,
       failureStatus: record.failureStatus,
       via: record.via,
       media: record.video?.media ?? null,
+      timeline: progress.timeline,
       createdAt: record.createdAt,
       completedAt: record.completedAt,
     };
@@ -445,10 +490,12 @@ export class DownloadManager {
     }
   }
 
-  #keepProgress(record: DownloadRecord, task: DownloadTask): void {
-    const progress = task.progress();
+  #keepProgress(record: DownloadRecord, task: DownloadTask | HlsTask): void {
+    const progress = progressOf(task);
+    if (progress === undefined) return;
     record.segments = progress.segments;
     record.downloadedBytes = progress.downloadedBytes;
+    record.timeline = progress.timeline;
   }
 
   async #stop(running: Running, intent: StopIntent): Promise<void> {
@@ -476,10 +523,24 @@ export class DownloadManager {
   async #run(record: DownloadRecord, running: Running): Promise<void> {
     const { signal } = running.controller;
     try {
-      const { url, headers, remote } = await this.#locate(record, signal);
+      const { url, headers, remote, kind } = await this.#locate(record, signal);
+      // A stream of its own — named, with pieces kept — that a new reading made a file: its pieces
+      // are of nothing now. Never another download's: a name not yet final is no one's.
+      if (kind === 'file' && record.named && record.timeline !== null) {
+        await rm(piecesOf(partPathOf(record)), { recursive: true, force: true }).catch(
+          (error: unknown) => {
+            throw new DiskError('The pieces of the stream could not be removed.', { cause: error });
+          },
+        );
+        record.timeline = null;
+      }
       await mkdir(record.directory, { recursive: true }).catch((error: unknown) => {
         throw new DiskError('The folder could not be made.', { cause: error });
       });
+      if (kind === 'hls' || remote === null) {
+        await this.#runStream(record, running, url, headers, signal);
+        return;
+      }
       this.#adopt(record, remote);
       const task = new DownloadTask({
         source: this.#deps.source,
@@ -509,6 +570,53 @@ export class DownloadManager {
       this.#changed();
       this.#schedule();
     }
+  }
+
+  // A page's video offered as an HLS stream (docs/adr/0010): named once, of no size known before,
+  // made into the part file by its task; its pieces wait beside it, kept across a pause.
+  async #runStream(
+    record: DownloadRecord,
+    running: Running,
+    url: string,
+    headers: RequestHeaders,
+    signal: AbortSignal,
+  ): Promise<void> {
+    if (!record.named) {
+      record.fileName = this.#freeName(record, record.fileName);
+      record.named = true;
+    }
+    record.totalBytes = null;
+    record.validator = null;
+    record.resumable = true;
+    record.segments = [];
+    const task = new HlsTask({
+      source: this.#deps.source,
+      playlistUrl: url,
+      headers,
+      partPath: partPathOf(record),
+      // Pieces of another quality are not pieces of this one.
+      variant: String(record.video?.media.height ?? ''),
+      connections: this.#settings.connectionsPerDownload,
+      onBytes: (count) => {
+        running.meter.record(count, this.#now());
+      },
+      allowance: (expectedBytes) => this.#throttle.allowance(expectedBytes),
+      ...(this.#deps.retryDelayMs === undefined ? {} : { retryDelayMs: this.#deps.retryDelayMs }),
+    });
+    running.task = task;
+    this.#changed();
+    await task.run(signal);
+    this.#keepProgress(record, task);
+    // The mp4's own size: not the pieces', which MPEG-TS weighs more and fMP4 less, its init
+    // segment uncounted.
+    record.totalBytes = await stat(partPathOf(record)).then(
+      (made) => made.size,
+      (error: unknown) => {
+        throw new DiskError('The made file could not be read.', { cause: error });
+      },
+    );
+    record.downloadedBytes = record.totalBytes;
+    await this.#finish(record);
   }
 
   #settle(record: DownloadRecord, running: Running, error: unknown): void {
@@ -544,9 +652,10 @@ export class DownloadManager {
     const url = await this.#address(record, signal);
     const headers = headersOf(record);
     const remote = await this.#deps.source.probe(url, headers, signal);
-    if (!remote.isPage || record.named || record.via !== null) return { url, headers, remote };
+    const asItStands = { url, headers, remote, kind: 'file' } as const;
+    if (!remote.isPage || record.named || record.via !== null) return asItStands;
     const chosen = await this.#readPage(record, signal);
-    if (chosen === undefined) return { url, headers, remote };
+    if (chosen === undefined) return asItStands;
     return this.#locateVideo(record, signal);
   }
 
@@ -555,8 +664,12 @@ export class DownloadManager {
     if (chosen === undefined) {
       throw new PageError(PageFailure.Unreadable, 'The page no longer says what video it plays.');
     }
+    // A stream is not probed: its task reads its playlist.
+    if (chosen.kind === 'hls') {
+      return { url: chosen.url, headers: chosen.headers, remote: null, kind: 'hls' };
+    }
     const remote = await this.#deps.source.probe(chosen.url, chosen.headers, signal);
-    return { url: chosen.url, headers: chosen.headers, remote };
+    return { url: chosen.url, headers: chosen.headers, remote, kind: 'file' };
   }
 
   // The video the page plays, into the record: undefined when there is no reader, or when the
@@ -566,13 +679,15 @@ export class DownloadManager {
   async #readPage(
     record: DownloadRecord,
     signal: AbortSignal,
-  ): Promise<{ readonly url: string; readonly headers: RequestHeaders } | undefined> {
+  ): Promise<
+    { readonly url: string; readonly headers: RequestHeaders; readonly kind: MediaKind } | undefined
+  > {
     const reader = this.#deps.pageReader;
     if (reader === undefined) return undefined;
     const found = await reader.read(record.url, signal);
     if (found === undefined) return undefined;
     const chosen = chooseMedia(found.formats, record.named ? containerOf(record) : undefined);
-    const source = { url: chosen.url, headers: { ...chosen.headers } };
+    const source = { url: chosen.url, headers: { ...chosen.headers }, kind: chosen.kind };
     record.video = { media: chosen.info, source };
     record.fromPage = true;
     // What the site calls the video is a title, not a path: a slash in it is a character.
