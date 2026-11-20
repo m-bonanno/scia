@@ -98,8 +98,8 @@ export class Integrations implements LinkResolver {
   #asking: Promise<void> | undefined;
   // The domains the service unlocks links of, when they were read, and the reading under way.
   #hosts: HostList | undefined;
-  // A reading belongs to the key it was asked with: another key asks again.
-  #readingHosts: { readonly key: string; readonly domains: Promise<readonly string[]> } | undefined;
+  // Forgotten with the list when another key, or none, is connected: that key asks again.
+  #readingHosts: Promise<readonly string[]> | undefined;
   // Connecting and disconnecting, one after the other: two at once would write one key over
   // another, in an order nobody chose.
   #changing: Promise<unknown> = Promise.resolve();
@@ -224,7 +224,7 @@ export class Integrations implements LinkResolver {
     if (known !== undefined && this.#now() - known.readAt < HOSTS_FRESH_MS) {
       return Promise.resolve(known.domains);
     }
-    if (this.#readingHosts?.key === key) return this.#readingHosts.domains;
+    if (this.#readingHosts !== undefined) return this.#readingHosts;
     const reading = this.#deps.alldebrid
       .domains(key)
       .then(
@@ -252,9 +252,9 @@ export class Integrations implements LinkResolver {
         },
       )
       .finally(() => {
-        if (this.#readingHosts?.domains === reading) this.#readingHosts = undefined;
+        if (this.#readingHosts === reading) this.#readingHosts = undefined;
       });
-    this.#readingHosts = { key, domains: reading };
+    this.#readingHosts = reading;
     return reading;
   }
 
