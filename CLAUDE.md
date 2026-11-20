@@ -95,7 +95,7 @@ Full detail: [`docs/development/git-flow.md`](./docs/development/git-flow.md).
 The rule is [`docs/development/review-flow.md`](./docs/development/review-flow.md); run it with `/team-review <PR>`. In short:
 
 - **Every PR but one is reviewed locally by a team of senior roles** (the exception is the back-merge of a release, which carries only what was already reviewed) — tech lead (always), backend engineer, frontend engineer, product designer, product manager — each an independent agent defined in `.claude/agents/`, chosen by the files the PR touches, by its type and by its size: a small PR is the tech lead's alone. Their reviews are posted on the PR.
-- **The author runs the gates before opening the PR**, the tech lead runs them again on the commit under review, CI runs them a third time.
+- **The author runs the gates before opening the PR**, the tech lead runs them again on the commit under review, CI runs them a third time. On a PR from a fork, CI alone: nothing of it runs here (below).
 - **A work branch is squash-merged into `develop` when the team approves its head commit and CI is green.** `main` and `develop` are protected on GitHub — only a PR's merge with its checks green — and no approving review is required there (the owner, #28). What is blocking, what happens after a fix, and the two merges that are never squashed (a release into `main`, and `main` back into `develop`) are in the runbook.
 - **`develop` → `main` is merged only on the owner's word.**
 - **A PR from outside** (a fork) closes an issue the owner chose to take up, and **nothing of its code runs on the owner's machine outside a sandbox** — not an install, a gate, a test or a checkout with the hooks on: the gates come from CI, and the reviewers read the diff ([`review-flow.md`](./docs/development/review-flow.md), "A pull request from outside"; [`CONTRIBUTING.md`](./CONTRIBUTING.md) for its author).
@@ -105,7 +105,7 @@ The rule is [`docs/development/review-flow.md`](./docs/development/review-flow.m
 Mechanics in [`docs/development/release-flow.md`](./docs/development/release-flow.md).
 
 - **semantic-release owns versioning.** No `version` field in the root `package.json`; `apps/desktop/package.json` stays `0.0.0` and CI injects the real version.
-- Squash merge to `develop` → tag `vX.Y.Z-beta.N`, notes only. Merge commit to `main` → `vX.Y.Z`, with the Windows installer attached to the GitHub release (the Linux job is off until Linux is tried).
+- Squash merge to `develop` → tag `vX.Y.Z-beta.N`, notes only. Merge commit to `main` → `vX.Y.Z`, with the Windows and Linux installers attached to the GitHub release.
 - The commit type decides the number: `fix`/`perf`/`hotfix` a patch, `feat` a minor, a breaking change a major; `chore`, `docs`, `ci`, `test`, `refactor` release nothing. Choose the type for what the change is to whoever uses Scia.
 - **Verify the artefact, not the build**: download the published installer, install it, launch it on a scratch profile, read its log.
 - Never push a tag by hand, never edit a published one.

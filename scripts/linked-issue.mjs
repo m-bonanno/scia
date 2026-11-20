@@ -8,7 +8,7 @@ const EXEMPT_MERGES = [
 const EXEMPT_AUTHORS = ['dependabot[bot]'];
 
 // GitHub's closing keywords, followed by a number of this repository.
-const CLOSING = /(?<![\w-])(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)/gi;
+const CLOSING = /(?<!\w)(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?):?\s+#(\d+)/gi;
 
 export function closingIssueNumbers(body) {
   const numbers = [...(body ?? '').matchAll(CLOSING)].map((match) => Number(match[1]));

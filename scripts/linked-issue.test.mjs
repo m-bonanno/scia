@@ -40,6 +40,10 @@ describe('closingIssueNumbers', () => {
     expect(closingIssueNumbers('prefixes #3 and unclosed #4')).toEqual([]);
   });
 
+  it('ignores a number with no # before it', () => {
+    expect(closingIssueNumbers('Closes 12')).toEqual([]);
+  });
+
   it('ignores an issue of another repository', () => {
     expect(closingIssueNumbers('Closes other/repo#5')).toEqual([]);
   });

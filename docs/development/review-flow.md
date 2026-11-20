@@ -29,7 +29,7 @@ A release into `main` is never small.
 
 ## The gates
 
-One list, for the author before opening the PR, for the tech lead during the review, for CI on GitHub:
+One list, for the author before opening the PR, for the tech lead during the review, for CI on GitHub. On a PR from a fork, CI's run is the only one: "A pull request from outside".
 
 ```bash
 npm run format:check
@@ -57,9 +57,9 @@ Everything else is non-blocking: a suggestion, a question, something to track. B
 ## Rules
 
 - **Independent.** A reviewer gets its role file, the PR and the issue it closes, never the author's reasoning: an agent handed a conclusion returns it confirmed. What the owner asked for belongs in the issue, where every reviewer reads it.
-- **Read-only.** Reviewers do not edit, commit, push or comment. Each writes its review to a file outside the repository, in a folder of its own that the other roles are told not to read, and answers with its verdict; the orchestrating session posts the files as they are and applies the fixes.
+- **Read-only.** Reviewers do not edit, commit, push or comment. Each writes its review to a file outside the repository, in a folder of its own that the other roles are told not to read, and answers with its verdict; the orchestrating session posts the files as they are and applies the fixes. On a PR from a fork they run nothing of it either — no script, harness, install or gate: "A pull request from outside".
 - **The team verdict is deterministic**: approved only if no role has a blocking finding, and it holds for one head commit.
-- **Changes requested** → the fix lands on the same branch as new commits, never a force-push. Then: the roles are decided again on the whole diff, size included (a fix can reach a new area, or make a small PR a large one); every role that blocked reviews again, resumed so that it checks its own findings; a role that had approved reviews again if the fix changes its area; a role the fix newly involves reviews for the first time; and the tech lead runs the gates again on the new head. Every round is posted.
+- **Changes requested** → the fix lands on the same branch as new commits, never a force-push. Then: the roles are decided again on the whole diff, size included (a fix can reach a new area, or make a small PR a large one); every role that blocked reviews again, resumed so that it checks its own findings; a role that had approved reviews again if the fix changes its area; a role the fix newly involves reviews for the first time; and the tech lead runs the gates again on the new head — on a fork's PR, reads CI's run on it ("A pull request from outside"). Every round is posted.
 - **Nothing unreviewed is merged.** A commit pushed after the approval — a non-blocking finding taken at the last moment — is reviewed before the merge. The roles are decided again on the whole diff, as after a fix, size included: a late commit can make a small PR a large one. Then the tech lead reviews it; so does every role of that set whose area the commit changes; and a role of that set that had not reviewed the PR yet reviews all of it. The verdict is posted again for the new head.
 - **Non-blocking findings are not lost**: taken in the same PR when they are in its scope and cheap, otherwise collected in a follow-up issue, opened before the approving verdict and linked from it. A verdict that asks for changes names none: its findings are still being fixed.
 - **A blocking finding the author contests goes to the owner.** The orchestrating session never overrules a reviewer; it fixes, or it asks.

@@ -24,7 +24,7 @@ The title of a PR becomes the commit on `develop`, and semantic-release reads it
 
 ## Repository settings
 
-Set on GitHub: the repository is **public** (since 20 November 2026, #28); default branch `develop`; squash merge and merge commit allowed, rebase merge off; head branches **not** deleted on merge.
+Set on GitHub: the repository is **public** (the owner, 20 November 2026, #28); default branch `develop`; squash merge and merge commit allowed, rebase merge off; head branches **not** deleted on merge.
 
 - **Branch protection** of `main` and `develop` (the owner, #28): no deletion, no force-push, no push but the merge of a PR, and the PR's three checks green — `Format, lint, types, tests, build`, `Conventional title`, `Linked issue`. Admins are held to it too. **No approving review is required**: GitHub does not let the author of a PR approve it, and every PR of the team is opened from the owner's account (the owner, 20 November 2026, replacing the review asked for on 19 November). Who merges, and on whose word: the "Merging" table of [`review-flow.md`](./review-flow.md). The husky hooks stay: they refuse a direct commit before GitHub does.
 - **Why head branches are not deleted on merge**: the back-merge of a release is a PR whose head is `main`. The protection refuses to delete `main` now, and the setting stays off all the same, so that neither depends on the other alone. A work branch is deleted by whoever merges it, at the merge (`git push origin --delete <branch>`, or the button on the PR) — never with a flag on the back-merge.
