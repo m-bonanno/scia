@@ -116,7 +116,8 @@ export class Integrations implements LinkResolver {
   }
 
   #oneAtATime<T>(change: () => Promise<T>): Promise<T> {
-    const done = this.#changing.then(change, change);
+    // The chain never rejects: what failed before does not stop what comes after.
+    const done = this.#changing.then(change);
     this.#changing = done.catch(() => undefined);
     return done;
   }
