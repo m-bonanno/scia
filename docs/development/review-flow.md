@@ -91,9 +91,20 @@ The last line is `Follow-ups: none` when an approving verdict leaves nothing to 
 | `develop` into `main` (a release)            | the team approves, CI is green, **and the owner says so**                                                                                         | **merge commit**, never a squash             |
 | `main` back into `develop` (after a release) | CI is green. The one PR nobody of the team reviews: it carries only what was reviewed on its way into `main`. The orchestrating session merges it | **merge commit**, never a squash             |
 
-**From the day the repository is public and its branches are protected** ([`git-flow.md`](./git-flow.md), "Repository settings"), every row of this table also needs the owner's approved review on GitHub: the team's verdict is then what the owner reads before approving, not what merges.
+`main` and `develop` are protected on GitHub ([`git-flow.md`](./git-flow.md), "Repository settings"): GitHub merges a PR only with its checks green, and **requires no approving review** — it does not let the author of a PR approve it, and the team's PRs are opened from the owner's account (the owner, 20 November 2026, #28). What this table says is what merges: the team's verdict, CI, and for a release the owner's word.
 
 The two merge commits are what lets semantic-release count the next version from the last one ([`release-flow.md`](./release-flow.md)): squashing either breaks the count.
+
+## A pull request from outside
+
+A PR from a fork, by someone without write access. The flow for its author is [`CONTRIBUTING.md`](../../CONTRIBUTING.md); this is the team's side of it.
+
+- **An issue first.** The PR closes an issue that explains the problem or the feature, and the `Linked issue` check fails it otherwise. **The owner chooses by hand** which issues and which PRs are taken up; a PR nobody took up waits, or is closed with a sentence on why.
+- **CI waits for the owner.** Its workflows run only once the owner approves the run on the PR. Before approving it, the owner reads what the PR changes in `.github/`, `scripts/`, `.husky/`, the configs at the root and `package.json`/`package-lock.json`: those run on GitHub's runner.
+- **Never run a contributor's code on the owner's machine outside a sandbox.** Not `npm ci` or `npm install` (install scripts), not a gate, a test, a build, `npm start` or a harness, not a checkout with the hooks on: husky runs a `.husky/post-checkout` the PR adds. **The gates come from CI**, on GitHub's runners: the tech lead reads that run, on the head under review, instead of running them, and reports its numbers. The reviewers read the diff — `gh pr diff <N>`, and after `git fetch origin pull/<N>/head`, `git show <sha>:<path>`; a tree to read whole files in is made with `git -c core.hooksPath=/dev/null worktree add --detach <dir> <sha>`, and nothing in it is run. Evidence of a real run is the contributor's, in the PR body; seeing it again takes a sandbox (Windows Sandbox, a throwaway virtual machine).
+- **`/team-review <N>`** as for any PR, roles, rounds and verdict alike. The reviews are posted on the PR; **the team verdict is posted on the linked issue too**, with each blocking finding on a line of its own, so that whoever follows the issue sees what stands between it and a merge.
+- **Changes requested** → the contributor fixes them on the same branch, as new commits, and the next round runs on the new head when the owner starts it. A PR whose findings stay unanswered is closed by the owner.
+- **Approved, CI green** → squash-merged like any work branch. Only the owner's account merges: a contributor cannot.
 
 ## What a review looks like
 

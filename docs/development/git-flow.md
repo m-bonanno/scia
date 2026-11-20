@@ -13,7 +13,7 @@
 
 1. Title: `type(scope): description`, lower-case.
 2. Body from `.github/PULL_REQUEST_TEMPLATE.md`, in English, written to `.claude/pr-bodies/<branch>.md` and passed with `gh pr create --body-file`.
-3. `Closes #N` in the body.
+3. `Closes #N` in the body, naming the issue the PR is for: the `Linked issue` check fails a PR whose body closes no issue of this repository (`scripts/linked-issue.mjs`).
 4. Before opening it, run the gates locally: the list is in [`review-flow.md`](./review-flow.md#the-gates).
 5. The team reviews it. When it is merged, how, and on whose word depends on the kind of PR: the "Merging" table of [`review-flow.md`](./review-flow.md).
 6. No AI attribution anywhere.
@@ -24,11 +24,15 @@ The title of a PR becomes the commit on `develop`, and semantic-release reads it
 
 ## Repository settings
 
-Set once, on GitHub: default branch `develop`; squash merge and merge commit allowed, rebase merge off; head branches **not** deleted on merge.
+Set on GitHub: the repository is **public** (since 20 November 2026, #28); default branch `develop`; squash merge and merge commit allowed, rebase merge off; head branches **not** deleted on merge.
 
-- **Why not deleted**: the back-merge of a release is a PR whose head is `main`, and a repository that deletes head branches would delete `main` with it. A work branch is deleted by whoever merges it, at the merge (`git push origin --delete <branch>`, or the button on the PR) — never with a flag on the back-merge.
-- **Branch protection** is refused on a private Free repository: until the repository is public, the hooks are the protection. The owner's decision (#18, and #28 for when and for what protected means): **the repository becomes public shortly before the first stable release, and `main` and `develop` are protected then** — no deletion, no force-push, only the merge of a PR with the two CI checks green and an approved review recorded on GitHub (the owner's words, #28). The owner is the only human account: from that day every PR waits for the owner's approval on GitHub, and the team's verdict alone merges nothing. Deletion on merge is off until then; whether it goes back on, once `main` cannot be deleted, is decided in the PR that records the protection.
+- **Branch protection** of `main` and `develop` (the owner, #28): no deletion, no force-push, no push but the merge of a PR, and the PR's three checks green — `Format, lint, types, tests, build`, `Conventional title`, `Linked issue`. Admins are held to it too. **No approving review is required**: GitHub does not let the author of a PR approve it, and every PR of the team is opened from the owner's account (the owner, 20 November 2026, replacing the review asked for on 19 November). Who merges, and on whose word: the "Merging" table of [`review-flow.md`](./review-flow.md). The husky hooks stay: they refuse a direct commit before GitHub does.
+- **Why head branches are not deleted on merge**: the back-merge of a release is a PR whose head is `main`. The protection refuses to delete `main` now, and the setting stays off all the same, so that neither depends on the other alone. A work branch is deleted by whoever merges it, at the merge (`git push origin --delete <branch>`, or the button on the PR) — never with a flag on the back-merge.
+- **Actions**: the workflows of a PR from a fork wait for the owner's approval, for every outside contributor; the `GITHUB_TOKEN` reads only, and no workflow may approve a PR. How such a PR is reviewed: [`review-flow.md`](./review-flow.md), "A pull request from outside".
+- **Who can write**: the owner alone. An outside contributor works on a fork and cannot push, merge or label here ([`CONTRIBUTING.md`](../../CONTRIBUTING.md)).
 
 ## The two PRs that have no issue
 
 A release (`develop` → `main`) and its back-merge (`main` → `develop`) close no issue and have no `<type>/<issue>-…` branch: their heads are `develop` and `main` themselves. The rule on branch names and `Closes #N` does not apply to them. They are titled `release: vX.Y.Z` and `chore: merge main back into develop after vX.Y.Z`; how each is merged, and by whom, is the "Merging" table of [`review-flow.md`](./review-flow.md).
+
+The `Linked issue` check lets those two through, and the PRs Dependabot opens (`.github/dependabot.yml`), which no person writes and which carry no issue either; each is still reviewed as the "Merging" table says.
