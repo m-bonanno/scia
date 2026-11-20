@@ -96,7 +96,7 @@ The rule is [`docs/development/review-flow.md`](./docs/development/review-flow.m
 
 - **Every PR but one is reviewed locally by a team of senior roles** (the exception is the back-merge of a release, which carries only what was already reviewed) — tech lead (always), backend engineer, frontend engineer, product designer, product manager — each an independent agent defined in `.claude/agents/`, chosen by the files the PR touches, by its type and by its size: a small PR is the tech lead's alone. Their reviews are posted on the PR.
 - **The author runs the gates before opening the PR**, the tech lead runs them again on the commit under review, CI runs them a third time. On a PR from a fork, CI alone: nothing of it runs here (below).
-- **A work branch is squash-merged into `develop` when the team approves its head commit and CI is green.** `main` and `develop` are protected on GitHub — only a PR's merge with its checks green — and no approving review is required there (the owner, #28). What is blocking, what happens after a fix, and the two merges that are never squashed (a release into `main`, and `main` back into `develop`) are in the runbook.
+- **A work branch is squash-merged into `develop` when the team approves its head commit and CI is green.** `main` and `develop` are protected on GitHub — only a PR's merge with its checks green — and a PR needs the owner's approval: a PR of the team, opened from the owner's account, is merged with the admin bypass on the team's verdict; **a PR anyone else opens is approved by the owner's own hand, never by a session** (#76). What is blocking, what happens after a fix, and the two merges that are never squashed (a release into `main`, and `main` back into `develop`) are in the runbook.
 - **`develop` → `main` is merged only on the owner's word.**
 - **A PR from outside** (a fork) closes an issue the owner chose to take up, and **nothing of its code runs on the owner's machine outside a sandbox** — not an install, a gate, a test or a checkout with the hooks on: the gates come from CI, and the reviewers read the diff ([`review-flow.md`](./docs/development/review-flow.md), "A pull request from outside"; [`CONTRIBUTING.md`](./CONTRIBUTING.md) for its author).
 
@@ -135,7 +135,7 @@ docs/
 1. **Propose the branch name (with issue number) before starting**, and work only on that branch.
 2. **Test first**, in every layer the change touches; prove runtime changes against the real runtime.
 3. **Respect the local canon** of the area you are in (the sub-files above).
-4. **Have the team review every PR but a release's back-merge** (`/team-review`) and merge a work branch into `develop` only on its approval with CI green; never merge into `main` without the owner's word.
+4. **Have the team review every PR but a release's back-merge** (`/team-review`) and merge a work branch into `develop` only on the team's approval with CI green, and as the "Merging" table of `review-flow.md` says; never merge into `main` without the owner's word.
 5. **Read `.claude/gotchas.md` before every push**; add an entry in the same PR when a mistake of that kind bites again.
 6. **Keep docs in lock-step**, and keep the roadmap honest — never mark done what is partial.
 7. **Report outcomes faithfully** — failing tests with their output, skipped steps named, what was not verified said plainly.
