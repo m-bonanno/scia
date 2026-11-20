@@ -2,6 +2,7 @@ export * from './download.ts';
 export * from './file-kind.ts';
 export * from './file-name.ts';
 export * from './pace.ts';
+export * from './page.ts';
 export * from './queue.ts';
 export * from './segments.ts';
 export * from './service.ts';

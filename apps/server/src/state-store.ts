@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
-import { IntegrationId, segmentSchema, settingsSchema } from '@scia/contracts';
+import { IntegrationId, mediaSchema, segmentSchema, settingsSchema } from '@scia/contracts';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
 import { z } from 'zod';
 
@@ -25,6 +25,22 @@ export const recordSchema = z.object({
   // after a pause or a restart. A state written before services existed has neither.
   via: z.enum(IntegrationId).nullable().catch(null),
   unlockedUrl: z.string().nullable().catch(null),
+  // The video a page plays, when the link was a page: what the row says of it (`media`), and the
+  // address and headers its site gave (`source`) — used again after a pause or a restart, cleared
+  // after a failure so that the page is read again. One value, read whole or not at all: a video
+  // whose `media` were dropped and whose address stayed would be fetched as a page (#101). A
+  // state written before pages were read has none.
+  video: z
+    .object({
+      media: mediaSchema,
+      source: z.object({ url: z.string(), headers: z.record(z.string(), z.string()) }).nullable(),
+    })
+    .nullable()
+    .catch(null),
+  // The download is the video of a page: a mark of its own, kept when its `video` is refused at
+  // load — a container a later version no longer takes — so that the page is read again for it,
+  // never fetched into its file as a page.
+  fromPage: z.boolean().catch(false),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });

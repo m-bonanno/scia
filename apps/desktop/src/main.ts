@@ -67,6 +67,7 @@ async function boot(): Promise<void> {
     userDataDir: app.getPath('userData'),
     downloadsDir: app.getPath('downloads'),
     scratchProfile: launch.userDataDir !== undefined,
+    platform: process.platform,
   });
 
   const logPath = join(layout.logsDir, 'main.log');
@@ -89,6 +90,7 @@ async function boot(): Promise<void> {
     port: enginePort,
     version: app.getVersion(),
     systemRoot: process.env.SystemRoot,
+    tempDir: app.getPath('temp'),
     alldebridApi: launch.alldebridApi,
   });
   // The keys of the services the engine is connected to: the engine asks, main keeps them

@@ -1,5 +1,11 @@
 import type { Download } from '@scia/contracts';
-import { DownloadFailure, DownloadStatus, ServiceFailure, UnlockFailure } from '@scia/core';
+import {
+  DownloadFailure,
+  DownloadStatus,
+  PageFailure,
+  ServiceFailure,
+  UnlockFailure,
+} from '@scia/core';
 import { describe, expect, it } from 'vitest';
 import { aDownload } from '@/test/a-download.ts';
 import { statusLine } from './status-line.ts';
@@ -152,6 +158,80 @@ describe('statusLine', () => {
     );
     // The disk is the disk, whoever gave the link.
     expect(failed({ failure: DownloadFailure.Disk })).toContain('free space');
+  });
+
+  it('says which video of a page it fetches, while it runs, when paused and when it is there', () => {
+    const video = (overrides: Partial<Download>) =>
+      statusLine(aDownload({ media: { ext: 'mp4', height: 1080 }, ...overrides }));
+
+    expect(video({})).toBe(
+      '42% · 420\u00a0MB of 1,000\u00a0MB · 10.0\u00a0MB/s · 58\u00a0s left · MP4\u00a01080p',
+    );
+    expect(video({ status: DownloadStatus.Paused })).toBe(
+      'Paused · 420\u00a0MB of 1,000\u00a0MB · MP4\u00a01080p',
+    );
+    expect(video({ status: DownloadStatus.Completed, downloadedBytes: 1000 * MIB })).toBe(
+      '1,000\u00a0MB · Completed · MP4\u00a01080p',
+    );
+    expect(
+      statusLine(
+        aDownload({
+          status: DownloadStatus.Completed,
+          downloadedBytes: 1000 * MIB,
+          media: { ext: 'webm', height: null },
+        }),
+      ),
+    ).toBe('1,000\u00a0MB · Completed · WEBM');
+  });
+
+  it('says the address the site gave for a video stopped working, and that trying again reads the page for a new one', () => {
+    const failed = (overrides: Partial<Download>) =>
+      statusLine(
+        aDownload({
+          status: DownloadStatus.Failed,
+          media: { ext: 'mp4', height: 1080 },
+          ...overrides,
+        }),
+      );
+    const again = 'Try again: Scia reads the page for a new one.';
+
+    expect(failed({ failure: DownloadFailure.HttpStatus, failureStatus: 403 })).toBe(
+      `The address the site gave for this video no longer works (403). ${again}`,
+    );
+    expect(failed({ failure: DownloadFailure.HttpStatus, failureStatus: 404 })).toBe(
+      `The address the site gave for this video no longer works (404). ${again}`,
+    );
+    expect(failed({ failure: DownloadFailure.Network })).toBe(
+      `The address the site gave for this video no longer works. ${again}`,
+    );
+    expect(failed({ failure: DownloadFailure.Incomplete })).toBe(
+      `The address the site gave for this video no longer works. ${again}`,
+    );
+    // The disk is the disk, whoever gave the address.
+    expect(failed({ failure: DownloadFailure.Disk })).toContain('free space');
+  });
+
+  it.each([
+    [
+      PageFailure.Drm,
+      'The video on this page is protected. Scia does not download protected videos.',
+    ],
+    [PageFailure.SiteBusy, 'The site did not answer properly. Try again later.'],
+    [
+      PageFailure.VideoUnavailable,
+      'The site says this video cannot be played. It may be private, removed, or not available in your country.',
+    ],
+    [
+      PageFailure.FormatUnsupported,
+      'The site offers this video only in a form Scia cannot download yet.',
+    ],
+    [
+      PageFailure.Playlist,
+      'This page lists several items, not one video. Add the link of one of them.',
+    ],
+    [PageFailure.Unreadable, 'Scia could not read the video on this page.'],
+  ] as const)('says why the video of a page was not downloaded when it was %s', (failure, text) => {
+    expect(statusLine(aDownload({ status: DownloadStatus.Failed, failure }))).toBe(text);
   });
 
   it('names no service for a link that was never known to be one', () => {

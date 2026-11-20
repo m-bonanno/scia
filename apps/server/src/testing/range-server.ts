@@ -23,12 +23,20 @@ export interface RangeServerOptions {
   // Answers this many requests for the first byte with a 200 that carries that one byte, as
   // the same link did once: read as it stands, the file is one byte long (#65).
   readonly firstByteAs200?: number;
+  // The Content-Type of every answer with a body: a page is `text/html`.
+  readonly contentType?: string;
 }
 
 export interface RangeServer {
   readonly url: string;
   // The Range header of every request received, in order.
   readonly ranges: (string | undefined)[];
+  // The User-Agent, Referer and Accept-Encoding of every request received, in order.
+  readonly asked: {
+    readonly userAgent: string | undefined;
+    readonly referer: string | undefined;
+    readonly acceptEncoding: string | undefined;
+  }[];
   close(): Promise<void>;
 }
 
@@ -56,6 +64,7 @@ async function send(
 // A real HTTP host on a free local port: the adapters are proven against sockets, not mocks.
 export async function startRangeServer(options: RangeServerOptions): Promise<RangeServer> {
   const ranges: (string | undefined)[] = [];
+  const asked: RangeServer['asked'][number][] = [];
   let drops = options.drops ?? 0;
   const mayDrop = () => {
     if (drops === 0) return false;
@@ -68,6 +77,11 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
 
   const server = createServer((request, response) => {
     ranges.push(request.headers.range);
+    asked.push({
+      userAgent: request.headers['user-agent'],
+      referer: request.headers.referer,
+      acceptEncoding: request.headers['accept-encoding'],
+    });
     if (options.status !== undefined) {
       response.writeHead(options.status).end();
       return;
@@ -83,7 +97,10 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
       response.writeHead(200, { 'content-length': '1' }).end(options.body.subarray(0, 1));
       return;
     }
-    const headers: Record<string, string> = { etag: '"v1"' };
+    const headers: Record<string, string> = {
+      etag: '"v1"',
+      ...(options.contentType === undefined ? {} : { 'content-type': options.contentType }),
+    };
     if (options.fileName !== undefined) {
       headers['content-disposition'] = `attachment; filename="${options.fileName}"`;
     }
@@ -115,6 +132,7 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
   return {
     url: `http://127.0.0.1:${String(port)}/files/sample.bin`,
     ranges,
+    asked,
     close: () =>
       new Promise((resolve) => {
         server.closeAllConnections();

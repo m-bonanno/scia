@@ -5,6 +5,8 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { type RangeServer, startRangeServer } from '@scia/server/testing/range-server.ts';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { YT_DLP_VERSION } from '../scripts/fetch-tools.ts';
+import { YT_DLP_OF_PLATFORM } from '../src/engine/runtime-layout.ts';
 import {
   launchScia,
   paste,
@@ -25,6 +27,8 @@ const VERSION = process.env.SCIA_VERSION;
 const INSTALL_DIR = join(process.env.LOCALAPPDATA ?? '', 'Programs', 'scia');
 const EXE = join(INSTALL_DIR, 'Scia.exe');
 const UNINSTALLER = join(INSTALL_DIR, 'Uninstall Scia.exe');
+// What the packing fetched beside the engine (electron-builder.yml, `extraResources`; ADR 0009).
+const YT_DLP = join(INSTALL_DIR, 'resources', 'tools', YT_DLP_OF_PLATFORM.win32!.file);
 // NSIS installs in seconds; a cold runner's disk is slow, and an uninstaller hands itself to a
 // copy in the temporary folder and returns before it has removed anything.
 const INSTALL_LIMIT_MS = 120_000;
@@ -74,6 +78,12 @@ describe('the installer, installed and started', () => {
 
     expect(await exists(EXE)).toBe(true);
     expect(await exists(UNINSTALLER)).toBe(true);
+  });
+
+  it('ships yt-dlp at the version it fixes, and yt-dlp answers', async () => {
+    const { stdout } = await run(YT_DLP, ['--version'], { timeout: 60_000 });
+
+    expect(stdout.trim()).toBe(YT_DLP_VERSION);
   });
 
   it('starts on a scratch profile as the packaged app of its version', async () => {

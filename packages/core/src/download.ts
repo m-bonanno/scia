@@ -1,3 +1,4 @@
+import { PageFailure } from './page.ts';
 import { ServiceFailure, UnlockFailure } from './service.ts';
 
 export const DownloadStatus = {
@@ -22,6 +23,8 @@ export const DownloadFailure = {
   // The link goes through a service, and the service refused or did not answer (service.ts).
   ...ServiceFailure,
   ...UnlockFailure,
+  // The link is a page, and the video in it was not downloaded (page.ts).
+  ...PageFailure,
 } as const;
 export type DownloadFailure = (typeof DownloadFailure)[keyof typeof DownloadFailure];
 

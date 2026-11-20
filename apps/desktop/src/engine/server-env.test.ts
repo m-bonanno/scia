@@ -9,6 +9,7 @@ const layout = {
   downloadDir: 'downloads',
   noticesPath: 'notices.json',
   keysDir: 'keys',
+  ytDlp: undefined,
 };
 
 describe('buildServerEnv', () => {
@@ -20,6 +21,7 @@ describe('buildServerEnv', () => {
         port: 47821,
         version: '1.0.0',
         systemRoot: undefined,
+        tempDir: 'temp',
       }),
     ).toEqual({
       SCIA_API_TOKEN: 'token',
@@ -28,6 +30,7 @@ describe('buildServerEnv', () => {
       SCIA_DOWNLOAD_DIR: 'downloads',
       SCIA_STATIC_DIR: 'renderer',
       SCIA_VERSION: '1.0.0',
+      SCIA_TEMP_DIR: 'temp',
     });
   });
 
@@ -38,9 +41,22 @@ describe('buildServerEnv', () => {
       port: 0,
       version: '1.0.0',
       systemRoot: undefined,
+      tempDir: 'temp',
       alldebridApi: 'http://127.0.0.1:8080',
     });
     expect(env.SCIA_ALLDEBRID_API).toBe('http://127.0.0.1:8080');
+  });
+
+  it('names the reader of pages only where one was shipped', () => {
+    const env = buildServerEnv({
+      layout: { ...layout, ytDlp: 'tools/yt-dlp.exe' },
+      apiToken: 'token',
+      port: 0,
+      version: '1.0.0',
+      systemRoot: undefined,
+      tempDir: 'temp',
+    });
+    expect(env.SCIA_YT_DLP).toBe('tools/yt-dlp.exe');
   });
 
   it('keeps SystemRoot on Windows, where the network stack needs it', () => {
@@ -50,6 +66,7 @@ describe('buildServerEnv', () => {
       port: 0,
       version: '1.0.0',
       systemRoot: 'C:\\Windows',
+      tempDir: 'temp',
     });
     expect(env.SystemRoot).toBe('C:\\Windows');
   });

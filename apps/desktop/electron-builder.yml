@@ -28,10 +28,18 @@ electronFuses:
   enableNodeOptionsEnvironmentVariable: false
   onlyLoadAppFromAsar: true
 
+# Fetches the programs shipped beside the engine for the system being packed, at the version and
+# checksum fixed in it (docs/adr/0009).
+beforePack: scripts/fetch-tools.ts
+
 # Mirrored by src/engine/runtime-layout.ts — change both together.
 extraResources:
   - from: ../renderer/dist
     to: renderer
+  - from: tools/${os}
+    to: tools
+  - from: third-party
+    to: third-party
 
 # Drawn from assets/icon.svg by `npm run icons` (scripts/icons/draw-icons.ts). The installer,
 # the uninstaller and the shortcuts take the exe's.
