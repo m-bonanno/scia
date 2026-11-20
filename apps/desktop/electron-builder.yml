@@ -30,8 +30,6 @@ electronFuses:
 
 # Mirrored by src/engine/runtime-layout.ts — change both together.
 extraResources:
-  - from: ../server/dist/server.cjs
-    to: server/server.cjs
   - from: ../renderer/dist
     to: renderer
 
