@@ -301,6 +301,18 @@ describe('Updates', () => {
       expect(fetches).toHaveLength(1);
     });
 
+    it('goes on with a download when a check finds the same version again', async () => {
+      const { updates, fetches, timers } = updating();
+      updates.engineSays({ idle: true });
+      updates.start();
+      await settle();
+
+      await elapse(timers);
+
+      expect(fetches).toHaveLength(1);
+      expect(fetches[0]!.signal.aborted).toBe(false);
+    });
+
     it('takes the newer version when one comes out while it downloads another', async () => {
       const { updates, fetches, timers, answering } = updating();
       updates.engineSays({ idle: true });
@@ -379,6 +391,15 @@ describe('Updates', () => {
       expect(fetches[0]!.signal.aborted).toBe(true);
     });
 
+    it('installs nothing while a newer version replaces the one downloaded', async () => {
+      const { updates, timers, fetches, answering } = await ready();
+      answering('1.2.0');
+      await elapse(timers);
+      expect(fetches).toHaveLength(2);
+
+      expect(await updates.atQuit({ askedByPerson: true })).toBe(false);
+    });
+
     it('installs a beta only when the switch is still on at the quit', async () => {
       let betas = true;
       const { updates } = await ready({ betas: async () => betas }, '1.1.0-beta.2');
@@ -389,9 +410,9 @@ describe('Updates', () => {
       expect(await second.updates.atQuit({ askedByPerson: true })).toBe(false);
     });
 
-    it('installs no beta when the engine does not say the setting at the quit', async () => {
+    it('installs no beta when the engine does not say the setting at the quit, and says why', async () => {
       let asked = 0;
-      const { updates } = await ready(
+      const { updates, lines } = await ready(
         {
           betas: async () => {
             asked += 1;
@@ -403,6 +424,15 @@ describe('Updates', () => {
       );
 
       expect(await updates.atQuit({ askedByPerson: true })).toBe(false);
+      expect(lines).toContainEqual({
+        level: 'warn',
+        event: 'update_not_installed',
+        data: {
+          version: '1.1.0-beta.2',
+          reason: 'betas_unknown',
+          error: 'Error: no answer in time',
+        },
+      });
     });
 
     it('asks the engine nothing at the quit for a stable', async () => {
@@ -420,17 +450,38 @@ describe('Updates', () => {
     });
 
     it('stops checking and downloading once the quit has begun', async () => {
-      const { updates, timers, checks, fetches, answering } = updating();
-      answering(undefined);
+      const { updates, timers, checks, fetches } = updating();
+      updates.engineSays({ idle: false });
       updates.start();
       await settle();
 
       await updates.atQuit({ askedByPerson: true });
       updates.engineSays({ idle: true });
+      await settle();
 
       expect(timers.every((timer) => timer.calledOff)).toBe(true);
       expect(checks).toHaveLength(1);
       expect(fetches).toHaveLength(0);
+    });
+
+    it('lets a check that was on its way at the quit start nothing', async () => {
+      let answer: (version: string) => void = () => undefined;
+      const { updates, timers, fetches } = updating({
+        check: () =>
+          new Promise<string>((resolve) => {
+            answer = resolve;
+          }),
+      });
+      updates.engineSays({ idle: true });
+      updates.start();
+      await settle();
+
+      await updates.atQuit({ askedByPerson: true });
+      answer('1.1.0');
+      await settle();
+
+      expect(fetches).toHaveLength(0);
+      expect(timers.filter((timer) => !timer.calledOff)).toHaveLength(0);
     });
 
     it('starts the installer it was told to, and says so in the log', async () => {
