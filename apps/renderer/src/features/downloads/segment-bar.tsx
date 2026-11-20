@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/cn.ts';
 
 const FILL: Readonly<Record<DownloadStatus, string>> = {
+  ready: 'bg-muted-foreground',
   downloading: 'bg-accent',
   queued: 'bg-muted-foreground',
   paused: 'bg-muted-foreground',

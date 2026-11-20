@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canPause, canResume, DownloadFailure, DownloadStatus } from './download.ts';
+import { canPause, canResume, canStart, DownloadFailure, DownloadStatus } from './download.ts';
 import { PageFailure } from './page.ts';
 import { ServiceFailure, UnlockFailure } from './service.ts';
 
@@ -16,6 +16,15 @@ describe('download status', () => {
     expect(canResume(DownloadStatus.Failed)).toBe(true);
     expect(canResume(DownloadStatus.Completed)).toBe(false);
     expect(canResume(DownloadStatus.Downloading)).toBe(false);
+    expect(canResume(DownloadStatus.Ready)).toBe(false);
+  });
+
+  it('starts what is ready, and pauses nothing that was never started', () => {
+    expect(canStart(DownloadStatus.Ready)).toBe(true);
+    for (const status of Object.values(DownloadStatus).filter((s) => s !== DownloadStatus.Ready)) {
+      expect(canStart(status), status).toBe(false);
+    }
+    expect(canPause(DownloadStatus.Ready)).toBe(false);
   });
 });
 

@@ -1,6 +1,6 @@
 import { Link } from 'lucide-react';
 import { type ReactNode, type SubmitEvent, useState } from 'react';
-import { extractLinks } from './links.ts';
+import { extractLinks } from '@scia/contracts/links';
 
 interface AddBarProps {
   // Resolves to whether the links were taken: the field is cleared only then.

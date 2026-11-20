@@ -510,6 +510,7 @@ describe('DownloadManager', () => {
       speedLimitBytesPerSecond: null,
       theme: 'black-tie',
       betaUpdates: false,
+      watchClipboard: false,
     });
     expect(existsSync(`${statePath}.unreadable`)).toBe(false);
   });

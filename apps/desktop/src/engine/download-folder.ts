@@ -28,7 +28,10 @@ export async function chooseDownloadFolder(
     signal: AbortSignal.timeout(limitMs),
   });
   if (!read.ok) throw new Error('The engine did not say its settings.');
-  const { downloadDirectory } = z.object({ data: settingsSchema }).parse(await read.json()).data;
+  // The one setting it needs: a setting it does not know never fails it (engine-settings.ts).
+  const { downloadDirectory } = z
+    .object({ data: settingsSchema.pick({ downloadDirectory: true }) })
+    .parse(await read.json()).data;
 
   const directory = await pick(downloadDirectory);
   if (directory === undefined) return FolderChange.Kept;

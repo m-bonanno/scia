@@ -151,7 +151,9 @@ describe('the engine API', () => {
     }
     await reader.cancel();
 
-    expect(heard.startsWith('event: snapshot\ndata: {"downloads":[]}\n\n')).toBe(true);
+    expect(
+      heard.startsWith('event: snapshot\ndata: {"downloads":[],"watchClipboard":false}\n\n'),
+    ).toBe(true);
     expect(heard.match(/event: snapshot/g)).toHaveLength(1);
     expect(heard.split(comment).length).toBeGreaterThanOrEqual(4);
   });
@@ -323,6 +325,83 @@ describe('the engine API', () => {
     expect(await betasOf(await turn(true))).toBe(true);
     expect(await betasOf(await call('/settings', { token: APP_TOKEN }))).toBe(true);
     expect(await betasOf(await turn(false))).toBe(false);
+  });
+
+  describe('the links of the clipboard', () => {
+    const offer = (urls: unknown, token = APP_TOKEN) =>
+      call('/downloads/offered', { method: 'POST', token, body: JSON.stringify({ urls }) });
+    const dataOf = async <T>(response: Response) => ((await response.json()) as { data: T }).data;
+
+    it('adds, for the app alone, the files among the links main read, ready and not started', async () => {
+      const response = await offer(['https://example.com/a.zip', 'https://example.com/blog/post']);
+
+      expect(response.status).toBe(200);
+      const added = await dataOf<{ fileName: string; status: string }[]>(response);
+      expect(added).toEqual([expect.objectContaining({ fileName: 'a.zip', status: 'ready' })]);
+      expect((await offer(['https://example.com/b.zip'], EXTENSION_TOKEN)).status).toBe(403);
+    });
+
+    it('answers an offer with nothing to take with an empty list', async () => {
+      const response = await offer(['https://example.com/photo.jpg']);
+
+      expect(response.status).toBe(200);
+      expect(await dataOf(response)).toEqual([]);
+    });
+
+    it('refuses what is not a list of http addresses', async () => {
+      const tooMany = Array.from({ length: 201 }, (_, n) => `https://example.com/${String(n)}.zip`);
+      for (const urls of [[], ['file:///c:/a.zip'], 'https://example.com/a.zip', tooMany]) {
+        expect((await offer(urls)).status).toBe(400);
+      }
+    });
+
+    it('starts a ready download for the app alone, and nothing that is not ready', async () => {
+      const [ready] = await dataOf<{ id: string }[]>(await offer(['https://example.com/a.zip']));
+      const start = (id: string, token = APP_TOKEN) =>
+        call(`/downloads/${id}/start`, { method: 'POST', token });
+
+      expect((await start(ready!.id, EXTENSION_TOKEN)).status).toBe(403);
+      const started = await start(ready!.id);
+      expect(started.status).toBe(200);
+      expect((await dataOf<{ status: string }>(started)).status).not.toBe('ready');
+      const again = await start(ready!.id);
+      expect(again.status).toBe(409);
+      expect(await codeOf(again)).toBe(ApiErrorCode.Conflict);
+      expect((await start('nope')).status).toBe(404);
+    });
+
+    it('starts every ready download at once, for the app alone', async () => {
+      await offer(['https://example.com/a.zip', 'https://example.com/b.zip']);
+      const startAll = (token = APP_TOKEN) =>
+        call('/downloads/start-ready', { method: 'POST', token });
+
+      expect((await startAll(EXTENSION_TOKEN)).status).toBe(403);
+      const started = await startAll();
+      expect(started.status).toBe(200);
+      expect((await dataOf<{ fileName: string }[]>(started)).map((d) => d.fileName)).toEqual([
+        'a.zip',
+        'b.zip',
+      ]);
+      expect(await dataOf(await startAll())).toEqual([]);
+    });
+
+    it('keeps the switch off until the person turns it on, and takes only a yes or a no', async () => {
+      const switchOf = async (response: Response) =>
+        (await dataOf<{ watchClipboard: unknown }>(response)).watchClipboard;
+      const turn = (watchClipboard: unknown) =>
+        call('/settings', {
+          method: 'PATCH',
+          token: APP_TOKEN,
+          body: JSON.stringify({ watchClipboard }),
+        });
+
+      expect(await switchOf(await call('/settings', { token: APP_TOKEN }))).toBe(false);
+      for (const refused of ['true', 1, null]) {
+        expect((await turn(refused)).status, String(refused)).toBe(400);
+      }
+      expect(await switchOf(await turn(true))).toBe(true);
+      expect(await switchOf(await turn(false))).toBe(false);
+    });
   });
 
   describe('the theme of the interface', () => {

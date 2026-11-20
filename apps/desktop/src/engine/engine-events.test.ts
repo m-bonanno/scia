@@ -1,5 +1,5 @@
 import { getEventListeners } from 'node:events';
-import type { Download } from '@scia/contracts';
+import type { Snapshot } from '@scia/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { EngineAccess } from './engine-access.ts';
 import { followDownloads, SseFrames } from './engine-events.ts';
@@ -29,7 +29,7 @@ function aDownload(id: string, status: string) {
 }
 
 const snapshot = (...downloads: unknown[]) =>
-  `event: snapshot\ndata: ${JSON.stringify({ downloads })}\n\n`;
+  `event: snapshot\ndata: ${JSON.stringify({ downloads, watchClipboard: false })}\n\n`;
 
 // An answer of the engine whose body the spec writes piece by piece, and ends when it likes.
 function aStream() {
@@ -60,6 +60,7 @@ function following(
 ) {
   const stopped = new AbortController();
   const seen: string[][] = [];
+  const watching: boolean[] = [];
   const warnings: string[] = [];
   const said: string[] = [];
   const waits: number[] = [];
@@ -77,8 +78,9 @@ function following(
       asked += 1;
       return { origin, apiToken: 'token', fetch };
     },
-    onDownloads: (downloads: readonly Download[]) => {
+    onSnapshot: ({ downloads, watchClipboard }: Snapshot) => {
       seen.push(downloads.map((download) => `${download.id}:${download.status}`));
+      watching.push(watchClipboard);
     },
     signal: stopped.signal,
     answerLimitMs: 50,
@@ -92,7 +94,7 @@ function following(
       info: (message) => said.push(message),
     },
   });
-  return { stopped, seen, warnings, said, waits, fetch, done };
+  return { stopped, seen, watching, warnings, said, waits, fetch, done };
 }
 
 describe('SseFrames', () => {
@@ -186,6 +188,22 @@ describe('followDownloads', () => {
     // Said once when the events are lost and once when they are back, not at every attempt.
     expect(follow.warnings).toEqual(['engine_events_lost']);
     expect(follow.said).toEqual(['engine_events_back']);
+    follow.stopped.abort();
+    await follow.done;
+  });
+
+  it('hands over, with each list, whether the clipboard is watched', async () => {
+    const stream = aStream();
+    const follow = following([async () => stream.response]);
+
+    stream.say(snapshot(aDownload('a', 'ready')));
+    stream.say(
+      `event: snapshot\ndata: ${JSON.stringify({ downloads: [], watchClipboard: true })}\n\n`,
+    );
+    await vi.waitFor(() => {
+      expect(follow.watching).toEqual([false, true]);
+    });
+
     follow.stopped.abort();
     await follow.done;
   });

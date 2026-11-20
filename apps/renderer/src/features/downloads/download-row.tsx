@@ -34,6 +34,8 @@ const KIND_ICON: Readonly<Record<FileKind, LucideIcon>> = {
 };
 
 export interface RowActions {
+  // A link taken from the clipboard waits for this press.
+  readonly start: (id: string) => void;
   readonly pause: (id: string) => void;
   readonly resume: (id: string) => void;
   // Unfinished bytes go with the row; a finished file stays where it is.
@@ -53,6 +55,7 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
   const Icon = KIND_ICON[download.kind];
   const completed = status === DownloadStatus.Completed;
   const failed = status === DownloadStatus.Failed;
+  const ready = status === DownloadStatus.Ready;
   const program = download.kind === FileKind.Program;
   const { open, reveal } = actions;
   const openButton = useRef<ConfirmButtonHandle>(null);
@@ -90,6 +93,16 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
+          {ready && (
+            <IconButton
+              label="Start"
+              onClick={() => {
+                actions.start(id);
+              }}
+            >
+              <Play size={16} aria-hidden="true" />
+            </IconButton>
+          )}
           {(status === DownloadStatus.Downloading || status === DownloadStatus.Queued) && (
             <IconButton
               label="Pause"
@@ -144,9 +157,10 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
             </IconButton>
           )}
           <ConfirmButton
-            label={completed ? 'Remove from list' : 'Cancel and delete'}
-            // A finished download only leaves the list; an unfinished one loses its bytes.
-            confirmLabel={completed ? undefined : 'Delete'}
+            label={completed ? 'Remove from list' : ready ? 'Remove' : 'Cancel and delete'}
+            // A finished download only leaves the list, and a ready one has nothing on the disk;
+            // an unfinished one loses its bytes.
+            confirmLabel={completed || ready ? undefined : 'Delete'}
             destructive
             onConfirm={() => {
               actions.remove(id);

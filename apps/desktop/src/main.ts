@@ -3,9 +3,10 @@ import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { BridgeChannel } from '@scia/contracts/bridge';
 import { DEFAULT_API_PORT, type Download, EVENTS_KEEP_ALIVE_MS } from '@scia/contracts';
-import { app, dialog, Notification, shell } from 'electron';
+import { app, clipboard, dialog, Notification, shell } from 'electron';
 import log from 'electron-log/main';
 import { APP_ID } from './engine/app-identity.ts';
+import { ClipboardWatch } from './engine/clipboard-watch.ts';
 import { CloseOutcome, WindowCloser } from './engine/close-policy.ts';
 import { activityOf, downloadActivity, unfinished } from './engine/download-activity.ts';
 import { chooseDownloadFolder, oneAtATime } from './engine/download-folder.ts';
@@ -20,6 +21,7 @@ import { EngineFailure, engineFailureNotice } from './engine/engine-failure.ts';
 import { betasOfEngine } from './engine/engine-settings.ts';
 import { KeyVault } from './engine/key-vault.ts';
 import { parseLaunchOptions } from './engine/launch-options.ts';
+import { offeredNotice, offerToEngine } from './engine/offered-links.ts';
 import { RestartPolicy } from './engine/restart-policy.ts';
 import { resolveRuntimeLayout } from './engine/runtime-layout.ts';
 import { buildServerEnv } from './engine/server-env.ts';
@@ -38,13 +40,17 @@ import { appOrigin, MainWindow } from './window.ts';
 // How long main waits for the engine to answer a question of its own. The engine is on this
 // computer: one that has not answered by then is not going to.
 const ENGINE_ANSWER_LIMIT_MS = 2000;
+// How long main waits for the engine to take the links read on the clipboard: the engine may ask
+// AllDebrid which hosts it knows first, within limits of its own.
+const OFFER_ANSWER_LIMIT_MS = 10_000;
 // How long main waits before it opens the engine's events again, when they end or are refused.
 const EVENTS_RETRY_MS = 1000;
 // The engine says it is still there every EVENTS_KEEP_ALIVE_MS: three of them missed are an
 // engine that stopped talking.
 const EVENTS_SILENCE_LIMIT_MS = 3 * EVENTS_KEEP_ALIVE_MS;
-// How many notifications of ended downloads are held so that a click on them still opens the
-// window: the ones on screen and the last ones in the system's list of notifications.
+// How many notifications — of ended downloads, of links taken from the clipboard — are held so that
+// a click on them still opens the window: the ones on screen and the last ones in the system's list
+// of notifications.
 const HELD_NOTICES = 20;
 
 const launch = parseLaunchOptions(process.argv, process.cwd());
@@ -161,7 +167,7 @@ async function boot(): Promise<void> {
   // Every one of them, not the last: an earlier notification is still on screen, or in the
   // system's list, and a click on it has to open the window too. Not let go when the system
   // says it closed — it says so as soon as it has shown it, while the person can still click.
-  const endedNotices = new Kept<Notification>(HELD_NOTICES);
+  const heldNotices = new Kept<Notification>(HELD_NOTICES);
 
   // What ended while Scia ran is said by the system when the person is not looking at the list
   // (engine/ended-downloads.ts, ended-batch.ts, ended-notice.ts). Main hears it from the
@@ -194,17 +200,17 @@ async function boot(): Promise<void> {
     if (isQuitting() || inFront || !Notification.isSupported()) return;
     const text = endedNotice(downloads, { lastOfHiddenScia });
     const shown = new Notification(text);
-    endedNotices.keep(shown);
+    heldNotices.keep(shown);
     shown.on('click', () => {
       log.info('ended_notice_clicked', {});
-      endedNotices.release(shown);
+      heldNotices.release(shown);
       openFromNotice();
     });
     shown.on('show', () => {
       log.info('ended_notice_shown', {});
     });
     shown.on('failed', (_event, error) => {
-      endedNotices.release(shown);
+      heldNotices.release(shown);
       log.warn('ended_notice_failed', { error });
     });
     // The title names no file: it is what was handed to the system, for whoever reads the log.
@@ -213,6 +219,43 @@ async function boot(): Promise<void> {
       bodyLines: text.body.split('\n').length,
       saysStillInTray: text.body.includes(STILL_IN_TRAY),
     });
+    shown.show();
+  }
+
+  // The links copied while the switch is on (engine/clipboard-watch.ts, docs/adr/0012): main
+  // reads the clipboard, the engine keeps what it knows, ready. Said by the system when the
+  // person is not looking at the list.
+  const clipboardWatch = new ClipboardWatch({
+    read: () => clipboard.readText(),
+    offer: async (links) => {
+      notifyOffered(await offerToEngine(links, engine(), OFFER_ANSWER_LIMIT_MS));
+    },
+    every: (ms, run) => {
+      const timer = setInterval(run, ms);
+      return () => {
+        clearInterval(timer);
+      };
+    },
+    log,
+  });
+
+  function notifyOffered(added: number): void {
+    const inFront = window.isInFront();
+    log.info('clipboard_links_added', { added, inFront });
+    if (added === 0 || isQuitting() || inFront || !Notification.isSupported()) return;
+    const text = offeredNotice(added);
+    const shown = new Notification(text);
+    heldNotices.keep(shown);
+    shown.on('click', () => {
+      heldNotices.release(shown);
+      openFromNotice();
+    });
+    shown.on('failed', (_event, error) => {
+      heldNotices.release(shown);
+      log.warn('offered_notice_failed', { error });
+    });
+    // What was handed to the system, for whoever reads the log: a count, no link.
+    log.info('offered_notice_asked', { title: text.title });
     shown.show();
   }
 
@@ -322,6 +365,7 @@ async function boot(): Promise<void> {
     quitting = true;
     listening.abort();
     endedBatch.stop();
+    clipboardWatch.watch(false);
     window.hide();
     tray?.destroy();
     // Whether to install is decided while the engine still runs (it keeps the betas switch), and
@@ -383,10 +427,12 @@ async function boot(): Promise<void> {
   // listens is taken for what had already ended — never said.
   void followDownloads({
     engine,
-    onDownloads: (downloads) => {
+    onSnapshot: ({ downloads, watchClipboard }) => {
       latest = downloads;
       updates?.engineSays({ idle: unfinished(activityOf(downloads)) === 0 });
       endedBatch.add(ended.seen(downloads));
+      // Heard here the moment it changes, whoever changed it; never after a quit has begun.
+      clipboardWatch.watch(watchClipboard && !isQuitting());
     },
     signal: listening.signal,
     answerLimitMs: ENGINE_ANSWER_LIMIT_MS,

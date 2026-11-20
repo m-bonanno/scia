@@ -43,6 +43,8 @@ describe('downloadActivity', () => {
         aDownload('d', 'paused'),
         aDownload('e', 'completed'),
         aDownload('f', 'failed'),
+        // Taken from the clipboard and not started: it waits for the person, not for the app.
+        aDownload('g', 'ready'),
       ],
     });
 

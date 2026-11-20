@@ -7,6 +7,7 @@ import { aDownload } from '@/test/a-download.ts';
 
 function actions(overrides: Partial<RowActions> = {}): RowActions {
   return {
+    start: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
     remove: vi.fn(),
@@ -39,6 +40,27 @@ describe('DownloadRow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(row.resume).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers a ready link its Start and its removal, at one press each, and nothing else', async () => {
+    const row = actions();
+    const ready = aDownload({ status: DownloadStatus.Ready, totalBytes: null, downloadedBytes: 0 });
+    render(<DownloadRow download={ready} actions={row} />);
+
+    expect(screen.getByText('Ready')).toHaveClass('text-muted-foreground');
+    expect(
+      screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')),
+    ).toEqual(['Start', 'Remove']);
+    // Its bar is empty and still: nothing has started.
+    expect(screen.getByRole('progressbar')).toBeEmptyDOMElement();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+    expect(row.start).toHaveBeenCalledExactlyOnceWith('d1');
+
+    // Nothing is on the disk yet: the row goes at the first press, asking nothing.
+    screen.getByRole('button', { name: 'Remove' }).focus();
+    await userEvent.keyboard('{Enter}');
+    expect(row.remove).toHaveBeenCalledExactlyOnceWith('d1');
   });
 
   it('shows the whole sentence of a failure, remedy included, where a running line is cut', () => {

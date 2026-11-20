@@ -17,6 +17,7 @@ const settings = {
   speedLimitBytesPerSecond: null,
   theme: 'black-tie',
   betaUpdates: false,
+  watchClipboard: false,
 } as const;
 
 // What the page hears of the engine: changed by a spec, then the page is rendered again.
@@ -75,6 +76,34 @@ describe('App', () => {
     );
     expect(notice).not.toHaveTextContent(ENGINE_UNREACHABLE);
     expect(openDownload).toHaveBeenCalledWith('d1');
+  });
+
+  it('offers "Start all" while there are ready links, and starts them all at one press', async () => {
+    const startReady = vi.spyOn(api, 'startReady').mockResolvedValue([]);
+    live.downloads = [aDownload({ status: DownloadStatus.Completed })];
+    const { rerender } = render(<App />);
+    expect(screen.queryByRole('button', { name: 'Start all' })).not.toBeInTheDocument();
+
+    live.downloads = [
+      aDownload({ id: 'a', status: DownloadStatus.Ready }),
+      aDownload({ id: 'b', status: DownloadStatus.Ready }),
+    ];
+    rerender(<App />);
+    await userEvent.click(screen.getByRole('button', { name: 'Start all' }));
+
+    expect(startReady).toHaveBeenCalledOnce();
+  });
+
+  it('starts one ready link from its row', async () => {
+    const start = vi
+      .spyOn(api, 'start')
+      .mockResolvedValue(aDownload({ status: DownloadStatus.Queued }));
+    live.downloads = [aDownload({ status: DownloadStatus.Ready })];
+    render(<App />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+    expect(start).toHaveBeenCalledExactlyOnceWith('d1');
   });
 
   it('wears the theme the engine keeps, and the one chosen in Settings as soon as it is kept', async () => {
