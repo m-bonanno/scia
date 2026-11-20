@@ -50,13 +50,13 @@ export function IntegrationsSection({ open, onError }: IntegrationsSectionProps)
         </p>
       </div>
       <ul className="flex flex-col gap-2">
-        {integrations.map((integration, index) => (
+        {integrations.map((integration) => (
           <IntegrationRow
             key={integration.id}
             integration={integration}
             onChange={(changed) => {
               setIntegrations((listed) =>
-                (listed ?? []).map((other, at) => (at === index ? changed : other)),
+                (listed ?? []).map((other) => (isSameService(other, changed) ? changed : other)),
               );
             }}
           />
@@ -64,6 +64,11 @@ export function IntegrationsSection({ open, onError }: IntegrationsSectionProps)
       </ul>
     </section>
   );
+}
+
+// Asked of two ids as text: with one service known, their type alone would say yes.
+function isSameService(one: { readonly id: string }, other: { readonly id: string }): boolean {
+  return one.id === other.id;
 }
 
 function accountLine(integration: Integration): string {
@@ -96,6 +101,9 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
   // Set when what the focus is on is about to leave the page: the control that takes its
   // place takes the focus too, as it arrives.
   const handFocusOn = useRef(false);
+  const row = useRef<HTMLLIElement>(null);
+  // Only a focus that is on what leaves is handed on: one that went elsewhere stays there.
+  const focusIsHere = () => row.current?.contains(document.activeElement) ?? false;
   const takeFocus = (control: { focus(): void } | null) => {
     if (control === null || !handFocusOn.current) return;
     handFocusOn.current = false;
@@ -109,7 +117,7 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
     api
       .connectIntegration(id, apiKey)
       .then((connected) => {
-        handFocusOn.current = true;
+        handFocusOn.current = focusIsHere();
         setEntering(false);
         setApiKey('');
         onChange(connected);
@@ -127,7 +135,7 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
     api
       .disconnectIntegration(id)
       .then(() => {
-        handFocusOn.current = true;
+        handFocusOn.current = focusIsHere();
         onChange({ id, connected: false, account: null, failure: null });
       })
       .catch((error: unknown) => {
@@ -142,7 +150,7 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
   );
 
   return (
-    <li className="flex flex-col gap-3">
+    <li ref={row} className="flex flex-col gap-3">
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-medium">{name}</p>
@@ -210,13 +218,14 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
             protects it.
           </p>
           <div className="flex justify-end gap-2">
-            {/* Not while the key is being checked: the check cannot be taken back, and a key
-                the service accepts meanwhile is kept. */}
+            {/* It does nothing while the key is being checked: the check cannot be taken back,
+                and a key the service accepts meanwhile is kept. */}
             <button
               type="button"
-              disabled={busy}
+              aria-disabled={busy}
               className={QUIET_BUTTON}
               onClick={() => {
+                if (busy) return;
                 handFocusOn.current = true;
                 setEntering(false);
                 setApiKey('');

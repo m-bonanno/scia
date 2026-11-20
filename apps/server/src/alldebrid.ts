@@ -75,7 +75,11 @@ export class AllDebrid {
     return {
       name: user.username,
       premium: user.isPremium,
-      premiumUntil: user.premiumUntil > 0 ? new Date(user.premiumUntil * 1000).toISOString() : null,
+      // A day only for an account that is premium, and only when the service gives one.
+      premiumUntil:
+        user.isPremium && user.premiumUntil > 0
+          ? new Date(user.premiumUntil * 1000).toISOString()
+          : null,
     };
   }
 

@@ -226,7 +226,7 @@ function PairingSection({
   return (
     <section className="flex flex-col gap-2">
       <div>
-        <p className="text-sm font-medium">Browser extension</p>
+        <h3 className="text-sm font-medium">Browser extension</h3>
         <p className="text-sm text-muted-foreground">
           Paste this code into the extension’s options. From then on, the extension sends Scia the
           links and the media of your pages.
