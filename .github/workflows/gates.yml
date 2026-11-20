@@ -92,6 +92,10 @@ jobs:
           key: electron-${{ runner.os }}-${{ hashFiles('apps/desktop/package.json') }}
       - name: Install
         run: npm ci
+      # Fetched here, from the cache when it holds it, rather than at the first spec's start, inside
+      # its time limit: npm ci can leave the binary to the first use (.claude/gotchas.md, Tooling).
+      - name: Electron's binary
+        run: node node_modules/electron/install.js
       - name: Build
         run: npm run build
       - name: E2E
