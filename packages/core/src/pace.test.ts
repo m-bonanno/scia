@@ -25,12 +25,26 @@ describe('Pacer', () => {
     expect(pacer.book(1, 5000)).toBe(0);
   });
 
-  it('gives no credit for a stretch with nothing to download: the rate is a ceiling', () => {
+  it('makes up for a wait that ended late, so that the line does not fall behind for it', () => {
+    // Ten milliseconds a booking.
+    const pacer = new Pacer(100_000);
+    pacer.book(1000, 0);
+    expect(pacer.book(1000, 0)).toBe(10);
+
+    // The wait of ten was thirty late, as a system's timer is: three bookings follow at once,
+    // where the line had been free, and the fourth waits again.
+    const waits = [1, 2, 3, 4].map(() => pacer.book(1000, 40));
+
+    expect(waits).toEqual([0, 0, 0, 10]);
+  });
+
+  it('makes up for no more than a twentieth of a second: the rate is a ceiling, not an average', () => {
     const pacer = new Pacer(1000);
     pacer.book(1, 0);
 
+    // A minute with nothing to download earns fifty milliseconds, not a minute.
     expect(pacer.book(1000, 60_000)).toBe(0);
-    expect(pacer.book(1000, 60_000)).toBe(1000);
+    expect(pacer.book(1000, 60_000)).toBe(950);
   });
 
   it('holds everyone who books together under the one rate', () => {
@@ -43,10 +57,12 @@ describe('Pacer', () => {
   it('does not take a clock that steps back for time still to wait', () => {
     const pacer = new Pacer(1000);
     pacer.book(1000, 60_000);
+    expect(pacer.book(1000, 60_000)).toBe(950);
 
-    // A minute earlier than the last time it was asked: the wait is what was booked, no more.
-    expect(pacer.book(1000, 0)).toBe(1000);
-    expect(pacer.book(1, 500)).toBe(1500);
+    // A minute earlier than the last time it was asked: the wait is what was booked — the two
+    // seconds, less the fifty milliseconds the first booking made up — and no minute more.
+    expect(pacer.book(1000, 0)).toBe(1950);
+    expect(pacer.book(1, 500)).toBe(2450);
   });
 
   it('answers a booking of nothing with the wait of whoever comes next', () => {
@@ -67,13 +83,13 @@ describe('Pacer', () => {
     expect(pacer.book(0, 0)).toBe(1000);
   });
 
-  it('gives no credit for what is given back when nothing is owed', () => {
+  it('gives no more credit than that for what is given back when nothing is owed', () => {
     const pacer = new Pacer(1000);
 
     pacer.book(-60_000, 0);
 
     expect(pacer.book(1000, 0)).toBe(0);
-    expect(pacer.book(1, 0)).toBe(1000);
+    expect(pacer.book(1, 0)).toBe(950);
   });
 
   it('forgets what was booked when the limit changes, and lifts it at once', () => {

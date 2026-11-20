@@ -1,5 +1,10 @@
+// How far back a booking may start. A wait never ends on time — a system's timer may fire
+// fifteen milliseconds late, more than a read's turn under a high limit — and what the late
+// wake lost is made up, to this much and no more.
+const MADE_UP_MS = 50;
+
 // Holds everything that books with it under one rate. A ceiling, not an average to catch up
-// with: a stretch with nothing to download earns no credit.
+// with: a stretch with nothing to download earns MADE_UP_MS of credit, however long it was.
 export class Pacer {
   #bytesPerSecond: number | null;
   #freeAtMs = 0;
@@ -23,8 +28,8 @@ export class Pacer {
     if (nowMs < this.#askedAtMs) this.#freeAtMs -= this.#askedAtMs - nowMs;
     this.#askedAtMs = nowMs;
     if (this.#bytesPerSecond === null) return 0;
-    const startAt = Math.max(nowMs, this.#freeAtMs);
+    const startAt = Math.max(nowMs - MADE_UP_MS, this.#freeAtMs);
     this.#freeAtMs = startAt + (bytes * 1000) / this.#bytesPerSecond;
-    return startAt - nowMs;
+    return Math.max(0, startAt - nowMs);
   }
 }

@@ -313,6 +313,25 @@ describe('DownloadManager', () => {
     expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
   });
 
+  it('reaches a high limit on one connection: a wait that ends late is made up', async () => {
+    const large = randomBytes(32 * MIB);
+    const { url } = await host({ body: large, fileName: 'Film.mkv' });
+    const downloads = await open();
+    // A read every two and a half milliseconds: less than a system's timer may take to fire.
+    downloads.updateSettings({ speedLimitBytesPerSecond: 25 * MIB, connectionsPerDownload: 1 });
+
+    const startedAt = Date.now();
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+    const took = Date.now() - startedAt;
+
+    // Thirty-two megabytes at twenty-five a second: 1.28 seconds. Not faster, and not at a
+    // third of the limit, which is what one read a tick comes to.
+    expect(took).toBeGreaterThan(1150);
+    expect(took).toBeLessThan(1900);
+    expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), large)).toBe(0);
+  });
+
   it('reads no more than the limit gives while the connections of a download open, from a host that does not pause', async () => {
     const { url } = await host({ body: randomBytes(8 * MIB) });
     const downloads = await open();

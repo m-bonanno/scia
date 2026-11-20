@@ -13,7 +13,8 @@ export interface Hold {
 
 // What one connection has booked of the limit, from before it asks its host to its last read.
 export interface Allowance {
-  // Asked before every read, the first included: books what is missing to a whole read.
+  // Asked before every read, the first included: books up to a whole read when what is booked
+  // no longer covers a read of the size the connection makes.
   next(): Hold;
   // What a read brought.
   took(bytes: number): void;
@@ -24,10 +25,20 @@ export interface Allowance {
 const NO_HOLD: Hold = { ms: 0, over: () => Promise.resolve() };
 
 // The speed limit as connections meet it: one for every connection of every download. A
-// connection reads only against room for a whole read, booked before it: nothing is read that
-// the limit has not made room for — from the first byte, and with nothing left owed by a
-// download that is paused or removed. The one exception is a read already under way when a
-// limit is set or lowered: it is taken, and paid for before the next.
+// connection reads only against room booked before the read — a whole read's before its first,
+// then room for the largest read it has made — and gives back what it did not read, so a
+// download that is paused or removed leaves nothing owed.
+//
+// Nothing is read that the limit has not made room for, from the first byte, but for three
+// things, each with its bound:
+// 1. when a limit is set or lowered, each connection in the middle of a read finishes that
+//    read — one read at most — and pays for it before its next;
+// 2. a read larger than any its connection has made before passes what was booked by the
+//    difference — less than one read over the connection's whole life — and is paid for
+//    before the next;
+// 3. a booking may start up to 50 ms in the past, so that a wait that ends late is caught up
+//    (`Pacer`): the limit is passed by no more than 50 ms' worth of it, and nothing beyond
+//    that is ever caught up.
 export class Throttle {
   readonly #pacer: Pacer;
   readonly #now: () => number;
@@ -54,6 +65,10 @@ export class Throttle {
     // Booked and not read yet; below zero for a read made without a booking.
     let unread = 0;
     let left = expectedBytes ?? Number.POSITIVE_INFINITY;
+    // What a read of this connection brings: a whole one until it has made one. Over an
+    // encrypted connection a read is a record of 16 KB, and one booking covers four.
+    let aRead = READ_BYTES;
+    let hasRead = false;
     let under = this.#changes;
     // A limit that changed has forgotten what was booked with the old one.
     const current = () => {
@@ -61,11 +76,12 @@ export class Throttle {
       unread = 0;
       under = this.#changes;
     };
-    // Books what is missing to a whole read and answers the wait for it.
+    // Books what is missing to a whole read, when what is booked does not cover the next, and
+    // answers the wait for it.
     const book = (): number => {
       current();
-      const missing = Math.min(READ_BYTES, left) - unread;
-      if (missing <= 0) return 0;
+      if (unread >= Math.min(aRead, left)) return 0;
+      const missing = Math.min(Math.max(READ_BYTES, aRead), left) - unread;
       unread += missing;
       return this.#pacer.book(missing, this.#now());
     };
@@ -75,6 +91,8 @@ export class Throttle {
         current();
         unread -= bytes;
         left = Math.max(0, left - bytes);
+        aRead = hasRead ? Math.max(aRead, bytes) : bytes;
+        hasRead = true;
       },
       settle: () => {
         current();

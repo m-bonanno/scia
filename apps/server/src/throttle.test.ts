@@ -74,6 +74,92 @@ describe('Throttle', () => {
     expect(throttle.allowance().next().ms).toBe(1000);
   });
 
+  it('does not let the line fall behind for a timer that fires late', async () => {
+    // Ten milliseconds a read.
+    const throttle = new Throttle(BOOKED * 100, now);
+    const reading = throttle.allowance();
+    reading.next();
+    reading.took(BOOKED);
+    const wait = watch(reading.next().over(never));
+
+    // The ten milliseconds asked for take forty, as they do on a system whose timer ticks.
+    clockMs += 30;
+    await pass(10);
+    expect(wait.over).toBe(true);
+
+    // The reads that the late wake held up follow at once; then the limit holds again.
+    const holds = [1, 2, 3, 4].map(() => {
+      reading.took(BOOKED);
+      return reading.next().ms;
+    });
+    expect(holds).toEqual([0, 0, 0, 10]);
+  });
+
+  it('waits once for as many reads as a booking covers, where a read is smaller than a whole one', () => {
+    const throttle = new Throttle(BOOKED, now);
+    const overTls = throttle.allowance();
+    overTls.next();
+
+    // A quarter of a whole read each time, as a record of an encrypted connection is.
+    const holds = [1, 2, 3, 4].map(() => {
+      overTls.took(BOOKED / 4);
+      return overTls.next().ms;
+    });
+
+    // Nothing more is booked while what is booked covers a read of the size it has made.
+    expect(holds).toEqual([0, 0, 0, 1000]);
+    expect(throttle.allowance().next().ms).toBe(2000);
+  });
+
+  it('keeps room for the largest read the connection has made, not for the last', () => {
+    const throttle = new Throttle(BOOKED, now);
+    const uneven = throttle.allowance();
+    uneven.next();
+    uneven.took(BOOKED);
+    expect(uneven.next().ms).toBe(1000);
+
+    // A short read after a whole one: three quarters are still booked, and a whole read may
+    // come next. The quarter that is missing is booked now, not after it was passed.
+    uneven.took(BOOKED / 4);
+    expect(uneven.next().ms).toBe(2000);
+  });
+
+  it('has a read larger than any the connection made before paid for before the next', () => {
+    const throttle = new Throttle(BOOKED, now);
+    const growing = throttle.allowance();
+    growing.next();
+    growing.took(BOOKED / 4);
+    growing.took(BOOKED / 4);
+    growing.took(BOOKED / 4);
+
+    // A quarter is booked, and the read brings a whole one: three quarters beyond the booking.
+    growing.took(BOOKED);
+    expect(growing.next().ms).toBe(1000);
+
+    // The three quarters and the next whole read: a second and three quarters after the first.
+    expect(throttle.allowance().next().ms).toBe(2750);
+  });
+
+  it('never leaves a whole read unpaid, however the reads of a connection grow', () => {
+    const throttle = new Throttle(BOOKED, now);
+    const growing = throttle.allowance();
+    growing.next();
+    // Seven reads of an eighth: the eighth still booked covers another like them.
+    const small = [1, 2, 3, 4, 5, 6, 7].map(() => {
+      growing.took(BOOKED / 8);
+      return growing.next().ms;
+    });
+    expect(small).toEqual([0, 0, 0, 0, 0, 0, 0]);
+
+    // Then a whole one: seven eighths beyond what was booked, the most a read can pass it by.
+    growing.took(BOOKED);
+    expect(growing.next().ms).toBe(1000);
+    growing.settle();
+
+    // Everything it read is booked: fifteen eighths, a second and seven eighths.
+    expect(throttle.allowance().next().ms).toBe(1875);
+  });
+
   it('books no more than its range can still bring', () => {
     const throttle = new Throttle(BOOKED, now);
     const small = throttle.allowance(BOOKED / 4);
