@@ -17,13 +17,15 @@ export interface RuntimeLayout {
   readonly ytDlp: string | undefined;
 }
 
-// The folder of each system's tools, and the name yt-dlp has in it. Mirrors TOOLS in
-// scripts/fetch-tools.mjs and `tools/${os}` in electron-builder.yml: change them together.
-const YT_DLP_OF_PLATFORM: Readonly<Partial<Record<NodeJS.Platform, { os: string; file: string }>>> =
-  {
-    win32: { os: 'win', file: 'yt-dlp.exe' },
-    linux: { os: 'linux', file: 'yt-dlp' },
-  };
+// The folder of each system's tools — electron-builder's name of the system, which `tools/${os}`
+// in electron-builder.yml also gives — and the name yt-dlp has in it. The one place these are
+// written: scripts/fetch-tools.ts fetches into them.
+export const YT_DLP_OF_PLATFORM: Readonly<
+  Partial<Record<NodeJS.Platform, { readonly os: string; readonly file: string }>>
+> = {
+  win32: { os: 'win', file: 'yt-dlp.exe' },
+  linux: { os: 'linux', file: 'yt-dlp' },
+};
 
 export interface LayoutInput {
   readonly isPackaged: boolean;

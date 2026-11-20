@@ -14,6 +14,8 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 ## Formatting numbers
 
+- → The editing tools of a session turn ` ` written in their text into the character itself, and so do PowerShell strings passed through them: three rounds of #101 put an invisible no-break space in a spec and in a component, which `no-irregular-whitespace` caught only in the component. In code, use `NBSP` from `lib/format.ts`; in a spec, write the escape with a script that builds its backslash, and check with `git grep -nP '\xa0'`.
+
 - → Grouping depends on the locale's CLDR data, not on intuition: `en-US` writes `1,000`, while `it-IT` leaves a four-digit number ungrouped (`1000`). A spec expects what `Intl` says for the `LOCALE` of `@scia/contracts/locale`.
 - → The unit is tied to its number with a non-breaking space, written as the escape `\u00a0`, never as the invisible character itself.
 - → Testing Library normalises the white space of the text it reads, the non-breaking space included, but not of the string it is asked for: a spec finds a formatted amount with a regular expression (`/^10\.0\sMB\/s$/`), not with the string.

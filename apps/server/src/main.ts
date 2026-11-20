@@ -38,8 +38,8 @@ async function extensionTokenIn(dataDir: string): Promise<string> {
   return token;
 }
 
-// A page that yt-dlp has said nothing of in this long is given up: it waits up to 30 s on a
-// silent site itself (`--socket-timeout`), and asks a site more than once.
+// A read of a page that has not ended in this long is given up, however much yt-dlp said: it
+// waits up to 30 s on a silent site itself (`--socket-timeout`), and may ask a site several times.
 const PAGE_READ_LIMIT_MS = 90_000;
 
 // A yt-dlp that is named and missing reads no page: pages are fetched as they stand, as without

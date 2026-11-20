@@ -30,7 +30,7 @@ electronFuses:
 
 # Fetches the programs shipped beside the engine for the system being packed, at the version and
 # checksum fixed in it (docs/adr/0009).
-beforePack: scripts/fetch-tools.mjs
+beforePack: scripts/fetch-tools.ts
 
 # Mirrored by src/engine/runtime-layout.ts — change both together.
 extraResources:
