@@ -12,12 +12,12 @@ Scia ships for Windows. On 20 November 2026 the pipeline was:
 - **On a merge into `develop` or `main`**, semantic-release tagged the commit at once. The required checks are not `strict`: a PR green against an older `develop` could be squashed into a commit no check had run on, and be published as a beta.
 - **In a release**, the Windows installer was built and its files were checked to exist; nothing installed or started it. An updater that follows the betas ([ADR 0007](./0007-automatic-updates.md)) would have installed a broken one before anyone did.
 
-The owner asked whether the pipeline had E2E, unit, integration, feature and smoke tests on every PR and release, and decided the open points on 20 November 2026, as four answers to multiple-choice questions:
+The owner asked whether the pipeline had E2E, unit, integration, feature and smoke tests on every PR and release, and decided the open points on 20 November 2026, as four answers to multiple-choice questions (#90; the burn-in's ten runs are #93):
 
 1. **The E2E suite is written with `playwright-core`'s Electron driver, run by Vitest** as a project of its own.
 2. **The installer is installed and started in CI on every PR, and in every release before its files are attached.** A stable is still installed by a person over the previous stable: the update path is not the smoke test's.
 3. **The gates run again on the commit a merge makes, before semantic-release tags it.**
-4. **A new check is advisory until it has run ten times in a row green on CI, then it is required** on `develop` and `main`. No automatic retries.
+4. **A new check is advisory until it has run ten times in a row green on CI, then it is required** on `develop` and `main`. No automatic retries. **Advisory means outside GitHub's branch protection, and nothing else** (the owner, the same day, #90): the team merges only with it green, and a release waits for it like any gate.
 
 ## Decision
 
@@ -53,17 +53,17 @@ The owner asked whether the pipeline had E2E, unit, integration, feature and smo
 - **No automatic retries**, in Vitest or in the workflows: a retry turns a failure into a pass and hides it. A failure is read; a spec that failed without a cause in the change is a bug of the spec or of the app, filed as an issue with its log.
 - **A flaky spec is fixed, or quarantined** — skipped with the issue's number beside it — never run again until it passes. A quarantine is a debt the roadmap does not count as held.
 - **The timing lessons of `.claude/gotchas.md` hold for the new layers**: a state is waited for with `until`, never a fixed sleep; a bound is set against a cold start on a CI runner, and against what the code does without the thing held; a rate is counted against a host that sends as fast as it is read.
-- **A new job is advisory until its burn-in** (the owner's decision 4): it runs ten times in a row green on one commit, started by hand, before it becomes required. A job that fails its burn-in is mended first.
+- **A new job is advisory until its burn-in** (the owner's decision 4): it runs ten times in a row green on one commit, started by hand, before GitHub's branch protection requires it. Advisory is that alone: from its first run a red job is a red gate — the team does not merge on it ([`review-flow.md`](../development/review-flow.md), "What is blocking"), and the release's gates wait for it. An unstable spec it carries is therefore fixed or quarantined at once, not lived with. A job that fails its burn-in is mended first.
 
 ### What it costs
 
-Nothing. The repository is public: GitHub's standard hosted runners, Linux and Windows, are free for it, and so are their minutes. `playwright-core` is free software (Apache-2.0). No larger runner, no paid service. Time is what it costs: a PR waits about seven minutes instead of one and a half, its jobs running side by side; a beta about seven minutes more, the gates running before the tag.
+Nothing. The repository is public: GitHub's standard hosted runners, Linux and Windows, are free for it, and so are their minutes. `playwright-core` is free software (Apache-2.0). No larger runner, no paid service. Time is what it costs. Measured on #94: the Ubuntu job took 1 min 22 s and the Windows job 1 min 24 s, side by side, so a PR and a beta's gates wait about a minute and a half, as before. Estimated, once the E2E job (#91) and the smoke test (#92) are in, from the release's installer job (1 min 39 s to 2 min 45 s) and the E2E suite's first runs: a PR waits about seven minutes, its jobs running side by side, and a beta about seven minutes more than before this pipeline. The estimate is replaced by the measured times as each lands.
 
 ### What a person still does
 
-- **A stable is installed over the previous stable** and run, before the release PR is called done: the smoke test installs on a clean runner, not over an earlier Scia ([`release-flow.md`](../development/release-flow.md)).
+- **A stable is installed over the previous stable, when there is one**, and run, before the release PR is called done: the smoke test installs on a clean runner, not over an earlier Scia. `release-flow.md` is to say so with the smoke test (#92).
 - **What the system draws and only a person sees** — a notification, the tray, a hand on the mouse, SmartScreen on a downloaded installer — stays with a person, as the roadmap lists it.
-- **The author runs the gates before opening a PR** ([`review-flow.md`](../development/review-flow.md)): on this Windows machine, the E2E suite too, once it exists, when the change touches the app's runtime.
+- **The author runs the gates before opening a PR** ([`review-flow.md`](../development/review-flow.md)): on Windows, the E2E suite too, once it exists (#91), when the change touches the app's runtime.
 
 ### The order it is built in
 
@@ -75,13 +75,14 @@ Four PRs, each closing its issue: the Windows job and the gates before a tag (#9
 - **Committing the DevTools harnesses as they were**: no new dependency, and more code to keep — every wait, every selector and every launch written by hand.
 - **The smoke test in releases only**: a packaging broken by a PR would be found after the merge, on a beta already tagged.
 - **Releases as drafts, published after the smoke test**: the strictest, and a change to semantic-release's configuration and to the updater's assumptions (ADR 0007) for a gain the order "smoke, then attach" already gives — a release whose smoke test fails has no installer, and an updater has nothing to install.
-- **Trusting the PR's checks on a merge**: a beta seven minutes sooner, from a commit no check ran on.
+- **Trusting the PR's checks on a merge**: a beta a few minutes sooner, from a commit no check ran on.
 - **Required branches up to date before a merge** (`strict`): a merge of `develop` and another run for nearly every PR, with several sessions working at once.
-- **The new checks required at once**: one unstable spec would block every PR of every session.
+- **The new checks required at once**: GitHub's protection changed before the job had shown it holds. A red job already blocks the team's merge and the release from its first run (decision 4), so an unstable spec does stop every session's PRs until it is mended or quarantined; what the burn-in still buys is that the branch protection — which binds every PR, a fork's and Dependabot's included, and is changed only on the owner's word — is changed for a job seen green ten times in a row.
 
 ## Consequences
 
-- A PR to `develop` or `main` waits for four jobs on two systems. A beta is published about seven minutes later than before.
+- A PR to `develop` or `main` waits for jobs on two systems — four, with #91 and #92 — and a beta for its gates before its tag ("What it costs").
+- A red new job blocks the team's merge and every beta from its first run, before it is required: one unstable Windows spec holds them all. The way out is to mend it, or skip it with the number of an issue that carries its log — never a retry.
 - A merge whose commit is red publishes nothing; whoever merged it mends it in the next PR.
 - The required checks change in #93, on the owner's word: `git-flow.md`, "Repository settings", lists them.
 - A job's name is a required check's name: renaming one blocks every PR until the protection is changed with it.
