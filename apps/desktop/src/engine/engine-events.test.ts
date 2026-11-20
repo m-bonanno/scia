@@ -1,3 +1,4 @@
+import { getEventListeners } from 'node:events';
 import type { Download } from '@scia/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { EngineAccess } from './engine-access.ts';
@@ -151,8 +152,11 @@ describe('followDownloads', () => {
 
     expect(follow.waits).toEqual([700]);
     expect(follow.fetch.mock.calls[1]![0]).toBe('http://127.0.0.1:50000/api/v1/events');
+    // One attempt listens for the stop at a time: the one that ended took its listener away.
+    expect(getEventListeners(follow.stopped.signal, 'abort')).toHaveLength(1);
     follow.stopped.abort();
     await follow.done;
+    expect(getEventListeners(follow.stopped.signal, 'abort')).toHaveLength(0);
   });
 
   it('tries again after a refusal, and after an engine that does not answer in time', async () => {

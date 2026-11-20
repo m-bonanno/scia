@@ -134,4 +134,33 @@ describe('endedNotice', () => {
     }
     expect(flags.replaceAll('🇮🇹', '')).not.toMatch(/[\u{1F1E6}-\u{1F1FF}]/u);
   });
+
+  it('counts the end it keeps in characters too: ten of them, not ten units of the text', () => {
+    // Ten units back from the extension fall in the middle of an emoji in both names.
+    const holidays = endedNotice(
+      [completed(`${'1234567890'.repeat(3)}${'😀'.repeat(6)}-holidays.mp4`)],
+      going,
+    ).body;
+    const laughing = endedNotice(
+      [completed(`${'a'.repeat(40)}${'😂'.repeat(4)}abc.mp4`)],
+      going,
+    ).body;
+    const halved = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+    expect(halved.test(holidays), holidays).toBe(false);
+    expect(holidays.endsWith('…😀-holidays.mp4')).toBe(true);
+    expect(halved.test(laughing), laughing).toBe(false);
+    expect(laughing.endsWith('…aaa😂😂😂😂abc.mp4')).toBe(true);
+  });
+
+  it('counts the room in characters too: a name of emoji that fits the line is left whole', () => {
+    // Thirty-four characters as a person sees them, sixty-four units of the text.
+    const fits = `${'😀'.repeat(30)}.mkv`;
+
+    expect(endedNotice([completed(fits)], going).body).toBe(fits);
+    // Marked, the room is thirty-two: seventeen, the mark of the cut, the ten kept and ".mkv".
+    expect(endedNotice([failed(fits), completed('a.mkv')], going).body).toBe(
+      `Failed: ${'😀'.repeat(17)}…${'😀'.repeat(10)}.mkv\na.mkv`,
+    );
+  });
 });
