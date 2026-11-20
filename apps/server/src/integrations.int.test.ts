@@ -182,6 +182,8 @@ describe('Integrations', () => {
     expect(performance.now() - started).toBeLessThan(300);
     expect(listed).toEqual([{ id: 'alldebrid', connected: true, account: null, failure: null }]);
     // The question is still out: its answer is there for a later listing, and not asked twice.
+    // The service is let speak only once it has the question, or it would answer it in time.
+    await until(() => service.requests.length === 1);
     service.misbehave(undefined);
     await until(async () => (await integrations.list())[0]?.failure !== null);
     expect(service.requests).toHaveLength(1);
