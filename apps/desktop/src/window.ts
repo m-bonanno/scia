@@ -3,6 +3,7 @@ import { ResolvedTheme, WINDOW_COLOURS } from '@scia/contracts/theme';
 import { BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, nativeTheme } from 'electron';
 import { guardPermissions } from './engine/page-permissions.ts';
 import { hasIntegratedTitleBar, titleBarOverlay, windowFrameOptions } from './engine/title-bar.ts';
+import { isInFront, isPutAway, type WindowState } from './engine/window-state.ts';
 
 export interface WindowLog {
   warn(message: string, details: object): void;
@@ -106,6 +107,24 @@ export class MainWindow {
 
   isVisible(): boolean {
     return !this.#window.isDestroyed() && this.#window.isVisible();
+  }
+
+  // Whether the person is looking at it (engine/window-state.ts).
+  isInFront(): boolean {
+    return !this.#window.isDestroyed() && isInFront(this.#state());
+  }
+
+  // Whether it was put away for the tray to bring back — not merely minimised.
+  isPutAway(): boolean {
+    return !this.#window.isDestroyed() && isPutAway(this.#state());
+  }
+
+  #state(): WindowState {
+    return {
+      visible: this.#window.isVisible(),
+      minimised: this.#window.isMinimized(),
+      focused: this.#window.isFocused(),
+    };
   }
 
   // The system's own folder dialog, over this window, opened on `current`. Undefined when the

@@ -1,5 +1,7 @@
+import { downloadSchema } from '@scia/contracts';
 import { describe, expect, it, vi } from 'vitest';
-import { downloadActivity, unfinished } from './download-activity.ts';
+import { z } from 'zod';
+import { activityOf, downloadActivity, unfinished } from './download-activity.ts';
 import type { EngineAccess } from './engine-access.ts';
 
 function aDownload(id: string, status: string) {
@@ -48,6 +50,14 @@ describe('downloadActivity', () => {
     const [url, init] = engine.fetch.mock.calls[0]!;
     expect(url).toBe('http://127.0.0.1:47821/api/v1/downloads');
     expect(init.headers).toEqual({ authorization: 'Bearer token' });
+  });
+
+  it('counts the same from a list main already has', () => {
+    const list = z
+      .array(downloadSchema)
+      .parse([aDownload('a', 'downloading'), aDownload('b', 'queued'), aDownload('c', 'failed')]);
+
+    expect(activityOf(list)).toEqual({ downloading: 1, queued: 1 });
   });
 
   it('counts nothing in an empty list', async () => {

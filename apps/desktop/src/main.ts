@@ -1,15 +1,20 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { BridgeChannel } from '@scia/contracts/bridge';
-import { DEFAULT_API_PORT } from '@scia/contracts';
+import { DEFAULT_API_PORT, type Download } from '@scia/contracts';
 import { app, dialog, Notification, shell } from 'electron';
 import log from 'electron-log/main';
 import { APP_ID } from './engine/app-identity.ts';
 import { CloseOutcome, WindowCloser } from './engine/close-policy.ts';
-import { downloadActivity } from './engine/download-activity.ts';
+import { activityOf, downloadActivity, unfinished } from './engine/download-activity.ts';
 import { chooseDownloadFolder, oneAtATime } from './engine/download-folder.ts';
 import { completedDownloadPath } from './engine/download-location.ts';
+import { EndedBatch } from './engine/ended-batch.ts';
+import { type Ended, EndedDownloads, Ending } from './engine/ended-downloads.ts';
+import { endedNotice } from './engine/ended-notice.ts';
 import type { EngineAccess } from './engine/engine-access.ts';
+import { followDownloads } from './engine/engine-events.ts';
 import { EngineFailure, engineFailureNotice } from './engine/engine-failure.ts';
 import { parseLaunchOptions } from './engine/launch-options.ts';
 import { RestartPolicy } from './engine/restart-policy.ts';
@@ -26,6 +31,8 @@ import { appOrigin, MainWindow } from './window.ts';
 // How long main waits for the engine to answer a question of its own. The engine is on this
 // computer: one that has not answered by then is not going to.
 const ENGINE_ANSWER_LIMIT_MS = 2000;
+// How long main waits before it opens the engine's events again, when they end or are refused.
+const EVENTS_RETRY_MS = 1000;
 
 const launch = parseLaunchOptions(process.argv, process.cwd());
 if (launch.userDataDir !== undefined) {
@@ -123,6 +130,49 @@ async function boot(): Promise<void> {
   });
   // Kept while it is on screen: a notification nobody holds is collected, and its click is lost.
   let notice: Notification | undefined;
+  let endedOnScreen: Notification | undefined;
+
+  // What ended while Scia ran is said by the system when the person is not looking at the list
+  // (engine/ended-downloads.ts, ended-batch.ts, ended-notice.ts). Main hears it from the
+  // engine's own events, not from the page, which may be hidden.
+  const ended = new EndedDownloads();
+  let latest: readonly Download[] = [];
+  const listening = new AbortController();
+  const endedBatch = new EndedBatch({
+    wait: (ms, run) => {
+      const timer = setTimeout(run, ms);
+      return () => {
+        clearTimeout(timer);
+      };
+    },
+    deliver: notifyEnded,
+  });
+
+  function notifyEnded(downloads: readonly Ended[]): void {
+    const inFront = window.isInFront();
+    // Idle in the tray: the window was put away and nothing is running or waiting any more.
+    const lastOfHiddenScia = window.isPutAway() && unfinished(activityOf(latest)) === 0;
+    const completed = downloads.filter((download) => download.ending === Ending.Completed).length;
+    log.info('downloads_ended', {
+      completed,
+      failed: downloads.length - completed,
+      inFront,
+      lastOfHiddenScia,
+    });
+    // A person looking at the list sees its rows change.
+    if (isQuitting() || inFront || !Notification.isSupported()) return;
+    endedOnScreen = new Notification(endedNotice(downloads, { lastOfHiddenScia }));
+    endedOnScreen.on('click', () => {
+      window.focus();
+    });
+    endedOnScreen.on('show', () => {
+      log.info('ended_notice_shown', {});
+    });
+    endedOnScreen.on('failed', (_event, error) => {
+      log.warn('ended_notice_failed', { error });
+    });
+    endedOnScreen.show();
+  }
 
   async function closeRequested(): Promise<void> {
     const result = await closer.close();
@@ -176,6 +226,8 @@ async function boot(): Promise<void> {
     event.preventDefault();
     if (quitting) return;
     quitting = true;
+    listening.abort();
+    endedBatch.stop();
     window.hide();
     tray?.destroy();
     void supervisor.stop().finally(() => {
@@ -221,4 +273,16 @@ async function boot(): Promise<void> {
   }
   log.info('engine_ready', { port });
   window.followServer(port);
+  void followDownloads({
+    engine,
+    onDownloads: (downloads) => {
+      latest = downloads;
+      endedBatch.add(ended.seen(downloads));
+    },
+    signal: listening.signal,
+    answerLimitMs: ENGINE_ANSWER_LIMIT_MS,
+    retryMs: EVENTS_RETRY_MS,
+    sleep: (ms, signal) => sleep(ms, undefined, { signal }),
+    log,
+  });
 }

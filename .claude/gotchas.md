@@ -65,6 +65,8 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 - → A page's `window.close()` destroys the window at once: Electron does not emit a preventable `close` for it. A harness that wants what the X does follows `docs/development/testing.md`, "Proving the real app".
 - → A debugging port answers before the window has a page: a harness waits for a `page` target, not just for the port.
+- → `BrowserWindow.isVisible()` is false for a minimised window on Windows: "hidden in the tray" is not shown _and_ not minimised. A notification told a person whose window was on the taskbar that Scia was in the system tray; the run in the real app showed it, no spec could (#45).
+- → A fake answer in a spec does not end when its request is aborted, as a real one does: a reader that waits on a stream is closed by whoever reads it (`reader.cancel()`), not left to the request's signal. The specs of main's ear on the engine hung until it did (#45).
 - → A very long profile path breaks Chromium's GPU cache (`The filename or extension is too long`). Harmless in a scratch folder; a sign to shorten the path, not a bug of the app.
 - → Over the DevTools protocol, Enter presses a focused button only when its `keyDown` carries `text: '\r'`: without it the key arrives and nothing is pressed, and the harness proves nothing while looking as if it had.
 - → A real double click over the DevTools protocol is two `mousePressed`/`mouseReleased` pairs at the same point with `clickCount` 1, then 2: `element.click()` from the page arrives with `detail` 0 and takes the roads a pointer never takes.
