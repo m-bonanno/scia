@@ -22,7 +22,9 @@ export interface ByteRange {
 // service or an HLS playlist will be others (docs/adr/0001).
 export interface RemoteSource {
   probe(url: string, headers: RequestHeaders, signal: AbortSignal): Promise<RemoteFile>;
-  // The bytes of `range`, or the whole file from its first byte when null.
+  // The bytes of `range`, or the whole file from its first byte when null. What is answered is
+  // read at once, to its end or until the reader leaves the loop, which closes it: a body that
+  // nobody starts to read is watched by nothing, and keeps its connection.
   open(
     url: string,
     headers: RequestHeaders,

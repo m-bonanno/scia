@@ -16,8 +16,8 @@ import {
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 const MAX_REDIRECTS = 10;
-// A host that owes an answer or more of a body, and sends nothing for this long, is dead: the
-// segment tries again.
+// A host is dead when it has not answered a request this long after it was made, or when a
+// read has waited this long for more of a body: the segment tries again.
 const IDLE_TIMEOUT_MS = 30_000;
 const SILENT = 'The host stopped answering.';
 const BUSY = new Set([408, 425, 429]);
@@ -190,7 +190,9 @@ export class HttpSource implements RemoteSource {
             resolve({ response, url: target.href, redirected: redirects > 0 });
             return;
           }
-          response.resume();
+          // Closed, not drained: a body that was announced and never comes would keep the
+          // connection for good, now that nothing times a socket nobody reads.
+          response.destroy();
           if (redirects >= MAX_REDIRECTS) {
             reject(new RemoteError(DownloadFailure.Network, false, 'Too many redirects.'));
             return;

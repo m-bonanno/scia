@@ -6,6 +6,7 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest';
 import { HttpSource } from './http-source.ts';
 import { RemoteError } from './remote-source.ts';
 import { type RangeServer, startRangeServer } from './testing/range-server.ts';
+import { until } from './testing/scratch.ts';
 
 const MIB = 1024 * 1024;
 const IDLE_MS = 150;
@@ -73,5 +74,33 @@ describe('HttpSource.open and a host that goes silent', () => {
     expect(failure).toBeInstanceOf(RemoteError);
     expect((failure as RemoteError).failure).toBe(DownloadFailure.Network);
     expect((failure as RemoteError).retryable).toBe(true);
+  });
+
+  it('closes the connection of a redirect whose body never comes, and follows it all the same', async () => {
+    const body = randomBytes(64 * 1024);
+    const target = await startRangeServer({ body });
+    server = target;
+    let redirectOpen = false;
+    // Announces a body with its redirect and never sends it.
+    const redirecting = createServer((socket) => {
+      redirectOpen = true;
+      socket.on('close', () => {
+        redirectOpen = false;
+      });
+      socket.on('error', () => undefined);
+      socket.once('data', () => {
+        socket.write(`HTTP/1.1 302 Found\r\nLocation: ${target.url}\r\nContent-Length: 10\r\n\r\n`);
+      });
+    });
+    mute = redirecting;
+    await new Promise<void>((resolve) => redirecting.listen(0, '127.0.0.1', resolve));
+    const { port } = redirecting.address() as AddressInfo;
+
+    const stream = await source.open(`http://127.0.0.1:${String(port)}/file.bin`, {}, null, signal);
+    const chunks: Uint8Array[] = [];
+    for await (const chunk of stream) chunks.push(chunk);
+
+    expect(Buffer.compare(Buffer.concat(chunks), body)).toBe(0);
+    await until(() => !redirectOpen, 2000);
   });
 });

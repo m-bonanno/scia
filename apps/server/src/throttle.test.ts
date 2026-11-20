@@ -49,18 +49,70 @@ describe('Throttle', () => {
     expect(holds).toEqual([0, 1000, 2000]);
   });
 
-  it('books again only when what was booked has been read', () => {
+  it('books before every read what the last one took: a read is made only against room for a whole one', () => {
     const throttle = new Throttle(BOOKED, now);
-    const trickling = throttle.allowance();
-    trickling.next();
+    const reading = throttle.allowance();
+    reading.next();
 
-    trickling.took(1000);
-    expect(trickling.next().ms).toBe(0);
-    // Nothing more was booked for it: another connection waits for the one booking only.
+    // A first read is short of a whole one — by the answer's headers, in a real one; by an
+    // eighth here: what is left of the booking is not room for the next.
+    reading.took((BOOKED * 7) / 8);
+    expect(reading.next().ms).toBe(1000);
+    reading.took(BOOKED);
+    expect(reading.next().ms).toBe(1875);
+
+    // Two reads were taken and a third is booked: three seconds' worth, less the eighth.
+    expect(throttle.allowance().next().ms).toBe(2875);
+  });
+
+  it('books nothing more while what is booked is a whole read', () => {
+    const throttle = new Throttle(BOOKED, now);
+    const idle = throttle.allowance();
+    idle.next();
+
+    expect(idle.next().ms).toBe(0);
     expect(throttle.allowance().next().ms).toBe(1000);
+  });
 
-    trickling.took(BOOKED - 1000);
-    expect(trickling.next().ms).toBe(2000);
+  it('books no more than its range can still bring', () => {
+    const throttle = new Throttle(BOOKED, now);
+    const small = throttle.allowance(BOOKED / 4);
+    small.next();
+
+    expect(throttle.allowance().next().ms).toBe(250);
+    small.took(BOOKED / 4);
+    expect(small.next().ms).toBe(0);
+    small.settle();
+    expect(throttle.allowance().next().ms).toBe(1250);
+  });
+
+  it('lets a read that is under way when a limit is set finish, and has it paid for before the next', () => {
+    const throttle = new Throttle(null, now);
+    const [first, second] = [throttle.allowance(), throttle.allowance()];
+    first.next();
+    second.next();
+
+    throttle.limit(BOOKED);
+    // Both were in the middle of a read: it cannot be taken back, one read each passes.
+    first.took(BOOKED);
+    second.took(BOOKED);
+
+    // Each books the read it made and the one it asks for: two seconds' worth each.
+    expect(first.next().ms).toBe(0);
+    expect(second.next().ms).toBe(2000);
+    expect(throttle.allowance().next().ms).toBe(4000);
+  });
+
+  it('forgets, when the limit changes, what a connection had booked under the old one', () => {
+    const throttle = new Throttle(BOOKED, now);
+    const reading = throttle.allowance();
+    reading.next();
+
+    throttle.limit(BOOKED);
+
+    // It books its read again: the limit that took the first booking is gone.
+    expect(reading.next().ms).toBe(0);
+    expect(throttle.allowance().next().ms).toBe(1000);
   });
 
   it('gives back what a connection booked and did not read', () => {

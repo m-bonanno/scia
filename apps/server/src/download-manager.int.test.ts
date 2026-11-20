@@ -276,7 +276,8 @@ describe('DownloadManager', () => {
   it('frees every connection at once when the limit is lifted, without stopping the download', async () => {
     const { url } = await host({ fileName: 'Film.mkv' });
     const downloads = await open();
-    // Eight connections with a read each to wait for: the last of them is owed eight seconds.
+    // Four megabytes are four ranges, a connection each, a second apart: three of them are
+    // waiting to open when the limit is lifted, the last for three seconds.
     downloads.updateSettings({ speedLimitBytesPerSecond: 64 * 1024 });
 
     const [added] = downloads.add({ urls: [url] });
@@ -294,7 +295,8 @@ describe('DownloadManager', () => {
   it('does not keep a paused download waiting on the limit, and resumes it byte for byte', async () => {
     const { url } = await host({ fileName: 'Film.mkv' });
     const downloads = await open();
-    // Eight connections, each waiting up to eight seconds for its turn when the pause comes.
+    // Four connections, a second apart: three are waiting to open when the pause comes, the
+    // last for three seconds, and the first for the four seconds before its next read.
     downloads.updateSettings({ speedLimitBytesPerSecond: 64 * 1024 });
 
     const [added] = downloads.add({ urls: [url] });
@@ -311,23 +313,89 @@ describe('DownloadManager', () => {
     expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
   });
 
-  it('leaves nothing owed by a download paused while its connections wait their turn', async () => {
-    const film = await host({ fileName: 'Film.mkv' });
+  it('reads no more than the limit gives while the connections of a download open, from a host that does not pause', async () => {
+    const { url } = await host({ body: randomBytes(8 * MIB) });
+    const downloads = await open();
+    const limit = 256 * 1024;
+    downloads.updateSettings({ speedLimitBytesPerSecond: limit });
+
+    const startedAt = Date.now();
+    const [added] = downloads.add({ urls: [url] });
+    // The two seconds in which the eight connections open, a quarter of a second apart: the
+    // wait is the stretch that is measured.
+    await until(() => Date.now() - startedAt >= 2000);
+    const read = downloads.find(added!.id).downloadedBytes;
+    const given = (limit * (Date.now() - startedAt)) / 1000;
+
+    // What the limit gives, to within a read: not a second read on each connection's turn.
+    expect(read).toBeLessThanOrEqual(given + 64 * 1024);
+    expect(read).toBeGreaterThan(given / 2);
+  });
+
+  it('lets the reads under way finish when a limit is set, one for each connection, and has them paid for', async () => {
+    // Fast enough to be reading on every connection, slow enough to last: 50 MB/s over eight.
+    const { url } = await host({ body: randomBytes(32 * MIB), chunkDelayMs: 10 });
+    // What the engine reads, counted as it takes it: what it has written lags behind.
+    let read = 0;
+    const counting: ManagerDeps['source'] = {
+      probe: (...asked) => source.probe(...asked),
+      open: async (...asked) => {
+        const answer = await source.open(...asked);
+        return (async function* () {
+          for await (const chunk of answer) {
+            read += chunk.byteLength;
+            yield chunk;
+          }
+        })();
+      },
+    };
+    const downloads = await open({ source: counting });
+    const limit = 256 * 1024;
+    const aRead = 64 * 1024;
+
+    downloads.add({ urls: [url] });
+    await until(() => read > 2 * MIB);
+    downloads.updateSettings({ speedLimitBytesPerSecond: limit });
+    const setAt = Date.now();
+    const readAtSet = read;
+    const since = () => ({ bytes: read - readAtSet, given: (limit * (Date.now() - setAt)) / 1000 });
+
+    // Half a second later: the eight reads that were under way, and no second one beside them.
+    await until(() => Date.now() - setAt >= 500);
+    const early = since();
+    expect(early.bytes).toBeLessThanOrEqual(8 * aRead + early.given + aRead);
+
+    // Each connection books the read it made with the next one, so the first round goes at half
+    // the limit: four seconds, after which what was read is what the limit gives.
+    await until(() => Date.now() - setAt >= 4500);
+    const late = since();
+    expect(late.bytes).toBeLessThanOrEqual(late.given + 2 * aRead);
+    expect(late.bytes).toBeGreaterThan(late.given * 0.7);
+  });
+
+  it('leaves nothing owed by a download paused in its stride, or while its connections wait their turn', async () => {
+    const film = await host({ body: randomBytes(8 * MIB), fileName: 'Film.mkv' });
     const cover = randomBytes(60_000);
     const image = await host({ body: cover, fileName: 'cover.jpg' });
     const downloads = await open();
-    // Eight connections: one has read, seven have booked the seconds after it.
-    downloads.updateSettings({ speedLimitBytesPerSecond: 64 * 1024 });
-    const [paused] = downloads.add({ urls: [film.url] });
-    await until(() => downloads.find(paused!.id).downloadedBytes > 0);
-    await downloads.pause(paused!.id);
+    downloads.updateSettings({ speedLimitBytesPerSecond: 256 * 1024 });
+    for (const reads of [1, 12]) {
+      // After one read the other seven connections have booked and not read; after twelve,
+      // every connection has read and waits its turn again.
+      const [paused] = downloads.add({ urls: [film.url] });
+      await until(() => downloads.find(paused!.id).downloadedBytes >= reads * 60_000);
+      await downloads.pause(paused!.id);
 
-    const addedAt = Date.now();
-    const [added] = downloads.add({ urls: [image.url] });
-    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+      const addedAt = Date.now();
+      const [added] = downloads.add({ urls: [image.url] });
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
 
-    // It waits for the one read that was made, a second at most — not for the seven that were not.
-    expect(Date.now() - addedAt).toBeLessThan(2500);
+      // It waits for the read under way when the pause came, a quarter of a second at most,
+      // and takes the quarter of a second its own bytes need — not a turn of the paused eight.
+      expect(Date.now() - addedAt, `paused after ${String(reads)} reads`).toBeLessThan(900);
+      await downloads.remove(paused!.id, true);
+      await downloads.remove(added!.id, false);
+    }
     expect(Buffer.compare(await readFile(inDownloads('cover.jpg')), cover)).toBe(0);
   });
 

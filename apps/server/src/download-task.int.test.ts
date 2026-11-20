@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DownloadFailure, isComplete, planSegments, type Segment } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -120,6 +120,28 @@ describe('DownloadTask against a real HTTP host', () => {
     expect(failure).toBeInstanceOf(RemoteError);
   });
 
+  it('empties the file before it asks a host without ranges, not between the answer and the reading of it', async () => {
+    const { url } = await host({ ranges: false });
+    await writeFile(partPath, 'what an earlier attempt left here');
+    let sizeWhenAsked: number | undefined;
+    const download = task(url, {
+      resumable: false,
+      segments: [],
+      source: {
+        probe: (...asked) => source.probe(...asked),
+        open: async (...asked) => {
+          sizeWhenAsked = (await stat(partPath)).size;
+          return source.open(...asked);
+        },
+      },
+    });
+
+    await download.run(new AbortController().signal);
+
+    expect(sizeWhenAsked).toBe(0);
+    expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+  });
+
   it('takes the whole file in one connection from a host without ranges', async () => {
     const { url, ranges } = await host({ ranges: false });
     const download = task(url, { resumable: false, segments: [] });
@@ -201,7 +223,7 @@ describe('DownloadTask against a real HTTP host', () => {
         connections: 1,
         segments: [{ start: 0, end: small.length, downloaded: 0 }],
         allowance: () => {
-          const own = allowance();
+          const own = allowance(null);
           return {
             ...own,
             next: () => {
@@ -223,6 +245,46 @@ describe('DownloadTask against a real HTTP host', () => {
         ...Array.from({ length: reads }, () => ['a asks', 'a waits', 'a took']).flat(),
         'a settles',
       ]);
+    });
+
+    it('tells the limit how much each connection can bring, when its host says', async () => {
+      const told: (number | null)[] = [];
+      const quiet = (expectedBytes: number | null) => {
+        told.push(expectedBytes);
+        return {
+          next: () => ({ ms: 0, over: () => Promise.resolve() }),
+          took: () => undefined,
+          settle: () => undefined,
+        };
+      };
+      const signal = new AbortController().signal;
+
+      const ranged = await host({ body: small });
+      await task(ranged.url, {
+        totalBytes: small.length,
+        connections: 1,
+        segments: [{ start: 50_000, end: small.length, downloaded: 0 }],
+        allowance: quiet,
+      }).run(signal);
+      await server?.close();
+      const whole = await host({ body: small, ranges: false });
+      await task(whole.url, {
+        totalBytes: small.length,
+        resumable: false,
+        segments: [],
+        allowance: quiet,
+      }).run(signal);
+      await server?.close();
+      const sizeless = await host({ body: small, ranges: false, announcesLength: false });
+      await task(sizeless.url, {
+        totalBytes: null,
+        resumable: false,
+        segments: [],
+        allowance: quiet,
+      }).run(signal);
+
+      // What is left of the range, the whole file, and nothing when the host does not say.
+      expect(told).toEqual([small.length - 50_000, small.length, null]);
     });
 
     it('does the same on a host without ranges', async () => {

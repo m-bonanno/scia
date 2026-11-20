@@ -37,6 +37,7 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 - → A bound in a timing spec is set against what the code does without the thing held, not against what it does with it: "a pause under a limit takes less than a second" passed with the wait deaf to the pause, because one read at the floor is a second and the unguarded pause took 980 ms. Make what is owed several times the bound, and see the spec fail with the guard taken out (#44).
 - → A spec written after its code is seen failing by taking the code's line away, one at a time — also the ones that "obviously" hold: a read made "when the engine is reached, and again when it comes back" stayed green with the read made at mount only, because the spec's connection never changed (#44).
+- → A number in a spec's comment, and in the PR body that quotes it, is counted from the run, not from the setting: eight connections were configured, and a file of four megabytes made four (#44).
 
 ## Docs and runbooks
 
@@ -53,7 +54,9 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → `IncomingMessage` must be destroyed, or drained, on every path that does not read it to the end: a redirect, a refused status. Otherwise the socket stays busy.
 
 - → A wait added inside a loop is tried against every timer that already watches that loop, at the largest numbers the settings allow. A connection that waits its turn under a speed limit is silent to its socket: the 30 s idle timeout cut it and asked the host again, for every read, from 160 connections at 256 KB/s — and no spec with one download could see it (#44).
-- → A limit is paid before the read, not after it. Paid after, a loop that books past its "is this the end?" never booked the last read — a file that arrives in one read was not limited at all — and, once that was mended, every connection still took its first read unpaid and left it owed when its download was removed: 10 MB at once and then 40 s without a byte, at the most Settings allows. No spec with one download showed either; the second was found by the run in the real app at those numbers (#44).
+- → A limit is paid before the read, not after it, and a read is made only against room for a whole one. Paid after, a loop that books past its "is this the end?" never booked the last read — a file that arrives in one read was not limited at all — and, once that was mended, every connection still took its first read unpaid and left it owed when its download was removed: 10 MB at once and then 40 s without a byte, at the most Settings allows. Paid before, but only when nothing was left of the last booking, the 128 bytes an answer's headers leave let a whole read through: twice the limit while connections opened (#44).
+- → A rate is proven against a host that sends as fast as it is read, and counted in bytes the engine took — not in bytes written, which lag, and not in the speed shown. A test host that pauses between pieces hid a limit passed twofold, in the specs and in the real app (#44).
+- → A guard that is taken away is searched for everything else it was guarding. The idle timer that left the socket was also what ended a redirect's drain and an answer nobody read (#44).
 - → Nothing that paces or times out runs on `Date.now()`: the system's clock steps. `performance.now()` does not (#44).
 
 ## Electron

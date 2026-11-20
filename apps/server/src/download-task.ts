@@ -41,8 +41,9 @@ export interface TaskOptions {
   readonly segments: readonly Segment[];
   readonly onBytes: (count: number) => void;
   // The speed limit: what a connection books of it before each read, from before it asks its
-  // host to its last read (throttle.ts).
-  readonly allowance?: () => Allowance;
+  // host to its last read (throttle.ts). It is told how much the connection's range can bring,
+  // when the host says.
+  readonly allowance?: (expectedBytes: number | null) => Allowance;
   readonly retryDelayMs?: (attempt: number) => number;
 }
 
@@ -237,7 +238,7 @@ export class DownloadTask {
   }
 
   async #streamSegment(index: number, file: FileHandle, signal: AbortSignal): Promise<void> {
-    const allowance = this.#options.allowance?.();
+    const allowance = this.#options.allowance?.(remainingBytes(this.#segment(index)));
     try {
       // Before the host is asked, not after: a connection is not opened to be left unread.
       await allowance?.next().over(signal);
@@ -332,7 +333,7 @@ export class DownloadTask {
   }
 
   async #streamWhole(file: FileHandle, signal: AbortSignal): Promise<void> {
-    const allowance = this.#options.allowance?.();
+    const allowance = this.#options.allowance?.(this.#options.totalBytes);
     try {
       await allowance?.next().over(signal);
       await this.#streamWholeBooked(file, signal, allowance);

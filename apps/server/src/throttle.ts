@@ -1,8 +1,7 @@
 import { Pacer } from '@scia/core';
 
-// What a connection books before it reads: Node hands a socket's bytes over in reads of at most
-// this, so one booking is one read from a host that keeps up, and several from one that trickles.
-const BOOKED_BYTES = 64 * 1024;
+// The most a read brings: Node hands a socket's bytes over in pieces of at most this.
+const READ_BYTES = 64 * 1024;
 
 // What the limit asks of a connection before a read.
 export interface Hold {
@@ -14,20 +13,21 @@ export interface Hold {
 
 // What one connection has booked of the limit, from before it asks its host to its last read.
 export interface Allowance {
-  // Asked before every read, the first included: books more when what was booked is used up.
+  // Asked before every read, the first included: books what is missing to a whole read.
   next(): Hold;
   // What a read brought.
   took(bytes: number): void;
-  // The connection is done, whatever ended it: what it booked and did not read is given back,
-  // what it read beyond its booking is counted.
+  // The connection is done, whatever ended it: what it booked and did not read is given back.
   settle(): void;
 }
 
 const NO_HOLD: Hold = { ms: 0, over: () => Promise.resolve() };
 
 // The speed limit as connections meet it: one for every connection of every download. A
-// connection books before it reads, so nothing arrives that the limit has not made room for —
-// from the first byte, and with nothing left owed by a download that is paused or removed.
+// connection reads only against room for a whole read, booked before it: nothing is read that
+// the limit has not made room for — from the first byte, and with nothing left owed by a
+// download that is paused or removed. The one exception is a read already under way when a
+// limit is set or lowered: it is taken, and paid for before the next.
 export class Throttle {
   readonly #pacer: Pacer;
   readonly #now: () => number;
@@ -48,33 +48,44 @@ export class Throttle {
     for (const wake of [...this.#waiting]) wake();
   }
 
-  allowance(): Allowance {
-    // Booked and not read yet; below zero when a read brought more than was booked.
+  // `expectedBytes` is what the connection's range can bring, when its host says: a small file
+  // books its own size, not a whole read's turn.
+  allowance(expectedBytes: number | null = null): Allowance {
+    // Booked and not read yet; below zero for a read made without a booking.
     let unread = 0;
+    let left = expectedBytes ?? Number.POSITIVE_INFINITY;
     let under = this.#changes;
+    // A limit that changed has forgotten what was booked with the old one.
+    const current = () => {
+      if (under === this.#changes) return;
+      unread = 0;
+      under = this.#changes;
+    };
+    // Books what is missing to a whole read and answers the wait for it.
+    const book = (): number => {
+      current();
+      const missing = Math.min(READ_BYTES, left) - unread;
+      if (missing <= 0) return 0;
+      unread += missing;
+      return this.#pacer.book(missing, this.#now());
+    };
     return {
-      next: () => {
-        if (unread > 0) return NO_HOLD;
-        unread += BOOKED_BYTES;
-        under = this.#changes;
-        return this.#book(BOOKED_BYTES, () => {
-          under = this.#changes;
-        });
-      },
+      next: () => this.#hold(book(), book),
       took: (bytes) => {
+        current();
         unread -= bytes;
+        left = Math.max(0, left - bytes);
       },
       settle: () => {
-        // A limit that changed since has forgotten this booking: there is nothing to give back.
-        if (under === this.#changes) this.#pacer.book(-unread, this.#now());
+        current();
+        this.#pacer.book(-unread, this.#now());
         unread = 0;
       },
     };
   }
 
-  // `again` is told each time a changed limit has the same bytes booked anew.
-  #book(bytes: number, again: () => void): Hold {
-    const ms = this.#pacer.book(bytes, this.#now());
+  // `again` books anew, and answers the new wait, each time the limit changes meanwhile.
+  #hold(ms: number, again: () => number): Hold {
     if (ms <= 0) return NO_HOLD;
     const booked = this.#changes;
     return {
@@ -87,8 +98,7 @@ export class Throttle {
             return;
           }
           under = this.#changes;
-          waitMs = this.#pacer.book(bytes, this.#now());
-          again();
+          waitMs = again();
         }
       },
     };

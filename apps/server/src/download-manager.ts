@@ -437,7 +437,7 @@ export class DownloadManager {
         onBytes: (count) => {
           running.meter.record(count, this.#now());
         },
-        allowance: () => this.#throttle.allowance(),
+        allowance: (expectedBytes) => this.#throttle.allowance(expectedBytes),
         ...(this.#deps.retryDelayMs === undefined ? {} : { retryDelayMs: this.#deps.retryDelayMs }),
       });
       running.task = task;
