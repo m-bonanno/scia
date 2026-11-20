@@ -15,7 +15,8 @@ const settings = {
   connectionsPerDownload: 8,
   downloadDirectory: '/home/me/Downloads',
   speedLimitBytesPerSecond: null,
-};
+  theme: 'black-tie',
+} as const;
 
 // What the page hears of the engine: changed by a spec, then the page is rendered again.
 const live = vi.hoisted((): { connection: Live.Connection; downloads: Download[] } => ({
@@ -45,6 +46,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   delete window.scia;
+  delete document.documentElement.dataset.theme;
 });
 
 describe('App', () => {
@@ -60,6 +62,7 @@ describe('App', () => {
       revealDownload: vi.fn(async () => undefined),
       openDownload,
       chooseDownloadFolder: vi.fn(async () => 'kept'),
+      themeChanged: vi.fn(async () => undefined),
     };
     render(<App />);
 
@@ -71,6 +74,22 @@ describe('App', () => {
     );
     expect(notice).not.toHaveTextContent(ENGINE_UNREACHABLE);
     expect(openDownload).toHaveBeenCalledWith('d1');
+  });
+
+  it('wears the theme the engine keeps, and the one chosen in Settings as soon as it is kept', async () => {
+    vi.spyOn(api, 'settings').mockResolvedValue({ ...settings, theme: 'brick' });
+    vi.spyOn(api, 'updateSettings').mockResolvedValue({ ...settings, theme: 'space' });
+    render(<App />);
+    await vi.waitFor(() => {
+      expect(document.documentElement.dataset.theme).toBe('brick');
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    await userEvent.selectOptions(await screen.findByRole('combobox', { name: 'Theme' }), 'Space');
+
+    await vi.waitFor(() => {
+      expect(document.documentElement.dataset.theme).toBe('space');
+    });
   });
 
   it('says beside the total speed that a limit is on, as the engine has it', async () => {

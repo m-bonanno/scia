@@ -23,6 +23,7 @@ You are the senior product manager of Scia. You hold the vision (`docs/product/v
 What earlier reviews taught, each with the PR that taught it.
 
 - A "done" added to the roadmap needs its evidence in the same PR; a sentence that is not a translation is not part of a translation. (#4)
+- A statement of state names only what is in the tree: "the app's icon and the extension's are still teal" was written of two icons that do not exist. Before a line says what something still is, find the file. (#52)
 
 - A "refused" in an issue is checked against what a person can actually choose: the system's dialog hands over only folders that exist, and those were never refused on Windows — the specs held a path no dialog can produce (#38).
 
@@ -32,7 +33,7 @@ What earlier reviews taught, each with the PR that taught it.
 
 - What a run "read" is checked against what the log can hold: "the script read what main asked the system to show" rested on a log that carried counts and no words. (#51)
 
-- The evidence of a run is read as one story: a count "in the whole run" beside sentences of a restart that must have asked again cannot both be true. And "all of it by keys, in both themes" on the roadmap is checked against the list of what was done by keys and looked at in each theme. (#53)
+- The evidence of a run is read as one story: a count "in the whole run" beside sentences of a restart that must have asked again cannot both be true. And "all of it by keys, in both themes" — both variants, since #52 — on the roadmap is checked against the list of what was done by keys and looked at in each variant. (#53)
 
 ## Output
 

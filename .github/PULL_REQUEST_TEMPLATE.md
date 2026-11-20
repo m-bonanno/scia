@@ -36,5 +36,5 @@ _What this PR deliberately does not do._
 - [ ] The gates, all of them (`docs/development/review-flow.md`) — green: _N tests passed_
 - [ ] Real-runtime evidence _(shell, boot, quit, packaging)_: _what ran, what the log says_
 - [ ] Keyboard-only path checked _(UI changes)_
-- [ ] Both themes checked _(UI changes)_
+- [ ] Light and dark variants checked, in the default theme _(UI changes; every theme when a token or a pairing of tokens changes)_
 - [ ] Manual smoke: _what to do → expected outcome_

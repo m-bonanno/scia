@@ -3,7 +3,7 @@ import { needsPairing, SendOutcome, sendToScia } from './scia-client.ts';
 import { forgetMedia, loadSettings, rememberMedia } from './storage.ts';
 
 const MENU_ID = 'scia-download';
-const BADGE_COLOUR = '#0a7f69';
+const BADGE_COLOUR = '#202020';
 const FEEDBACK_MS = 1500;
 
 async function showCount(tabId: number, count: number): Promise<void> {

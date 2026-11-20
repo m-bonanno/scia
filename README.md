@@ -9,9 +9,10 @@ A download manager for Windows, with Linux to follow: paste a link, Scia fetches
 - Downloads any http/https link over several connections in parallel, handing work over when one finishes before the others.
 - Pauses and resumes from the bytes it already has, even after the app was closed and opened again.
 - Keeps downloading from the system tray when the window is closed with downloads running or waiting (Windows; Linux not yet tried); closing it with nothing left quits.
-- Says when a download ends — completed or failed — with a notification of the system, while its window is not the one in use (Windows; asked of the system under a script, not yet seen or clicked; a Scia that opened behind the window in use is silent until it has been used once, minimised, or closed into the tray; Linux not yet tried).
+- Says when a download ends — completed or failed — with a notification of the system, while its window is not the one in use (Windows; asked of the system under a script, not yet seen or clicked; a Scia that opened behind the window in use can be silent until it has been used once, minimised, or closed into the tray; Linux not yet tried).
 - Marks what it downloads as coming from the network, as a browser does, so that Windows can ask before running it (Windows; seen with a script, not yet with an `.exe`, an installer or a document); and asks for a second press itself before running a downloaded program.
 - Keeps a queue: how many downloads at once and how many connections per download are settings, and so are the folder they go to and a speed limit for all of them together.
+- Wears one of nine colour themes, chosen in Settings, each in a light and a dark variant that follows the system (seen on a dark system; the light variant with the page told to be light, not yet on a light one); the default one is black and white.
 - Takes links and media from the browser through the extension (`apps/extension`) — written and tested in its logic, not yet tried in a real browser.
 
 What comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).

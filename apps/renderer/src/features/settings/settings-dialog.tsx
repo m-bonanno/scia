@@ -8,6 +8,7 @@ import { bridge } from '@/lib/bridge.ts';
 import { FOLDER_REFUSED } from '@/lib/messages.ts';
 import { IntegrationsSection } from './integrations.tsx';
 import { SpeedLimit } from './speed-limit.tsx';
+import { ThemeChoice } from './theme-choice.tsx';
 
 interface SettingsDialogProps {
   readonly open: boolean;
@@ -32,6 +33,20 @@ export function SettingsDialog({
     },
     [onSettings],
   );
+  // The engine is asked what it keeps at every opening, at every change, and after a folder was
+  // chosen. An answer is kept only when nothing was asked after it: a read asked before a change
+  // says what was there before it, whenever it arrives.
+  const asked = useRef(0);
+  const learn = useCallback(
+    (ask: Promise<Settings>): Promise<void> => {
+      asked.current += 1;
+      const mine = asked.current;
+      return ask.then((answer) => {
+        if (mine === asked.current) keep(answer);
+      });
+    },
+    [keep],
+  );
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [folderRefused, setFolderRefused] = useState(false);
   const shell = bridge();
@@ -48,17 +63,15 @@ export function SettingsDialog({
   useEffect(() => {
     if (!open) return undefined;
     let current = true;
-    Promise.all([api.settings(), api.pairing()])
-      .then(([loadedSettings, loadedPairing]) => {
-        if (!current) return;
-        keep(loadedSettings);
-        setPairing(loadedPairing);
+    Promise.all([learn(api.settings()), api.pairing()])
+      .then(([, loadedPairing]) => {
+        if (current) setPairing(loadedPairing);
       })
       .catch(onError);
     return () => {
       current = false;
     };
-  }, [open, onError, keep]);
+  }, [open, onError, learn]);
 
   // The page names no folder: main shows the system's dialog and tells the engine, and the
   // page reads back what the engine kept.
@@ -74,13 +87,12 @@ export function SettingsDialog({
         setFolderRefused(change === FolderChange.Refused);
       })
       .catch(onError)
-      .then(() => api.settings())
-      .then(keep)
+      .then(() => learn(api.settings()))
       .catch(onError);
   };
 
   const change = (patch: SettingsPatch) => {
-    api.updateSettings(patch).then(keep).catch(onError);
+    learn(api.updateSettings(patch)).catch(onError);
   };
 
   return (
@@ -146,6 +158,12 @@ export function SettingsDialog({
                 </IconButton>
               )}
             </div>
+            <ThemeChoice
+              value={settings.theme}
+              onChange={(theme) => {
+                change({ theme });
+              }}
+            />
           </section>
         )}
         <IntegrationsSection open={open} onError={onError} />

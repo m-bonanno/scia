@@ -23,5 +23,7 @@ contextBridge.exposeInMainWorld(
     // The page asks and names nothing: main shows the system's folder dialog.
     chooseDownloadFolder: () =>
       ipcRenderer.invoke(BridgeChannel.ChooseDownloadFolder) as Promise<unknown>,
+    // The page says that the theme changed, not which: main asks the engine.
+    themeChanged: () => ipcRenderer.invoke(BridgeChannel.ThemeChanged) as Promise<unknown>,
   }),
 );

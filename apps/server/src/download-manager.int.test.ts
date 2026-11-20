@@ -508,7 +508,30 @@ describe('DownloadManager', () => {
       connectionsPerDownload: 4,
       downloadDirectory: join(folder.path, 'downloads'),
       speedLimitBytesPerSecond: null,
+      theme: 'black-tie',
     });
+    expect(existsSync(`${statePath}.unreadable`)).toBe(false);
+  });
+
+  it('loads a state that names a theme of another time with the default one, and keeps its downloads', async () => {
+    const { url } = await host();
+    const first = await open();
+    const [added] = first.add({ urls: [url] });
+    await until(() => statusOf(first, added!.id) === DownloadStatus.Completed);
+    first.updateSettings({ theme: 'ice' });
+    await first.close();
+    const statePath = join(folder.path, 'data', 'state.json');
+    const state = JSON.parse(await readFile(statePath, 'utf8')) as {
+      settings: Record<string, unknown>;
+    };
+    expect(state.settings.theme).toBe('ice');
+    state.settings.theme = 'teal';
+    await writeFile(statePath, JSON.stringify(state));
+
+    const again = await open();
+
+    expect(again.settings().theme).toBe('black-tie');
+    expect(statusOf(again, added!.id)).toBe(DownloadStatus.Completed);
     expect(existsSync(`${statePath}.unreadable`)).toBe(false);
   });
 

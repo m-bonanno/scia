@@ -14,6 +14,7 @@ import {
   settingsPatchSchema,
   SNAPSHOT_EVENT,
 } from '@scia/contracts';
+import type { Theme } from '@scia/contracts/theme';
 import { ServiceFailure } from '@scia/core';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
@@ -24,6 +25,12 @@ import { describeFailure, type Logger } from './logger.ts';
 
 // How often a page hears of a running download: four times a second reads as continuous.
 const SNAPSHOT_INTERVAL_MS = 250;
+
+// The page names its theme from the first paint: its colours wait for no script, and for no
+// answer of the engine.
+function wearing(page: string, theme: Theme): string {
+  return page.replace(/<html([^>]*)>/, `<html$1 data-theme="${theme}">`);
+}
 
 export interface AppDeps {
   readonly manager: DownloadManager;
@@ -229,10 +236,15 @@ export function createApp(deps: AppDeps): Hono {
     if (staticDir === undefined) return c.notFound();
     const requested = join(staticDir, normalize(decodeURIComponent(c.req.path)));
     const isAsset = requested.startsWith(`${staticDir}${sep}`) && extname(requested) !== '';
-    const file = isAsset ? requested : join(staticDir, 'index.html');
+    const page = join(staticDir, 'index.html');
+    const file = isAsset ? requested : page;
     try {
-      const body = await readFile(file);
-      return c.body(new Uint8Array(body), 200, {
+      // The page is the one file served wearing something, also when it is asked for by name.
+      const body =
+        file === page
+          ? wearing(await readFile(file, 'utf8'), manager.settings().theme)
+          : new Uint8Array(await readFile(file));
+      return c.body(body, 200, {
         'content-type': MIME[extname(file)] ?? 'application/octet-stream',
         'cache-control': 'no-cache',
       });

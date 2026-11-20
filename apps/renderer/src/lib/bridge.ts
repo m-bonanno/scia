@@ -10,6 +10,9 @@ export interface SciaBridge {
   openDownload(id: string): Promise<unknown>;
   // Main shows the system's folder dialog and tells the engine: the page sends no path.
   chooseDownloadFolder(): Promise<unknown>;
+  // The window's own colours are main's: the page says that the theme changed, and main asks
+  // the engine which it is.
+  themeChanged(): Promise<unknown>;
 }
 
 declare global {
