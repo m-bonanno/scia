@@ -35,7 +35,10 @@ extraResources:
   - from: ../renderer/dist
     to: renderer
 
+# Drawn from assets/icon.svg by `npm run icons` (scripts/icons/draw-icons.ts). The installer,
+# the uninstaller and the shortcuts take the exe's.
 win:
+  icon: assets/icon.ico
   target:
     - target: nsis
       arch: [x64]
@@ -56,6 +59,7 @@ linux:
       arch: [x64]
     - target: deb
       arch: [x64]
+  icon: build/icons
   category: Network
   # The .deb needs one; without it electron-builder asks for an e-mail in package.json.
   maintainer: Scia
