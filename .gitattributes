@@ -14,3 +14,6 @@
 *.icns binary
 *.woff2 binary
 *.node binary
+
+# Signed bytes: a release of yt-dlp as its project published it (apps/server/src/testing).
+SHA2-256SUMS* binary

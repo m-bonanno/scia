@@ -6,24 +6,9 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { YT_DLP_OF_PLATFORM } from '../src/engine/runtime-layout.ts';
+import { YT_DLP_OF_PLATFORM, YT_DLP_VERSION } from '../src/engine/runtime-layout.ts';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
-
-// yt-dlp 2026.10.26: each build's name in the release, and its checksum from the release's
-// SHA2-256SUMS. Keyed by the system's folder of tools (src/engine/runtime-layout.ts), which also
-// says the name the engine runs.
-export const YT_DLP_VERSION = '2026.10.26';
-export const YT_DLP_BUILDS: Readonly<Record<string, { asset: string; sha256: string }>> = {
-  win: {
-    asset: 'yt-dlp.exe',
-    sha256: 'f5389d3698ecde4ef06f4e6b1ce0294fe9ac1396228c8990b8d3416d6d177a7d',
-  },
-  linux: {
-    asset: 'yt-dlp_linux',
-    sha256: '767ba9dce7052aa196f8b12652f433d76de128ba168966fa84b6394d5e6c6795',
-  },
-};
 
 const sha256 = (bytes: Buffer) => createHash('sha256').update(bytes).digest('hex');
 
@@ -36,12 +21,11 @@ async function held(path: string): Promise<Buffer | undefined> {
 }
 
 export async function fetchTools(platform: NodeJS.Platform): Promise<string> {
-  const tool = YT_DLP_OF_PLATFORM[platform];
-  const build = tool === undefined ? undefined : YT_DLP_BUILDS[tool.os];
-  if (tool === undefined || build === undefined) {
+  const build = YT_DLP_OF_PLATFORM[platform];
+  if (build === undefined) {
     throw new Error(`No build of yt-dlp is fixed for ${platform}.`);
   }
-  const target = join(ROOT, 'tools', tool.os, tool.file);
+  const target = join(ROOT, 'tools', build.os, build.file);
   const kept = await held(target);
   if (kept !== undefined && sha256(kept) === build.sha256) return target;
 
@@ -59,7 +43,7 @@ export async function fetchTools(platform: NodeJS.Platform): Promise<string> {
   if (platform !== 'win32') await chmod(partial, 0o755);
   await rm(target, { force: true });
   await rename(partial, target);
-  console.warn(`yt-dlp ${YT_DLP_VERSION} for ${tool.os}: ${target}`);
+  console.warn(`yt-dlp ${YT_DLP_VERSION} for ${build.os}: ${target}`);
   return target;
 }
 
