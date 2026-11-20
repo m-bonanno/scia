@@ -1,6 +1,6 @@
 # Scia — design
 
-Captures of the real app: its page, read over the DevTools protocol while the app runs on a scratch profile and downloads from local test hosts. The page only — the window's own buttons, which the system draws at the right of the title bar, are not in them.
+Captures of the real app: its page, read over the DevTools protocol while the app runs on a scratch profile and downloads from local test hosts. The page only — the window's own buttons, which the system draws at the right of the title bar, are not in them. The app's icon, at the end, is the exception: its captures say how each was made.
 
 The app wears one of nine themes, each in a light and a dark variant that follows the system: [`themes.md`](./themes.md) says where every colour of each comes from. The captures below are in the default one, Black Tie.
 
@@ -39,4 +39,4 @@ The mark on a tile, in the default theme's dark variant (`#e3e3e3` on `#111111`;
 | [`app-icon.png`](./app-icon.png)                                         | The committed icons at 16, 24, 32, 48, 64, 128 and 256 px, each at its own pixels, on a dark and a light ground                                                                                                                                         |
 | [`app-icon-as-windows-gives-it.png`](./app-icon-as-windows-gives-it.png) | What Windows gave for the installed app, read from the system, not from the screen: the shell's image of the setup file, the installed exe and the Start menu and desktop shortcuts at 16, 32, 48 and 256 px, and the window's own icon at 16 and 32 px |
 
-Not captured: the taskbar, the tray and the shortcuts as Windows draws them on screen (#85).
+Not captured (#85): the installed app's icon as Windows draws it on screen — the taskbar's button and its name, the tray, the Start menu and desktop shortcuts, the window in Alt+Tab, in the taskbar's thumbnail and in its menu, and a taskbar pin made before the upgrade.
