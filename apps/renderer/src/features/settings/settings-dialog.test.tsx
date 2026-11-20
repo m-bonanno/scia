@@ -101,6 +101,21 @@ describe('SettingsDialog', () => {
       expect(await screen.findByRole('switch', { name: 'Beta versions' })).not.toBeChecked();
     });
 
+    it('stay as the engine keeps them when it refuses the change, and the refusal is told', async () => {
+      aShell(async () => 'kept');
+      const refusal = new Error('The engine is restarting.');
+      vi.spyOn(api, 'updateSettings').mockRejectedValue(refusal);
+      const onError = vi.fn();
+      render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
+
+      await userEvent.click(await screen.findByRole('switch', { name: 'Beta versions' }));
+
+      await vi.waitFor(() => {
+        expect(onError).toHaveBeenCalledWith(refusal);
+      });
+      expect(screen.getByRole('switch', { name: 'Beta versions' })).not.toBeChecked();
+    });
+
     it('are offered only where Scia updates itself', async () => {
       render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
       await screen.findByText('Simultaneous downloads');

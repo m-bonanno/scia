@@ -259,8 +259,15 @@ async function boot(): Promise<void> {
     platform: process.platform,
     version: app.getVersion(),
   };
-  const updates = updatesApply(updating)
-    ? new Updates({
+  // An updater that cannot be made leaves Scia as it is, and a line in the log: nothing in the
+  // start depends on it.
+  const makeUpdates = (): Updates | undefined => {
+    if (!updatesApply(updating)) {
+      log.info('updates_off', updating);
+      return undefined;
+    }
+    try {
+      return new Updates({
         betas: () => betasOfEngine(engine(), ENGINE_ANSWER_LIMIT_MS),
         ...createUpdater(log.scope('updater')),
         wait: (ms, run) => {
@@ -270,9 +277,13 @@ async function boot(): Promise<void> {
           };
         },
         log,
-      })
-    : undefined;
-  if (updates === undefined) log.info('updates_off', updating);
+      });
+    } catch (error) {
+      log.warn('updates_off', { ...updating, error: String(error) });
+      return undefined;
+    }
+  };
+  const updates = makeUpdates();
 
   const supervisor = new ServerSupervisor({
     start: () =>

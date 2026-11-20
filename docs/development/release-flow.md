@@ -45,7 +45,7 @@ To build again the files of a tag: **Actions → Release → Run workflow**, wit
 
 ## Not there yet
 
-- **Auto-update of a stable.** An installed Scia updates itself from the releases of this repository ([ADR 0007](../adr/0007-automatic-updates.md)), and was seen to from beta to beta (#82); no stable release exists yet, so none has been taken, and a Scia that follows the stables finds nothing until `v1.0.0`.
+- **Auto-update of a stable.** An installed Scia updates itself from the releases of this repository ([ADR 0007](../adr/0007-automatic-updates.md)), and was seen to from a build of its branch to `v1.0.0-beta.13` (#82); no stable release exists yet, so none has been taken, and a Scia that follows the stables finds nothing until `v1.0.0`.
 - **Signed installers.** Windows shows SmartScreen's warning for an unsigned `.exe`, at the first install; an update is not signed either, and is checked only against the SHA-512 of its release's `latest.yml` (ADR 0007).
 - **Linux.** The first stable release ships for Windows only, and the Linux job of the workflow is off until Linux is tried (roadmap, "After the first stable release").
-- **The Linux packages have never been built anywhere.** The Windows installer has come out of CI three times, each on request (`v1.0.0-beta.10` to `.12`): the first was installed and run (#78). Every release carries `latest.yml` and the blockmap from `v1.0.0-beta.13` on (#83).
+- **The Linux packages have never been built anywhere.** The Windows installer came out of CI three times on request (`v1.0.0-beta.10` to `.12`), and with every release from `v1.0.0-beta.13` on, with `latest.yml` and the blockmap (#83) — `v1.0.0-beta.13`'s run dispatched by hand, because GitHub recorded no push for the merge before it (#95). `v1.0.0-beta.10` and `v1.0.0-beta.12` were installed and run (#78), and `v1.0.0-beta.13` installed by the updater and run (#82).

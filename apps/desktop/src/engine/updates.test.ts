@@ -313,8 +313,70 @@ describe('Updates', () => {
       expect(fetches[0]!.signal.aborted).toBe(false);
     });
 
-    it('takes the newer version when one comes out while it downloads another', async () => {
+    it('keeps nothing of a download that finished after it was given up', async () => {
+      let finish: () => void = () => undefined;
+      const { updates, fetches, lines } = updating({
+        // A download that does not stop when it is told to, and finishes all the same.
+        fetch: () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+            fetches.push({
+              signal: new AbortController().signal,
+              finish: resolve,
+              fail: () => undefined,
+            });
+          }),
+      });
+      updates.engineSays({ idle: true });
+      updates.start();
+      await settle();
+
+      updates.engineSays({ idle: false });
+      finish();
+      await settle();
+
+      expect(lines.map((line) => line.event)).not.toContain('update_ready');
+      expect(lines.map((line) => line.event)).toContain('update_fetch_put_off');
+      expect(await updates.atQuit({ askedByPerson: true })).toBe(false);
+    });
+
+    it('downloads nothing that the last check no longer offered, found while Scia was busy', async () => {
       const { updates, fetches, timers, answering } = updating();
+      updates.engineSays({ idle: false });
+      answering('1.1.0-beta.1');
+      updates.start();
+      await settle();
+
+      // The switch turned off: the stables alone hold nothing newer.
+      answering(undefined);
+      await elapse(timers);
+      updates.engineSays({ idle: true });
+      await settle();
+
+      expect(fetches).toHaveLength(0);
+    });
+
+    it('gives up a download that the last check no longer offered, and does not take it up', async () => {
+      const { updates, fetches, timers, answering } = updating();
+      updates.engineSays({ idle: true });
+      answering('1.1.0-beta.1');
+      updates.start();
+      await settle();
+      expect(fetches).toHaveLength(1);
+
+      answering(undefined);
+      await elapse(timers);
+      expect(fetches[0]!.signal.aborted).toBe(true);
+      updates.engineSays({ idle: false });
+      updates.engineSays({ idle: true });
+      await settle();
+
+      expect(fetches).toHaveLength(1);
+      expect(await updates.atQuit({ askedByPerson: true })).toBe(false);
+    });
+
+    it('takes the newer version when one comes out while it downloads another', async () => {
+      const { updates, fetches, timers, answering, lines } = updating();
       updates.engineSays({ idle: true });
       updates.start();
       await settle();
@@ -324,9 +386,40 @@ describe('Updates', () => {
 
       expect(fetches[0]!.signal.aborted).toBe(true);
       expect(fetches).toHaveLength(2);
+      expect(
+        lines.filter((line) => line.event === 'update_fetching').map((line) => line.data),
+      ).toEqual([{ version: '1.1.0' }, { version: '1.2.0' }]);
       fetches[1]!.finish();
       await settle();
       expect(await updates.atQuit({ askedByPerson: true })).toBe(true);
+    });
+
+    it('starts the newer download only once the one it replaces has ended', async () => {
+      const ends: (() => void)[] = [];
+      const { updates, timers, answering, lines } = updating({
+        // A download that takes its time to stop once it is told to.
+        fetch: (signal) =>
+          new Promise<void>((_resolve, reject) => {
+            signal.addEventListener('abort', () => {
+              ends.push(() => {
+                reject(new Error('cancelled'));
+              });
+            });
+          }),
+      });
+      const fetching = () => lines.filter((line) => line.event === 'update_fetching').length;
+      updates.engineSays({ idle: true });
+      updates.start();
+      await settle();
+
+      answering('1.2.0');
+      await elapse(timers);
+      updates.engineSays({ idle: true });
+      expect(fetching()).toBe(1);
+
+      ends[0]!();
+      await settle();
+      expect(fetching()).toBe(2);
     });
 
     it('keeps nothing of a download that failed, and finds it again at the next check', async () => {
@@ -464,6 +557,25 @@ describe('Updates', () => {
       expect(fetches).toHaveLength(0);
     });
 
+    it('asks for no version once the quit has begun while the setting was being read', async () => {
+      let say: (betas: boolean) => void = () => undefined;
+      const { updates, checks } = updating({
+        betas: () =>
+          new Promise<boolean>((resolve) => {
+            say = resolve;
+          }),
+      });
+      updates.start();
+      await settle();
+
+      const quitting = updates.atQuit({ askedByPerson: true });
+      say(true);
+      await quitting;
+      await settle();
+
+      expect(checks).toEqual([]);
+    });
+
     it('lets a check that was on its way at the quit start nothing', async () => {
       let answer: (version: string) => void = () => undefined;
       const { updates, timers, fetches } = updating({
@@ -494,7 +606,7 @@ describe('Updates', () => {
       expect(lines).toContainEqual({
         level: 'info',
         event: 'update_installing',
-        data: { version: '1.1.0', started: true },
+        data: { version: '1.1.0', asked: true },
       });
     });
   });

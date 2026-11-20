@@ -37,7 +37,7 @@ export function isNothingPublished(error: unknown): boolean {
 }
 
 // electron-updater puts an answer's headers and body in its messages: the log keeps the first line.
-function firstLine(error: unknown): string {
+export function firstLine(error: unknown): string {
   return String(error).split('\n', 1)[0] ?? '';
 }
 
@@ -61,7 +61,8 @@ export interface UpdatesOptions {
   // Downloads the version the last check found, and keeps it once its SHA-512 matches. Rejects
   // when it fails or is given up through the signal.
   readonly fetch: (signal: AbortSignal) => Promise<void>;
-  // Starts the installer of what was downloaded, silent and detached; true if it started.
+  // Asks for the installer of what was downloaded to start, silent and detached; true if it was
+  // asked — whether it then ran, electron-updater says only as an error.
   readonly install: () => boolean;
   // Runs `run` after `ms`, and answers how to call it off.
   readonly wait: (ms: number, run: () => void) => () => void;
@@ -81,6 +82,9 @@ export class Updates {
   #fetching: { readonly version: string; readonly controller: AbortController } | undefined;
   // Downloaded and checked, waiting for the quit.
   #ready: string | undefined;
+  // What the last check that answered offered: nothing is downloaded that it no longer offers —
+  // a beta, once the switch is off.
+  #offered: string | undefined;
 
   constructor(options: UpdatesOptions) {
     this.#options = options;
@@ -92,7 +96,6 @@ export class Updates {
 
   // Every list the engine sends: the update is downloaded only while nothing runs or waits.
   engineSays(state: { readonly idle: boolean }): void {
-    if (this.#isStopped()) return;
     this.#idle = state.idle;
     if (state.idle) this.#fetchIfIdle();
     else this.#fetching?.controller.abort();
@@ -130,8 +133,8 @@ export class Updates {
   }
 
   install(): void {
-    const started = this.#options.install();
-    this.#options.log.info('update_installing', { version: this.#ready, started });
+    const asked = this.#options.install();
+    this.#options.log.info('update_installing', { version: this.#ready, asked });
   }
 
   #isStopped(): boolean {
@@ -140,7 +143,6 @@ export class Updates {
 
   #schedule(ms: number): void {
     if (this.#isStopped()) return;
-    this.#callOff?.();
     this.#callOff = this.#options.wait(ms, () => {
       this.#callOff = undefined;
       void this.#check();
@@ -148,7 +150,6 @@ export class Updates {
   }
 
   async #check(): Promise<void> {
-    if (this.#isStopped()) return;
     const { log } = this.#options;
     let betas: boolean;
     try {
@@ -167,13 +168,13 @@ export class Updates {
       this.#schedule(UPDATE_RETRY_MS);
       return;
     }
-    if (this.#isStopped()) return;
     this.#schedule(UPDATE_CHECK_EVERY_MS);
     log.info('update_checked', { betas, found: found ?? null });
-    if (found === undefined || found === this.#ready || found === this.#fetching?.version) return;
-    // A newer version than the one being downloaded replaces it.
+    this.#offered = found;
+    if (found !== undefined && found === this.#fetching?.version) return;
+    // What is being downloaded is no longer offered, or a newer version replaces it.
     this.#fetching?.controller.abort();
-    this.#found = found;
+    this.#found = found === this.#ready ? undefined : found;
     this.#fetchIfIdle();
   }
 
@@ -208,11 +209,10 @@ export class Updates {
     );
   }
 
-  // Given up for a download of the person's, a newer version, or the quit: taken up again when
-  // the engine is idle, unless something newer took its place.
+  // Given up for a download of the person's, a check that no longer offers it or offers a newer
+  // one, or the quit: taken up again when the engine is idle only if it is still what is offered.
   #putOff(version: string): void {
-    if (this.#isStopped()) return;
-    this.#found ??= version;
+    if (version === this.#offered) this.#found = version;
     this.#options.log.info('update_fetch_put_off', { version });
     this.#fetchIfIdle();
   }
