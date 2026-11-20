@@ -156,7 +156,14 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
     app.evaluate(() => process.pid),
     PID_LIMIT_MS,
     'no pid',
-  ).catch(() => shellOf(app));
+  ).catch(async () => {
+    try {
+      return shellOf(app);
+    } catch (error) {
+      await service?.close();
+      throw error;
+    }
+  });
   const close = async () => {
     await end(app, main);
     await service?.close();

@@ -33,6 +33,9 @@ const YT_DLP = join(INSTALL_DIR, 'resources', 'tools', YT_DLP_OF_PLATFORM.win32!
 // copy in the temporary folder and returns before it has removed anything.
 const INSTALL_LIMIT_MS = 120_000;
 
+// An error of main's, or of the engine's, which main copies into its log as a line of its own.
+const errorsIn = (log: string) => /\[error\]|"level":"error"/.test(log);
+
 const exists = (path: string) =>
   access(path).then(
     () => true,
@@ -92,7 +95,7 @@ describe('the installer, installed and started', () => {
     const log = await profile!.log();
     expect(log).toContain(`boot { version: '${VERSION!}', packaged: true`);
     expect(log).toContain('engine_ready');
-    expect(log).not.toMatch(/\[error\]/);
+    expect(errorsIn(log)).toBe(false);
   });
 
   it('downloads a pasted link from a local host, byte for byte', async () => {
@@ -109,11 +112,21 @@ describe('the installer, installed and started', () => {
   });
 
   it('quits when its window is closed with nothing to download', async () => {
+    let ended = false;
+    void scia!.exited.then(() => {
+      ended = true;
+    });
+
     await scia!.closeWindow();
 
-    await scia!.exited;
+    await until(() => ended);
     scia = undefined;
-    expect(await profile!.log()).toMatch(/\bquit\b/);
+    const log = await profile!.log();
+    expect(log).toMatch(/\bquit\b/);
+    // Over the whole run, not only at its start.
+    expect(errorsIn(log)).toBe(false);
+    // A release's version updates itself (ADR 0007): what was tried is what is uninstalled.
+    expect(log).not.toContain('update_installing');
   });
 
   it('uninstalls silently, leaving no program behind', async () => {

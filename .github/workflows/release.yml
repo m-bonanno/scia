@@ -78,7 +78,8 @@ jobs:
     strategy:
       fail-fast: false
       # Linux is off until it is tried (#28). Its entry, then: os ubuntu-latest,
-      # cache ~/.cache/electron-builder, artefacts 'Scia-$V.AppImage Scia-$V.deb latest-linux.yml'.
+      # cache ~/.cache/electron-builder, artefacts 'Scia-$V.AppImage Scia-$V.deb latest-linux.yml';
+      # the smoke test installs a Windows installer, and that entry has to skip it or have its own.
       matrix:
         include:
           - name: Windows
