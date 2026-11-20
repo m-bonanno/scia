@@ -3,6 +3,7 @@ import { ColourScheme, DEFAULT_THEME, type Theme, WINDOW_COLOURS } from '@scia/c
 import { BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, nativeTheme } from 'electron';
 import { guardPermissions } from './engine/page-permissions.ts';
 import { hasIntegratedTitleBar, titleBarOverlay, windowFrameOptions } from './engine/title-bar.ts';
+import { windowIconFile } from './engine/window-icon.ts';
 import { isInFront, isPutAway, type WindowState } from './engine/window-state.ts';
 
 export interface WindowLog {
@@ -46,6 +47,7 @@ export class MainWindow {
       minHeight: 420,
       show: false,
       title: 'Scia',
+      icon: join(__dirname, 'assets', windowIconFile(options.platform)),
       // The page's own background, so the window never flashes another colour while it loads.
       backgroundColor: WINDOW_COLOURS[this.#theme][currentScheme()].background,
       ...windowFrameOptions(options.platform, titleBarOverlay(this.#theme, currentScheme(), true)),

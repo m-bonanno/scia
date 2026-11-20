@@ -1,6 +1,6 @@
 # Scia — design
 
-Captures of the real app: its page, read over the DevTools protocol while the app runs on a scratch profile and downloads from local test hosts. The page only — the window's own buttons, which the system draws at the right of the title bar, are not in them.
+Captures of the real app: its page, read over the DevTools protocol while the app runs on a scratch profile and downloads from local test hosts. The page only — the window's own buttons, which the system draws at the right of the title bar, are not in them. The app's icon, at the end, is the exception: its captures say how each was made.
 
 The app wears one of nine themes, each in a light and a dark variant that follows the system: [`themes.md`](./themes.md) says where every colour of each comes from. The captures below are in the default one, Black Tie.
 
@@ -29,3 +29,14 @@ The light variant of a capture is the page told that the system asks for light (
 A capture is retaken in the PR that changes what it shows (`apps/renderer/CLAUDE.md`, "Behaviour"; the product designer checks it).
 
 Not captured yet: Settings with a folder refused, the key's form in a light variant, a connected service that says its key is no longer accepted, the open list of a menu of Settings — the speed limit's, the theme's — (the system draws it outside the page, so no capture of the page shows it; it was read from the system in the review of #52 — the theme's menu in every theme and both variants, the speed limit's once: its rows are the theme's `tonal` and `foreground`, its chosen row Chromium's own blue — #58), the title bar with a limit in the light variant, Settings and "Run" in a theme that is not the default one, the empty list, the engine unreachable, the extension's popup and options, and the notifications the system draws for Scia (the one of the first time it hides, and the one of a download that ends): no capture of the page shows them, and nobody has looked at one.
+
+## The app's icon
+
+The mark on a tile, in the default theme's dark variant (`#e3e3e3` on `#111111`; the owner, #81). Its one source is [`apps/desktop/assets/icon.svg`](../../apps/desktop/assets/icon.svg); every icon of the app is drawn from it by `npm run icons -w @scia/desktop` and committed (`apps/desktop/CLAUDE.md`).
+
+| Capture                                                                  | Shows                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`app-icon.png`](./app-icon.png)                                         | The committed icons at 16, 24, 32, 48, 64, 128 and 256 px, each at its own pixels, on a dark and a light ground                                                                                                                                         |
+| [`app-icon-as-windows-gives-it.png`](./app-icon-as-windows-gives-it.png) | What Windows gave for the installed app, read from the system, not from the screen: the shell's image of the setup file, the installed exe and the Start menu and desktop shortcuts at 16, 32, 48 and 256 px, and the window's own icon at 16 and 32 px |
+
+Not captured (#85): the installed app's icon as Windows draws it on screen — the taskbar's button and its name, the tray, the Start menu and desktop shortcuts, the window in Alt+Tab, in the taskbar's thumbnail and in the window's menu, and a taskbar pin made before the upgrade.
