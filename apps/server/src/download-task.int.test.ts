@@ -102,6 +102,17 @@ describe('DownloadTask against a real HTTP host', () => {
     expect(fetchedAfter).toBe(body.length - keptBytes);
   });
 
+  it('cuts a part file left longer by an earlier attempt to the length of the file it fetches', async () => {
+    const { url } = await host();
+    // What an attempt at a larger file left, before the host's file got smaller.
+    await writeFile(partPath, Buffer.alloc(body.length + 3 * MIB, 0xaa));
+
+    await task(url).run(new AbortController().signal);
+
+    expect((await readFile(partPath)).length).toBe(body.length);
+    expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+  });
+
   it('retries a connection the host cut, without losing what had arrived', async () => {
     const { url } = await host({ drops: 3, dropAfterBytes: 200 * 1024 });
 

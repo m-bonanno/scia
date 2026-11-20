@@ -141,10 +141,23 @@ export class DownloadTask {
 
   async #openPart(): Promise<FileHandle> {
     return onDisk(async () => {
+      let kept: FileHandle | undefined;
       try {
-        return await open(this.#options.partPath, 'r+');
+        kept = await open(this.#options.partPath, 'r+');
       } catch (error) {
         if (!isMissing(error)) throw error;
+      }
+      if (kept !== undefined) {
+        try {
+          // The file's length, whatever an earlier attempt left: when the host's file got smaller
+          // and the download started over, the old file's tail would stay past the new end (#106).
+          // The segments hold only bytes inside it.
+          if (this.#ranged) await kept.truncate(this.#options.totalBytes ?? 0);
+        } catch (error) {
+          await kept.close();
+          throw error;
+        }
+        return kept;
       }
       // The part file is gone, and with it what the segments remember.
       this.#segments = this.#segments.map((segment) => ({ ...segment, downloaded: 0 }));
