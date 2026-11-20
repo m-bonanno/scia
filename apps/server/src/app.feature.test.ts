@@ -1,7 +1,9 @@
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { API_PREFIX, ApiErrorCode, DEFAULT_API_PORT, SETTINGS_LIMITS } from '@scia/contracts';
+import { DEFAULT_THEME } from '@scia/contracts/theme';
 import type { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
 import { createApp } from './app.ts';
 import { DownloadManager } from './download-manager.ts';
@@ -19,6 +21,7 @@ describe('the engine API', () => {
   let folder: Awaited<ReturnType<typeof scratchFolder>>;
   let manager: DownloadManager;
   let app: Hono;
+  let integrations: Integrations;
 
   beforeEach(async () => {
     folder = await scratchFolder();
@@ -28,14 +31,15 @@ describe('the engine API', () => {
       defaultDirectory: join(folder.path, 'downloads'),
       logger: silentLogger,
     });
+    // No service is connected here, so none is ever asked (integrations.feature.test.ts).
+    integrations = await Integrations.open({
+      vault: new MemoryVault(),
+      alldebrid: new AllDebrid({ api: 'http://127.0.0.1:9', userAgent: 'Scia/spec' }),
+      logger: silentLogger,
+    });
     app = createApp({
       manager,
-      // No service is connected here, so none is ever asked (integrations.feature.test.ts).
-      integrations: await Integrations.open({
-        vault: new MemoryVault(),
-        alldebrid: new AllDebrid({ api: 'http://127.0.0.1:9', userAgent: 'Scia/spec' }),
-        logger: silentLogger,
-      }),
+      integrations,
       apiToken: APP_TOKEN,
       extensionToken: EXTENSION_TOKEN,
       version: '1.2.3',
@@ -45,6 +49,7 @@ describe('the engine API', () => {
     });
   });
   afterEach(async () => {
+    vi.restoreAllMocks();
     await manager.close();
     await folder.remove();
   });
@@ -115,6 +120,75 @@ describe('the engine API', () => {
       const response = await call(path, { token: EXTENSION_TOKEN });
       expect(response.status).toBe(403);
     }
+  });
+
+  it('says on a quiet stream of events that it is still there, between one list and the next', async () => {
+    const quiet = createApp({
+      manager,
+      integrations,
+      apiToken: APP_TOKEN,
+      extensionToken: EXTENSION_TOKEN,
+      version: '1.2.3',
+      port: () => DEFAULT_API_PORT,
+      staticDir: undefined,
+      logger: silentLogger,
+      eventsKeepAliveMs: 30,
+    });
+    const response = await quiet.request(`${ORIGIN}${API_PREFIX}/events`, {
+      headers: { authorization: `Bearer ${APP_TOKEN}` },
+    });
+    const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+    const decoder = new TextDecoder();
+    const comment = ': idle\n\n';
+
+    // The list as it is; then nothing changes, and the engine says so with comments, which a
+    // reader of events passes over.
+    let heard = '';
+    while (heard.split(comment).length < 4) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      heard += decoder.decode(value, { stream: true });
+    }
+    await reader.cancel();
+
+    expect(heard.startsWith('event: snapshot\ndata: {"downloads":[]}\n\n')).toBe(true);
+    expect(heard.match(/event: snapshot/g)).toHaveLength(1);
+    expect(heard.split(comment).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('leaves nothing behind for a stream of events whose listener has gone', async () => {
+    const quiet = createApp({
+      manager,
+      integrations,
+      apiToken: APP_TOKEN,
+      extensionToken: EXTENSION_TOKEN,
+      version: '1.2.3',
+      port: () => DEFAULT_API_PORT,
+      staticDir: undefined,
+      logger: silentLogger,
+      eventsKeepAliveMs: 37,
+    });
+    const asked = vi.spyOn(manager, 'nextChange');
+    const started = vi.spyOn(globalThis, 'setInterval');
+    const cleared = vi.spyOn(globalThis, 'clearInterval');
+    const response = await quiet.request(`${ORIGIN}${API_PREFIX}/events`, {
+      headers: { authorization: `Bearer ${APP_TOKEN}` },
+    });
+    const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+    await reader.read();
+    // Nothing changes: the route is waiting on the manager, with a sign of life every 37 ms.
+    await vi.waitFor(() => {
+      expect(asked.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    const stillHere = started.mock.results[started.mock.calls.findIndex((call) => call[1] === 37)];
+
+    await reader.cancel();
+
+    // The wait is called off through the signal the route handed over, and its timer stopped.
+    await vi.waitFor(() => {
+      expect(asked.mock.calls.at(-1)?.[1]?.aborted).toBe(true);
+      expect(cleared).toHaveBeenCalledWith(stillHere?.value);
+    });
   });
 
   it('refuses what is not an http address', async () => {
@@ -230,5 +304,56 @@ describe('the engine API', () => {
     expect(
       ((await changed.json()) as { data: { connectionsPerDownload: number } }).data,
     ).toMatchObject({ connectionsPerDownload: 4 });
+  });
+
+  describe('the theme of the interface', () => {
+    const themeOf = async (response: Response) =>
+      ((await response.json()) as { data: { theme: string } }).data.theme;
+    const choose = (theme: unknown) =>
+      call('/settings', { method: 'PATCH', token: APP_TOKEN, body: JSON.stringify({ theme }) });
+
+    it('is the default one until a person chooses another, and only one that exists', async () => {
+      expect(await themeOf(await call('/settings', { token: APP_TOKEN }))).toBe(DEFAULT_THEME);
+
+      for (const refused of ['neon', '', 3, null]) {
+        expect((await choose(refused)).status, String(refused)).toBe(400);
+      }
+      expect(await themeOf(await choose('ice'))).toBe('ice');
+      expect(await themeOf(await call('/settings', { token: APP_TOKEN }))).toBe('ice');
+    });
+
+    it('is on the page the engine serves, before any script runs', async () => {
+      const staticDir = join(folder.path, 'renderer');
+      await mkdir(staticDir);
+      await writeFile(
+        join(staticDir, 'index.html'),
+        '<!doctype html>\n<html lang="en">\n  <head></head>\n</html>\n',
+      );
+      const serving = createApp({
+        manager,
+        integrations: await Integrations.open({
+          vault: new MemoryVault(),
+          alldebrid: new AllDebrid({ api: 'http://127.0.0.1:9', userAgent: 'Scia/spec' }),
+          logger: silentLogger,
+        }),
+        apiToken: APP_TOKEN,
+        extensionToken: EXTENSION_TOKEN,
+        version: '1.2.3',
+        port: () => DEFAULT_API_PORT,
+        staticDir,
+        logger: silentLogger,
+      });
+      const page = async (path: string) => (await serving.request(`${ORIGIN}${path}`)).text();
+
+      expect(await page('/')).toContain(`<html lang="en" data-theme="${DEFAULT_THEME}">`);
+
+      await choose('wood-floor');
+
+      expect(await page('/')).toContain('<html lang="en" data-theme="wood-floor">');
+      // Every address that is not a file is the page.
+      expect(await page('/anything')).toContain('data-theme="wood-floor"');
+      // And so is the page asked for by its file's name.
+      expect(await page('/index.html')).toContain('data-theme="wood-floor"');
+    });
   });
 });

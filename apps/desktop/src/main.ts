@@ -1,15 +1,21 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { BridgeChannel } from '@scia/contracts/bridge';
-import { DEFAULT_API_PORT } from '@scia/contracts';
+import { DEFAULT_API_PORT, type Download, EVENTS_KEEP_ALIVE_MS } from '@scia/contracts';
 import { app, dialog, Notification, shell } from 'electron';
 import log from 'electron-log/main';
 import { APP_ID } from './engine/app-identity.ts';
 import { CloseOutcome, WindowCloser } from './engine/close-policy.ts';
-import { downloadActivity } from './engine/download-activity.ts';
+import { activityOf, downloadActivity, unfinished } from './engine/download-activity.ts';
 import { chooseDownloadFolder, oneAtATime } from './engine/download-folder.ts';
 import { completedDownloadPath } from './engine/download-location.ts';
+import { EndedBatch } from './engine/ended-batch.ts';
+import { type Ended, EndedDownloads, Ending } from './engine/ended-downloads.ts';
+import { endedNotice, STILL_IN_TRAY } from './engine/ended-notice.ts';
 import type { EngineAccess } from './engine/engine-access.ts';
+import { Kept } from './engine/kept.ts';
+import { followDownloads } from './engine/engine-events.ts';
 import { EngineFailure, engineFailureNotice } from './engine/engine-failure.ts';
 import { KeyVault } from './engine/key-vault.ts';
 import { parseLaunchOptions } from './engine/launch-options.ts';
@@ -19,6 +25,7 @@ import { buildServerEnv } from './engine/server-env.ts';
 import { ServerSupervisor } from './engine/server-supervisor.ts';
 import { ShownNotices } from './engine/shown-notices.ts';
 import { HIDDEN_TO_TRAY_NOTICE, trayTooltip } from './engine/tray-presentation.ts';
+import { themeOfEngine } from './engine/window-theme.ts';
 import { KeyFolder, systemCipher } from './key-store.ts';
 import { NoticeFile } from './notice-file.ts';
 import { startServer } from './server-process.ts';
@@ -28,6 +35,14 @@ import { appOrigin, MainWindow } from './window.ts';
 // How long main waits for the engine to answer a question of its own. The engine is on this
 // computer: one that has not answered by then is not going to.
 const ENGINE_ANSWER_LIMIT_MS = 2000;
+// How long main waits before it opens the engine's events again, when they end or are refused.
+const EVENTS_RETRY_MS = 1000;
+// The engine says it is still there every EVENTS_KEEP_ALIVE_MS: three of them missed are an
+// engine that stopped talking.
+const EVENTS_SILENCE_LIMIT_MS = 3 * EVENTS_KEEP_ALIVE_MS;
+// How many notifications of ended downloads are held so that a click on them still opens the
+// window: the ones on screen and the last ones in the system's list of notifications.
+const HELD_NOTICES = 20;
 
 const launch = parseLaunchOptions(process.argv, process.cwd());
 if (launch.userDataDir !== undefined) {
@@ -127,8 +142,71 @@ async function boot(): Promise<void> {
         throw error;
       }),
   });
+  // What a click on any of Scia's notifications does. Not while quitting: the window would
+  // show, then vanish with the process.
+  const openFromNotice = () => {
+    if (!isQuitting()) window.focus();
+  };
+
   // Kept while it is on screen: a notification nobody holds is collected, and its click is lost.
   let notice: Notification | undefined;
+  // Every one of them, not the last: an earlier notification is still on screen, or in the
+  // system's list, and a click on it has to open the window too. Not let go when the system
+  // says it closed — it says so as soon as it has shown it, while the person can still click.
+  const endedNotices = new Kept<Notification>(HELD_NOTICES);
+
+  // What ended while Scia ran is said by the system when the person is not looking at the list
+  // (engine/ended-downloads.ts, ended-batch.ts, ended-notice.ts). Main hears it from the
+  // engine's own events, not from the page, which may be hidden.
+  const ended = new EndedDownloads();
+  let latest: readonly Download[] = [];
+  const listening = new AbortController();
+  const endedBatch = new EndedBatch({
+    wait: (ms, run) => {
+      const timer = setTimeout(run, ms);
+      return () => {
+        clearTimeout(timer);
+      };
+    },
+    deliver: notifyEnded,
+  });
+
+  function notifyEnded(downloads: readonly Ended[]): void {
+    const inFront = window.isInFront();
+    // Idle in the tray: the window was put away and nothing is running or waiting any more.
+    const lastOfHiddenScia = window.isPutAway() && unfinished(activityOf(latest)) === 0;
+    const completed = downloads.filter((download) => download.ending === Ending.Completed).length;
+    log.info('downloads_ended', {
+      completed,
+      failed: downloads.length - completed,
+      inFront,
+      lastOfHiddenScia,
+    });
+    // A person looking at the list sees its rows change.
+    if (isQuitting() || inFront || !Notification.isSupported()) return;
+    const text = endedNotice(downloads, { lastOfHiddenScia });
+    const shown = new Notification(text);
+    endedNotices.keep(shown);
+    shown.on('click', () => {
+      log.info('ended_notice_clicked', {});
+      endedNotices.release(shown);
+      openFromNotice();
+    });
+    shown.on('show', () => {
+      log.info('ended_notice_shown', {});
+    });
+    shown.on('failed', (_event, error) => {
+      endedNotices.release(shown);
+      log.warn('ended_notice_failed', { error });
+    });
+    // The title names no file: it is what was handed to the system, for whoever reads the log.
+    log.info('ended_notice_asked', {
+      title: text.title,
+      bodyLines: text.body.split('\n').length,
+      saysStillInTray: text.body.includes(STILL_IN_TRAY),
+    });
+    shown.show();
+  }
 
   async function closeRequested(): Promise<void> {
     const result = await closer.close();
@@ -140,12 +218,25 @@ async function boot(): Promise<void> {
         title: HIDDEN_TO_TRAY_NOTICE.title,
         body: HIDDEN_TO_TRAY_NOTICE.body,
       });
-      notice.on('click', () => {
-        window.focus();
-      });
+      notice.on('click', openFromNotice);
       notice.show();
     }
   }
+
+  // The window's own colours are the theme's, which the engine keeps: asked before the page
+  // loads, and whenever the page says the theme changed. An engine that does not say leaves
+  // the window as it is.
+  const wearTheme = async () => {
+    try {
+      window.wear(await themeOfEngine(engine(), ENGINE_ANSWER_LIMIT_MS));
+    } catch (error) {
+      log.warn('theme_unknown', { error: String(error) });
+    }
+  };
+  const followEngine = async () => {
+    await wearTheme();
+    window.followServer(port);
+  };
 
   const giveUp = (failure: EngineFailure, reason: string) => {
     log.error('engine_gave_up', { failure, reason });
@@ -169,7 +260,7 @@ async function boot(): Promise<void> {
     onRestarted: (restartedOn) => {
       port = restartedOn;
       log.info('engine_restarted', { port });
-      window.followServer(port);
+      void followEngine();
     },
     onGaveUp: () => {
       giveUp(EngineFailure.KeepsStopping, 'too many restarts');
@@ -188,6 +279,8 @@ async function boot(): Promise<void> {
     event.preventDefault();
     if (quitting) return;
     quitting = true;
+    listening.abort();
+    endedBatch.stop();
     window.hide();
     tray?.destroy();
     void supervisor.stop().finally(() => {
@@ -224,6 +317,8 @@ async function boot(): Promise<void> {
     ),
   );
 
+  window.answer(BridgeChannel.ThemeChanged, wearTheme);
+
   try {
     port = await supervisor.start();
   } catch (error) {
@@ -232,5 +327,20 @@ async function boot(): Promise<void> {
     return;
   }
   log.info('engine_ready', { port });
-  window.followServer(port);
+  // The ear first: it reads the engine, not the theme or the page, and what ends before it
+  // listens is taken for what had already ended — never said.
+  void followDownloads({
+    engine,
+    onDownloads: (downloads) => {
+      latest = downloads;
+      endedBatch.add(ended.seen(downloads));
+    },
+    signal: listening.signal,
+    answerLimitMs: ENGINE_ANSWER_LIMIT_MS,
+    silenceLimitMs: EVENTS_SILENCE_LIMIT_MS,
+    retryMs: EVENTS_RETRY_MS,
+    sleep: (ms, signal) => sleep(ms, undefined, { signal }),
+    log,
+  });
+  await followEngine();
 }

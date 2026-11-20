@@ -2,6 +2,7 @@ import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
 import { IntegrationId, segmentSchema, settingsSchema } from '@scia/contracts';
+import { DEFAULT_THEME } from '@scia/contracts/theme';
 import { z } from 'zod';
 
 export const recordSchema = z.object({
@@ -34,6 +35,7 @@ export type DownloadRecord = z.infer<typeof recordSchema>;
 // aside as unreadable for one setting.
 const storedSettingsSchema = settingsSchema.extend({
   speedLimitBytesPerSecond: settingsSchema.shape.speedLimitBytesPerSecond.catch(null),
+  theme: settingsSchema.shape.theme.catch(DEFAULT_THEME),
 });
 
 export const stateSchema = z.object({

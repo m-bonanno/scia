@@ -1,8 +1,9 @@
 import { join } from 'node:path';
-import { ResolvedTheme, WINDOW_COLOURS } from '@scia/contracts/theme';
+import { ColourScheme, DEFAULT_THEME, type Theme, WINDOW_COLOURS } from '@scia/contracts/theme';
 import { BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, nativeTheme } from 'electron';
 import { guardPermissions } from './engine/page-permissions.ts';
 import { hasIntegratedTitleBar, titleBarOverlay, windowFrameOptions } from './engine/title-bar.ts';
+import { isInFront, isPutAway, type WindowState } from './engine/window-state.ts';
 
 export interface WindowLog {
   warn(message: string, details: object): void;
@@ -23,8 +24,8 @@ export function appOrigin(port: number): string {
   return `http://127.0.0.1:${String(port)}`;
 }
 
-function currentTheme(): ResolvedTheme {
-  return nativeTheme.shouldUseDarkColors ? ResolvedTheme.Dark : ResolvedTheme.Light;
+function currentScheme(): ColourScheme {
+  return nativeTheme.shouldUseDarkColors ? ColourScheme.Dark : ColourScheme.Light;
 }
 
 // The app's one window. It is made hidden and without a page: it shows once it has loaded the
@@ -33,6 +34,8 @@ export class MainWindow {
   readonly #window: BrowserWindow;
   readonly #platform: string;
   #port = 0;
+  #shownOnce = false;
+  #theme: Theme = DEFAULT_THEME;
 
   constructor(options: MainWindowOptions) {
     this.#platform = options.platform;
@@ -44,8 +47,8 @@ export class MainWindow {
       show: false,
       title: 'Scia',
       // The page's own background, so the window never flashes another colour while it loads.
-      backgroundColor: WINDOW_COLOURS[currentTheme()].background,
-      ...windowFrameOptions(options.platform, titleBarOverlay(currentTheme(), true)),
+      backgroundColor: WINDOW_COLOURS[this.#theme][currentScheme()].background,
+      ...windowFrameOptions(options.platform, titleBarOverlay(this.#theme, currentScheme(), true)),
       webPreferences: {
         preload: join(__dirname, 'preload.cjs'),
         contextIsolation: true,
@@ -63,7 +66,7 @@ export class MainWindow {
     // Hidden, not removed: removing the menu also drops its zoom and clipboard shortcuts.
     this.#window.setMenuBarVisibility(false);
     this.#confineToApp();
-    this.#keepTheme();
+    this.#followSystem();
     this.#window.webContents.on(
       'did-fail-load',
       (_event, errorCode, errorDescription, url, isMainFrame) => {
@@ -73,6 +76,9 @@ export class MainWindow {
     );
     this.#window.once('ready-to-show', () => {
       this.#window.show();
+    });
+    this.#window.once('show', () => {
+      this.#shownOnce = true;
     });
     // Closing is a question, not an order. A quit ends the process without closing the window
     // (main.ts), so nothing here has to tell the two apart.
@@ -100,12 +106,37 @@ export class MainWindow {
     if (!this.#window.isDestroyed()) this.#load();
   }
 
+  // The theme the person chose: the window's background and its own buttons are that theme's.
+  wear(theme: Theme): void {
+    this.#theme = theme;
+    this.#paint();
+  }
+
   hide(): void {
     if (!this.#window.isDestroyed()) this.#window.hide();
   }
 
   isVisible(): boolean {
     return !this.#window.isDestroyed() && this.#window.isVisible();
+  }
+
+  // Whether the person is looking at it (engine/window-state.ts).
+  isInFront(): boolean {
+    return !this.#window.isDestroyed() && isInFront(this.#state());
+  }
+
+  // Whether it was put away for the tray to bring back — not merely minimised.
+  isPutAway(): boolean {
+    return !this.#window.isDestroyed() && isPutAway(this.#state());
+  }
+
+  #state(): WindowState {
+    return {
+      shownOnce: this.#shownOnce,
+      visible: this.#window.isVisible(),
+      minimised: this.#window.isMinimized(),
+      focused: this.#window.isFocused(),
+    };
   }
 
   // The system's own folder dialog, over this window, opened on `current`. Undefined when the
@@ -133,14 +164,20 @@ export class MainWindow {
     this.#window.loadURL(`${appOrigin(this.#port)}/`).catch(() => undefined);
   }
 
-  // The window's background and its own buttons follow the system's theme and the focus.
-  #keepTheme(): void {
+  #paint(): void {
+    if (this.#window.isDestroyed()) return;
+    this.#window.setBackgroundColor(WINDOW_COLOURS[this.#theme][currentScheme()].background);
+    if (hasIntegratedTitleBar(this.#platform)) {
+      this.#window.setTitleBarOverlay(
+        titleBarOverlay(this.#theme, currentScheme(), this.#window.isFocused()),
+      );
+    }
+  }
+
+  // The window's background and its own buttons follow the system's light or dark, and the focus.
+  #followSystem(): void {
     const paint = () => {
-      if (this.#window.isDestroyed()) return;
-      this.#window.setBackgroundColor(WINDOW_COLOURS[currentTheme()].background);
-      if (hasIntegratedTitleBar(this.#platform)) {
-        this.#window.setTitleBarOverlay(titleBarOverlay(currentTheme(), this.#window.isFocused()));
-      }
+      this.#paint();
     };
     this.#window.on('focus', paint);
     this.#window.on('blur', paint);

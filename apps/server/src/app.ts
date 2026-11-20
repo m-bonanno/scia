@@ -7,12 +7,14 @@ import {
   ApiErrorCode,
   connectIntegrationSchema,
   downloadFolderSchema,
+  EVENTS_KEEP_ALIVE_MS,
   type Health,
   isIntegrationId,
   type Pairing,
   settingsPatchSchema,
   SNAPSHOT_EVENT,
 } from '@scia/contracts';
+import type { Theme } from '@scia/contracts/theme';
 import { isServiceFailure, ServiceFailure } from '@scia/core';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
@@ -23,6 +25,12 @@ import { ServiceError } from './service-error.ts';
 
 // How often a page hears of a running download: four times a second reads as continuous.
 const SNAPSHOT_INTERVAL_MS = 250;
+
+// The page names its theme from the first paint: its colours wait for no script, and for no
+// answer of the engine.
+function wearing(page: string, theme: Theme): string {
+  return page.replace(/<html([^>]*)>/, `<html$1 data-theme="${theme}">`);
+}
 
 export interface AppDeps {
   readonly manager: DownloadManager;
@@ -36,7 +44,13 @@ export interface AppDeps {
   readonly port: () => number;
   readonly staticDir: string | undefined;
   readonly logger: Logger;
+  // How long GET /events stays silent before it says it is still there; the contract's, but
+  // for a spec.
+  readonly eventsKeepAliveMs?: number;
 }
+
+// A comment of the event stream: no reader takes it for an event.
+const STILL_HERE = ': idle\n\n';
 
 const Caller = { App: 'app', Extension: 'extension' } as const;
 type Caller = (typeof Caller)[keyof typeof Caller];
@@ -138,14 +152,31 @@ export function createApp(deps: AppDeps): Hono {
 
   app.get(`${API_PREFIX}/events`, (c) =>
     streamSSE(c, async (stream) => {
-      let version = -1;
-      while (!stream.aborted && !stream.closed) {
-        version = await manager.nextChange(version);
-        await stream.writeSSE({
-          event: SNAPSHOT_EVENT,
-          data: JSON.stringify(manager.snapshot()),
-        });
-        await stream.sleep(SNAPSHOT_INTERVAL_MS);
+      // Ends the wait for a change when whoever listens has gone: a stream that closed leaves
+      // no waiter behind in the manager.
+      const gone = new AbortController();
+      stream.onAbort(() => {
+        gone.abort();
+      });
+      // The stream is never silent for long (EVENTS_KEEP_ALIVE_MS): a comment says the engine
+      // is there, with nothing to send or between two lists.
+      const stillHere = setInterval(() => {
+        void stream.write(STILL_HERE);
+      }, deps.eventsKeepAliveMs ?? EVENTS_KEEP_ALIVE_MS);
+      try {
+        let version = -1;
+        while (!stream.aborted && !stream.closed) {
+          version = await manager.nextChange(version, gone.signal);
+          if (gone.signal.aborted) return;
+          await stream.writeSSE({
+            event: SNAPSHOT_EVENT,
+            data: JSON.stringify(manager.snapshot()),
+          });
+          await stream.sleep(SNAPSHOT_INTERVAL_MS);
+        }
+      } finally {
+        clearInterval(stillHere);
+        gone.abort();
       }
     }),
   );
@@ -205,10 +236,15 @@ export function createApp(deps: AppDeps): Hono {
     if (staticDir === undefined) return c.notFound();
     const requested = join(staticDir, normalize(decodeURIComponent(c.req.path)));
     const isAsset = requested.startsWith(`${staticDir}${sep}`) && extname(requested) !== '';
-    const file = isAsset ? requested : join(staticDir, 'index.html');
+    const page = join(staticDir, 'index.html');
+    const file = isAsset ? requested : page;
     try {
-      const body = await readFile(file);
-      return c.body(new Uint8Array(body), 200, {
+      // The page is the one file served wearing something, also when it is asked for by name.
+      const body =
+        file === page
+          ? wearing(await readFile(file, 'utf8'), manager.settings().theme)
+          : new Uint8Array(await readFile(file));
+      return c.body(body, 200, {
         'content-type': MIME[extname(file)] ?? 'application/octet-stream',
         'cache-control': 'no-cache',
       });

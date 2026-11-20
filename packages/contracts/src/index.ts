@@ -1,6 +1,7 @@
 import { DownloadFailure, DownloadStatus, FileKind, ServiceFailure } from '@scia/core';
 import { z } from 'zod';
 import { IntegrationId } from './integrations.ts';
+import { Theme } from './theme.ts';
 
 export { API_PREFIX, DEFAULT_API_PORT } from './endpoint.ts';
 export * from './integrations.ts';
@@ -68,6 +69,11 @@ export type Snapshot = z.infer<typeof snapshotSchema>;
 
 // The event the engine sends on GET /events, its data a Snapshot.
 export const SNAPSHOT_EVENT = 'snapshot';
+// How long the engine lets GET /events stay silent: with nothing to send it writes a comment,
+// which a reader of events passes over. Whoever listens tells an engine with nothing to say
+// from one that has stopped talking — and a client that ends an answer after minutes without
+// a byte, as Node's does after five, never meets one.
+export const EVENTS_KEEP_ALIVE_MS = 15_000;
 
 export const SETTINGS_LIMITS = {
   maxConcurrentDownloads: { min: 1, max: 10 },
@@ -95,6 +101,8 @@ export const settingsSchema = z.object({
     .int()
     .min(SETTINGS_LIMITS.speedLimitBytesPerSecond.min)
     .nullable(),
+  // Of the interface: the engine keeps it, and writes it into the page it serves.
+  theme: z.enum(Theme),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -103,6 +111,7 @@ export const settingsPatchSchema = settingsSchema
     maxConcurrentDownloads: true,
     connectionsPerDownload: true,
     speedLimitBytesPerSecond: true,
+    theme: true,
   })
   .partial();
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;

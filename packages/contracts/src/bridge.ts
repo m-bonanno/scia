@@ -4,6 +4,7 @@ export const BridgeChannel = {
   RevealDownload: 'downloads.reveal',
   OpenDownload: 'downloads.open',
   ChooseDownloadFolder: 'settings.chooseDownloadFolder',
+  ThemeChanged: 'settings.themeChanged',
 } as const;
 export type BridgeChannel = (typeof BridgeChannel)[keyof typeof BridgeChannel];
 

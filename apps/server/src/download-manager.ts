@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { type Download, type Settings, type SettingsPatch, type Snapshot } from '@scia/contracts';
+import { DEFAULT_THEME } from '@scia/contracts/theme';
 import {
   canPause,
   canResume,
@@ -38,6 +39,7 @@ const DEFAULT_SETTINGS = {
   maxConcurrentDownloads: 3,
   connectionsPerDownload: 8,
   speedLimitBytesPerSecond: null,
+  theme: DEFAULT_THEME,
 } as const;
 // A connection is not opened for less than this.
 const MIN_SEGMENT_BYTES = 1024 * 1024;
@@ -148,15 +150,23 @@ export class DownloadManager {
   }
 
   // The version to pass next time. Resolves at once while a download runs (its progress never
-  // stops changing), otherwise at the next change.
-  nextChange(since: number): Promise<number> {
-    if (this.#version > since || this.#running.size > 0 || this.#closed) {
+  // stops changing), otherwise at the next change — or when `gone` says that whoever asked is
+  // no longer there, so that nothing waits here on its behalf.
+  nextChange(since: number, gone?: AbortSignal): Promise<number> {
+    if (this.#version > since || this.#running.size > 0 || this.#closed || gone?.aborted === true) {
       return Promise.resolve(this.#version);
     }
     return new Promise((resolve) => {
-      this.#waiters.push(() => {
+      const wake = () => {
+        gone?.removeEventListener('abort', leave);
         resolve(this.#version);
-      });
+      };
+      const leave = () => {
+        this.#waiters = this.#waiters.filter((waiter) => waiter !== wake);
+        resolve(this.#version);
+      };
+      this.#waiters.push(wake);
+      gone?.addEventListener('abort', leave, { once: true });
     });
   }
 
@@ -257,6 +267,7 @@ export class DownloadManager {
       ...(patch.speedLimitBytesPerSecond === undefined
         ? {}
         : { speedLimitBytesPerSecond: patch.speedLimitBytesPerSecond }),
+      ...(patch.theme === undefined ? {} : { theme: patch.theme }),
     };
     // At once, also for what is already running.
     if (patch.speedLimitBytesPerSecond !== undefined) {
