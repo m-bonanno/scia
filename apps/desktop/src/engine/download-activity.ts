@@ -1,4 +1,4 @@
-import { API_PREFIX, downloadSchema } from '@scia/contracts';
+import { API_PREFIX, type Download, downloadSchema } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
 import { z } from 'zod';
 import type { EngineAccess } from './engine-access.ts';
@@ -14,6 +14,13 @@ export function unfinished(activity: DownloadActivity): number {
   return activity.downloading + activity.queued;
 }
 
+// The same count, from a list main already has.
+export function activityOf(downloads: readonly Download[]): DownloadActivity {
+  const count = (status: DownloadStatus) =>
+    downloads.filter((download) => download.status === status).length;
+  return { downloading: count(DownloadStatus.Downloading), queued: count(DownloadStatus.Queued) };
+}
+
 // Asked of the engine when main needs it (the window closing, the pointer on the tray icon),
 // never on a timer. Rejects when the engine refuses, answers something else, or says nothing
 // within `limitMs`: an engine can be alive and silent, and whoever asked must not wait on it.
@@ -26,8 +33,5 @@ export async function downloadActivity(
     signal: AbortSignal.timeout(limitMs),
   });
   if (!response.ok) throw new Error('The engine did not list its downloads.');
-  const downloads = z.object({ data: z.array(downloadSchema) }).parse(await response.json()).data;
-  const count = (status: DownloadStatus) =>
-    downloads.filter((download) => download.status === status).length;
-  return { downloading: count(DownloadStatus.Downloading), queued: count(DownloadStatus.Queued) };
+  return activityOf(z.object({ data: z.array(downloadSchema) }).parse(await response.json()).data);
 }

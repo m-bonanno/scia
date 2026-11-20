@@ -1,11 +1,11 @@
 # Testing
 
-| Layer       | Command                    | What it proves                                                        |
-| ----------- | -------------------------- | --------------------------------------------------------------------- |
-| Unit        | `npm run test:unit`        | Rules: the domain, desktop engines, extension logic, React components |
-| Integration | `npm run test:integration` | The downloader against a real HTTP host and a real folder             |
-| Feature     | `npm run test:feature`     | The engine's API: tokens, scopes, status codes                        |
-| All         | `npm test`                 | The three above                                                       |
+| Layer       | Command                    | What it proves                                                                                               |
+| ----------- | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| Unit        | `npm run test:unit`        | Rules: the domain, desktop engines, extension logic, React components                                        |
+| Integration | `npm run test:integration` | The downloader against a real HTTP host and a real folder; main's ear on the engine against a real HTTP host |
+| Feature     | `npm run test:feature`     | The engine's API: tokens, scopes, status codes                                                               |
+| All         | `npm test`                 | The three above                                                                                              |
 
 ## Writing a spec
 

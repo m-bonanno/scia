@@ -43,6 +43,10 @@ What earlier reviews taught, each with the PR that taught it.
 - "Each caught" in a test plan is sampled, on the roads the specs really take: of 35 lines deleted from a PR that claimed 65 caught, 12 survived — a code the test host never answers, a line only an engine that restarts runs, two halves of one condition the host ties together, and rules the PR wrote into a `CLAUDE.md` with no spec. And a number in the body is checked against the code: "two requests in the whole run" could not be, with an engine that asks at every start. (#53)
 - A verdict is given on a head that can be merged: read `gh pr view <n> --json mergeable,mergeStateStatus` in every round. The heads of three rounds were behind `develop`, and the third conflicted with it in eight files; no review looked at the base. (#52)
 
+- A thing that lasts as long as the app is left alone for longer than every timer under it: a stream approved on runs of a minute was cut at five. (#51)
+
+- A flag the runtime gives is checked against what the system says, in the state a person can be in: `isFocused()` was true for a window that was never in use, and a run from a window that had been in use could not show it. (#51)
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.

@@ -23,7 +23,7 @@ export default defineConfig({
         test: {
           name: 'integration',
           environment: 'node',
-          include: ['apps/server/src/**/*.int.test.ts'],
+          include: ['apps/server/src/**/*.int.test.ts', 'apps/desktop/src/**/*.int.test.ts'],
         },
       },
       {

@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { getEventListeners } from 'node:events';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, sep } from 'node:path';
@@ -235,6 +236,39 @@ describe('DownloadManager', () => {
     expect(kept.downloadDirectory).toBe(elsewhere);
     // The path is read before anything is made: nothing is left of the detour.
     expect(await readdir(elsewhere)).toEqual([]);
+  });
+
+  it('stops waiting for a change when whoever asked has gone', async () => {
+    const downloads = await open();
+    const seen = await downloads.nextChange(-1);
+    const gone = new AbortController();
+    let answered = false;
+
+    // Nothing changes: the wait would last until something does.
+    const waiting = downloads.nextChange(seen, gone.signal).then((version) => {
+      answered = true;
+      return version;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(answered).toBe(false);
+    gone.abort();
+
+    expect(await waiting).toBe(seen);
+    // And asked by someone who has already gone, it does not wait at all.
+    expect(await downloads.nextChange(seen, gone.signal)).toBe(seen);
+  });
+
+  it('leaves nothing on the signal of whoever waits, however many changes it is told of', async () => {
+    const downloads = await open();
+    const listening = new AbortController();
+    let version = await downloads.nextChange(-1);
+
+    for (const connections of [2, 3, 4, 5]) {
+      const waiting = downloads.nextChange(version, listening.signal);
+      downloads.updateSettings({ connectionsPerDownload: connections });
+      version = await waiting;
+      expect(getEventListeners(listening.signal, 'abort')).toHaveLength(0);
+    }
   });
 
   it('holds a download under the speed limit', async () => {
