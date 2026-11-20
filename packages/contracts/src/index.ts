@@ -64,7 +64,8 @@ export const SNAPSHOT_EVENT = 'snapshot';
 export const SETTINGS_LIMITS = {
   maxConcurrentDownloads: { min: 1, max: 10 },
   connectionsPerDownload: { min: 1, max: 16 },
-  // Below this a connection reads as stalled to the host it downloads from.
+  // One read from a host — up to 64 KB — a second. It is the rate of all connections together:
+  // each of them is read from more slowly than this, the more of them there are.
   speedLimitBytesPerSecond: { min: 64 * 1024 },
 } as const;
 

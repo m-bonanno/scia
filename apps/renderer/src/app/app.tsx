@@ -33,7 +33,8 @@ export function App(): ReactNode {
   }, []);
 
   // The limit the title bar names is the engine's: read when the engine is reached, and again
-  // whenever it comes back. An engine that does not answer is said by the list, not here.
+  // whenever it comes back. A read that fails all the same is not reported here: the limit
+  // still holds, and Settings, which reports its own read, tells this page what it learns.
   const reached = live.connection === Connection.Live;
   useEffect(() => {
     if (!reached) return undefined;

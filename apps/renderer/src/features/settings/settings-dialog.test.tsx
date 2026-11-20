@@ -1,3 +1,4 @@
+import { settingsPatchSchema } from '@scia/contracts';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -46,7 +47,8 @@ describe('SettingsDialog', () => {
   }
 
   it('shows the limits, the folder and how to pair the extension', async () => {
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    const onSettings = vi.fn();
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
 
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
     expect(await screen.findByText('Simultaneous downloads')).toBeInTheDocument();
@@ -54,6 +56,8 @@ describe('SettingsDialog', () => {
     expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
     expect(screen.getByText('pairing-code')).toBeInTheDocument();
     expect(screen.getByText(/Paste this code into the extension’s options/)).toBeInTheDocument();
+    // Whoever opened it learns what was read, not only what is changed here.
+    expect(onSettings).toHaveBeenCalledExactlyOnceWith(settings);
   });
 
   it('changes the folder through the desktop shell, naming no path itself, and shows what the engine kept', async () => {
@@ -62,12 +66,14 @@ describe('SettingsDialog', () => {
     vi.spyOn(api, 'settings')
       .mockResolvedValueOnce(settings)
       .mockResolvedValueOnce({ ...settings, downloadDirectory: '/media/films' });
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    const onSettings = vi.fn();
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
 
     await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
 
     expect(chooseDownloadFolder).toHaveBeenCalledExactlyOnceWith();
     expect(await screen.findByText('/media/films')).toBeInTheDocument();
+    expect(onSettings).toHaveBeenLastCalledWith({ ...settings, downloadDirectory: '/media/films' });
   });
 
   it('says so, by the folder, when the engine refused the one that was chosen', async () => {
@@ -198,6 +204,38 @@ describe('SettingsDialog', () => {
 
     await userEvent.selectOptions(limit, 'none');
     expect(update).toHaveBeenLastCalledWith({ speedLimitBytesPerSecond: null });
+  });
+
+  it('keeps showing what the engine has when a change of the limit fails, and reports it', async () => {
+    const failure = new Error('refused');
+    vi.spyOn(api, 'updateSettings').mockRejectedValue(failure);
+    const onError = vi.fn();
+    render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
+    const limit = await screen.findByRole('combobox', { name: 'Speed limit' });
+
+    await userEvent.selectOptions(limit, String(5 * MIB));
+
+    await vi.waitFor(() => {
+      expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
+    });
+    expect(limit).toHaveValue('none');
+  });
+
+  it('offers no limit the engine would refuse', async () => {
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    const limit = await screen.findByRole('combobox', { name: 'Speed limit' });
+
+    const offered = within(limit)
+      .getAllByRole<HTMLOptionElement>('option')
+      .map((option) => (option.value === 'none' ? null : Number(option.value)));
+
+    expect(offered).toHaveLength(9);
+    for (const speedLimitBytesPerSecond of offered) {
+      expect(
+        settingsPatchSchema.safeParse({ speedLimitBytesPerSecond }).success,
+        String(speedLimitBytesPerSecond),
+      ).toBe(true);
+    }
   });
 
   it('shows a limit the engine has that is not one of the ready values', async () => {

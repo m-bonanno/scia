@@ -2,7 +2,6 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
-import { setTimeout as sleep } from 'node:timers/promises';
 import { type Download, type Settings, type SettingsPatch, type Snapshot } from '@scia/contracts';
 import {
   canPause,
@@ -13,7 +12,6 @@ import {
   fileKindOfName,
   fileNameFromUrl,
   nextToStart,
-  Pacer,
   planSegments,
   SpeedMeter,
   uniqueFileName,
@@ -29,6 +27,7 @@ import {
   type RequestHeaders,
 } from './remote-source.ts';
 import type { DownloadRecord, StateStore } from './state-store.ts';
+import { Throttle } from './throttle.ts';
 
 export const PART_SUFFIX = '.scia';
 
@@ -105,14 +104,14 @@ export class DownloadManager {
   #closed = false;
   readonly #markDownloaded: MarkDownloaded;
   // One for every connection of every download: the limit is for all of them together.
-  readonly #pacer: Pacer;
+  readonly #throttle: Throttle;
 
   constructor(deps: ManagerDeps, records: DownloadRecord[], settings: Settings) {
     this.#deps = deps;
     this.#markDownloaded = deps.markDownloaded ?? markerFor(process.platform);
     this.#records = records;
     this.#settings = settings;
-    this.#pacer = new Pacer(settings.speedLimitBytesPerSecond);
+    this.#throttle = new Throttle(settings.speedLimitBytesPerSecond);
   }
 
   static async open(deps: ManagerDeps): Promise<DownloadManager> {
@@ -249,7 +248,7 @@ export class DownloadManager {
     };
     // At once, also for what is already running.
     if (patch.speedLimitBytesPerSecond !== undefined) {
-      this.#pacer.limit(patch.speedLimitBytesPerSecond);
+      this.#throttle.limit(patch.speedLimitBytesPerSecond);
     }
     this.#changed();
     this.#schedule();
@@ -438,10 +437,7 @@ export class DownloadManager {
         onBytes: (count) => {
           running.meter.record(count, this.#now());
         },
-        pace: async (bytes, stop) => {
-          const waitMs = this.#pacer.book(bytes, this.#now());
-          if (waitMs > 0) await sleep(waitMs, undefined, { signal: stop });
-        },
+        allowance: () => this.#throttle.allowance(),
         ...(this.#deps.retryDelayMs === undefined ? {} : { retryDelayMs: this.#deps.retryDelayMs }),
       });
       running.task = task;

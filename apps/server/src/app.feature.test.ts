@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { API_PREFIX, ApiErrorCode, DEFAULT_API_PORT } from '@scia/contracts';
+import { API_PREFIX, ApiErrorCode, DEFAULT_API_PORT, SETTINGS_LIMITS } from '@scia/contracts';
 import { DownloadFailure } from '@scia/core';
 import type { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -209,9 +209,11 @@ describe('the engine API', () => {
         .speedLimitBytesPerSecond;
 
     expect(await limitOf(await call('/settings', { token: APP_TOKEN }))).toBeNull();
-    for (const refused of [1000, 1024 * 1024 + 0.5, -1, 'fast']) {
+    const floor = SETTINGS_LIMITS.speedLimitBytesPerSecond.min;
+    for (const refused of [floor - 1, 1024 * 1024 + 0.5, -1, 'fast']) {
       expect((await patch(refused)).status, String(refused)).toBe(400);
     }
+    expect(await limitOf(await patch(floor))).toBe(floor);
     expect(await limitOf(await patch(1024 * 1024))).toBe(1024 * 1024);
     expect(await limitOf(await patch(null))).toBeNull();
   });

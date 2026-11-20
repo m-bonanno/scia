@@ -17,10 +17,14 @@ const settings = {
   speedLimitBytesPerSecond: null,
 };
 
-const live = vi.hoisted(() => ({ downloads: [] as Download[] }));
+// What the page hears of the engine: changed by a spec, then the page is rendered again.
+const live = vi.hoisted((): { connection: Live.Connection; downloads: Download[] } => ({
+  connection: 'live',
+  downloads: [],
+}));
 vi.mock('@/lib/live.ts', async (original) => ({
   ...(await original<typeof Live>()),
-  useLive: () => ({ connection: 'live', downloads: live.downloads }),
+  useLive: () => ({ connection: live.connection, downloads: live.downloads }),
 }));
 
 beforeAll(() => {
@@ -34,6 +38,7 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
+  live.connection = 'live';
   vi.spyOn(api, 'settings').mockResolvedValue(settings);
   vi.spyOn(api, 'pairing').mockResolvedValue({ token: 'pairing-code', port: 47821 });
 });
@@ -73,6 +78,57 @@ describe('App', () => {
     vi.spyOn(api, 'settings').mockResolvedValue({ ...settings, speedLimitBytesPerSecond: MIB });
 
     render(<App />);
+
+    expect(await screen.findByText(/limit\s1\.0\sMB\/s/)).toBeInTheDocument();
+  });
+
+  it('asks for no settings before the engine is reached, and shows the limit once it is', async () => {
+    live.connection = 'connecting';
+    live.downloads = [aDownload({ bytesPerSecond: MIB })];
+    const read = vi
+      .spyOn(api, 'settings')
+      .mockResolvedValue({ ...settings, speedLimitBytesPerSecond: MIB });
+    const { rerender } = render(<App />);
+    expect(read).not.toHaveBeenCalled();
+
+    live.connection = 'live';
+    rerender(<App />);
+
+    expect(await screen.findByText(/limit\s1\.0\sMB\/s/)).toBeInTheDocument();
+    expect(read).toHaveBeenCalledOnce();
+  });
+
+  it('reads the settings again when the engine comes back, and follows a limit that changed meanwhile', async () => {
+    live.downloads = [aDownload({ bytesPerSecond: MIB })];
+    const read = vi
+      .spyOn(api, 'settings')
+      .mockResolvedValueOnce({ ...settings, speedLimitBytesPerSecond: MIB })
+      .mockResolvedValueOnce({ ...settings, speedLimitBytesPerSecond: 5 * MIB });
+    const { rerender } = render(<App />);
+    expect(await screen.findByText(/limit\s1\.0\sMB\/s/)).toBeInTheDocument();
+
+    live.connection = 'offline';
+    rerender(<App />);
+    live.connection = 'live';
+    rerender(<App />);
+
+    expect(await screen.findByText(/limit\s5\.0\sMB\/s/)).toBeInTheDocument();
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('learns the limit from Settings when its own read of it failed', async () => {
+    live.downloads = [aDownload({ bytesPerSecond: MIB })];
+    const read = vi
+      .spyOn(api, 'settings')
+      .mockRejectedValueOnce(new Error('not this time'))
+      .mockResolvedValue({ ...settings, speedLimitBytesPerSecond: MIB });
+    render(<App />);
+    await vi.waitFor(() => {
+      expect(read).toHaveBeenCalledOnce();
+    });
+    expect(screen.queryByText(/limit\s/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
 
     expect(await screen.findByText(/limit\s1\.0\sMB\/s/)).toBeInTheDocument();
   });

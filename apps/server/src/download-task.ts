@@ -11,6 +11,7 @@ import {
   splitLargest,
 } from '@scia/core';
 import { DiskError, RemoteError, type RemoteSource, type RequestHeaders } from './remote-source.ts';
+import type { Allowance } from './throttle.ts';
 
 // A connection that finished its range takes over half of another only when at least this much
 // is left for each: below it, the handshake costs more than it saves.
@@ -39,9 +40,9 @@ export interface TaskOptions {
   readonly connections: number;
   readonly segments: readonly Segment[];
   readonly onBytes: (count: number) => void;
-  // Called with what has just arrived: it resolves when more may be taken, so that everything
-  // that shares it stays under the speed limit. It rejects when the signal aborts.
-  readonly pace?: (bytes: number, signal: AbortSignal) => Promise<void>;
+  // The speed limit: what a connection books of it before each read, from before it asks its
+  // host to its last read (throttle.ts).
+  readonly allowance?: () => Allowance;
   readonly retryDelayMs?: (attempt: number) => number;
 }
 
@@ -236,6 +237,22 @@ export class DownloadTask {
   }
 
   async #streamSegment(index: number, file: FileHandle, signal: AbortSignal): Promise<void> {
+    const allowance = this.#options.allowance?.();
+    try {
+      // Before the host is asked, not after: a connection is not opened to be left unread.
+      await allowance?.next().over(signal);
+      await this.#streamBooked(index, file, signal, allowance);
+    } finally {
+      allowance?.settle();
+    }
+  }
+
+  async #streamBooked(
+    index: number,
+    file: FileHandle,
+    signal: AbortSignal,
+    allowance: Allowance | undefined,
+  ): Promise<void> {
     const asked = this.#segment(index);
     const body = await this.#options.source.open(
       this.#options.url,
@@ -269,16 +286,22 @@ export class DownloadTask {
 
     try {
       for await (const chunk of body) {
+        allowance?.took(chunk.byteLength);
         pending.push(chunk);
         pendingBytes += chunk.byteLength;
+        const whole = pendingBytes >= remainingBytes(this.#segment(index));
+        // Nothing is booked for a read that will not be made.
+        const hold = whole ? undefined : allowance?.next();
         const due =
           pendingBytes >= FLUSH_BYTES ||
-          pendingBytes >= remainingBytes(this.#segment(index)) ||
-          performance.now() - flushedAt >= FLUSH_INTERVAL_MS;
+          whole ||
+          performance.now() - flushedAt >= FLUSH_INTERVAL_MS ||
+          // What arrived is not kept in memory, unwritten and uncounted, for a wait this long.
+          (hold !== undefined && hold.ms >= FLUSH_INTERVAL_MS);
         // Leaving the loop closes the connection: the range it was asked may be longer than
         // what is left to this segment after a split.
         if (due && (await flush())) return;
-        await this.#options.pace?.(chunk.byteLength, signal);
+        await hold?.over(signal);
       }
       await flush();
     } catch (error) {
@@ -309,20 +332,40 @@ export class DownloadTask {
   }
 
   async #streamWhole(file: FileHandle, signal: AbortSignal): Promise<void> {
+    const allowance = this.#options.allowance?.();
+    try {
+      await allowance?.next().over(signal);
+      await this.#streamWholeBooked(file, signal, allowance);
+    } finally {
+      allowance?.settle();
+    }
+  }
+
+  async #streamWholeBooked(
+    file: FileHandle,
+    signal: AbortSignal,
+    allowance: Allowance | undefined,
+  ): Promise<void> {
     this.#wholeBytes = 0;
+    // Before the host is asked: nothing stands between its answer and the reading of it, where
+    // a failure would leave the connection open and unread.
+    await onDisk(() => file.truncate(0));
     const body = await this.#options.source.open(
       this.#options.url,
       this.#options.headers,
       null,
       signal,
     );
-    await onDisk(() => file.truncate(0));
+    const total = this.#options.totalBytes;
     try {
       for await (const chunk of body) {
         await writeFully(file, chunk, this.#wholeBytes);
         this.#wholeBytes += chunk.byteLength;
         this.#options.onBytes(chunk.byteLength);
-        await this.#options.pace?.(chunk.byteLength, signal);
+        allowance?.took(chunk.byteLength);
+        // A file that is whole books nothing more. A host that does not say the size has one
+        // more read booked and waited for: only that read tells that the last was the last.
+        if (this.#wholeBytes !== total) await allowance?.next().over(signal);
       }
     } catch (error) {
       if (error instanceof DiskError || error instanceof RemoteError || signal.aborted) throw error;
@@ -330,7 +373,6 @@ export class DownloadTask {
         cause: error,
       });
     }
-    const total = this.#options.totalBytes;
     if (total !== null && this.#wholeBytes !== total) {
       throw new RemoteError(DownloadFailure.Incomplete, true, 'The host closed the file early.');
     }

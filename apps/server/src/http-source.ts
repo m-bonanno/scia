@@ -16,8 +16,10 @@ import {
 
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 const MAX_REDIRECTS = 10;
-// A connection that sends nothing for this long is dead: the segment tries again.
+// A host that owes an answer or more of a body, and sends nothing for this long, is dead: the
+// segment tries again.
 const IDLE_TIMEOUT_MS = 30_000;
+const SILENT = 'The host stopped answering.';
 const BUSY = new Set([408, 425, 429]);
 
 interface Answer {
@@ -33,6 +35,31 @@ function refusal(status: number): RemoteError {
     `The host answered ${String(status)}.`,
     { status },
   );
+}
+
+// The body, read with the host's silence timed only while a read is waiting for it. The time
+// its reader stays away between two reads — a speed limit — is not the host's: timed on the
+// socket, a connection held back for longer than the timeout would be cut and asked again.
+async function* whileAnswering(
+  response: IncomingMessage,
+  idleTimeoutMs: number,
+): AsyncGenerator<Uint8Array> {
+  const chunks = response[Symbol.asyncIterator]() as AsyncIterator<Uint8Array>;
+  try {
+    for (;;) {
+      const silence = setTimeout(() => {
+        response.destroy(new Error(SILENT));
+      }, idleTimeoutMs);
+      const next = await chunks.next().finally(() => {
+        clearTimeout(silence);
+      });
+      if (next.done === true) return;
+      yield next.value;
+    }
+  } finally {
+    // A reader that leaves before the end closes the connection.
+    response.destroy();
+  }
 }
 
 function headerOf(response: IncomingMessage, name: string): string | undefined {
@@ -73,8 +100,11 @@ export class HttpSource implements RemoteSource {
     https: new https.Agent({ keepAlive: true }),
   };
 
-  constructor(userAgent: string) {
+  readonly #idleTimeoutMs: number;
+
+  constructor(userAgent: string, options: { readonly idleTimeoutMs?: number } = {}) {
     this.#userAgent = userAgent;
+    this.#idleTimeoutMs = options.idleTimeoutMs ?? IDLE_TIMEOUT_MS;
   }
 
   async probe(url: string, headers: RequestHeaders, signal: AbortSignal): Promise<RemoteFile> {
@@ -123,7 +153,7 @@ export class HttpSource implements RemoteSource {
           })
         : refusal(status);
     }
-    return response;
+    return whileAnswering(response, this.#idleTimeoutMs);
   }
 
   close(): void {
@@ -154,6 +184,7 @@ export class HttpSource implements RemoteSource {
           },
         },
         (response) => {
+          clearTimeout(silence);
           const location = response.headers.location;
           if (!REDIRECTS.has(response.statusCode ?? 0) || location === undefined) {
             resolve({ response, url: target.href, redirected: redirects > 0 });
@@ -167,10 +198,11 @@ export class HttpSource implements RemoteSource {
           resolve(this.#get(new URL(location, target).href, headers, signal, redirects + 1));
         },
       );
-      request.setTimeout(IDLE_TIMEOUT_MS, () => {
-        request.destroy(new Error('The host stopped answering.'));
-      });
+      const silence = setTimeout(() => {
+        request.destroy(new Error(SILENT));
+      }, this.#idleTimeoutMs);
       request.on('error', (error) => {
+        clearTimeout(silence);
         reject(
           signal.aborted
             ? error

@@ -15,4 +15,4 @@ The pairing code and the folder in `settings.png` belong to that scratch profile
 
 A capture is retaken in the PR that changes what it shows (`apps/renderer/CLAUDE.md`, "Behaviour"; the product designer checks it).
 
-Not captured yet: Settings in the light theme and with a folder refused, the empty list, the engine unreachable, a failed download, the extension's popup and options.
+Not captured yet: Settings in the light theme and with a folder refused, the open list of the speed limit's menu (the system draws it outside the page: no capture of the page shows it, and nobody has looked at it in either theme), the title bar with a limit in the light theme, the empty list, the engine unreachable, a failed download, the extension's popup and options.

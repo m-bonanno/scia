@@ -1,7 +1,7 @@
 import { ArrowDown, Settings } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { IconButton } from '@/components/icon-button.tsx';
-import { formatSpeed } from '@/lib/format.ts';
+import { formatSpeed, SEPARATOR } from '@/lib/format.ts';
 import { Logo } from './logo.tsx';
 
 interface TitleBarProps {
@@ -28,10 +28,12 @@ export function TitleBar({
           <span className="flex items-center gap-1 text-sm text-muted-foreground tabular-nums">
             <ArrowDown size={14} aria-hidden="true" className="text-accent" />
             <span className="sr-only">Total speed: </span>
-            {formatSpeed(bytesPerSecond)}
-            {speedLimitBytesPerSecond !== null && (
-              <span>· limit {formatSpeed(speedLimitBytesPerSecond)}</span>
-            )}
+            {/* One run of text: what is read aloud or copied has the spaces that are seen. */}
+            <span>
+              {formatSpeed(bytesPerSecond)}
+              {speedLimitBytesPerSecond !== null &&
+                `${SEPARATOR}limit ${formatSpeed(speedLimitBytesPerSecond)}`}
+            </span>
           </span>
         )}
         <IconButton label="Settings" className="no-drag" onClick={onOpenSettings}>

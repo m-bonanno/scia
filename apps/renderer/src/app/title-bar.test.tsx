@@ -24,6 +24,10 @@ describe('TitleBar', () => {
     );
 
     expect(screen.getByText(/limit\s1\.0\sMB\/s/)).toBeInTheDocument();
+    // Read aloud, or copied, as it is seen: the dot stands between two spaces in the text too.
+    expect(screen.getByRole('banner')).toHaveTextContent(
+      /Total speed: 1\.0\sMB\/s · limit\s1\.0\sMB\/s/,
+    );
   });
 
   it('says nothing of a limit when there is none, or nothing for it to hold back', () => {

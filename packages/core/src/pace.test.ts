@@ -40,6 +40,42 @@ describe('Pacer', () => {
     expect(waits).toEqual([0, 125, 250, 375, 500, 625, 750, 875]);
   });
 
+  it('does not take a clock that steps back for time still to wait', () => {
+    const pacer = new Pacer(1000);
+    pacer.book(1000, 60_000);
+
+    // A minute earlier than the last time it was asked: the wait is what was booked, no more.
+    expect(pacer.book(1000, 0)).toBe(1000);
+    expect(pacer.book(1, 500)).toBe(1500);
+  });
+
+  it('answers a booking of nothing with the wait of whoever comes next', () => {
+    const pacer = new Pacer(1000);
+    pacer.book(2000, 0);
+
+    expect(pacer.book(0, 500)).toBe(1500);
+    expect(pacer.book(0, 500)).toBe(1500);
+  });
+
+  it('takes back what was booked and will not be taken', () => {
+    const pacer = new Pacer(1000);
+    pacer.book(1000, 0);
+    pacer.book(1000, 0);
+
+    pacer.book(-1000, 0);
+
+    expect(pacer.book(0, 0)).toBe(1000);
+  });
+
+  it('gives no credit for what is given back when nothing is owed', () => {
+    const pacer = new Pacer(1000);
+
+    pacer.book(-60_000, 0);
+
+    expect(pacer.book(1000, 0)).toBe(0);
+    expect(pacer.book(1, 0)).toBe(1000);
+  });
+
   it('forgets what was booked when the limit changes, and lifts it at once', () => {
     const pacer = new Pacer(1000);
     pacer.book(10_000, 0);
