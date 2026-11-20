@@ -41,6 +41,8 @@ npm run build
 
 With untracked files of other work in the tree, check the format of tracked files only: `git ls-files | xargs npx prettier --check --ignore-unknown`.
 
+CI runs them on Ubuntu, and all but format, lint and types again on Windows, the system Scia ships for; it runs them once more on the commit a merge makes, before that commit is released ([`testing.md`](./testing.md), "Where CI runs them"). A gate green here and red on one of CI's systems is red.
+
 ## What is blocking
 
 This is the one definition; role files and `CLAUDE.md` point here. A finding is blocking when it is one of:
