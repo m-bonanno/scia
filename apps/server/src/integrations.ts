@@ -17,6 +17,10 @@ const HOSTS_FRESH_MS = 6 * 60 * 60_000;
 // After a reading that failed, the list it had is used this long before the service is asked
 // again: a service that does not answer is not asked once for every link.
 const HOSTS_RETRY_MS = 60_000;
+// With no service connected, a public list that could not be read is asked again only this
+// much later: a direct link waits on each reading, and nobody asked Scia to speak to the
+// service (#49).
+const PUBLIC_HOSTS_RETRY_MS = 60 * 60_000;
 
 // `work`, or the reason of `signal` as soon as it stops: what many wait for together is not
 // stopped by one of them leaving.
@@ -209,6 +213,8 @@ export class Integrations implements LinkResolver {
       // A file host's page is on its own domain, or on its www; its other names are the
       // servers of its files, which give them to anyone: those links go as they stand.
       const domains = await unlessStopped(this.#publicDomains(), signal);
+      // A service connected while the list was read is the one that decides.
+      if (this.#key !== undefined) return this.serviceFor(url, signal);
       if (domains.some((domain) => host === domain || host === `www.${domain}`)) {
         throw new ServiceError(
           IntegrationId.AllDebrid,
@@ -279,7 +285,7 @@ export class Integrations implements LinkResolver {
 
   // As the account's list: read when first needed and every six hours, one reading for every
   // link that waits. One that cannot be read leaves the links to go as they stand — as they
-  // did before #49 — and is asked again a minute later.
+  // did before #49 — and is asked again an hour later.
   #publicDomains(): Promise<readonly string[]> {
     const known = this.#publicHosts;
     if (known !== undefined && this.#now() - known.readAt < HOSTS_FRESH_MS) {
@@ -298,7 +304,10 @@ export class Integrations implements LinkResolver {
             error: describeFailure(error),
           });
           const domains = known?.domains ?? [];
-          this.#publicHosts = { domains, readAt: this.#now() - HOSTS_FRESH_MS + HOSTS_RETRY_MS };
+          this.#publicHosts = {
+            domains,
+            readAt: this.#now() - HOSTS_FRESH_MS + PUBLIC_HOSTS_RETRY_MS,
+          };
           return domains;
         },
       )

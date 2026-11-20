@@ -71,7 +71,8 @@ export function serviceTroubleMessage(failure: ServiceFailure, id: IntegrationId
 }
 
 // Said on the row of a download whose link goes through a service, when the service did not
-// give a link for it. Every sentence begins with who said so.
+// give a link for it; and, for a file host's link added with no service connected, what to
+// connect. Every sentence of a service's refusal begins with who said so.
 const LINK_NOT_UNLOCKED: Readonly<
   Record<ServiceFailure | UnlockFailure, (service: string) => string>
 > = {
@@ -116,7 +117,9 @@ export function directLinkFailedMessage(status: number | null, via: IntegrationI
 }
 
 // `via` is null when the service failed before it could say whether the link is one of its
-// own: the link belongs to no service yet, and the one that did not answer is not named.
+// own: the link belongs to no service yet, and the one that did not answer is not named. It
+// is null too for a file host's link added with no service connected, whose sentence names the
+// service to connect itself.
 export function linkNotUnlockedMessage(
   failure: ServiceFailure | UnlockFailure,
   via: IntegrationId | null,

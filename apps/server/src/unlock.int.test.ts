@@ -244,7 +244,7 @@ describe('a link that goes through a service', () => {
       });
     });
 
-    it('fetches a link as it stands while the list cannot be read, and asks again a minute later', async () => {
+    it('fetches a link as it stands while the list cannot be read, and asks again an hour later', async () => {
       const alldebrid = await serviceWith({ links: {} });
       let clock = 0;
       const integrations = await noneConnected(alldebrid, () => clock);
@@ -255,15 +255,39 @@ describe('a link that goes through a service', () => {
       expect(logged.join('\n')).toContain('service_public_hosts_not_read');
       const afterTheFailure = publicListAsked(alldebrid);
 
-      clock += 59_000;
+      clock += 60 * 60_000 - 1;
       await integrations.serviceFor(LINK, never);
       expect(publicListAsked(alldebrid)).toBe(afterTheFailure);
 
       alldebrid.misbehave(undefined);
-      clock += 2000;
+      clock += 1;
       await expect(integrations.serviceFor(LINK, never)).rejects.toMatchObject({
         failure: UnlockFailure.NeedsService,
       });
+    });
+
+    it('goes by the service connected while the public list was being read', async () => {
+      const alldebrid = await serviceWith({ links: {} });
+      let answer: ((domains: string[]) => void) | undefined;
+      class Holding extends AllDebrid {
+        override publicDomains(): Promise<string[]> {
+          return new Promise((resolve) => {
+            answer = resolve;
+          });
+        }
+      }
+      const integrations = await Integrations.open({
+        vault: new MemoryVault(),
+        alldebrid: new Holding({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+        logger,
+      });
+      const asked = integrations.serviceFor(LINK, never);
+      await until(() => answer !== undefined);
+
+      await integrations.connect(IntegrationId.AllDebrid, KEY);
+      answer?.(['hoster.example']);
+
+      expect(await asked).toBe('alldebrid');
     });
 
     it('asks for no public list once a service is connected', async () => {
