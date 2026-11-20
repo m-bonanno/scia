@@ -152,9 +152,13 @@ describe('HlsTask against a real HTTP host', () => {
     let settled = 0;
     const stream = task(`${host.url}/ts/index.m3u8`, {
       allowance: () => ({
-        next: () => ({ over: async () => undefined }),
-        took: (count: number) => (took += count),
-        settle: () => (settled += 1),
+        next: () => ({ ms: 0, over: async () => undefined }),
+        took: (count: number) => {
+          took += count;
+        },
+        settle: () => {
+          settled += 1;
+        },
       }),
     });
 

@@ -11,10 +11,10 @@ import {
   parsePlaylist,
   type Segment,
 } from '@scia/core';
-import muxjs from 'mux.js';
 import { PageError } from './media-choice.ts';
 import { DiskError, RemoteError, type RemoteSource, type RequestHeaders } from './remote-source.ts';
 import type { Allowance } from './throttle.ts';
+import { createTransmuxer } from './transmuxer.ts';
 
 const MOST_ATTEMPTS = 5;
 const MOST_PLAYLIST_BYTES = 8 * 1024 * 1024;
@@ -25,6 +25,9 @@ export interface HlsTaskOptions {
   readonly headers: RequestHeaders;
   // Where the mp4 is made; its pieces wait beside it, in a folder of their own, until then.
   readonly partPath: string;
+  // What the pieces are of — the quality chosen — written beside them: pieces kept of another are
+  // thrown away, not put into this mp4.
+  readonly variant?: string;
   readonly connections: number;
   readonly onBytes: (count: number) => void;
   // As a connection of a file books against the one speed limit, every read of a piece does.
@@ -46,7 +49,7 @@ interface Piece {
   readonly segment: HlsSegment;
 }
 
-const piecesOf = (partPath: string) => `${partPath}.pieces`;
+export const piecesOf = (partPath: string) => `${partPath}.pieces`;
 const pieceName = (index: number) => `${String(index)}.piece`;
 
 function refusalOf(error: HlsError): PageError {
@@ -92,7 +95,7 @@ export class HlsTask {
   async run(signal: AbortSignal): Promise<void> {
     const folder = piecesOf(this.#options.partPath);
     const pieces = await this.#readPlaylist(signal);
-    await disk(() => mkdir(folder, { recursive: true }));
+    await this.#keepOnlyPiecesOf(folder);
     for (const name of await disk(() => readdir(folder))) {
       const index = /^(\d+)\.piece$/.exec(name)?.[1];
       if (index !== undefined) {
@@ -116,6 +119,23 @@ export class HlsTask {
     }
     await this.#assemble(folder, signal);
     await disk(() => rm(folder, { recursive: true, force: true }));
+  }
+
+  // The pieces are written as files: what is there is on disk.
+  sync(): Promise<void> {
+    return Promise.resolve();
+  }
+
+  async #keepOnlyPiecesOf(folder: string): Promise<void> {
+    const label = join(folder, 'variant');
+    const durations = this.#pieces.map((piece) => String(piece.endMs - piece.startMs)).join(',');
+    const wanted = `${this.#options.variant ?? ''}|${durations}`;
+    const kept = await readFile(label, 'utf8').catch(() => undefined);
+    if (kept !== undefined && kept !== wanted) {
+      await disk(() => rm(folder, { recursive: true, force: true }));
+    }
+    await disk(() => mkdir(folder, { recursive: true }));
+    await disk(() => writeFile(label, wanted));
   }
 
   async #readPlaylist(signal: AbortSignal): Promise<Piece[]> {
@@ -281,7 +301,7 @@ export class HlsTask {
     output: Awaited<ReturnType<typeof open>>,
     signal: AbortSignal,
   ): Promise<void> {
-    const transmuxer = new muxjs.mp4.Transmuxer({ keepOriginalTimestamps: false, remux: true });
+    const transmuxer = createTransmuxer();
     // Its init segment once, before the first fragment: mux.js gives it with every one.
     const written = { init: false };
     let made: Buffer[] = [];

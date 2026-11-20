@@ -21,6 +21,7 @@ function aDownload(id: string, status: DownloadStatus, fileName = `${id}.bin`): 
     failureStatus: null,
     via: null,
     media: null,
+    timeline: null,
     createdAt: '2026-11-20T10:00:00.000Z',
     completedAt: null,
   };
