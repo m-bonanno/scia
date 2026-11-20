@@ -38,6 +38,8 @@ What earlier reviews taught, each with the PR that taught it.
 - A guard loosened to close one finding is reviewed for what it now lets through, and where: the fix that let quick presses clear a list let a third click answer a button that had grown under the pointer, and the harness that approved it pressed on the name, never where the button would be (#32).
 - A merge rule needs its exceptions named: "squash when approved" would have squashed the back-merge of a release. (#10)
 
+- An approval names the range it measured. A limit approved on runs from 64 KB/s to 1 MB/s over plain http, for a menu that ends at 50 MB/s, was a third of itself at 25: the review says what it tried, and what of the settings it did not. (#44)
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.

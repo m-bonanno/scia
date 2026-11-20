@@ -10,7 +10,7 @@ A download manager for Windows, with Linux to follow: paste a link, Scia fetches
 - Pauses and resumes from the bytes it already has, even after the app was closed and opened again.
 - Keeps downloading from the system tray when the window is closed with downloads running or waiting (Windows; Linux not yet tried); closing it with nothing left quits.
 - Marks what it downloads as coming from the network, as a browser does, so that Windows can ask before running it (Windows; seen with a script, not yet with an `.exe`, an installer or a document); and asks for a second press itself before running a downloaded program.
-- Keeps a queue: how many downloads at once and how many connections per download are settings, and so is the folder they go to.
+- Keeps a queue: how many downloads at once and how many connections per download are settings, and so are the folder they go to and a speed limit for all of them together.
 - Takes links and media from the browser through the extension (`apps/extension`) — written and tested in its logic, not yet tried in a real browser.
 
 What comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).

@@ -12,7 +12,7 @@
 - The name of a spec is the rule it holds: `'never overwrites a file already in the folder'`.
 - One behaviour per spec; arrange, act, assert, with a blank line between.
 - Integration specs compare **bytes** (`Buffer.compare`), not counters that could agree by accident.
-- No fixed sleeps. Wait for a state with `until(() => …)` (`apps/server/src/testing/scratch.ts`); inject delays (`retryDelayMs`).
+- No fixed sleeps. Wait for a state with `until(() => …)` (`apps/server/src/testing/scratch.ts`); inject delays (`retryDelayMs`). A wait that is the case itself is not a wait for an outcome — a reader that stays away from a host, the stretch over which a rate is measured — and says so where it stands.
 - Each spec gets its own temp folder and its own host (`startRangeServer`), and removes them.
 - A host that misbehaves is an option of `startRangeServer` (`drops`, `ranges: false`, `status`, `announcesLength: false`), not a mock of `http`.
 - Never hardcode a Windows path separator in a spec: build paths with `path.join`. CI runs on Linux.

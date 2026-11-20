@@ -3,6 +3,8 @@ import { LOCALE } from '@scia/contracts/locale';
 // Every number the person reads goes through here: one locale, a unit that never wraps away
 // from its number.
 const NBSP = '\u00a0';
+// Between two facts on one line: a row's status, the speed and its limit.
+export const SEPARATOR = ' \u00b7 ';
 const UNITS = ['B', 'KB', 'MB', 'GB', 'TB'] as const;
 
 const whole = new Intl.NumberFormat(LOCALE, { maximumFractionDigits: 0 });

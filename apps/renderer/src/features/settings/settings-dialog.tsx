@@ -1,21 +1,36 @@
 import { type Pairing, type Settings, SETTINGS_LIMITS, type SettingsPatch } from '@scia/contracts';
 import { FolderChange, isFolderChange } from '@scia/contracts/bridge';
 import { Check, Copy, FolderPen, Minus, Plus, X } from 'lucide-react';
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { IconButton } from '@/components/icon-button.tsx';
 import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { FOLDER_REFUSED } from '@/lib/messages.ts';
+import { SpeedLimit } from './speed-limit.tsx';
 
 interface SettingsDialogProps {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly onError: (error: unknown) => void;
+  // Told every time the dialog learns what the engine keeps: what it read, what it changed.
+  readonly onSettings: (settings: Settings) => void;
 }
 
-export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps): ReactNode {
+export function SettingsDialog({
+  open,
+  onClose,
+  onError,
+  onSettings,
+}: SettingsDialogProps): ReactNode {
   const dialog = useRef<HTMLDialogElement>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const keep = useCallback(
+    (kept: Settings) => {
+      setSettings(kept);
+      onSettings(kept);
+    },
+    [onSettings],
+  );
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [folderRefused, setFolderRefused] = useState(false);
   const shell = bridge();
@@ -35,14 +50,14 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
     Promise.all([api.settings(), api.pairing()])
       .then(([loadedSettings, loadedPairing]) => {
         if (!current) return;
-        setSettings(loadedSettings);
+        keep(loadedSettings);
         setPairing(loadedPairing);
       })
       .catch(onError);
     return () => {
       current = false;
     };
-  }, [open, onError]);
+  }, [open, onError, keep]);
 
   // The page names no folder: main shows the system's dialog and tells the engine, and the
   // page reads back what the engine kept.
@@ -59,12 +74,12 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
       })
       .catch(onError)
       .then(() => api.settings())
-      .then(setSettings)
+      .then(keep)
       .catch(onError);
   };
 
   const change = (patch: SettingsPatch) => {
-    api.updateSettings(patch).then(setSettings).catch(onError);
+    api.updateSettings(patch).then(keep).catch(onError);
   };
 
   return (
@@ -101,6 +116,12 @@ export function SettingsDialog({ open, onClose, onError }: SettingsDialogProps):
               {...SETTINGS_LIMITS.connectionsPerDownload}
               onChange={(connectionsPerDownload) => {
                 change({ connectionsPerDownload });
+              }}
+            />
+            <SpeedLimit
+              value={settings.speedLimitBytesPerSecond}
+              onChange={(speedLimitBytesPerSecond) => {
+                change({ speedLimitBytesPerSecond });
               }}
             />
             <div className="flex items-start justify-between gap-4">

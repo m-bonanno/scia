@@ -1,3 +1,4 @@
+import type { Settings } from '@scia/contracts';
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from 'react';
 import { AddBar } from '@/features/downloads/add-bar.tsx';
 import { DownloadList } from '@/features/downloads/download-list.tsx';
@@ -21,10 +22,33 @@ export function App(): ReactNode {
   const [filter, setFilter] = useState<Filter>(Filter.All);
   const [notice, setNotice] = useState<string | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [speedLimit, setSpeedLimit] = useState<number | null>(null);
 
   const report = useCallback((error: unknown) => {
     setNotice(errorMessage(error));
   }, []);
+
+  const keepSettings = useCallback((settings: Settings) => {
+    setSpeedLimit(settings.speedLimitBytesPerSecond);
+  }, []);
+
+  // The limit the title bar names is the engine's: read when the engine is reached, and again
+  // whenever it comes back. A read that fails all the same is not reported here: the limit
+  // still holds, and Settings, which reports its own read, tells this page what it learns.
+  const reached = live.connection === Connection.Live;
+  useEffect(() => {
+    if (!reached) return undefined;
+    let current = true;
+    api
+      .settings()
+      .then((settings) => {
+        if (current) keepSettings(settings);
+      })
+      .catch(() => undefined);
+    return () => {
+      current = false;
+    };
+  }, [reached, keepSettings]);
 
   const add = useCallback(
     async (urls: string[]): Promise<boolean> => {
@@ -95,6 +119,7 @@ export function App(): ReactNode {
     <div className="flex h-screen flex-col">
       <TitleBar
         bytesPerSecond={bytesPerSecond}
+        speedLimitBytesPerSecond={speedLimit}
         onOpenSettings={() => {
           setSettingsOpen(true);
         }}
@@ -123,6 +148,7 @@ export function App(): ReactNode {
           setSettingsOpen(false);
         }}
         onError={report}
+        onSettings={keepSettings}
       />
     </div>
   );

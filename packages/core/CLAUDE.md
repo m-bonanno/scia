@@ -2,7 +2,7 @@
 
 Loaded when working under `packages/core/`. **Extends** the root `CLAUDE.md`.
 
-The domain: how a file is split into segments and split again while it downloads, what the queue starts next, how fast a transfer is, what a file may be called on Windows and Linux, what kind of file it is. **Pure TypeScript.**
+The domain: how a file is split into segments and split again while it downloads, what the queue starts next, how fast a transfer is and how it is held under a limit, what a file may be called on Windows and Linux, what kind of file it is. **Pure TypeScript.**
 
 - **No IO, no frameworks, no runtime.** No `node:*`, no `electron`, no `zod`, no `fetch`, no `URL`, no DOM. ESLint enforces it. The same code runs in the engine, in the page and in the extension's service worker.
 - **No clock.** A function that needs the time takes it as an argument (`SpeedMeter.record(bytes, atMs)`). `new Date()` and `Date.now()` are lint errors here.

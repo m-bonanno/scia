@@ -25,9 +25,16 @@ export const recordSchema = z.object({
 });
 export type DownloadRecord = z.infer<typeof recordSchema>;
 
+// A setting added after a state was written is read with its default, and so is one whose
+// stored value the bounds of today refuse: the file loads with its downloads, it is not set
+// aside as unreadable for one setting.
+const storedSettingsSchema = settingsSchema.extend({
+  speedLimitBytesPerSecond: settingsSchema.shape.speedLimitBytesPerSecond.catch(null),
+});
+
 export const stateSchema = z.object({
   version: z.literal(1),
-  settings: settingsSchema,
+  settings: storedSettingsSchema,
   downloads: z.array(recordSchema),
 });
 export type PersistedState = z.infer<typeof stateSchema>;

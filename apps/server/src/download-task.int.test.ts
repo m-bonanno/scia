@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DownloadFailure, isComplete, planSegments, type Segment } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -120,6 +120,28 @@ describe('DownloadTask against a real HTTP host', () => {
     expect(failure).toBeInstanceOf(RemoteError);
   });
 
+  it('empties the file before it asks a host without ranges, not between the answer and the reading of it', async () => {
+    const { url } = await host({ ranges: false });
+    await writeFile(partPath, 'what an earlier attempt left here');
+    let sizeWhenAsked: number | undefined;
+    const download = task(url, {
+      resumable: false,
+      segments: [],
+      source: {
+        probe: (...asked) => source.probe(...asked),
+        open: async (...asked) => {
+          sizeWhenAsked = (await stat(partPath)).size;
+          return source.open(...asked);
+        },
+      },
+    });
+
+    await download.run(new AbortController().signal);
+
+    expect(sizeWhenAsked).toBe(0);
+    expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+  });
+
   it('takes the whole file in one connection from a host without ranges', async () => {
     const { url, ranges } = await host({ ranges: false });
     const download = task(url, { resumable: false, segments: [] });
@@ -152,6 +174,224 @@ describe('DownloadTask against a real HTTP host', () => {
     expect((failure as RemoteError).status).toBe(404);
     // One request per connection, none repeated.
     expect(ranges.length).toBeLessThanOrEqual(4);
+  });
+
+  describe('under a speed limit', () => {
+    const small = randomBytes(200_000);
+    // What the connections of a download do with the limit, in the order they do it.
+    function ledger() {
+      const events: string[] = [];
+      let opened = 0;
+      const allowance: TaskOptions['allowance'] = () => {
+        const name = String.fromCharCode('a'.charCodeAt(0) + opened);
+        opened += 1;
+        return {
+          next: () => {
+            events.push(`${name} asks`);
+            return {
+              ms: 0,
+              over: () => {
+                events.push(`${name} waits`);
+                return Promise.resolve();
+              },
+            };
+          },
+          took: (bytes) => {
+            events.push(`${name} took ${String(bytes)}`);
+          },
+          settle: () => {
+            events.push(`${name} settles`);
+          },
+        };
+      };
+      return { events, allowance };
+    }
+    const taken = (events: readonly string[]) =>
+      events
+        .map((event) => /took (\d+)$/.exec(event)?.[1])
+        .reduce((total, bytes) => total + Number(bytes ?? 0), 0);
+    // "a asks", "a waits" before every read; "a took <n>" after it.
+    const withoutCounts = (events: readonly string[]) =>
+      events.map((event) => event.replace(/ \d+$/, ''));
+
+    it('asks before the host is asked and before every read, never after the last, and settles', async () => {
+      const { url, ranges } = await host({ body: small });
+      const { events, allowance } = ledger();
+      const asksAt: number[] = [];
+      const download = task(url, {
+        totalBytes: small.length,
+        connections: 1,
+        segments: [{ start: 0, end: small.length, downloaded: 0 }],
+        allowance: () => {
+          const own = allowance(null);
+          return {
+            ...own,
+            next: () => {
+              // How many requests the host had seen when the limit was asked.
+              asksAt.push(ranges.length);
+              return own.next();
+            },
+          };
+        },
+      });
+
+      await download.run(new AbortController().signal);
+
+      expect(Buffer.compare(await readFile(partPath), small)).toBe(0);
+      expect(taken(events)).toBe(small.length);
+      expect(asksAt[0]).toBe(0);
+      const reads = events.filter((event) => event.includes('took')).length;
+      expect(withoutCounts(events)).toEqual([
+        ...Array.from({ length: reads }, () => ['a asks', 'a waits', 'a took']).flat(),
+        'a settles',
+      ]);
+    });
+
+    it('tells the limit how much each connection can bring, when its host says', async () => {
+      const told: (number | null)[] = [];
+      const quiet = (expectedBytes: number | null) => {
+        told.push(expectedBytes);
+        return {
+          next: () => ({ ms: 0, over: () => Promise.resolve() }),
+          took: () => undefined,
+          settle: () => undefined,
+        };
+      };
+      const signal = new AbortController().signal;
+
+      const ranged = await host({ body: small });
+      await task(ranged.url, {
+        totalBytes: small.length,
+        connections: 1,
+        segments: [{ start: 50_000, end: small.length, downloaded: 0 }],
+        allowance: quiet,
+      }).run(signal);
+      await server?.close();
+      const whole = await host({ body: small, ranges: false });
+      await task(whole.url, {
+        totalBytes: small.length,
+        resumable: false,
+        segments: [],
+        allowance: quiet,
+      }).run(signal);
+      await server?.close();
+      const sizeless = await host({ body: small, ranges: false, announcesLength: false });
+      await task(sizeless.url, {
+        totalBytes: null,
+        resumable: false,
+        segments: [],
+        allowance: quiet,
+      }).run(signal);
+
+      // What is left of the range, the whole file, and nothing when the host does not say.
+      expect(told).toEqual([small.length - 50_000, small.length, null]);
+    });
+
+    it('does the same on a host without ranges', async () => {
+      const { url } = await host({ body: small, ranges: false });
+      const { events, allowance } = ledger();
+      const download = task(url, {
+        totalBytes: small.length,
+        resumable: false,
+        segments: [],
+        allowance,
+      });
+
+      await download.run(new AbortController().signal);
+
+      expect(Buffer.compare(await readFile(partPath), small)).toBe(0);
+      expect(taken(events)).toBe(small.length);
+      const reads = events.filter((event) => event.includes('took')).length;
+      expect(withoutCounts(events)).toEqual([
+        ...Array.from({ length: reads }, () => ['a asks', 'a waits', 'a took']).flat(),
+        'a settles',
+      ]);
+    });
+
+    it('settles what a connection booked when it is stopped while it waits, before or after its host answered', async () => {
+      const { url, ranges } = await host();
+      for (const heldAt of [1, 2]) {
+        const stopped = new AbortController();
+        const events: string[] = [];
+        let asked = 0;
+        const download = task(url, {
+          connections: 1,
+          segments: [{ start: 0, end: body.length, downloaded: 0 }],
+          allowance: () => ({
+            next: () => {
+              asked += 1;
+              const held = asked === heldAt;
+              return {
+                ms: held ? 60_000 : 0,
+                over: (signal) =>
+                  held
+                    ? new Promise((_, reject) => {
+                        events.push('waits');
+                        signal.addEventListener('abort', () => {
+                          reject(signal.reason as Error);
+                        });
+                      })
+                    : Promise.resolve(),
+              };
+            },
+            took: () => undefined,
+            settle: () => {
+              events.push('settles');
+            },
+          }),
+        });
+
+        const running = download.run(stopped.signal).catch((error: unknown) => error);
+        await until(() => events.includes('waits'), 2000);
+        const requests = ranges.length;
+        stopped.abort(new Error('paused'));
+
+        expect(await running, `held at ask ${String(heldAt)}`).toEqual(new Error('paused'));
+        expect(events).toEqual(['waits', 'settles']);
+        // Held before its first read, the connection had asked its host for nothing yet.
+        if (heldAt === 1) expect(requests).toBe(0);
+      }
+    });
+
+    it('writes and counts what arrived before a long wait, not after it', async () => {
+      const { url } = await host();
+      const stopped = new AbortController();
+      let asked = 0;
+      const download = task(url, {
+        connections: 1,
+        segments: [{ start: 0, end: body.length, downloaded: 0 }],
+        // Nothing holds the first read; before the second the limit asks for a minute.
+        allowance: () => ({
+          next: () => {
+            asked += 1;
+            const held = asked > 1;
+            return {
+              ms: held ? 60_000 : 0,
+              over: (signal) =>
+                held
+                  ? new Promise((_, reject) => {
+                      signal.addEventListener('abort', () => {
+                        reject(signal.reason as Error);
+                      });
+                    })
+                  : Promise.resolve(),
+            };
+          },
+          took: () => undefined,
+          settle: () => undefined,
+        }),
+      });
+
+      const running = download.run(stopped.signal).catch((error: unknown) => error);
+      await until(() => download.progress().downloadedBytes > 0, 2000);
+      const held = download.progress().downloadedBytes;
+      stopped.abort(new Error('paused'));
+
+      expect(await running).toEqual(new Error('paused'));
+      expect((await readFile(partPath)).subarray(0, held).equals(body.subarray(0, held))).toBe(
+        true,
+      );
+    });
   });
 });
 

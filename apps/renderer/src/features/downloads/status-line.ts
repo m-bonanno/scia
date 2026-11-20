@@ -1,8 +1,12 @@
 import type { Download } from '@scia/contracts';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
-import { formatBytes, formatDuration, formatPercent, formatSpeed } from '@/lib/format.ts';
-
-const SEPARATOR = ' · ';
+import {
+  formatBytes,
+  formatDuration,
+  formatPercent,
+  formatSpeed,
+  SEPARATOR,
+} from '@/lib/format.ts';
 
 // The fact, then the remedy where there is one: trying again does not bring back a deleted file.
 function failureText(download: Download): string {
