@@ -3,6 +3,11 @@
 appId: app.scia.desktop
 productName: Scia
 copyright: Copyright © 2026 Scia
+# A one-click install for the user goes to Programs\<this name>; the workspace's own name,
+# @scia/desktop, would make it @sciadesktop. Kept equal to productName, lower-case, by
+# src/engine/app-identity.test.ts. The app's name and its data folder come from productName.
+extraMetadata:
+  name: scia
 
 directories:
   output: release
