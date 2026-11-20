@@ -12,8 +12,8 @@ interface Copied {
 }
 
 // The system's clipboard is the one thing answered for the person, in main, as the folder dialog
-// is in settings.e2e: a process started under a job that limits the desktop — as a session of the
-// owner's assistant is — cannot open it, and a spec must not take a person's clipboard either.
+// is in settings.e2e: a process started under a job that limits the desktop — as a sandboxed shell
+// is — cannot open it, and a spec must not take a person's clipboard either.
 // Everything after Electron's read is the app's own.
 const answerClipboard = (app: ElectronApplication) =>
   app.evaluate(({ clipboard }) => {

@@ -63,6 +63,45 @@ describe('DownloadRow', () => {
     expect(row.remove).toHaveBeenCalledExactlyOnceWith('d1');
   });
 
+  it('names a ready link that names no file by its address, which is all that is known before its Start', () => {
+    const { rerender } = render(
+      <DownloadRow
+        download={aDownload({
+          status: DownloadStatus.Ready,
+          url: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
+          fileName: 'watch',
+          kind: FileKind.Other,
+        })}
+        actions={actions()}
+      />,
+    );
+    expect(screen.getByTitle('youtube.com/watch?v=aqz-KE-bpKQ')).toHaveTextContent(
+      'youtube.com/watch?v=aqz-KE-bpKQ',
+    );
+
+    rerender(
+      <DownloadRow
+        download={aDownload({
+          status: DownloadStatus.Ready,
+          url: 'https://example.com/files/archive.zip',
+          fileName: 'archive.zip',
+          kind: FileKind.Archive,
+        })}
+        actions={actions()}
+      />,
+    );
+    expect(screen.getByTitle('archive.zip')).toBeInTheDocument();
+
+    // Once started, the row names what the host or the site calls the file.
+    rerender(
+      <DownloadRow
+        download={aDownload({ url: 'https://www.youtube.com/watch?v=x', fileName: 'watch' })}
+        actions={actions()}
+      />,
+    );
+    expect(screen.getByTitle('watch')).toBeInTheDocument();
+  });
+
   it('shows the whole sentence of a failure, remedy included, where a running line is cut', () => {
     const failed = aDownload({
       status: DownloadStatus.Failed,

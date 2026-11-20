@@ -45,6 +45,15 @@ export interface RowActions {
   readonly open: ((id: string) => void) | undefined;
 }
 
+// A ready link's name is a guess from its address until it starts: a site's page is "watch", a
+// file host's an "….html". One that names no kind of file is shown by its address.
+function shownName(download: Download): string {
+  if (download.status !== DownloadStatus.Ready || download.kind !== FileKind.Other) {
+    return download.fileName;
+  }
+  return download.url.replace(/^https?:\/\/(www\.)?/i, '');
+}
+
 interface DownloadRowProps {
   readonly download: Download;
   readonly actions: RowActions;
@@ -59,6 +68,7 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
   const program = download.kind === FileKind.Program;
   const { open, reveal } = actions;
   const openButton = useRef<ConfirmButtonHandle>(null);
+  const name = shownName(download);
 
   return (
     <li
@@ -76,11 +86,8 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
           <Icon size={18} aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <p
-            className="truncate text-[0.9375rem] leading-snug font-medium"
-            title={download.fileName}
-          >
-            {download.fileName}
+          <p className="truncate text-[0.9375rem] leading-snug font-medium" title={name}>
+            {name}
           </p>
           <p
             className={cn(
