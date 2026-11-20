@@ -17,6 +17,10 @@ export interface StartServerOptions {
   readonly entry: string;
   readonly env: Record<string, string>;
   readonly log: ServerLog;
+  // What main answers to a message of the engine's that asks something of it — today, the key
+  // of a service (engine/key-vault.ts). Undefined for a message that asks nothing; it never
+  // rejects.
+  readonly answer: (message: unknown) => Promise<unknown>;
 }
 
 function isReadyMessage(message: unknown): message is ReadyMessage {
@@ -39,6 +43,12 @@ export async function startServer(options: StartServerOptions): Promise<StartedS
   });
   child.stderr?.on('data', (chunk: Buffer) => {
     options.log.warn(`[engine] ${chunk.toString().trimEnd()}`);
+  });
+  // From its first moment: the engine asks for its keys before it listens.
+  child.on('message', (message: unknown) => {
+    void options.answer(message).then((answer) => {
+      if (answer !== undefined) child.postMessage(answer);
+    });
   });
   let hasExited = false;
   const exited = new Promise<number>((resolve) => {

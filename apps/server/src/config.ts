@@ -1,4 +1,5 @@
 import { DEFAULT_API_PORT } from '@scia/contracts';
+import { ALLDEBRID_API } from './alldebrid.ts';
 
 export interface ServerConfig {
   readonly port: number;
@@ -10,6 +11,24 @@ export interface ServerConfig {
   // The built renderer; absent under the dev server, where Vite serves it.
   readonly staticDir: string | undefined;
   readonly version: string;
+  // Where AllDebrid answers: its own address, unless a run names a simulated service.
+  readonly alldebridApi: string;
+}
+
+// The key of the person's account goes wherever this address says. It is replaced only by an
+// address on this computer — the simulated service of a run — so that no variable can send a
+// key to another machine.
+function serviceAddress(given: string | undefined, name: string, real: string): string {
+  if (given === undefined || given === '') return real;
+  const address = URL.canParse(given) ? new URL(given) : undefined;
+  if (
+    address?.protocol !== 'http:' ||
+    (address.hostname !== '127.0.0.1' && address.hostname !== 'localhost') ||
+    address.username !== ''
+  ) {
+    throw new Error(`${name} must be an http address on this computer.`);
+  }
+  return address.origin;
 }
 
 const MIN_TOKEN_LENGTH = 16;
@@ -38,5 +57,6 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
     downloadDir: required(env, 'SCIA_DOWNLOAD_DIR'),
     staticDir: staticDir === undefined || staticDir === '' ? undefined : staticDir,
     version: env.SCIA_VERSION ?? '0.0.0',
+    alldebridApi: serviceAddress(env.SCIA_ALLDEBRID_API, 'SCIA_ALLDEBRID_API', ALLDEBRID_API),
   };
 }

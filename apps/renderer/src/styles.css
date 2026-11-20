@@ -108,7 +108,9 @@
     scrollbar-width: thin;
     scrollbar-color: var(--tonal) transparent;
   }
-  button:not(:disabled) {
+  /* A button that does nothing for now — disabled, or `aria-disabled` to keep the focus — does
+     not offer itself to the pointer. */
+  button:not(:disabled, [aria-disabled='true']) {
     cursor: pointer;
   }
   ::selection {

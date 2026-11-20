@@ -30,6 +30,8 @@ What earlier reviews taught, each with the PR that taught it.
 
 - A number that vouches for a roadmap clause is asked how it was counted and against what: an approval rested on a host that paused between pieces and on speeds shown, where the claim was a rate — and the rate was passed twofold. Bytes, against a host that does not pause, at both ends of what the settings offer. (#44)
 
+- The evidence of a run is read as one story: a count "in the whole run" beside sentences of a restart that must have asked again cannot both be true. And "all of it by keys, in both themes" on the roadmap is checked against the list of what was done by keys and looked at in each theme. (#53)
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.

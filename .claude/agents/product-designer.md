@@ -25,6 +25,8 @@ What earlier reviews taught, each with the PR that taught it.
 
 - A capture shows one screen. For a change that touches every string, ask what each dialog reads in the real app, not only the main view. (#4)
 
+- A sentence is read against every cause its code covers, in the engine: "is not answering" was the text of a code that also means maintenance, an unknown answer and too many requests. And a way back is not drawn beside what cannot be taken back. (#53)
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.
