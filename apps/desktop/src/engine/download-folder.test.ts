@@ -7,6 +7,7 @@ const settings = {
   maxConcurrentDownloads: 3,
   connectionsPerDownload: 8,
   downloadDirectory: 'C:\\Users\\me\\Downloads',
+  speedLimitBytesPerSecond: null,
 };
 
 function engineWith(fetch: EngineAccess['fetch']) {

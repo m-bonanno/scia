@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { type Download, type Settings, type SettingsPatch, type Snapshot } from '@scia/contracts';
 import {
   canPause,
@@ -12,6 +13,7 @@ import {
   fileKindOfName,
   fileNameFromUrl,
   nextToStart,
+  Pacer,
   planSegments,
   SpeedMeter,
   uniqueFileName,
@@ -30,7 +32,11 @@ import type { DownloadRecord, StateStore } from './state-store.ts';
 
 export const PART_SUFFIX = '.scia';
 
-const DEFAULT_SETTINGS = { maxConcurrentDownloads: 3, connectionsPerDownload: 8 } as const;
+const DEFAULT_SETTINGS = {
+  maxConcurrentDownloads: 3,
+  connectionsPerDownload: 8,
+  speedLimitBytesPerSecond: null,
+} as const;
 // A connection is not opened for less than this.
 const MIN_SEGMENT_BYTES = 1024 * 1024;
 const CHECKPOINT_MS = 5000;
@@ -98,12 +104,15 @@ export class DownloadManager {
   #checkpointing = false;
   #closed = false;
   readonly #markDownloaded: MarkDownloaded;
+  // One for every connection of every download: the limit is for all of them together.
+  readonly #pacer: Pacer;
 
   constructor(deps: ManagerDeps, records: DownloadRecord[], settings: Settings) {
     this.#deps = deps;
     this.#markDownloaded = deps.markDownloaded ?? markerFor(process.platform);
     this.#records = records;
     this.#settings = settings;
+    this.#pacer = new Pacer(settings.speedLimitBytesPerSecond);
   }
 
   static async open(deps: ManagerDeps): Promise<DownloadManager> {
@@ -233,7 +242,15 @@ export class DownloadManager {
       ...(patch.connectionsPerDownload === undefined
         ? {}
         : { connectionsPerDownload: patch.connectionsPerDownload }),
+      // Null is a value here: it lifts the limit.
+      ...(patch.speedLimitBytesPerSecond === undefined
+        ? {}
+        : { speedLimitBytesPerSecond: patch.speedLimitBytesPerSecond }),
     };
+    // At once, also for what is already running.
+    if (patch.speedLimitBytesPerSecond !== undefined) {
+      this.#pacer.limit(patch.speedLimitBytesPerSecond);
+    }
     this.#changed();
     this.#schedule();
     return this.#settings;
@@ -420,6 +437,10 @@ export class DownloadManager {
         segments: record.segments,
         onBytes: (count) => {
           running.meter.record(count, this.#now());
+        },
+        pace: async (bytes, stop) => {
+          const waitMs = this.#pacer.book(bytes, this.#now());
+          if (waitMs > 0) await sleep(waitMs, undefined, { signal: stop });
         },
         ...(this.#deps.retryDelayMs === undefined ? {} : { retryDelayMs: this.#deps.retryDelayMs }),
       });

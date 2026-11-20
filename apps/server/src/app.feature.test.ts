@@ -197,6 +197,25 @@ describe('the engine API', () => {
     expect(manager.settings().downloadDirectory).toBe(before);
   });
 
+  it('takes a speed limit above its floor, or none', async () => {
+    const patch = (speedLimitBytesPerSecond: unknown) =>
+      call('/settings', {
+        method: 'PATCH',
+        token: APP_TOKEN,
+        body: JSON.stringify({ speedLimitBytesPerSecond }),
+      });
+    const limitOf = async (response: Response) =>
+      ((await response.json()) as { data: { speedLimitBytesPerSecond: number | null } }).data
+        .speedLimitBytesPerSecond;
+
+    expect(await limitOf(await call('/settings', { token: APP_TOKEN }))).toBeNull();
+    for (const refused of [1000, 1024 * 1024 + 0.5, -1, 'fast']) {
+      expect((await patch(refused)).status, String(refused)).toBe(400);
+    }
+    expect(await limitOf(await patch(1024 * 1024))).toBe(1024 * 1024);
+    expect(await limitOf(await patch(null))).toBeNull();
+  });
+
   it('keeps the settings inside their limits', async () => {
     const tooMany = await call('/settings', {
       method: 'PATCH',

@@ -64,6 +64,8 @@ export const SNAPSHOT_EVENT = 'snapshot';
 export const SETTINGS_LIMITS = {
   maxConcurrentDownloads: { min: 1, max: 10 },
   connectionsPerDownload: { min: 1, max: 16 },
+  // Below this a connection reads as stalled to the host it downloads from.
+  speedLimitBytesPerSecond: { min: 64 * 1024 },
 } as const;
 
 export const settingsSchema = z.object({
@@ -78,11 +80,21 @@ export const settingsSchema = z.object({
     .min(SETTINGS_LIMITS.connectionsPerDownload.min)
     .max(SETTINGS_LIMITS.connectionsPerDownload.max),
   downloadDirectory: z.string().min(1),
+  // For all downloads together; null for no limit.
+  speedLimitBytesPerSecond: z
+    .number()
+    .int()
+    .min(SETTINGS_LIMITS.speedLimitBytesPerSecond.min)
+    .nullable(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
 export const settingsPatchSchema = settingsSchema
-  .pick({ maxConcurrentDownloads: true, connectionsPerDownload: true })
+  .pick({
+    maxConcurrentDownloads: true,
+    connectionsPerDownload: true,
+    speedLimitBytesPerSecond: true,
+  })
   .partial();
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
 

@@ -7,12 +7,18 @@ import { Logo } from './logo.tsx';
 interface TitleBarProps {
   // The sum of every running download; zero hides the reading.
   readonly bytesPerSecond: number;
+  // Shown beside the speed while it is on: why the downloads go no faster.
+  readonly speedLimitBytesPerSecond: number | null;
   readonly onOpenSettings: () => void;
 }
 
 // The window's title bar, drawn by the page beside the window's own buttons. It moves the
 // window; only what can be pressed in it takes the pointer.
-export function TitleBar({ bytesPerSecond, onOpenSettings }: TitleBarProps): ReactNode {
+export function TitleBar({
+  bytesPerSecond,
+  speedLimitBytesPerSecond,
+  onOpenSettings,
+}: TitleBarProps): ReactNode {
   return (
     <header className="title-bar flex h-10 shrink-0 items-center gap-2 pr-1 pl-4">
       <Logo />
@@ -23,6 +29,9 @@ export function TitleBar({ bytesPerSecond, onOpenSettings }: TitleBarProps): Rea
             <ArrowDown size={14} aria-hidden="true" className="text-accent" />
             <span className="sr-only">Total speed: </span>
             {formatSpeed(bytesPerSecond)}
+            {speedLimitBytesPerSecond !== null && (
+              <span>· limit {formatSpeed(speedLimitBytesPerSecond)}</span>
+            )}
           </span>
         )}
         <IconButton label="Settings" className="no-drag" onClick={onOpenSettings}>

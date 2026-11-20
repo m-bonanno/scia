@@ -39,6 +39,9 @@ export interface TaskOptions {
   readonly connections: number;
   readonly segments: readonly Segment[];
   readonly onBytes: (count: number) => void;
+  // Called with what has just arrived: it resolves when more may be taken, so that everything
+  // that shares it stays under the speed limit. It rejects when the signal aborts.
+  readonly pace?: (bytes: number, signal: AbortSignal) => Promise<void>;
   readonly retryDelayMs?: (attempt: number) => number;
 }
 
@@ -275,6 +278,7 @@ export class DownloadTask {
         // Leaving the loop closes the connection: the range it was asked may be longer than
         // what is left to this segment after a split.
         if (due && (await flush())) return;
+        await this.#options.pace?.(chunk.byteLength, signal);
       }
       await flush();
     } catch (error) {
@@ -318,6 +322,7 @@ export class DownloadTask {
         await writeFully(file, chunk, this.#wholeBytes);
         this.#wholeBytes += chunk.byteLength;
         this.#options.onBytes(chunk.byteLength);
+        await this.#options.pace?.(chunk.byteLength, signal);
       }
     } catch (error) {
       if (error instanceof DiskError || error instanceof RemoteError || signal.aborted) throw error;

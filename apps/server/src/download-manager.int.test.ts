@@ -237,6 +237,75 @@ describe('DownloadManager', () => {
     expect(await readdir(elsewhere)).toEqual([]);
   });
 
+  it('holds a download under the speed limit', async () => {
+    const { url } = await host({ body: randomBytes(MIB) });
+    const downloads = await open();
+    downloads.updateSettings({ speedLimitBytesPerSecond: MIB / 2 });
+
+    const startedAt = Date.now();
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    // A megabyte at half a megabyte a second: two seconds, less the first bytes, which wait
+    // for nothing.
+    expect(Date.now() - startedAt).toBeGreaterThan(1500);
+  });
+
+  it('frees a running download when the limit is lifted, without stopping it', async () => {
+    const { url } = await host({ body: randomBytes(MIB) });
+    const downloads = await open();
+    // A megabyte at this rate is sixteen seconds: longer than the spec waits.
+    downloads.updateSettings({ speedLimitBytesPerSecond: 64 * 1024 });
+
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => downloads.find(added!.id).downloadedBytes > 0);
+    expect(downloads.updateSettings({ speedLimitBytesPerSecond: null })).toMatchObject({
+      speedLimitBytesPerSecond: null,
+    });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(downloads.find(added!.id).downloadedBytes).toBe(MIB);
+  });
+
+  it('does not keep a paused download waiting on the limit', async () => {
+    const { url } = await host({ body: randomBytes(MIB) });
+    const downloads = await open();
+    downloads.updateSettings({ speedLimitBytesPerSecond: 64 * 1024 });
+
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => downloads.find(added!.id).downloadedBytes > 0);
+    const askedAt = Date.now();
+    await downloads.pause(added!.id);
+
+    expect(statusOf(downloads, added!.id)).toBe(DownloadStatus.Paused);
+    expect(Date.now() - askedAt).toBeLessThan(1000);
+  });
+
+  it('loads a state written before the speed limit existed, with no limit', async () => {
+    const statePath = join(folder.path, 'data', 'state.json');
+    await mkdir(join(folder.path, 'data'), { recursive: true });
+    await writeFile(
+      statePath,
+      JSON.stringify({
+        version: 1,
+        settings: {
+          maxConcurrentDownloads: 2,
+          connectionsPerDownload: 4,
+          downloadDirectory: join(folder.path, 'downloads'),
+        },
+        downloads: [],
+      }),
+    );
+
+    expect((await open()).settings()).toEqual({
+      maxConcurrentDownloads: 2,
+      connectionsPerDownload: 4,
+      downloadDirectory: join(folder.path, 'downloads'),
+      speedLimitBytesPerSecond: null,
+    });
+    expect(existsSync(`${statePath}.unreadable`)).toBe(false);
+  });
+
   it('runs no more downloads at once than the setting allows', async () => {
     const { url } = await host({ chunkDelayMs: 3 });
     const downloads = await open();
