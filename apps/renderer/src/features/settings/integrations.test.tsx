@@ -16,7 +16,7 @@ const notConnected: Integration = {
 const connected: Integration = {
   id: 'alldebrid',
   connected: true,
-  // Midday, so that the day is the same wherever the spec runs.
+  // Midday in UTC: the same day wherever the spec runs, but twelve hours and more east of it.
   account: { name: 'ada', premium: true, premiumUntil: '2027-06-30T12:00:00.000Z' },
   failure: null,
 };
@@ -118,16 +118,20 @@ describe('IntegrationsSection', () => {
       'AllDebrid refuses this key from this network. Check your AllDebrid account, then try again.',
     ],
     [ApiErrorCode.AccountBanned, 422, 'AllDebrid says this account is banned.'],
-    [ApiErrorCode.Unavailable, 502, 'AllDebrid is not answering. Try again in a moment.'],
+    [
+      ApiErrorCode.Unavailable,
+      502,
+      'Scia could not check this key with AllDebrid. Try again in a moment.',
+    ],
     [
       ApiErrorCode.KeyNotKept,
       500,
-      'Scia could not store the key safely on this computer. Nothing was connected.',
+      'Scia could not keep the key safely on this computer. Nothing was connected.',
     ],
     [
       ApiErrorCode.InvalidRequest,
       400,
-      'That is not a key. Copy it again from your AllDebrid account.',
+      'This is not a key. Copy it again from your AllDebrid account.',
     ],
   ])(
     'says what happened to the key, by its field, when the answer is %s',
@@ -141,12 +145,27 @@ describe('IntegrationsSection', () => {
       await userEvent.click(service.getByRole('button', { name: 'Connect' }));
 
       expect(await service.findByRole('alert')).toHaveTextContent(text);
-      // A failed attempt never clears what was typed.
-      expect(service.getByLabelText('AllDebrid API key')).toHaveValue(KEY);
+      // A failed attempt never clears what was typed, and the field says what is wrong with it.
+      const field = service.getByLabelText('AllDebrid API key');
+      expect(field).toHaveValue(KEY);
+      expect(field).toBeInvalid();
+      expect(field).toHaveAccessibleDescription(expect.stringContaining(text));
       expect(service.getByText('Not connected')).toBeInTheDocument();
       expect(onError).not.toHaveBeenCalled();
     },
   );
+
+  it('describes the field by its hint alone until something is wrong with the key', async () => {
+    listing([notConnected]);
+    render(<IntegrationsSection open onError={ignore} />);
+
+    const field = (await typeAKey()).getByLabelText('AllDebrid API key');
+
+    expect(field).toBeValid();
+    expect(field).toHaveAccessibleDescription(
+      'Create one in your AllDebrid account, under API keys. Scia keeps it where this computer protects it.',
+    );
+  });
 
   it('blames no key when the engine could not be reached', async () => {
     listing([notConnected]);
@@ -177,6 +196,32 @@ describe('IntegrationsSection', () => {
     expect(service.queryByRole('alert')).not.toBeInTheDocument();
   });
 
+  it('forgets the key once it is taken: it is not there when the field is opened again', async () => {
+    listing([notConnected]);
+    vi.spyOn(api, 'connectIntegration').mockResolvedValue(connected);
+    vi.spyOn(api, 'disconnectIntegration').mockResolvedValue();
+    render(<IntegrationsSection open onError={ignore} />);
+    const service = await typeAKey();
+    await userEvent.keyboard('{Enter}');
+
+    await userEvent.click(await service.findByRole('button', { name: 'Disconnect' }));
+    await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+    await userEvent.click(await service.findByRole('button', { name: 'Connect' }));
+
+    expect(service.getByLabelText('AllDebrid API key')).toHaveValue('');
+  });
+
+  it('sends the key as it was typed: what surrounds it is the engine’s to take away', async () => {
+    listing([notConnected]);
+    const connect = vi.spyOn(api, 'connectIntegration').mockResolvedValue(connected);
+    render(<IntegrationsSection open onError={ignore} />);
+    await typeAKey(` ${KEY} `);
+
+    await userEvent.keyboard('{Enter}');
+
+    expect(connect).toHaveBeenCalledExactlyOnceWith('alldebrid', ` ${KEY} `);
+  });
+
   it('sends nothing while there is no key to send', async () => {
     listing([notConnected]);
     const connect = vi.spyOn(api, 'connectIntegration');
@@ -204,17 +249,31 @@ describe('IntegrationsSection', () => {
 
     expect(service.getByRole('button', { name: 'Checking…' })).toBeDisabled();
     expect(connect).toHaveBeenCalledTimes(1);
+    // The check cannot be taken back: while it lasts there is no Cancel to press, and whoever
+    // does not see the button is told as well.
+    expect(service.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(
+      service
+        .getAllByRole('status')
+        .some((status) => status.textContent === 'Checking the key with AllDebrid…'),
+    ).toBe(true);
     answer(connected);
     expect(await service.findByRole('status')).toHaveTextContent(/^Connected as ada/);
   });
 
-  it('closes the field at Cancel, forgets what was typed, and gives the focus back to Connect', async () => {
+  it('closes the field at Cancel, forgets what was typed and what was said of it, and gives the focus back to Connect', async () => {
     listing([notConnected]);
+    vi.spyOn(api, 'connectIntegration').mockRejectedValue(
+      new ApiError(422, ApiErrorCode.KeyRefused, 'no'),
+    );
     render(<IntegrationsSection open onError={ignore} />);
     const service = await typeAKey();
+    await userEvent.keyboard('{Enter}');
+    expect(await service.findByRole('alert')).toBeInTheDocument();
 
     await userEvent.click(service.getByRole('button', { name: 'Cancel' }));
 
+    expect(service.queryByRole('alert')).not.toBeInTheDocument();
     expect(service.queryByLabelText('AllDebrid API key')).not.toBeInTheDocument();
     expect(service.getByRole('button', { name: 'Connect' })).toHaveFocus();
     await userEvent.click(service.getByRole('button', { name: 'Connect' }));
@@ -263,7 +322,7 @@ describe('IntegrationsSection', () => {
       'AllDebrid refuses the key from this network. Check your AllDebrid account.',
     ],
     [ApiErrorCode.AccountBanned, 'AllDebrid says this account is banned.'],
-    [ApiErrorCode.Unavailable, 'AllDebrid is not answering right now.'],
+    [ApiErrorCode.Unavailable, 'Scia could not ask AllDebrid about this account just now.'],
   ] as const)(
     'says what is wrong with a connected service that answered %s',
     async (failure, text) => {

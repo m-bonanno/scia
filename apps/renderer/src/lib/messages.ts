@@ -33,11 +33,14 @@ const KEY_NOT_TAKEN: Readonly<Record<string, (service: string) => string>> = {
   [ApiErrorCode.KeyBlocked]: (service) =>
     `${service} refuses this key from this network. Check your ${service} account, then try again.`,
   [ApiErrorCode.AccountBanned]: (service) => `${service} says this account is banned.`,
-  [ApiErrorCode.Unavailable]: (service) => `${service} is not answering. Try again in a moment.`,
+  // Not answering, under maintenance, or answering what Scia does not understand: what is
+  // true of all of them is that the key was not checked.
+  [ApiErrorCode.Unavailable]: (service) =>
+    `Scia could not check this key with ${service}. Try again in a moment.`,
   [ApiErrorCode.KeyNotKept]: () =>
-    'Scia could not store the key safely on this computer. Nothing was connected.',
+    'Scia could not keep the key safely on this computer. Nothing was connected.',
   [ApiErrorCode.InvalidRequest]: (service) =>
-    `That is not a key. Copy it again from your ${service} account.`,
+    `This is not a key. Copy it again from your ${service} account.`,
 };
 
 export function connectFailureMessage(error: unknown, id: IntegrationId): string {
@@ -52,7 +55,8 @@ const SERVICE_TROUBLE: Readonly<Record<ServiceFailure, (service: string) => stri
   [ServiceFailure.KeyBlocked]: (service) =>
     `${service} refuses the key from this network. Check your ${service} account.`,
   [ServiceFailure.AccountBanned]: (service) => `${service} says this account is banned.`,
-  [ServiceFailure.Unavailable]: (service) => `${service} is not answering right now.`,
+  [ServiceFailure.Unavailable]: (service) =>
+    `Scia could not ask ${service} about this account just now.`,
 };
 
 export function serviceTroubleMessage(failure: ServiceFailure, id: IntegrationId): string {

@@ -50,6 +50,7 @@ export interface SimulatedRequest {
   // Path and query, as received.
   readonly url: string;
   readonly authorization: string | undefined;
+  readonly userAgent: string | undefined;
 }
 
 export interface AllDebridServer {
@@ -67,7 +68,7 @@ function send(response: ServerResponse, status: number, body: unknown): void {
 function refuse(response: ServerResponse, status: number, code: string): void {
   send(response, status, {
     status: 'error',
-    error: { code, message: MESSAGES[code] ?? 'Unknown error' },
+    error: { code, message: Object.hasOwn(MESSAGES, code) ? MESSAGES[code] : 'Unknown error' },
   });
 }
 
@@ -96,6 +97,7 @@ export async function startAllDebridServer(
       method: request.method ?? '',
       url: request.url ?? '',
       authorization: request.headers.authorization,
+      userAgent: request.headers['user-agent'],
     });
     if (misbehaviour !== undefined) {
       if ('silent' in misbehaviour) return;

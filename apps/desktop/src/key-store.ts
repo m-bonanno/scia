@@ -34,16 +34,27 @@ export class KeyFolder implements KeyFiles {
 
   readonly write = async (name: string, kept: Uint8Array): Promise<void> => {
     await mkdir(this.#directory, { recursive: true });
-    const temporary = `${this.#path(name)}.tmp`;
-    await writeFile(temporary, kept, { mode: 0o600 });
-    await rename(temporary, this.#path(name));
+    const temporary = this.#temporary(name);
+    try {
+      await writeFile(temporary, kept, { mode: 0o600 });
+      await rename(temporary, this.#path(name));
+    } catch (error) {
+      // A sealed key is not left behind under another name.
+      await rm(temporary, { force: true }).catch(() => undefined);
+      throw error;
+    }
   };
 
   readonly remove = async (name: string): Promise<void> => {
     await rm(this.#path(name), { force: true });
+    await rm(this.#temporary(name), { force: true });
   };
 
   #path(name: string): string {
     return join(this.#directory, `${name}.key`);
+  }
+
+  #temporary(name: string): string {
+    return `${this.#path(name)}.tmp`;
   }
 }

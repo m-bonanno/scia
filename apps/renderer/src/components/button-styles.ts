@@ -10,6 +10,13 @@ export const TEXT_BUTTON = cn(
   FOCUS_RING,
 );
 
+// The way back from what a text button beside it would do: the same size, without its fill.
+export const QUIET_BUTTON = cn(
+  'inline-flex h-8 shrink-0 items-center rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors',
+  'hover:bg-tonal hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent',
+  FOCUS_RING,
+);
+
 // What a button that is only an icon looks like: `IconButton`, and the button that asks once
 // more, which looks like one until it is pressed.
 export const ICON_BUTTON = cn(

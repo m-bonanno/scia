@@ -38,10 +38,12 @@ export function isProtectedStorage(system: {
 
 const ACTIONS: readonly unknown[] = ['read', 'write', 'remove'] satisfies KeyRequest['action'][];
 
-function isKeyRequest(message: unknown): message is Record<keyof KeyRequest, unknown> & {
+type KeyRequestLike = Record<keyof KeyRequest, unknown> & {
   readonly id: number;
   readonly action: KeyRequest['action'];
-} {
+};
+
+function isKeyRequest(message: unknown): message is KeyRequestLike {
   if (typeof message !== 'object' || message === null) return false;
   const request = message as Partial<Record<keyof KeyRequest, unknown>>;
   return (
@@ -53,6 +55,9 @@ function isKeyRequest(message: unknown): message is Record<keyof KeyRequest, unk
 // keeps: a key is on disk only sealed by the system, and never where the system cannot seal.
 export class KeyVault {
   readonly #deps: KeyVaultDeps;
+  // One request at a time, in the order they came: a write that is slow never lands after
+  // the removal that was asked after it.
+  #last: Promise<unknown> = Promise.resolve();
 
   constructor(deps: KeyVaultDeps) {
     this.#deps = deps;
@@ -60,8 +65,14 @@ export class KeyVault {
 
   // What main answers to a message of the engine's; undefined for one that asks for no key.
   // It never rejects: a refusal is an answer.
-  async answer(message: unknown): Promise<KeyAnswer | undefined> {
-    if (!isKeyRequest(message)) return undefined;
+  answer(message: unknown): Promise<KeyAnswer | undefined> {
+    if (!isKeyRequest(message)) return Promise.resolve(undefined);
+    const answered = this.#last.then(() => this.#answer(message));
+    this.#last = answered;
+    return answered;
+  }
+
+  async #answer(message: KeyRequestLike): Promise<KeyAnswer> {
     const { id, action, name } = message;
     try {
       // The name becomes a file's name: only a service's id is one.

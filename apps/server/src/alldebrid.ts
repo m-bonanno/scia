@@ -9,13 +9,15 @@ const ANSWER_LIMIT_MS = 10_000;
 
 // The service's refusals that say something of the key (https://docs.alldebrid.com, "All
 // errors"). Every other code — maintenance, one Scia does not know — means it cannot be asked
-// right now.
-const FAILURE_OF: Readonly<Record<string, ServiceFailure>> = {
-  AUTH_MISSING_APIKEY: ServiceFailure.KeyRefused,
-  AUTH_BAD_APIKEY: ServiceFailure.KeyRefused,
-  AUTH_BLOCKED: ServiceFailure.KeyBlocked,
-  AUTH_USER_BANNED: ServiceFailure.AccountBanned,
-};
+// right now. A map, not an object: a code is a word from outside, and "constructor" is one.
+const FAILURE_OF: ReadonlyMap<string, ServiceFailure> = new Map([
+  ['AUTH_BAD_APIKEY', ServiceFailure.KeyRefused],
+  ['AUTH_BLOCKED', ServiceFailure.KeyBlocked],
+  ['AUTH_USER_BANNED', ServiceFailure.AccountBanned],
+]);
+
+// The last second a date can name: a number past it is not an instant.
+const LAST_SECOND = 8_640_000_000_000;
 
 // The body says whether a request succeeded; the HTTP status that comes with it is not to be
 // relied on (the documentation says both that a refused key is a 401 and that it no longer is).
@@ -29,7 +31,7 @@ const userSchema = z.object({
     username: z.string(),
     isPremium: z.boolean(),
     // Seconds since 1970, written as a number or as text; 0 for an account that is not premium.
-    premiumUntil: z.coerce.number().nonnegative(),
+    premiumUntil: z.coerce.number().nonnegative().max(LAST_SECOND),
   }),
 });
 
@@ -67,27 +69,17 @@ export class AllDebrid {
     this.#options = options;
   }
 
-  // Whose account a key is. Rejects with a ServiceError that says why not, or with the reason
-  // of `signal` when whoever asked has stopped.
-  async account(apiKey: string, signal?: AbortSignal): Promise<IntegrationAccount> {
-    const { user } = await this.#get('/v4/user', apiKey, userSchema, signal);
+  // Whose account a key is. Rejects with a ServiceError that says why not.
+  async account(apiKey: string): Promise<IntegrationAccount> {
+    const { user } = await this.#get('/v4/user', apiKey, userSchema);
     return {
       name: user.username,
       premium: user.isPremium,
-      premiumUntil:
-        user.isPremium && user.premiumUntil > 0
-          ? new Date(user.premiumUntil * 1000).toISOString()
-          : null,
+      premiumUntil: user.premiumUntil > 0 ? new Date(user.premiumUntil * 1000).toISOString() : null,
     };
   }
 
-  async #get<T>(
-    path: string,
-    apiKey: string,
-    schema: z.ZodType<T>,
-    signal: AbortSignal | undefined,
-  ): Promise<T> {
-    const limit = AbortSignal.timeout(this.#options.answerLimitMs ?? ANSWER_LIMIT_MS);
+  async #get<T>(path: string, apiKey: string, schema: z.ZodType<T>): Promise<T> {
     let body: unknown;
     try {
       const response = await fetch(`${this.#options.api}${path}`, {
@@ -98,11 +90,10 @@ export class AllDebrid {
         },
         // The key is for the service's own address: it does not follow it anywhere else.
         redirect: 'error',
-        signal: signal === undefined ? limit : AbortSignal.any([signal, limit]),
+        signal: AbortSignal.timeout(this.#options.answerLimitMs ?? ANSWER_LIMIT_MS),
       });
       body = await response.json();
     } catch (error) {
-      signal?.throwIfAborted();
       throw new ServiceError(ServiceFailure.Unavailable, 'AllDebrid did not answer.', {
         cause: error,
       });
@@ -114,7 +105,7 @@ export class AllDebrid {
     if (envelope.data.status === 'error') {
       const { code } = envelope.data.error;
       throw new ServiceError(
-        FAILURE_OF[code] ?? ServiceFailure.Unavailable,
+        FAILURE_OF.get(code) ?? ServiceFailure.Unavailable,
         `AllDebrid answered ${code}.`,
         { code },
       );

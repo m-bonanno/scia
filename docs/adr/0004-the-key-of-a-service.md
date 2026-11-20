@@ -16,7 +16,7 @@ The engine is the process that speaks to the service: it downloads, it runs unde
 3. **The engine asks main for it on the channel that already carries `ready` and `shutdown`**: a request to read, write or remove the key of a service, and main's answer. In the engine this is a port, `KeyVault` (`apps/server/src/key-vault.ts`), with two adapters: `ParentVault` in the real app, `MemoryVault` under plain Node, where nobody keeps a key and it lasts as long as the process. Main's side is `apps/desktop/src/engine/key-vault.ts`. The engine asks before it listens, so a download that waits in the queue never starts before its service is known.
 4. **Main answers only for a name that is a service's id.** The name becomes a file's name: no request of the engine's reaches another file.
 5. **Where the system has nothing that protects a key, no key is kept, and the service is not connected.** On Linux without a keyring Electron seals with a password written in the program: that is not taken for protection.
-6. **A key is kept only after the service accepted it, and leaves the vault before it is forgotten.** One that stayed in the vault would connect Scia again by itself at its next start.
+6. **A key is kept only after the service accepted it, and leaves the vault before it is forgotten.** One that stayed in the vault would connect Scia again by itself at its next start. Connecting and disconnecting happen one at a time, in the engine and in main; a write the engine gave up waiting for is undone, by asking the vault to be what it was.
 7. **The page hands the key to the engine once**, on a route of the app's token alone (`PUT /api/v1/integrations/:id`). No route answers a key: the page cannot read back what it sent, and the extension's token opens none of these routes ([ADR 0002](./0002-browser-extension-pairing.md)).
 8. **The address a service is spoken to at is replaced only by one on this computer** (`SCIA_ALLDEBRID_API`, from the launch option `--alldebrid-api`): the simulated service of a run. The engine does not start with any other, so that no argument sends a key to another machine.
 
@@ -35,4 +35,6 @@ The engine is the process that speaks to the service: it downloads, it runs unde
 - The key is in the engine's memory while it runs, and crosses the loopback API once, in the body of the request that connects.
 - An engine that main starts again asks for the key again: nothing is handed over twice by hand.
 - `npm run dev` keeps no key between two runs.
+- The launch option of point 8 is honoured by the installed app too: on the real profile, the address on this computer would be sent the key that profile holds. Every run that names a simulated service uses a scratch profile (`apps/desktop/CLAUDE.md`, "User data").
+- A key that cannot be read for a passing reason — a main that is silent for five seconds — shows "Not connected" and stays in the vault: Scia is connected again at its next start. That is not what point 6 wants; it is rare, and the log says `key_not_read`.
 - Linux is untried, as the rest of Scia there.

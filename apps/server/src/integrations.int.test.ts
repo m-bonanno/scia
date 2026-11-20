@@ -6,6 +6,7 @@ import { Integrations, KeyNotKeptError } from './integrations.ts';
 import { type KeyVault, MemoryVault } from './key-vault.ts';
 import type { Logger } from './logger.ts';
 import { type AllDebridServer, startAllDebridServer } from './testing/alldebrid-server.ts';
+import { until } from './testing/scratch.ts';
 
 // Made up: no account anywhere has these keys.
 const KEY = 'spec-key-0000000000000000';
@@ -129,6 +130,9 @@ describe('Integrations', () => {
     expect(await restarted.list()).toEqual([
       { id: 'alldebrid', connected: true, account: ada, failure: null },
     ]);
+    // Once: what it then knows is believed for a minute, as after connecting.
+    clock += 59_000;
+    await restarted.list();
     expect(service.requests).toHaveLength(asked + 1);
   });
 
@@ -142,6 +146,127 @@ describe('Integrations', () => {
       { id: 'alldebrid', connected: true, account: null, failure: ServiceFailure.KeyRefused },
     ]);
     expect(await vault.read(IntegrationId.AllDebrid)).toBe(REVOKED);
+  });
+
+  it('forgets what the service said of a key when another is connected, and when it is disconnected', async () => {
+    const vault = new MemoryVault();
+    await vault.write(IntegrationId.AllDebrid, REVOKED);
+    const integrations = await open(vault);
+    expect((await integrations.list())[0]?.failure).toBe(ServiceFailure.KeyRefused);
+
+    expect((await integrations.connect(IntegrationId.AllDebrid, KEY)).failure).toBeNull();
+
+    const other = new MemoryVault();
+    await other.write(IntegrationId.AllDebrid, REVOKED);
+    const refused = await open(other);
+    await refused.list();
+    await refused.disconnect(IntegrationId.AllDebrid);
+    expect(await refused.list()).toEqual([notConnected]);
+  });
+
+  it('does not keep Settings waiting for a service that is slow to say whose account it is', async () => {
+    const vault = new MemoryVault();
+    await vault.write(IntegrationId.AllDebrid, KEY);
+    service.misbehave({ silent: true });
+    const integrations = await Integrations.open({
+      vault,
+      alldebrid: new AllDebrid({ api: service.api, userAgent: 'Scia/spec', answerLimitMs: 400 }),
+      logger,
+      now: () => clock,
+      listWaitMs: 20,
+    });
+
+    const started = performance.now();
+    const listed = await integrations.list();
+
+    expect(performance.now() - started).toBeLessThan(300);
+    expect(listed).toEqual([{ id: 'alldebrid', connected: true, account: null, failure: null }]);
+    // The question is still out: its answer is there for a later listing, and not asked twice.
+    service.misbehave(undefined);
+    await until(async () => (await integrations.list())[0]?.failure !== null);
+    expect(service.requests).toHaveLength(1);
+    clock += 61_000;
+    await until(async () => (await integrations.list())[0]?.account !== null);
+    expect((await integrations.list())[0]).toEqual({
+      id: 'alldebrid',
+      connected: true,
+      account: ada,
+      failure: null,
+    });
+  });
+
+  it('connects and disconnects one at a time, in the order asked', async () => {
+    const other = 'other-key-000000000000000';
+    await service.close();
+    service = await startAllDebridServer({
+      accounts: { [KEY]: { username: 'ada' }, [other]: { username: 'grace' } },
+    });
+    const done: string[] = [];
+    const kept = new MemoryVault();
+    const slow: KeyVault = {
+      read: (name) => kept.read(name),
+      write: async (name, key) => {
+        // The first write is the slow one: were they not in turn, the second would land first.
+        if (key === KEY) await new Promise((resolve) => setTimeout(resolve, 60));
+        await kept.write(name, key);
+        done.push(`write ${key}`);
+      },
+      remove: async (name) => {
+        await kept.remove(name);
+        done.push('remove');
+      },
+    };
+    const integrations = await open(slow);
+
+    await Promise.all([
+      integrations.connect(IntegrationId.AllDebrid, KEY),
+      integrations.connect(IntegrationId.AllDebrid, other),
+      integrations.disconnect(IntegrationId.AllDebrid),
+    ]);
+
+    expect(done).toEqual([`write ${KEY}`, `write ${other}`, 'remove']);
+    expect(await integrations.list()).toEqual([notConnected]);
+  });
+
+  it('puts the vault back as it was when a key was given up on and landed all the same', async () => {
+    const kept = new MemoryVault();
+    let late = false;
+    // A vault that answers too late: the key is written, and whoever asked is told it was not.
+    const tardy: KeyVault = {
+      read: (name) => kept.read(name),
+      write: async (name, key) => {
+        await kept.write(name, key);
+        if (late) throw new Error('Main did not write the key in time.');
+      },
+      remove: (name) => kept.remove(name),
+    };
+    const integrations = await open(tardy);
+    late = true;
+
+    await expect(integrations.connect(IntegrationId.AllDebrid, KEY)).rejects.toBeInstanceOf(
+      KeyNotKeptError,
+    );
+    // Told "not kept": the next start must not find it.
+    expect(await kept.read(IntegrationId.AllDebrid)).toBeUndefined();
+
+    late = false;
+    await integrations.connect(IntegrationId.AllDebrid, KEY);
+    late = true;
+    await service.close();
+    service = await startAllDebridServer({
+      accounts: { [KEY]: { username: 'ada' }, 'other-key-000000000000000': { username: 'grace' } },
+    });
+    const again = await Integrations.open({
+      vault: tardy,
+      alldebrid: new AllDebrid({ api: service.api, userAgent: 'Scia/spec' }),
+      logger,
+    });
+    late = true;
+    await expect(
+      again.connect(IntegrationId.AllDebrid, 'other-key-000000000000000'),
+    ).rejects.toBeInstanceOf(KeyNotKeptError);
+    // Still connected with the key it had: that is the one the next start must find.
+    expect(await kept.read(IntegrationId.AllDebrid)).toBe(KEY);
   });
 
   it('keeps what it knew of the account while the service does not answer, and says that it does not', async () => {

@@ -12,8 +12,9 @@ export function isIntegrationId(value: unknown): value is IntegrationId {
 export const integrationAccountSchema = z.object({
   name: z.string(),
   premium: z.boolean(),
-  // Null for an account that is not premium, and when the service does not say until when.
-  premiumUntil: z.string().nullable(),
+  // An instant, as ISO 8601. Null for an account that is not premium, and when the service
+  // does not say until when.
+  premiumUntil: z.iso.datetime().nullable(),
 });
 export type IntegrationAccount = z.infer<typeof integrationAccountSchema>;
 
