@@ -17,6 +17,7 @@ describe('parseConfig', () => {
       downloadDir: '/downloads',
       staticDir: undefined,
       version: '0.0.0',
+      alldebridApi: 'https://api.alldebrid.com',
     });
   });
 
@@ -40,6 +41,32 @@ describe('parseConfig', () => {
   it('refuses a port that is not one', () => {
     expect(() => parseConfig({ ...base, SCIA_PORT: '70000' })).toThrow('SCIA_PORT');
     expect(() => parseConfig({ ...base, SCIA_PORT: 'abc' })).toThrow('SCIA_PORT');
+  });
+
+  it('takes another address for AllDebrid only when it is on this computer', () => {
+    expect(parseConfig({ ...base, SCIA_ALLDEBRID_API: '' }).alldebridApi).toBe(
+      'https://api.alldebrid.com',
+    );
+    expect(parseConfig({ ...base, SCIA_ALLDEBRID_API: 'http://127.0.0.1:8080' }).alldebridApi).toBe(
+      'http://127.0.0.1:8080',
+    );
+    expect(
+      parseConfig({ ...base, SCIA_ALLDEBRID_API: 'http://localhost:8080/' }).alldebridApi,
+    ).toBe('http://localhost:8080');
+    for (const elsewhere of [
+      'https://api.example.com',
+      'http://127.0.0.1.example.com',
+      'http://localhost.example.com:8080',
+      'http://127.0.0.1@example.com',
+      'http://key@127.0.0.1:8080',
+      'https://127.0.0.1:8080',
+      'file:///keys',
+      'not an address',
+    ]) {
+      expect(() => parseConfig({ ...base, SCIA_ALLDEBRID_API: elsewhere }), elsewhere).toThrow(
+        'SCIA_ALLDEBRID_API',
+      );
+    }
   });
 
   it('refuses to start without its folders', () => {

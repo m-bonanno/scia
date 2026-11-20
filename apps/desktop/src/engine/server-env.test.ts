@@ -8,6 +8,7 @@ const layout = {
   logsDir: 'logs',
   downloadDir: 'downloads',
   noticesPath: 'notices.json',
+  keysDir: 'keys',
 };
 
 describe('buildServerEnv', () => {
@@ -28,6 +29,18 @@ describe('buildServerEnv', () => {
       SCIA_STATIC_DIR: 'renderer',
       SCIA_VERSION: '1.0.0',
     });
+  });
+
+  it('names another address for AllDebrid only when the launch gave one', () => {
+    const env = buildServerEnv({
+      layout,
+      apiToken: 'token',
+      port: 0,
+      version: '1.0.0',
+      systemRoot: undefined,
+      alldebridApi: 'http://127.0.0.1:8080',
+    });
+    expect(env.SCIA_ALLDEBRID_API).toBe('http://127.0.0.1:8080');
   });
 
   it('keeps SystemRoot on Windows, where the network stack needs it', () => {

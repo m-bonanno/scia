@@ -2,11 +2,15 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { serve } from '@hono/node-server';
+import { AllDebrid } from './alldebrid.ts';
 import { createApp } from './app.ts';
 import { parseConfig } from './config.ts';
 import { DownloadManager } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
+import { Integrations } from './integrations.ts';
+import { MemoryVault, ParentVault } from './key-vault.ts';
 import { createJsonLogger, describeFailure } from './logger.ts';
+import { parentPort } from './parent-port.ts';
 import { JsonStateStore } from './state-store.ts';
 
 // The engine tells main where it listens; main tells it to stop before quitting.
@@ -16,16 +20,6 @@ export interface ReadyMessage {
 }
 export interface ShutdownMessage {
   readonly type: 'shutdown';
-}
-
-// Electron's channel to the process that forked this one; absent under plain Node.
-interface ParentPort {
-  postMessage(message: unknown): void;
-  on(event: 'message', listener: (event: { readonly data: unknown }) => void): void;
-}
-
-function parentPort(): ParentPort | undefined {
-  return (process as { parentPort?: ParentPort }).parentPort;
 }
 
 async function extensionTokenIn(dataDir: string): Promise<string> {
@@ -48,6 +42,15 @@ export async function main(
   const config = parseConfig(env);
   await mkdir(config.dataDir, { recursive: true });
 
+  // Main keeps the keys of the services, where the system protects them. Under plain Node
+  // there is no main: a key lasts as long as this process, and is written nowhere.
+  const keeper = parentPort();
+  const integrations = await Integrations.open({
+    vault: keeper === undefined ? new MemoryVault() : new ParentVault(keeper),
+    alldebrid: new AllDebrid({ api: config.alldebridApi, userAgent: `Scia/${config.version}` }),
+    logger,
+  });
+
   const source = new HttpSource(`Mozilla/5.0 (compatible; Scia/${config.version})`);
   const manager = await DownloadManager.open({
     source,
@@ -59,6 +62,7 @@ export async function main(
   let port = config.port;
   const app = createApp({
     manager,
+    integrations,
     apiToken: config.apiToken,
     extensionToken: await extensionTokenIn(config.dataDir),
     version: config.version,

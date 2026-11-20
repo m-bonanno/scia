@@ -11,6 +11,7 @@ import { chooseDownloadFolder, oneAtATime } from './engine/download-folder.ts';
 import { completedDownloadPath } from './engine/download-location.ts';
 import type { EngineAccess } from './engine/engine-access.ts';
 import { EngineFailure, engineFailureNotice } from './engine/engine-failure.ts';
+import { KeyVault } from './engine/key-vault.ts';
 import { parseLaunchOptions } from './engine/launch-options.ts';
 import { RestartPolicy } from './engine/restart-policy.ts';
 import { resolveRuntimeLayout } from './engine/runtime-layout.ts';
@@ -18,6 +19,7 @@ import { buildServerEnv } from './engine/server-env.ts';
 import { ServerSupervisor } from './engine/server-supervisor.ts';
 import { ShownNotices } from './engine/shown-notices.ts';
 import { HIDDEN_TO_TRAY_NOTICE, trayTooltip } from './engine/tray-presentation.ts';
+import { KeyFolder, systemCipher } from './key-store.ts';
 import { NoticeFile } from './notice-file.ts';
 import { startServer } from './server-process.ts';
 import { createSystemTray } from './tray.ts';
@@ -69,7 +71,11 @@ async function boot(): Promise<void> {
     port: enginePort,
     version: app.getVersion(),
     systemRoot: process.env.SystemRoot,
+    alldebridApi: launch.alldebridApi,
   });
+  // The keys of the services the engine is connected to: the engine asks, main keeps them
+  // sealed by the system (engine/key-vault.ts).
+  const keys = new KeyVault({ cipher: systemCipher, files: new KeyFolder(layout.keysDir), log });
 
   let port = 0;
   let quitting = false;
@@ -150,7 +156,13 @@ async function boot(): Promise<void> {
   };
 
   const supervisor = new ServerSupervisor({
-    start: () => startServer({ entry: layout.serverEntry, env, log }),
+    start: () =>
+      startServer({
+        entry: layout.serverEntry,
+        env,
+        log,
+        answer: (message) => keys.answer(message),
+      }),
     policy: new RestartPolicy(),
     now: Date.now,
     sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

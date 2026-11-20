@@ -4,4 +4,5 @@ export * from './file-name.ts';
 export * from './pace.ts';
 export * from './queue.ts';
 export * from './segments.ts';
+export * from './service.ts';
 export * from './speed.ts';

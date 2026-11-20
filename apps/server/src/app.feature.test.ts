@@ -1,29 +1,19 @@
 import { join } from 'node:path';
 import { API_PREFIX, ApiErrorCode, DEFAULT_API_PORT, SETTINGS_LIMITS } from '@scia/contracts';
-import { DownloadFailure } from '@scia/core';
 import type { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { AllDebrid } from './alldebrid.ts';
 import { createApp } from './app.ts';
 import { DownloadManager } from './download-manager.ts';
-import { type RemoteSource, RemoteError } from './remote-source.ts';
+import { Integrations } from './integrations.ts';
+import { MemoryVault } from './key-vault.ts';
 import { JsonStateStore } from './state-store.ts';
 import { scratchFolder, silentLogger } from './testing/scratch.ts';
+import { silentSource } from './testing/silent-source.ts';
 
 const APP_TOKEN = 'app-token-0000000000000000';
 const EXTENSION_TOKEN = 'extension-token-00000000000';
 const ORIGIN = `http://127.0.0.1:${String(DEFAULT_API_PORT)}`;
-
-// No network in this layer: every host stays silent until the download is stopped, so a download
-// that was added is still running when the next request arrives.
-const silent: RemoteSource = {
-  probe: (_url, _headers, signal) =>
-    new Promise((_resolve, reject) => {
-      signal.addEventListener('abort', () => {
-        reject(new RemoteError(DownloadFailure.Network, false, 'stopped'));
-      });
-    }),
-  open: () => Promise.reject(new RemoteError(DownloadFailure.Network, false, 'offline')),
-};
 
 describe('the engine API', () => {
   let folder: Awaited<ReturnType<typeof scratchFolder>>;
@@ -33,13 +23,19 @@ describe('the engine API', () => {
   beforeEach(async () => {
     folder = await scratchFolder();
     manager = await DownloadManager.open({
-      source: silent,
+      source: silentSource,
       store: new JsonStateStore(join(folder.path, 'state.json')),
       defaultDirectory: join(folder.path, 'downloads'),
       logger: silentLogger,
     });
     app = createApp({
       manager,
+      // No service is connected here, so none is ever asked (integrations.feature.test.ts).
+      integrations: await Integrations.open({
+        vault: new MemoryVault(),
+        alldebrid: new AllDebrid({ api: 'http://127.0.0.1:9', userAgent: 'Scia/spec' }),
+        logger: silentLogger,
+      }),
       apiToken: APP_TOKEN,
       extensionToken: EXTENSION_TOKEN,
       version: '1.2.3',

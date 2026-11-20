@@ -4,6 +4,9 @@ import {
   type Download,
   downloadSchema,
   errorEnvelopeSchema,
+  type Integration,
+  type IntegrationId,
+  integrationSchema,
   type Pairing,
   pairingSchema,
   type Settings,
@@ -68,4 +71,13 @@ export const api = {
   updateSettings: (patch: SettingsPatch): Promise<Settings> =>
     request('/settings', settingsSchema, { method: 'PATCH', body: JSON.stringify(patch) }),
   pairing: (): Promise<Pairing> => request('/extension/pairing', pairingSchema),
+  integrations: (): Promise<Integration[]> => request('/integrations', z.array(integrationSchema)),
+  // The key goes to the engine and is never read back: no answer carries it.
+  connectIntegration: (id: IntegrationId, apiKey: string): Promise<Integration> =>
+    request(`/integrations/${encodeURIComponent(id)}`, integrationSchema, {
+      method: 'PUT',
+      body: JSON.stringify({ apiKey }),
+    }),
+  disconnectIntegration: (id: IntegrationId): Promise<void> =>
+    request(`/integrations/${encodeURIComponent(id)}`, null, { method: 'DELETE' }),
 };

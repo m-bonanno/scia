@@ -6,6 +6,7 @@ import { IconButton } from '@/components/icon-button.tsx';
 import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { FOLDER_REFUSED } from '@/lib/messages.ts';
+import { IntegrationsSection } from './integrations.tsx';
 import { SpeedLimit } from './speed-limit.tsx';
 
 interface SettingsDialogProps {
@@ -147,6 +148,7 @@ export function SettingsDialog({
             </div>
           </section>
         )}
+        <IntegrationsSection open={open} onError={onError} />
         {pairing !== null && <PairingSection pairing={pairing} onError={onError} />}
         <p className="text-sm text-muted-foreground">Scia {shell?.version ?? 'development'}</p>
       </div>

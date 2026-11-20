@@ -10,6 +10,8 @@ export interface ConfirmButtonHandle {
   // One press from elsewhere — a double click on the row the button is in. It takes the focus,
   // and asks, or does what needs no asking. It never answers a question already asked.
   press(): void;
+  // The focus alone, for a button that arrives where another control just left.
+  focus(): void;
 }
 
 interface ConfirmButtonProps {
@@ -57,6 +59,9 @@ export function ConfirmButton({
       press: () => {
         element.current?.focus();
         if (!asking) element.current?.click();
+      },
+      focus: () => {
+        element.current?.focus();
       },
     }),
     [asking],
