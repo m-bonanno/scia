@@ -30,6 +30,7 @@ export class SseFrames {
 }
 
 export interface FollowLog {
+  info(message: string, details: object): void;
   warn(message: string, details: object): void;
 }
 
@@ -39,9 +40,12 @@ export interface FollowOptions {
   readonly onDownloads: (downloads: readonly Download[]) => void;
   // Ends the following: a quit.
   readonly signal: AbortSignal;
-  // How long the engine has to begin its answer. The stream itself has no bound: an engine
-  // with nothing to say is silent for as long as nothing changes.
+  // How long the engine has to begin its answer.
   readonly answerLimitMs: number;
+  // How long the stream may say nothing at all once it is open. The engine writes a comment
+  // when it has nothing to send (EVENTS_KEEP_ALIVE_MS): a longer silence is an engine that
+  // stopped talking, and the stream is given up before the client's own timer cuts it.
+  readonly silenceLimitMs: number;
   readonly retryMs: number;
   readonly sleep: (ms: number, signal: AbortSignal) => Promise<void>;
   readonly log: FollowLog;
@@ -49,54 +53,72 @@ export interface FollowOptions {
 
 // Main's own ear on the engine's stream of changes (`GET /events`): each list of downloads is
 // handed over as the engine sends it — not asked for on a timer, and not taken from the page,
-// which may be hidden. A stream that ends, a refusal, an engine that does not answer: the
-// stream is opened again after a wait, until the signal ends it. Resolves then.
+// which may be hidden. A stream that ends, a refusal, an engine that does not answer or goes
+// silent: the stream is opened again after a wait, until the signal ends it. Resolves then.
 export async function followDownloads(options: FollowOptions): Promise<void> {
   // Asked anew after every wait: the quit may have come meanwhile.
   const stopped = () => options.signal.aborted;
+  // Said once when the events are lost and once when they are back, not at every attempt.
+  let lost = false;
+  const opened = () => {
+    if (lost) options.log.info('engine_events_back', {});
+    lost = false;
+  };
   while (!stopped()) {
-    try {
-      await followOnce(options);
-    } catch (error) {
-      if (!stopped()) options.log.warn('engine_events_lost', { error: String(error) });
-    }
+    const reason = await followOnce(options, opened).then(
+      () => 'The engine closed its events.',
+      (error: unknown) => String(error),
+    );
     if (stopped()) return;
+    if (!lost) options.log.warn('engine_events_lost', { reason });
+    lost = true;
     await options.sleep(options.retryMs, options.signal).catch(() => undefined);
   }
 }
 
-async function followOnce(options: FollowOptions): Promise<void> {
+// Resolves when the engine ends the stream; rejects for everything else that ends it.
+async function followOnce(options: FollowOptions, opened: () => void): Promise<void> {
   const engine = options.engine();
-  // One signal for the attempt: the quit ends it, and so does an answer that does not begin.
+  // One signal for the attempt: the quit ends it, and so does an engine that says nothing.
   const attempt = new AbortController();
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   const giveUp = () => {
     attempt.abort();
+    // The stream is closed here, not left to whoever made it: a read that waits on a silent
+    // engine ends when the attempt does.
+    void reader?.cancel().catch(() => undefined);
   };
   options.signal.addEventListener('abort', giveUp, { once: true });
-  const silent = setTimeout(giveUp, options.answerLimitMs);
-  let closeStream: (() => void) | undefined;
+  let silent = setTimeout(giveUp, options.answerLimitMs);
+  // Set by the timer while a read waits, and looked at when the read comes back.
+  const silence = { fell: false };
+  const heard = () => {
+    clearTimeout(silent);
+    silent = setTimeout(() => {
+      silence.fell = true;
+      giveUp();
+    }, options.silenceLimitMs);
+  };
   try {
     const response = await engine.fetch(`${engine.origin}${API_PREFIX}/events`, {
       headers: { authorization: `Bearer ${engine.apiToken}` },
       signal: attempt.signal,
     });
-    clearTimeout(silent);
     if (!response.ok || response.body === null) {
       await response.body?.cancel().catch(() => undefined);
       throw new Error('The engine did not open its events.');
     }
+    heard();
+    opened();
+    reader = response.body.getReader();
     const frames = new SseFrames();
     const decoder = new TextDecoder();
-    const reader = response.body.getReader();
-    // The stream is closed here, not left to whoever made it: a read that waits on a silent
-    // engine ends when the following does.
-    closeStream = () => {
-      void reader.cancel().catch(() => undefined);
-    };
-    options.signal.addEventListener('abort', closeStream, { once: true });
     for (;;) {
       const { done, value } = await reader.read();
+      if (silence.fell) throw new Error('The engine went silent.');
       if (done) return;
+      // Anything at all, a comment included: the engine is there.
+      heard();
       for (const frame of frames.push(decoder.decode(value, { stream: true }))) {
         if (frame.event !== SNAPSHOT_EVENT) continue;
         const downloads = downloadsIn(frame.data);
@@ -107,7 +129,6 @@ async function followOnce(options: FollowOptions): Promise<void> {
   } finally {
     clearTimeout(silent);
     options.signal.removeEventListener('abort', giveUp);
-    if (closeStream !== undefined) options.signal.removeEventListener('abort', closeStream);
   }
 }
 

@@ -121,6 +121,39 @@ describe('the engine API', () => {
     }
   });
 
+  it('says on a quiet stream of events that it is still there, between one list and the next', async () => {
+    const quiet = createApp({
+      manager,
+      apiToken: APP_TOKEN,
+      extensionToken: EXTENSION_TOKEN,
+      version: '1.2.3',
+      port: () => DEFAULT_API_PORT,
+      staticDir: undefined,
+      logger: silentLogger,
+      eventsKeepAliveMs: 30,
+    });
+    const response = await quiet.request(`${ORIGIN}${API_PREFIX}/events`, {
+      headers: { authorization: `Bearer ${APP_TOKEN}` },
+    });
+    const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+    const decoder = new TextDecoder();
+    const comment = ': idle\n\n';
+
+    // The list as it is; then nothing changes, and the engine says so with comments, which a
+    // reader of events passes over.
+    let heard = '';
+    while (heard.split(comment).length < 4) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      heard += decoder.decode(value, { stream: true });
+    }
+    await reader.cancel();
+
+    expect(heard.startsWith('event: snapshot\ndata: {"downloads":[]}\n\n')).toBe(true);
+    expect(heard.match(/event: snapshot/g)).toHaveLength(1);
+    expect(heard.split(comment).length).toBeGreaterThanOrEqual(4);
+  });
+
   it('refuses what is not an http address', async () => {
     for (const urls of [[], ['file:///etc/passwd'], ['javascript:alert(1)'], 'https://a.test']) {
       const response = await call('/downloads', {

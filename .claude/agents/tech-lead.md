@@ -40,6 +40,8 @@ What earlier reviews taught, each with the PR that taught it.
 
 - An approval names the range it measured. A limit approved on runs from 64 KB/s to 1 MB/s over plain http, for a menu that ends at 50 MB/s, was a third of itself at 25: the review says what it tried, and what of the settings it did not. (#44)
 
+- A thing that lasts as long as the app is left alone for longer than every timer under it: a stream approved on runs of a minute was cut at five. (#51)
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.

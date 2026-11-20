@@ -6,6 +6,7 @@ import {
   API_PREFIX,
   ApiErrorCode,
   downloadFolderSchema,
+  EVENTS_KEEP_ALIVE_MS,
   type Health,
   type Pairing,
   settingsPatchSchema,
@@ -30,7 +31,13 @@ export interface AppDeps {
   readonly port: () => number;
   readonly staticDir: string | undefined;
   readonly logger: Logger;
+  // How long GET /events stays silent before it says it is still there; the contract's, but
+  // for a spec.
+  readonly eventsKeepAliveMs?: number;
 }
+
+// A comment of the event stream: no reader takes it for an event.
+const STILL_HERE = ': idle\n\n';
 
 const Caller = { App: 'app', Extension: 'extension' } as const;
 type Caller = (typeof Caller)[keyof typeof Caller];
@@ -132,14 +139,31 @@ export function createApp(deps: AppDeps): Hono {
 
   app.get(`${API_PREFIX}/events`, (c) =>
     streamSSE(c, async (stream) => {
-      let version = -1;
-      while (!stream.aborted && !stream.closed) {
-        version = await manager.nextChange(version);
-        await stream.writeSSE({
-          event: SNAPSHOT_EVENT,
-          data: JSON.stringify(manager.snapshot()),
-        });
-        await stream.sleep(SNAPSHOT_INTERVAL_MS);
+      // Ends the wait for a change when whoever listens has gone: a stream that closed leaves
+      // no waiter behind in the manager.
+      const gone = new AbortController();
+      stream.onAbort(() => {
+        gone.abort();
+      });
+      // The stream is never silent for long (EVENTS_KEEP_ALIVE_MS): a comment says the engine
+      // is there, with nothing to send or between two lists.
+      const stillHere = setInterval(() => {
+        void stream.write(STILL_HERE);
+      }, deps.eventsKeepAliveMs ?? EVENTS_KEEP_ALIVE_MS);
+      try {
+        let version = -1;
+        while (!stream.aborted && !stream.closed) {
+          version = await manager.nextChange(version, gone.signal);
+          if (gone.signal.aborted) return;
+          await stream.writeSSE({
+            event: SNAPSHOT_EVENT,
+            data: JSON.stringify(manager.snapshot()),
+          });
+          await stream.sleep(SNAPSHOT_INTERVAL_MS);
+        }
+      } finally {
+        clearInterval(stillHere);
+        gone.abort();
       }
     }),
   );

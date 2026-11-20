@@ -237,6 +237,26 @@ describe('DownloadManager', () => {
     expect(await readdir(elsewhere)).toEqual([]);
   });
 
+  it('stops waiting for a change when whoever asked has gone', async () => {
+    const downloads = await open();
+    const seen = await downloads.nextChange(-1);
+    const gone = new AbortController();
+    let answered = false;
+
+    // Nothing changes: the wait would last until something does.
+    const waiting = downloads.nextChange(seen, gone.signal).then((version) => {
+      answered = true;
+      return version;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(answered).toBe(false);
+    gone.abort();
+
+    expect(await waiting).toBe(seen);
+    // And asked by someone who has already gone, it does not wait at all.
+    expect(await downloads.nextChange(seen, gone.signal)).toBe(seen);
+  });
+
   it('holds a download under the speed limit', async () => {
     const { url } = await host({ body: randomBytes(MIB) });
     const downloads = await open();

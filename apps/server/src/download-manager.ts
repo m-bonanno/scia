@@ -140,15 +140,23 @@ export class DownloadManager {
   }
 
   // The version to pass next time. Resolves at once while a download runs (its progress never
-  // stops changing), otherwise at the next change.
-  nextChange(since: number): Promise<number> {
-    if (this.#version > since || this.#running.size > 0 || this.#closed) {
+  // stops changing), otherwise at the next change — or when `gone` says that whoever asked is
+  // no longer there, so that nothing waits here on its behalf.
+  nextChange(since: number, gone?: AbortSignal): Promise<number> {
+    if (this.#version > since || this.#running.size > 0 || this.#closed || gone?.aborted === true) {
       return Promise.resolve(this.#version);
     }
     return new Promise((resolve) => {
-      this.#waiters.push(() => {
+      const wake = () => {
+        gone?.removeEventListener('abort', leave);
         resolve(this.#version);
-      });
+      };
+      const leave = () => {
+        this.#waiters = this.#waiters.filter((waiter) => waiter !== wake);
+        resolve(this.#version);
+      };
+      this.#waiters.push(wake);
+      gone?.addEventListener('abort', leave, { once: true });
     });
   }
 

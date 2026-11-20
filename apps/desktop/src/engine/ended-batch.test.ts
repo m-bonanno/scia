@@ -90,6 +90,23 @@ describe('EndedBatch', () => {
     expect(delivered).toEqual([[completed('a')]]);
   });
 
+  it('says a download that ended twice where it ended last, after those that ended meanwhile', () => {
+    const timer = aTimer();
+    const delivered: (readonly Ended[])[] = [];
+    const batch = new EndedBatch({
+      ...timer,
+      gatherMs: 2000,
+      deliver: (ended) => delivered.push(ended),
+    });
+
+    batch.add([failed('a')]);
+    batch.add([completed('b')]);
+    batch.add([completed('a')]);
+    timer.waits[0]!.run();
+
+    expect(delivered).toEqual([[completed('b'), completed('a')]]);
+  });
+
   it('waits for nothing when nothing ended', () => {
     const timer = aTimer();
     const batch = new EndedBatch({ ...timer, gatherMs: 2000, deliver: () => undefined });

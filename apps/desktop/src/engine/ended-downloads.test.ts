@@ -77,7 +77,7 @@ describe('EndedDownloads', () => {
     ]);
   });
 
-  it('names again a download that failed, was tried again, and ended again', () => {
+  it('names again a download that failed and ended again, when a list in between showed it running', () => {
     const ended = new EndedDownloads();
     ended.seen([aDownload('a', DownloadStatus.Failed)]);
     ended.seen([aDownload('a', DownloadStatus.Downloading)]);
@@ -85,5 +85,14 @@ describe('EndedDownloads', () => {
     expect(ended.seen([aDownload('a', DownloadStatus.Completed)])).toEqual([
       { id: 'a', fileName: 'a.bin', ending: Ending.Completed },
     ]);
+  });
+
+  it('cannot tell a second failure from the first when no list in between showed anything else', () => {
+    const ended = new EndedDownloads();
+    ended.seen([aDownload('a', DownloadStatus.Downloading)]);
+    ended.seen([aDownload('a', DownloadStatus.Failed)]);
+
+    // Tried again and failed again within the quarter of a second between two lists.
+    expect(ended.seen([aDownload('a', DownloadStatus.Failed)])).toEqual([]);
   });
 });

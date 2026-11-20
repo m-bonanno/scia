@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { BridgeChannel } from '@scia/contracts/bridge';
-import { DEFAULT_API_PORT, type Download } from '@scia/contracts';
+import { DEFAULT_API_PORT, type Download, EVENTS_KEEP_ALIVE_MS } from '@scia/contracts';
 import { app, dialog, Notification, shell } from 'electron';
 import log from 'electron-log/main';
 import { APP_ID } from './engine/app-identity.ts';
@@ -12,8 +12,9 @@ import { chooseDownloadFolder, oneAtATime } from './engine/download-folder.ts';
 import { completedDownloadPath } from './engine/download-location.ts';
 import { EndedBatch } from './engine/ended-batch.ts';
 import { type Ended, EndedDownloads, Ending } from './engine/ended-downloads.ts';
-import { endedNotice } from './engine/ended-notice.ts';
+import { endedNotice, STILL_IN_TRAY } from './engine/ended-notice.ts';
 import type { EngineAccess } from './engine/engine-access.ts';
+import { Kept } from './engine/kept.ts';
 import { followDownloads } from './engine/engine-events.ts';
 import { EngineFailure, engineFailureNotice } from './engine/engine-failure.ts';
 import { parseLaunchOptions } from './engine/launch-options.ts';
@@ -33,6 +34,12 @@ import { appOrigin, MainWindow } from './window.ts';
 const ENGINE_ANSWER_LIMIT_MS = 2000;
 // How long main waits before it opens the engine's events again, when they end or are refused.
 const EVENTS_RETRY_MS = 1000;
+// The engine says it is still there every EVENTS_KEEP_ALIVE_MS: three of them missed are an
+// engine that stopped talking.
+const EVENTS_SILENCE_LIMIT_MS = 3 * EVENTS_KEEP_ALIVE_MS;
+// How many notifications of ended downloads are held so that a click on them still opens the
+// window: the ones on screen and the last ones in the system's list of notifications.
+const HELD_NOTICES = 20;
 
 const launch = parseLaunchOptions(process.argv, process.cwd());
 if (launch.userDataDir !== undefined) {
@@ -128,9 +135,18 @@ async function boot(): Promise<void> {
         throw error;
       }),
   });
+  // What a click on any of Scia's notifications does. Not while quitting: the window would
+  // show, then vanish with the process.
+  const openFromNotice = () => {
+    if (!isQuitting()) window.focus();
+  };
+
   // Kept while it is on screen: a notification nobody holds is collected, and its click is lost.
   let notice: Notification | undefined;
-  let endedOnScreen: Notification | undefined;
+  // Every one of them, not the last: an earlier notification is still on screen, or in the
+  // system's list, and a click on it has to open the window too. Not let go when the system
+  // says it closed — it says so as soon as it has shown it, while the person can still click.
+  const endedNotices = new Kept<Notification>(HELD_NOTICES);
 
   // What ended while Scia ran is said by the system when the person is not looking at the list
   // (engine/ended-downloads.ts, ended-batch.ts, ended-notice.ts). Main hears it from the
@@ -161,17 +177,28 @@ async function boot(): Promise<void> {
     });
     // A person looking at the list sees its rows change.
     if (isQuitting() || inFront || !Notification.isSupported()) return;
-    endedOnScreen = new Notification(endedNotice(downloads, { lastOfHiddenScia }));
-    endedOnScreen.on('click', () => {
-      window.focus();
+    const text = endedNotice(downloads, { lastOfHiddenScia });
+    const shown = new Notification(text);
+    endedNotices.keep(shown);
+    shown.on('click', () => {
+      log.info('ended_notice_clicked', {});
+      endedNotices.release(shown);
+      openFromNotice();
     });
-    endedOnScreen.on('show', () => {
+    shown.on('show', () => {
       log.info('ended_notice_shown', {});
     });
-    endedOnScreen.on('failed', (_event, error) => {
+    shown.on('failed', (_event, error) => {
+      endedNotices.release(shown);
       log.warn('ended_notice_failed', { error });
     });
-    endedOnScreen.show();
+    // The title names no file: it is what was handed to the system, for whoever reads the log.
+    log.info('ended_notice_asked', {
+      title: text.title,
+      bodyLines: text.body.split('\n').length,
+      saysStillInTray: text.body.includes(STILL_IN_TRAY),
+    });
+    shown.show();
   }
 
   async function closeRequested(): Promise<void> {
@@ -184,9 +211,7 @@ async function boot(): Promise<void> {
         title: HIDDEN_TO_TRAY_NOTICE.title,
         body: HIDDEN_TO_TRAY_NOTICE.body,
       });
-      notice.on('click', () => {
-        window.focus();
-      });
+      notice.on('click', openFromNotice);
       notice.show();
     }
   }
@@ -281,6 +306,7 @@ async function boot(): Promise<void> {
     },
     signal: listening.signal,
     answerLimitMs: ENGINE_ANSWER_LIMIT_MS,
+    silenceLimitMs: EVENTS_SILENCE_LIMIT_MS,
     retryMs: EVENTS_RETRY_MS,
     sleep: (ms, signal) => sleep(ms, undefined, { signal }),
     log,

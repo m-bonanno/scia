@@ -34,6 +34,7 @@ export class MainWindow {
   readonly #window: BrowserWindow;
   readonly #platform: string;
   #port = 0;
+  #shownOnce = false;
 
   constructor(options: MainWindowOptions) {
     this.#platform = options.platform;
@@ -74,6 +75,9 @@ export class MainWindow {
     );
     this.#window.once('ready-to-show', () => {
       this.#window.show();
+    });
+    this.#window.once('show', () => {
+      this.#shownOnce = true;
     });
     // Closing is a question, not an order. A quit ends the process without closing the window
     // (main.ts), so nothing here has to tell the two apart.
@@ -121,6 +125,7 @@ export class MainWindow {
 
   #state(): WindowState {
     return {
+      shownOnce: this.#shownOnce,
       visible: this.#window.isVisible(),
       minimised: this.#window.isMinimized(),
       focused: this.#window.isFocused(),

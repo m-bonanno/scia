@@ -49,10 +49,15 @@ function aStream() {
 
 type Answer = (init: Parameters<EngineAccess['fetch']>[1]) => Promise<Response>;
 
-function following(answers: Answer[], origins = ['http://127.0.0.1:47821']) {
+function following(
+  answers: Answer[],
+  origins = ['http://127.0.0.1:47821'],
+  silenceLimitMs = 60_000,
+) {
   const stopped = new AbortController();
   const seen: string[][] = [];
   const warnings: string[] = [];
+  const said: string[] = [];
   const waits: number[] = [];
   let attempt = 0;
   const fetch = vi.fn<EngineAccess['fetch']>(async (_url, init) => {
@@ -73,13 +78,17 @@ function following(answers: Answer[], origins = ['http://127.0.0.1:47821']) {
     },
     signal: stopped.signal,
     answerLimitMs: 50,
+    silenceLimitMs,
     retryMs: 700,
     sleep: async (ms) => {
       waits.push(ms);
     },
-    log: { warn: (message) => warnings.push(message) },
+    log: {
+      warn: (message) => warnings.push(message),
+      info: (message) => said.push(message),
+    },
   });
-  return { stopped, seen, warnings, waits, fetch, done };
+  return { stopped, seen, warnings, said, waits, fetch, done };
 }
 
 describe('SseFrames', () => {
@@ -167,6 +176,9 @@ describe('followDownloads', () => {
 
     expect(follow.fetch).toHaveBeenCalledTimes(3);
     expect(follow.waits).toEqual([700, 700]);
+    // Said once when the events are lost and once when they are back, not at every attempt.
+    expect(follow.warnings).toEqual(['engine_events_lost']);
+    expect(follow.said).toEqual(['engine_events_back']);
     follow.stopped.abort();
     await follow.done;
   });
@@ -184,6 +196,7 @@ describe('followDownloads', () => {
     });
 
     expect(follow.warnings).toEqual(['engine_event_unreadable', 'engine_event_unreadable']);
+    expect(follow.said).toEqual([]);
     follow.stopped.abort();
     await follow.done;
   });
@@ -201,5 +214,47 @@ describe('followDownloads', () => {
 
     expect(follow.fetch).toHaveBeenCalledOnce();
     expect(follow.waits).toEqual([]);
+  });
+
+  it('gives up a stream on which nothing is heard for too long, and opens it again', async () => {
+    const quiet = aStream();
+    const next = aStream();
+    const follow = following(
+      [async () => quiet.response, async () => next.response],
+      undefined,
+      120,
+    );
+    quiet.say(snapshot(aDownload('a', 'downloading')));
+
+    // Not a word after the first list: an engine that is alive and has stopped talking.
+    next.say(snapshot(aDownload('a', 'completed')));
+    await vi.waitFor(() => {
+      expect(follow.seen).toEqual([['a:downloading'], ['a:completed']]);
+    });
+
+    expect(follow.fetch).toHaveBeenCalledTimes(2);
+    follow.stopped.abort();
+    await follow.done;
+  });
+
+  it('takes a comment of the engine for a sign that it is there, with nothing to say', async () => {
+    const stream = aStream();
+    const follow = following([async () => stream.response], undefined, 120);
+    stream.say(snapshot(aDownload('a', 'downloading')));
+
+    // Three times the bound, a comment every third of it.
+    for (let comments = 0; comments < 9; comments += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 40));
+      stream.say(': idle\n\n');
+    }
+    stream.say(snapshot(aDownload('a', 'completed')));
+    await vi.waitFor(() => {
+      expect(follow.seen).toEqual([['a:downloading'], ['a:completed']]);
+    });
+
+    expect(follow.fetch).toHaveBeenCalledOnce();
+    expect(follow.warnings).toEqual([]);
+    follow.stopped.abort();
+    await follow.done;
   });
 });

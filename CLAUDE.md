@@ -46,12 +46,12 @@ Runbooks in [`docs/development/`](./docs/development/): [`git-flow.md`](./docs/d
 
 **Failing test first, then the minimum code to pass, then refactor.**
 
-| Layer           | Tool                  | Scope                                                                                   | Lives in                                       |
-| --------------- | --------------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------- |
-| **Unit**        | Vitest                | Pure logic: the domain, desktop engines, extension logic, React components              | `*.test.ts(x)` next to the code                |
-| **Integration** | Vitest                | Adapters against the real thing: the downloader against a real HTTP host on a real disk | `apps/server/**/*.int.test.ts`                 |
-| **Feature**     | Vitest                | The engine's API through `app.request()`: tokens, scopes, status codes                  | `apps/server/**/*.feature.test.ts`             |
-| **Runtime**     | the real Electron app | Boot, window, bridge, quit, resume after restart                                        | a throwaway harness, its result in the PR body |
+| Layer           | Tool                  | Scope                                                                                                                                      | Lives in                                                        |
+| --------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
+| **Unit**        | Vitest                | Pure logic: the domain, desktop engines, extension logic, React components                                                                 | `*.test.ts(x)` next to the code                                 |
+| **Integration** | Vitest                | Adapters against the real thing: the downloader against a real HTTP host on a real disk, main's ear on the engine against a real HTTP host | `apps/server/**/*.int.test.ts`, `apps/desktop/**/*.int.test.ts` |
+| **Feature**     | Vitest                | The engine's API through `app.request()`: tokens, scopes, status codes                                                                     | `apps/server/**/*.feature.test.ts`                              |
+| **Runtime**     | the real Electron app | Boot, window, bridge, quit, resume after restart                                                                                           | a throwaway harness, its result in the PR body                  |
 
 **Unit tests do not prove a runtime works.** Anything that opens a socket, writes a file, spawns a process or packages an artefact is proven against the real thing. "The suite is green" is not "it works". There is no E2E suite yet (roadmap): until then a runtime change carries the evidence of a manual run, as [`testing.md`](./docs/development/testing.md) describes.
 

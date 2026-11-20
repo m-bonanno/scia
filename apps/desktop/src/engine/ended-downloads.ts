@@ -20,6 +20,11 @@ function endingOf(status: DownloadStatus): Ending | undefined {
 // Follows the engine's list from one look to the next and names what ended in between. What
 // had already ended at the first look is old news: only what ends while Scia runs is said. It
 // is kept across an engine that restarts, whose list is the same downloads.
+//
+// Its limit: an end is told from the one before only by a list in between that shows the
+// download as something else. A download that failed, was tried again and failed again before
+// the engine sent such a list — the engine sends one every quarter of a second while anything
+// runs — is seen as having failed once. The engine would have to say when a download ended.
 export class EndedDownloads {
   #statuses: ReadonlyMap<string, DownloadStatus> | undefined;
 

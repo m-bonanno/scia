@@ -30,6 +30,8 @@ What earlier reviews taught, each with the PR that taught it.
 
 - A number that vouches for a roadmap clause is asked how it was counted and against what: an approval rested on a host that paused between pieces and on speeds shown, where the claim was a rate — and the rate was passed twofold. Bytes, against a host that does not pause, at both ends of what the settings offer. (#44)
 
+- What a run "read" is checked against what the log can hold: "the script read what main asked the system to show" rested on a log that carried counts and no words. (#51)
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.

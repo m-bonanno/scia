@@ -55,9 +55,14 @@ describe('downloadActivity', () => {
   it('counts the same from a list main already has', () => {
     const list = z
       .array(downloadSchema)
-      .parse([aDownload('a', 'downloading'), aDownload('b', 'queued'), aDownload('c', 'failed')]);
+      .parse([
+        aDownload('a', 'downloading'),
+        aDownload('b', 'queued'),
+        aDownload('c', 'failed'),
+        aDownload('d', 'downloading'),
+      ]);
 
-    expect(activityOf(list)).toEqual({ downloading: 1, queued: 1 });
+    expect(activityOf(list)).toEqual({ downloading: 2, queued: 1 });
   });
 
   it('counts nothing in an empty list', async () => {
