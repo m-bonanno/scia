@@ -65,5 +65,6 @@ main (Electron: lifecycle, supervision, the window, the tray, the system's notif
 
 - `npm run dist` builds engine + renderer + main + preload, then electron-builder. `apps/desktop/package.json` stays at `0.0.0`; a release injects the version.
 - **No native modules** without an ADR.
+- **Programs shipped beside the engine are fixed by version and checksum** (`scripts/fetch-tools.ts`, [ADR 0009](../../docs/adr/0009-the-video-of-a-page.md)): yt-dlp's own build for each system, fetched by electron-builder's `beforePack` for the system it packs and by `npm start` for this one, into `tools/<os>/` (not in git), refused unless its sha256 is the one written there. It lands in `resources/tools/`, its licence in `resources/third-party/`; `runtime-layout.ts` names its path, `server-env.ts` hands it to the engine. Changing its version means changing the version and every checksum together, from the release's `SHA2-256SUMS`.
 - **A zero exit code from a packager is not proof**: install the artefact, launch it on a scratch profile, read its log.
 - `npm install` can leave `node_modules/electron/dist` empty while exiting 0. Symptom: missing `electron.exe`. Run `node node_modules/electron/install.js`.

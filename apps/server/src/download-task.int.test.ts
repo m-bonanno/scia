@@ -432,7 +432,39 @@ describe('HttpSource.probe', () => {
       acceptsRanges: true,
       fileName: 'Relazione finale.pdf',
       validator: '"v1"',
+      isPage: false,
     });
+  });
+
+  it('tells a web page from a file by what the host says it is', async () => {
+    const isPage = async (contentType: string | undefined) => {
+      await server?.close();
+      server = await startRangeServer({
+        body,
+        ...(contentType === undefined ? {} : { contentType }),
+      });
+      return (await source.probe(server.url, {}, new AbortController().signal)).isPage;
+    };
+
+    expect(await isPage('text/html; charset=utf-8')).toBe(true);
+    expect(await isPage('application/xhtml+xml')).toBe(true);
+    expect(await isPage('TEXT/HTML')).toBe(true);
+    expect(await isPage('video/mp4')).toBe(false);
+    expect(await isPage('text/html-sandboxed')).toBe(false);
+    expect(await isPage(undefined)).toBe(false);
+  });
+
+  it('asks for the bytes as they are, whatever headers a site asks to be sent', async () => {
+    server = await startRangeServer({ body });
+
+    await source.probe(
+      server.url,
+      { 'Accept-Encoding': 'gzip, deflate', 'User-Agent': 'SiteAgent/1' },
+      new AbortController().signal,
+    );
+
+    expect(server.asked.map((request) => request.acceptEncoding)).toEqual(['identity']);
+    expect(server.asked.map((request) => request.userAgent)).toEqual(['SiteAgent/1']);
   });
 
   it('sees a host that ignores ranges', async () => {

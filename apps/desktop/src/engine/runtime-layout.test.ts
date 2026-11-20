@@ -9,6 +9,7 @@ const input = {
   userDataDir: join('profile', 'Scia'),
   downloadsDir: join('home', 'Downloads'),
   scratchProfile: false,
+  platform: 'win32' as const,
 };
 
 describe('resolveRuntimeLayout', () => {
@@ -22,6 +23,19 @@ describe('resolveRuntimeLayout', () => {
     const layout = resolveRuntimeLayout(input);
     expect(layout.serverEntry).toBe(join('repo', 'apps', 'server', 'dist', 'server.cjs'));
     expect(layout.rendererDir).toBe(join('repo', 'apps', 'renderer', 'dist'));
+  });
+
+  it('finds the reader of pages that was shipped for this system, and none where none is', () => {
+    expect(resolveRuntimeLayout({ ...input, isPackaged: true }).ytDlp).toBe(
+      join('install', 'resources', 'tools', 'yt-dlp.exe'),
+    );
+    expect(resolveRuntimeLayout(input).ytDlp).toBe(
+      join('repo', 'apps', 'desktop', 'tools', 'win', 'yt-dlp.exe'),
+    );
+    expect(resolveRuntimeLayout({ ...input, isPackaged: true, platform: 'linux' }).ytDlp).toBe(
+      join('install', 'resources', 'tools', 'yt-dlp'),
+    );
+    expect(resolveRuntimeLayout({ ...input, platform: 'darwin' }).ytDlp).toBeUndefined();
   });
 
   it('keeps the engine’s files and the logs in the profile, never beside the executable', () => {

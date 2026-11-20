@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import { DEFAULT_API_PORT } from '@scia/contracts';
 import { describe, expect, it } from 'vitest';
 import { parseConfig } from './config.ts';
@@ -18,7 +19,19 @@ describe('parseConfig', () => {
       staticDir: undefined,
       version: '0.0.0',
       alldebridApi: 'https://api.alldebrid.com',
+      ytDlp: undefined,
+      tempDir: tmpdir(),
     });
+  });
+
+  it('reads pages with the yt-dlp it is given, and with none when it is given none', () => {
+    expect(parseConfig({ ...base, SCIA_YT_DLP: '/tools/yt-dlp' }).ytDlp).toBe('/tools/yt-dlp');
+    expect(parseConfig({ ...base, SCIA_YT_DLP: '' }).ytDlp).toBeUndefined();
+  });
+
+  it('takes the folder for temporary files main names, or the one it knows of itself', () => {
+    expect(parseConfig({ ...base, SCIA_TEMP_DIR: '/temp' }).tempDir).toBe('/temp');
+    expect(parseConfig({ ...base, SCIA_TEMP_DIR: '' }).tempDir).toBe(tmpdir());
   });
 
   it('takes the port, the renderer and the version it is given', () => {

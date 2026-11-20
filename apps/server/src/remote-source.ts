@@ -10,6 +10,8 @@ export interface RemoteFile {
   readonly fileName: string | undefined;
   // ETag or Last-Modified: the same file answers the same tomorrow, another file does not.
   readonly validator: string | null;
+  // The host answered a web page (HTML), not a file.
+  readonly isPage: boolean;
 }
 
 // [start, end), as a Segment.

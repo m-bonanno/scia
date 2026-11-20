@@ -1,4 +1,10 @@
-import { DownloadFailure, DownloadStatus, FileKind, ServiceFailure } from '@scia/core';
+import {
+  DownloadFailure,
+  DownloadStatus,
+  FileKind,
+  ServiceFailure,
+  VIDEO_CONTAINERS,
+} from '@scia/core';
 import { z } from 'zod';
 import { IntegrationId } from './integrations.ts';
 import { Theme } from './theme.ts';
@@ -30,6 +36,13 @@ const httpUrl = z.url({ protocol: /^https?$/ });
 
 export const segmentSchema = z.object({ start: byteCount, end: byteCount, downloaded: byteCount });
 
+// The container of a video and its lines of picture, when the site says them.
+export const mediaSchema = z.object({
+  // It ends the name of the file.
+  ext: z.enum(VIDEO_CONTAINERS),
+  height: z.number().int().positive().nullable(),
+});
+
 export const downloadSchema = z.object({
   id: z.string(),
   url: z.string(),
@@ -50,6 +63,9 @@ export const downloadSchema = z.object({
   failureStatus: z.number().int().nullable(),
   // The service the link goes through, or went through: it was not fetched as it stands.
   via: z.enum(IntegrationId).nullable(),
+  // The video of a page, as the site offers it: the link was a page, and this is what is
+  // fetched instead. Null for a link that is fetched as it stands.
+  media: mediaSchema.nullable(),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });
