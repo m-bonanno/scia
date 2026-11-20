@@ -334,6 +334,30 @@ describe('AllDebrid', () => {
     await expect(asked).rejects.toThrow('paused');
   });
 
+  it('stops with what whoever asked said, also while it waits between two questions', async () => {
+    const server = await serviceWith({
+      hosts,
+      links: { [LINK]: { direct: 'http://127.0.0.1:9/x', delayedPolls: 1_000_000 } },
+    });
+    const between = (options: Partial<ConstructorParameters<typeof AllDebrid>[0]>) =>
+      new AllDebrid({ api: server.api, userAgent: 'Scia/spec', ...options });
+
+    // Waiting to ask again about a link being prepared.
+    const preparing = new AbortController();
+    const prepared = between({ delayedPollMs: 60_000 }).unlock(KEY, LINK, preparing.signal);
+    await until(() => server.requests.length === 1);
+    preparing.abort(new Error('paused'));
+    await expect(prepared).rejects.toThrow('paused');
+
+    // Waiting to ask again a service that did not answer.
+    server.misbehave({ status: 503, times: 1 });
+    const retrying = new AbortController();
+    const retried = between({ retryDelayMs: () => 60_000 }).unlock(KEY, LINK, retrying.signal);
+    await until(() => server.requests.length === 2);
+    retrying.abort(new Error('removed'));
+    await expect(retried).rejects.toThrow('removed');
+  });
+
   it.each([
     ['MUST_BE_PREMIUM', UnlockFailure.NotPremium],
     ['FREE_TRIAL_LIMIT_REACHED', UnlockFailure.NotPremium],

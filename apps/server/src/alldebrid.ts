@@ -113,6 +113,17 @@ function isHttpAddress(value: string | null | undefined): value is string {
   return typeof value === 'string' && /^https?:$/.test(URL.parse(value)?.protocol ?? '');
 }
 
+// A wait that, when whoever asked stops, rejects with what they said: a timer's own rejection
+// says only that it was aborted.
+async function wait(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  try {
+    await sleep(ms, undefined, { signal });
+  } catch (error) {
+    signal?.throwIfAborted();
+    throw error;
+  }
+}
+
 // AllDebrid's API, as far as Scia uses it. The key travels in the Authorization header of a
 // request to the service's own address, and in nothing else: not in an address, not in an
 // error, not in a log. Every method rejects with a ServiceError that says why not, or with the
@@ -175,7 +186,7 @@ export class AllDebrid {
       if (performance.now() >= giveUpAt) {
         throw refused(UnlockFailure.NotReady, 'AllDebrid was still preparing the link.');
       }
-      await sleep(this.#options.delayedPollMs ?? DELAYED_POLL_MS, undefined, { signal });
+      await wait(this.#options.delayedPollMs ?? DELAYED_POLL_MS, signal);
       const { status, link } = await this.#insist(
         () => this.#ask('/v4/link/delayed', apiKey, delayedSchema, { id: String(id) }, signal),
         signal,
@@ -198,7 +209,7 @@ export class AllDebrid {
         const heals = error instanceof ServiceError && error.failure === ServiceFailure.Unavailable;
         if (!heals || attempt >= ATTEMPTS) throw error;
         const delayMs = (this.#options.retryDelayMs ?? defaultRetryDelayMs)(attempt);
-        await sleep(delayMs, undefined, { signal });
+        await wait(delayMs, signal);
       }
     }
   }
