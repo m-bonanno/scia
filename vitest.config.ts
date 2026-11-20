@@ -14,6 +14,7 @@ export default defineConfig({
             'apps/server/src/**/*.test.ts',
             'apps/desktop/src/**/*.test.ts',
             'apps/extension/src/**/*.test.ts',
+            'scripts/**/*.test.mjs',
           ],
           exclude: ['**/node_modules/**', ...slowerLayers],
         },

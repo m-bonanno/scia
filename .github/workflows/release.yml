@@ -54,7 +54,7 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Tag at HEAD: ${TAG:-none}"
 
-  # A stable only by default: Windows minutes count double on a private repository.
+  # A stable only by default; a beta's installers when asked for, with installer_tag.
   installers:
     name: Installer (${{ matrix.name }})
     needs: release
@@ -66,16 +66,14 @@ jobs:
       contents: write
     strategy:
       fail-fast: false
+      # Linux is off until it is tried (#28). Its entry, then: os ubuntu-latest,
+      # cache ~/.cache/electron-builder, artefacts 'Scia-$V.AppImage Scia-$V.deb'.
       matrix:
         include:
           - name: Windows
             os: windows-latest
             cache: ~/AppData/Local/electron-builder/Cache
             artefacts: 'Scia-Setup-$V.exe'
-          - name: Linux
-            os: ubuntu-latest
-            cache: ~/.cache/electron-builder
-            artefacts: 'Scia-$V.AppImage Scia-$V.deb'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     defaults:

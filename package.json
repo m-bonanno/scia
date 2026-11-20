@@ -2,7 +2,8 @@
   "name": "scia",
   "private": true,
   "type": "module",
-  "description": "Scia monorepo — a fast, minimal download manager for Windows and Linux",
+  "description": "Scia monorepo — a fast, minimal download manager for Windows, with Linux to follow",
+  "license": "MIT",
   "workspaces": [
     "packages/core",
     "packages/contracts",
