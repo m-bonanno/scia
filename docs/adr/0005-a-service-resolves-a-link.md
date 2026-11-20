@@ -1,6 +1,6 @@
 # ADR 0005 — A debrid service plugs in as a link resolver, at the start of a download
 
-- **Status**: accepted
+- **Status**: accepted; its last consequence — a hoster's link with no service connected — amended by [ADR 0006](./0006-a-file-host-without-a-service.md)
 - **Date**: 2026-11-20
 
 ## Context

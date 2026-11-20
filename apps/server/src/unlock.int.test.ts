@@ -3,7 +3,7 @@ import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { type IntegrationAccount, IntegrationId } from '@scia/contracts';
-import { DownloadFailure, DownloadStatus, ServiceFailure } from '@scia/core';
+import { DownloadFailure, DownloadStatus, ServiceFailure, UnlockFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
 import { DownloadManager } from './download-manager.ts';
@@ -144,20 +144,157 @@ describe('a link that goes through a service', () => {
     expect(JSON.stringify(alldebrid.requests)).not.toContain(host.url);
   });
 
-  it('asks no service anything while none is connected', async () => {
-    const host = await fileHost({ fileName: 'direct.bin' });
-    const alldebrid = await serviceWith({ links: {} });
-    const none = await Integrations.open({
-      vault: new MemoryVault(),
-      alldebrid: new AllDebrid({ api: alldebrid.api, userAgent: 'Scia/spec' }),
-      logger,
+  describe('while no service is connected', () => {
+    const never = new AbortController().signal;
+    const publicListAsked = (of: AllDebridServer) =>
+      of.requests.filter((request) => request.url === '/v4/hosts/domains').length;
+    async function noneConnected(to: AllDebridServer, now?: () => number): Promise<Integrations> {
+      return Integrations.open({
+        vault: new MemoryVault(),
+        alldebrid: new AllDebrid({ api: to.api, userAgent: 'Scia/spec', retryDelayMs: () => 1 }),
+        logger,
+        ...(now === undefined ? {} : { now }),
+      });
+    }
+
+    it("says a file host's link needs a service, and fetches nothing from its host", async () => {
+      const alldebrid = await serviceWith({ links: {} });
+      const downloads = await open(await noneConnected(alldebrid));
+
+      const [added] = downloads.add({ urls: [LINK] });
+      const failed = await finished(downloads, added!.id, DownloadStatus.Failed);
+
+      expect(failed.failure).toBe(UnlockFailure.NeedsService);
+      expect(failed.via).toBeNull();
+      expect(existsSync(inDownloads('abc123'))).toBe(false);
+      // The service was asked for the hosts it supports, with no key and nothing of the link.
+      expect(alldebrid.requests.map((request) => request.url)).toEqual(['/v4/hosts/domains']);
+      expect(alldebrid.requests[0]?.authorization).toBeUndefined();
+      expect(JSON.stringify(alldebrid.requests)).not.toContain('abc123');
     });
-    const downloads = await open(none);
 
-    const [added] = downloads.add({ urls: [host.url] });
-    await finished(downloads, added!.id, DownloadStatus.Completed);
+    it('fetches any other link as it stands, and tells the service nothing of it', async () => {
+      const host = await fileHost({ fileName: 'direct.bin' });
+      const alldebrid = await serviceWith({ links: {} });
+      const downloads = await open(await noneConnected(alldebrid));
 
-    expect(alldebrid.requests).toEqual([]);
+      const [added] = downloads.add({ urls: [host.url] });
+      const done = await finished(downloads, added!.id, DownloadStatus.Completed);
+
+      expect(done.via).toBeNull();
+      expect(Buffer.compare(await readFile(inDownloads('direct.bin')), body)).toBe(0);
+      expect(JSON.stringify(alldebrid.requests)).not.toContain(host.url);
+    });
+
+    it('takes for a file host only its own domain and its www, not the servers of its files', async () => {
+      const alldebrid = await serviceWith({ links: {} });
+      const integrations = await noneConnected(alldebrid);
+      const needsService = { failure: UnlockFailure.NeedsService };
+
+      await expect(integrations.serviceFor(LINK, never)).rejects.toMatchObject(needsService);
+      await expect(
+        integrations.serviceFor('https://WWW.Hoster.example/f/1', never),
+      ).rejects.toMatchObject(needsService);
+      for (const other of [
+        // A file's own server, which serves it to anyone: a direct link.
+        'https://dl42.hoster.example/files/film.mkv',
+        'https://nothoster.example/f/1',
+        'https://hoster.example.evil.test/f/1',
+        'https://evil.test/?u=hoster.example',
+        'not an address',
+      ]) {
+        expect(await integrations.serviceFor(other, never), other).toBeUndefined();
+      }
+    });
+
+    it('takes no site of videos and no shortener of links for a file host', async () => {
+      const alldebrid = await serviceWith({
+        links: {},
+        streams: ['videos.example'],
+        redirectors: ['short.example'],
+      });
+      const integrations = await noneConnected(alldebrid);
+
+      expect(
+        await integrations.serviceFor('https://videos.example/watch?v=1', never),
+      ).toBeUndefined();
+      expect(await integrations.serviceFor('https://short.example/abc', never)).toBeUndefined();
+    });
+
+    it('reads the list once for the links that wait, and again after six hours', async () => {
+      const alldebrid = await serviceWith({ links: {} });
+      let clock = 0;
+      const integrations = await noneConnected(alldebrid, () => clock);
+      const ask = () => integrations.serviceFor('https://elsewhere.example/f', never);
+
+      await Promise.all([ask(), ask(), ask()]);
+      clock += 6 * 60 * 60_000 - 1;
+      await ask();
+      expect(publicListAsked(alldebrid)).toBe(1);
+
+      clock += 1;
+      await ask();
+      expect(publicListAsked(alldebrid)).toBe(2);
+
+      // A list that cannot be read again is still the list.
+      alldebrid.misbehave({ status: 503 });
+      clock += 6 * 60 * 60_000;
+      await expect(integrations.serviceFor(LINK, never)).rejects.toMatchObject({
+        failure: UnlockFailure.NeedsService,
+      });
+    });
+
+    it('fetches a link as it stands while the list cannot be read, and asks again a minute later', async () => {
+      const alldebrid = await serviceWith({ links: {} });
+      let clock = 0;
+      const integrations = await noneConnected(alldebrid, () => clock);
+      alldebrid.misbehave({ status: 503 });
+
+      // Not stopped on a guess: with no service, a link went as it stands before #49.
+      expect(await integrations.serviceFor(LINK, never)).toBeUndefined();
+      expect(logged.join('\n')).toContain('service_public_hosts_not_read');
+      const afterTheFailure = publicListAsked(alldebrid);
+
+      clock += 59_000;
+      await integrations.serviceFor(LINK, never);
+      expect(publicListAsked(alldebrid)).toBe(afterTheFailure);
+
+      alldebrid.misbehave(undefined);
+      clock += 2000;
+      await expect(integrations.serviceFor(LINK, never)).rejects.toMatchObject({
+        failure: UnlockFailure.NeedsService,
+      });
+    });
+
+    it('asks for no public list once a service is connected', async () => {
+      const alldebrid = await serviceWith({ links: {} });
+      const integrations = await connected(alldebrid);
+
+      await integrations.serviceFor(LINK, never);
+
+      expect(publicListAsked(alldebrid)).toBe(0);
+    });
+
+    it('unlocks the link once a service is connected and the download tried again', async () => {
+      const host = await fileHost({ fileName: 'Film.mkv' });
+      const alldebrid = await serviceWith({ links: { [LINK]: { direct: host.url } } });
+      const vault = new MemoryVault();
+      const integrations = await Integrations.open({
+        vault,
+        alldebrid: new AllDebrid({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+        logger,
+      });
+      const downloads = await open(integrations);
+      const [added] = downloads.add({ urls: [LINK] });
+      await finished(downloads, added!.id, DownloadStatus.Failed);
+
+      await integrations.connect(IntegrationId.AllDebrid, KEY);
+      downloads.resume(added!.id);
+      const done = await finished(downloads, added!.id, DownloadStatus.Completed);
+
+      expect(done.via).toBe('alldebrid');
+      expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
+    });
   });
 
   it('takes the links of a host’s subdomains, and not of a domain that only looks like it', async () => {

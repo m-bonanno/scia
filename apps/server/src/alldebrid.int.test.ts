@@ -234,6 +234,31 @@ describe('AllDebrid', () => {
     expect(server.requests.at(-1)).toMatchObject({ method: 'GET', url: '/v4.1/user/hosts' });
   });
 
+  it('lists the domains of the file hosts it supports to anyone, with no key, in lower case', async () => {
+    const server = await serviceWith({
+      hosts: { onefile: ['OneFile.example', '1f.example'], bighost: ['bighost.example'] },
+      streams: ['videos.example'],
+      redirectors: ['short.example'],
+    });
+
+    expect(await clientOf(server).publicDomains()).toEqual([
+      'onefile.example',
+      '1f.example',
+      'bighost.example',
+    ]);
+    expect(server.requests.at(-1)).toMatchObject({ method: 'GET', url: '/v4/hosts/domains' });
+    expect(server.requests.at(-1)?.authorization).toBeUndefined();
+  });
+
+  it('asks again for the public list a service that did not answer, and says when it never does', async () => {
+    const server = await serviceWith({ hosts });
+    server.misbehave({ status: 503, times: 1 });
+    expect(await clientOf(server).publicDomains()).toEqual(['hoster.example']);
+
+    server.misbehave({ nonsense: true });
+    expect(await failureOf(clientOf(server).publicDomains())).toBe(ServiceFailure.Unavailable);
+  });
+
   it('unlocks a link: the direct link and the name the service gives, the link sent in a form', async () => {
     const server = await serviceWith({
       hosts,

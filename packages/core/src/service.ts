@@ -31,6 +31,9 @@ export const UnlockFailure = {
   NotConnected: 'SERVICE_NOT_CONNECTED',
   // The service was still preparing the link after the longest wait Scia gives it.
   NotReady: 'LINK_NOT_READY',
+  // A file host's link, added while no service is connected: Scia does not fetch the host's page
+  // and call it the file (#49).
+  NeedsService: 'SERVICE_NEEDED',
 } as const;
 export type UnlockFailure = (typeof UnlockFailure)[keyof typeof UnlockFailure];
 

@@ -100,6 +100,9 @@ export class Integrations implements LinkResolver {
   #hosts: HostList | undefined;
   // Forgotten with the list when another key, or none, is connected: that key asks again.
   #readingHosts: Promise<readonly string[]> | undefined;
+  // The file hosts the service lists to anyone, read while no service is connected (#49).
+  #publicHosts: HostList | undefined;
+  #readingPublicHosts: Promise<readonly string[]> | undefined;
   // Connecting and disconnecting, one after the other: two at once would write one key over
   // another, in an order nobody chose.
   #changing: Promise<unknown> = Promise.resolve();
@@ -201,7 +204,20 @@ export class Integrations implements LinkResolver {
   async serviceFor(url: string, signal: AbortSignal): Promise<IntegrationId | undefined> {
     const key = this.#key;
     const host = hostNameOf(url);
-    if (key === undefined || host === undefined) return undefined;
+    if (host === undefined) return undefined;
+    if (key === undefined) {
+      // A file host's page is on its own domain, or on its www; its other names are the
+      // servers of its files, which give them to anyone: those links go as they stand.
+      const domains = await unlessStopped(this.#publicDomains(), signal);
+      if (domains.some((domain) => host === domain || host === `www.${domain}`)) {
+        throw new ServiceError(
+          IntegrationId.AllDebrid,
+          UnlockFailure.NeedsService,
+          "A file host's link, and no service is connected.",
+        );
+      }
+      return undefined;
+    }
     const domains = await unlessStopped(this.#domains(key), signal);
     return domains.some((domain) => host === domain || host.endsWith(`.${domain}`))
       ? IntegrationId.AllDebrid
@@ -259,6 +275,37 @@ export class Integrations implements LinkResolver {
       });
     this.#readingHosts = reading;
     return reading;
+  }
+
+  // As the account's list: read when first needed and every six hours, one reading for every
+  // link that waits. One that cannot be read leaves the links to go as they stand — as they
+  // did before #49 — and is asked again a minute later.
+  #publicDomains(): Promise<readonly string[]> {
+    const known = this.#publicHosts;
+    if (known !== undefined && this.#now() - known.readAt < HOSTS_FRESH_MS) {
+      return Promise.resolve(known.domains);
+    }
+    this.#readingPublicHosts ??= this.#deps.alldebrid
+      .publicDomains()
+      .then(
+        (domains) => {
+          this.#publicHosts = { domains, readAt: this.#now() };
+          return domains;
+        },
+        (error: unknown) => {
+          this.#deps.logger.warn('service_public_hosts_not_read', {
+            service: IntegrationId.AllDebrid,
+            error: describeFailure(error),
+          });
+          const domains = known?.domains ?? [];
+          this.#publicHosts = { domains, readAt: this.#now() - HOSTS_FRESH_MS + HOSTS_RETRY_MS };
+          return domains;
+        },
+      )
+      .finally(() => {
+        this.#readingPublicHosts = undefined;
+      });
+    return this.#readingPublicHosts;
   }
 
   async #keepHosts(domains: readonly string[]): Promise<void> {

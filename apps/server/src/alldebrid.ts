@@ -75,6 +75,10 @@ const hostsSchema = z.object({
   hosts: z.record(z.string(), z.object({ domains: z.array(z.string()) })),
 });
 
+// What the service lists to anyone: file hosts, and sites of videos and shorteners of links,
+// which are no file hosts and are not read.
+const publicHostsSchema = z.object({ hosts: z.array(z.string()) });
+
 const unlockSchema = z.object({
   // Empty, or absent, while the link is being prepared.
   link: z.string().nullish(),
@@ -161,6 +165,16 @@ export class AllDebrid {
     );
   }
 
+  // The domains of the file hosts the service supports, as it lists them to anyone: no key is
+  // sent, and nothing of any link (#49).
+  async publicDomains(signal?: AbortSignal): Promise<string[]> {
+    const { hosts } = await this.#insist(
+      () => this.#ask('/v4/hosts/domains', undefined, publicHostsSchema, undefined, signal),
+      signal,
+    );
+    return hosts.map((domain) => domain.toLowerCase());
+  }
+
   // The direct link for a hoster's. A link the service needs time to prepare is waited for,
   // for as long as the service says it is preparing it and nobody stops the wait.
   async unlock(apiKey: string, link: string, signal?: AbortSignal): Promise<UnlockedLink> {
@@ -217,7 +231,7 @@ export class AllDebrid {
   // One request: a GET, or a POST of `form` when there is one.
   async #ask<T>(
     path: string,
-    apiKey: string,
+    apiKey: string | undefined,
     schema: z.ZodType<T>,
     form: Readonly<Record<string, string>> | undefined,
     signal: AbortSignal | undefined,
@@ -228,7 +242,7 @@ export class AllDebrid {
       const response = await fetch(`${this.#options.api}${path}`, {
         ...(form === undefined ? {} : { method: 'POST', body: new URLSearchParams(form) }),
         headers: {
-          authorization: `Bearer ${apiKey}`,
+          ...(apiKey === undefined ? {} : { authorization: `Bearer ${apiKey}` }),
           accept: 'application/json',
           'user-agent': this.#options.userAgent,
         },

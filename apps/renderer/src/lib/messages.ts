@@ -99,6 +99,9 @@ const LINK_NOT_UNLOCKED: Readonly<
   [UnlockFailure.LinkRefused]: (service) => `${service} could not unlock this link.`,
   [UnlockFailure.NotReady]: (service) =>
     `${service} was still preparing this link after ${formatDuration(PREPARE_LIMIT_SECONDS)}. Try again later.`,
+  // Said with no service connected, so it names the one there is to connect.
+  [UnlockFailure.NeedsService]: () =>
+    `This link is on a file host: Scia downloads it through ${SERVICE_NAME.alldebrid}. Connect ${SERVICE_NAME.alldebrid} in Settings, then try again.`,
   [UnlockFailure.NotConnected]: (service) =>
     `${service} is no longer connected. Connect it in Settings, then try again.`,
 };
