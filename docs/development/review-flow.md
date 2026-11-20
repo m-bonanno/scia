@@ -29,7 +29,7 @@ A release into `main` is never small.
 
 ## The gates
 
-One list, for the author before opening the PR, for the tech lead during the review, for CI on GitHub:
+One list, for the author before opening the PR, for the tech lead during the review, for CI on GitHub. On a PR from a fork, CI's run is the only one: "A pull request from outside".
 
 ```bash
 npm run format:check
@@ -57,9 +57,9 @@ Everything else is non-blocking: a suggestion, a question, something to track. B
 ## Rules
 
 - **Independent.** A reviewer gets its role file, the PR and the issue it closes, never the author's reasoning: an agent handed a conclusion returns it confirmed. What the owner asked for belongs in the issue, where every reviewer reads it.
-- **Read-only.** Reviewers do not edit, commit, push or comment. Each writes its review to a file outside the repository, in a folder of its own that the other roles are told not to read, and answers with its verdict; the orchestrating session posts the files as they are and applies the fixes.
+- **Read-only.** Reviewers do not edit, commit, push or comment. Each writes its review to a file outside the repository, in a folder of its own that the other roles are told not to read, and answers with its verdict; the orchestrating session posts the files as they are and applies the fixes. On a PR from a fork they run nothing of it either — no script, harness, install or gate: "A pull request from outside".
 - **The team verdict is deterministic**: approved only if no role has a blocking finding, and it holds for one head commit.
-- **Changes requested** → the fix lands on the same branch as new commits, never a force-push. Then: the roles are decided again on the whole diff, size included (a fix can reach a new area, or make a small PR a large one); every role that blocked reviews again, resumed so that it checks its own findings; a role that had approved reviews again if the fix changes its area; a role the fix newly involves reviews for the first time; and the tech lead runs the gates again on the new head. Every round is posted.
+- **Changes requested** → the fix lands on the same branch as new commits, never a force-push. Then: the roles are decided again on the whole diff, size included (a fix can reach a new area, or make a small PR a large one); every role that blocked reviews again, resumed so that it checks its own findings; a role that had approved reviews again if the fix changes its area; a role the fix newly involves reviews for the first time; and the tech lead runs the gates again on the new head — on a fork's PR, reads CI's run on it ("A pull request from outside"). Every round is posted.
 - **Nothing unreviewed is merged.** A commit pushed after the approval — a non-blocking finding taken at the last moment — is reviewed before the merge. The roles are decided again on the whole diff, as after a fix, size included: a late commit can make a small PR a large one. Then the tech lead reviews it; so does every role of that set whose area the commit changes; and a role of that set that had not reviewed the PR yet reviews all of it. The verdict is posted again for the new head.
 - **Non-blocking findings are not lost**: taken in the same PR when they are in its scope and cheap, otherwise collected in a follow-up issue, opened before the approving verdict and linked from it. A verdict that asks for changes names none: its findings are still being fixed.
 - **A blocking finding the author contests goes to the owner.** The orchestrating session never overrules a reviewer; it fixes, or it asks.
@@ -91,9 +91,20 @@ The last line is `Follow-ups: none` when an approving verdict leaves nothing to 
 | `develop` into `main` (a release)            | the team approves, CI is green, **and the owner says so**                                                                                         | **merge commit**, never a squash             |
 | `main` back into `develop` (after a release) | CI is green. The one PR nobody of the team reviews: it carries only what was reviewed on its way into `main`. The orchestrating session merges it | **merge commit**, never a squash             |
 
-**From the day the repository is public and its branches are protected** ([`git-flow.md`](./git-flow.md), "Repository settings"), every row of this table also needs the owner's approved review on GitHub: the team's verdict is then what the owner reads before approving, not what merges.
+`main` and `develop` are protected on GitHub ([`git-flow.md`](./git-flow.md), "Repository settings"): GitHub merges a PR only with its checks green, and **requires no approving review** — it does not let the author of a PR approve it, and the team's PRs are opened from the owner's account (the owner, 20 November 2026, #28). What this table says is what merges: the team's verdict, CI, and for a release the owner's word.
 
 The two merge commits are what lets semantic-release count the next version from the last one ([`release-flow.md`](./release-flow.md)): squashing either breaks the count.
+
+## A pull request from outside
+
+A PR from a fork, by someone without write access. The flow for its author is [`CONTRIBUTING.md`](../../CONTRIBUTING.md); this is the team's side of it.
+
+- **An issue first.** The PR closes an issue that explains the problem or the feature, and the `Linked issue` check fails it otherwise. **The owner chooses by hand** which issues and which PRs are taken up; a PR nobody took up waits, or is closed with a sentence on why.
+- **CI waits for the owner.** Its workflows run only once the owner approves the run on the PR. Before approving it, the owner reads what the PR changes in `.github/`, `scripts/`, `.husky/`, the configs at the root and `package.json`/`package-lock.json`: those run on GitHub's runner.
+- **Never run a contributor's code on the owner's machine outside a sandbox.** Not `npm ci` or `npm install` (install scripts), not a gate, a test, a build, `npm start` or a harness, not a checkout with the hooks on: husky runs a `.husky/post-checkout` the PR adds. **The gates come from CI**, on GitHub's runners: the tech lead reads that run, on the head under review, instead of running them, and reports its numbers. The reviewers read the diff — `gh pr diff <N>`, and after `git fetch origin pull/<N>/head`, `git show <sha>:<path>`; a tree to read whole files in is made with `git -c core.hooksPath=/dev/null worktree add --detach <dir> <sha>`, and nothing in it is run. Evidence of a real run is the contributor's, in the PR body; seeing it again takes a sandbox (Windows Sandbox, a throwaway virtual machine).
+- **`/team-review <N>`** as for any PR, roles, rounds and verdict alike. The reviews are posted on the PR; **the team verdict is posted on the linked issue too**, with each blocking finding on a line of its own, so that whoever follows the issue sees what stands between it and a merge.
+- **Changes requested** → the contributor fixes them on the same branch, as new commits, and the next round runs on the new head when the owner starts it. A PR whose findings stay unanswered is closed by the owner.
+- **Approved, CI green** → squash-merged like any work branch. Only the owner's account merges: a contributor cannot.
 
 ## What a review looks like
 

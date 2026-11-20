@@ -1,4 +1,5 @@
 <!--
+  A PR closes an issue: open one first (CONTRIBUTING.md). The Linked issue check fails a body that closes none.
   English only. Delete Notes / Out of scope if empty; never delete What / Why / How / References / Test plan.
   No AI attribution anywhere.
   Write the body to .claude/pr-bodies/<branch>.md and pass it with --body-file.

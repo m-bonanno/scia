@@ -54,7 +54,7 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Tag at HEAD: ${TAG:-none}"
 
-  # A stable only by default: Windows minutes count double on a private repository.
+  # A stable only by default; a beta's installers when asked for, with installer_tag.
   installers:
     name: Installer (${{ matrix.name }})
     needs: release

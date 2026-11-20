@@ -4,6 +4,8 @@ A download manager for Windows, with Linux to follow: paste a link, Scia fetches
 
 ![Scia with a few downloads in progress](docs/design/downloads-in-progress.png)
 
+**There is no stable release yet.** The pre-releases (`v1.0.0-beta.N`) on the Releases page carry notes, and an installer only when one is built to try it — none carries one yet; the Windows installer is not signed, so Windows warns before running it. To try Scia today, build it from the source (below).
+
 ## What it does today
 
 - Downloads any http/https link over several connections in parallel, handing work over when one finishes before the others.
@@ -40,4 +42,8 @@ How the project is built and how to work on it: [`CLAUDE.md`](CLAUDE.md). The ar
 
 ### Contributing
 
-Work happens on a `<type>/<issue>-<description>` branch cut from `develop`, with conventional commits, and lands through a PR into `develop`: [`docs/development/git-flow.md`](docs/development/git-flow.md). Versions are decided by semantic-release from the commits: [`docs/development/release-flow.md`](docs/development/release-flow.md).
+An issue first, then a pull request that closes it: [`CONTRIBUTING.md`](CONTRIBUTING.md). Work happens on a `<type>/<issue>-<description>` branch cut from `develop`, with conventional commits, and lands through a PR into `develop`: [`docs/development/git-flow.md`](docs/development/git-flow.md). Versions are decided by semantic-release from the commits: [`docs/development/release-flow.md`](docs/development/release-flow.md).
+
+## Licence
+
+[MIT](LICENSE).

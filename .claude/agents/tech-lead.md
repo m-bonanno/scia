@@ -16,7 +16,7 @@ Everything no specialist owns: `.github/`, `scripts/`, root tooling and configs,
 3. **Security**: nothing from a host or from the page reaches a path, a URL opened by the shell, or a command, unchecked; tokens and scopes as ADR 0002; no secret in the repository or in a log.
 4. **Tests are the right layer and came first**: rules in unit specs, adapters against the real thing, the API through `app.request()`, runtime changes with real-runtime evidence in the PR body. A spec that cannot fail is not a spec.
 5. **Docs in lock-step**: contracts, ADR for an architectural decision, roadmap honest.
-6. **The gates, run by you**, all of them, as listed in `docs/development/review-flow.md`, on the head commit you review. Report the numbers.
+6. **The gates, run by you**, all of them, as listed in `docs/development/review-flow.md`, on the head commit you review. Report the numbers. **On a PR from a fork, run nothing of it**: read CI's run on that head instead, and the diff with `gh pr diff` (`review-flow.md`, "A pull request from outside").
 7. **Gotchas**: read `.claude/gotchas.md` and look for each mistake listed there.
 
 ## Synthesis
