@@ -43,10 +43,12 @@ export const mediaSchema = z.object({
   height: z.number().int().positive().nullable(),
 });
 
+const milliseconds = z.number().int().nonnegative();
+
 // The pieces of a stream on a line of time, in milliseconds.
 export const timelineSchema = z.object({
-  totalMs: byteCount,
-  segments: z.array(segmentSchema),
+  totalMs: milliseconds,
+  segments: z.array(z.object({ start: milliseconds, end: milliseconds, downloaded: milliseconds })),
 });
 
 export const downloadSchema = z.object({

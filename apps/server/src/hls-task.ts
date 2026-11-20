@@ -1,6 +1,7 @@
 import { createDecipheriv } from 'node:crypto';
 import { mkdir, open, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import {
   DownloadFailure,
   HlsError,
@@ -18,6 +19,8 @@ import { createTransmuxer } from './transmuxer.ts';
 
 const MOST_ATTEMPTS = 5;
 const MOST_PLAYLIST_BYTES = 8 * 1024 * 1024;
+// A piece is held whole while it is opened and written: a few seconds of video, never this.
+const MOST_PIECE_BYTES = 256 * 1024 * 1024;
 
 export interface HlsTaskOptions {
   readonly source: RemoteSource;
@@ -74,13 +77,20 @@ export class HlsTask {
     this.#options = options;
   }
 
-  progress(): { readonly downloadedBytes: number; readonly timeline: Timeline | null } {
-    let downloadedBytes = this.#inFlight;
-    for (const bytes of this.#done.values()) downloadedBytes += bytes;
+  // `wholeBytes` are those of the pieces kept whole: what the time left is reckoned from.
+  progress(): {
+    readonly downloadedBytes: number;
+    readonly wholeBytes: number;
+    readonly timeline: Timeline | null;
+  } {
+    let wholeBytes = 0;
+    for (const bytes of this.#done.values()) wholeBytes += bytes;
+    const downloadedBytes = wholeBytes + this.#inFlight;
     const last = this.#pieces.at(-1);
-    if (last === undefined) return { downloadedBytes, timeline: null };
+    if (last === undefined) return { downloadedBytes, wholeBytes, timeline: null };
     return {
       downloadedBytes,
+      wholeBytes,
       timeline: {
         totalMs: last.endMs,
         segments: this.#pieces.map((piece) => ({
@@ -104,19 +114,30 @@ export class HlsTask {
       }
     }
     const waiting = pieces.filter((piece) => !this.#done.has(piece.index));
+    // A piece that fails for good ends every connection, and the task waits for them all: nothing
+    // is fetched or written for a download that has failed, and the limit is not booked for it.
+    const failure = new AbortController();
+    const both = AbortSignal.any([signal, failure.signal]);
     const workers = Array.from(
       { length: Math.max(1, Math.min(this.#options.connections, waiting.length)) },
       async () => {
         for (let piece = waiting.shift(); piece !== undefined; piece = waiting.shift()) {
-          await this.#fetchPiece(piece, folder, signal);
+          await this.#fetchPiece(piece, folder, both);
         }
       },
     );
-    try {
-      await Promise.all(workers);
-    } finally {
-      this.#inFlight = 0;
-    }
+    const ended = await Promise.allSettled(
+      workers.map((worker) =>
+        worker.catch((error: unknown) => {
+          failure.abort(error);
+          throw error;
+        }),
+      ),
+    );
+    this.#inFlight = 0;
+    signal.throwIfAborted();
+    const first = ended.find((outcome) => outcome.status === 'rejected');
+    if (first !== undefined) throw first.reason;
     await this.#assemble(folder, signal);
     await disk(() => rm(folder, { recursive: true, force: true }));
   }
@@ -154,6 +175,19 @@ export class HlsTask {
       throw new PageError(PageFailure.Unreadable, 'The stream names no piece of one quality.');
     }
     if (!playlist.ends) throw new PageError(PageFailure.Live, 'The stream is live.');
+    // A stream that jumps — stitched ads or intros — would be one broken mp4: refused for now
+    // (the owner, on #98; #123).
+    const [head] = playlist.segments;
+    const sameMap = (map: HlsSegment['map']) =>
+      JSON.stringify(map) === JSON.stringify(head?.map ?? null);
+    // An init segment under a key is encrypted, and written as fetched it would be no mp4's (#123).
+    const changes = (segment: HlsSegment) =>
+      segment.discontinuity ||
+      !sameMap(segment.map) ||
+      (segment.map !== null && segment.key !== null);
+    if (playlist.segments.some(changes)) {
+      throw new PageError(PageFailure.FormatUnsupported, 'The stream changes partway.');
+    }
     let at = 0;
     this.#pieces = playlist.segments.map((segment, index) => {
       const startMs = at;
@@ -175,7 +209,7 @@ export class HlsTask {
       byteRange === null
         ? null
         : { start: byteRange.offset, end: byteRange.offset + byteRange.length };
-    let bytes = await this.#fetch(piece.url, range, signal, null, true);
+    let bytes = await this.#fetch(piece.url, range, signal, MOST_PIECE_BYTES, true);
     if (key !== null) {
       const secret = await this.#key(new URL(key.uri, this.#options.playlistUrl).href, signal);
       const decipher = createDecipheriv(
@@ -192,8 +226,15 @@ export class HlsTask {
       }
     }
     const path = join(folder, pieceName(piece.index));
+    // On the disk before it is renamed: a piece counted as kept after a power cut holds its bytes.
     await disk(async () => {
-      await writeFile(`${path}.part`, bytes);
+      const piecefile = await open(`${path}.part`, 'w');
+      try {
+        await piecefile.writeFile(bytes);
+        await piecefile.datasync();
+      } finally {
+        await piecefile.close();
+      }
       await rename(`${path}.part`, path);
     });
     this.#done.set(piece.index, bytes.byteLength);
@@ -256,9 +297,8 @@ export class HlsTask {
         if (signal.aborted || !heals || attempt >= MOST_ATTEMPTS) {
           throw signal.aborted ? signal.reason : asRemote(error);
         }
-        await new Promise((resolve) =>
-          setTimeout(resolve, this.#options.retryDelayMs?.(attempt) ?? 1000 * attempt),
-        );
+        // A pause in the wait ends it.
+        await sleep(this.#options.retryDelayMs?.(attempt) ?? 1000 * attempt, undefined, { signal });
       } finally {
         allowance?.settle();
       }
@@ -290,6 +330,8 @@ export class HlsTask {
       }
       await this.#transmux(folder, output, signal);
     } finally {
+      // The manager marks and renames it, and says it is complete, next.
+      await output.datasync().catch(() => undefined);
       await output.close();
     }
   }

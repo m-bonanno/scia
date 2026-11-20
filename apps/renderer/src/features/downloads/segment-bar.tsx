@@ -50,9 +50,10 @@ export function SegmentBar({ download }: { readonly download: Download }): React
       aria-valuemax={100}
       aria-valuenow={Math.floor((measure.done / total) * 100)}
     >
-      {measure.segments.map((segment) => (
+      {measure.segments.map((segment, index) => (
         <div
-          key={segment.start}
+          // Two pieces of no length start at the same moment.
+          key={index}
           className={cn('absolute inset-y-0 transition-[width] duration-300 ease-linear', fill)}
           style={{
             left: `${String((segment.start / total) * 100)}%`,

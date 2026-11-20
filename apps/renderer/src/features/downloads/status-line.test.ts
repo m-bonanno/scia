@@ -208,6 +208,10 @@ describe('statusLine', () => {
     expect(stream({ status: DownloadStatus.Paused })).toBe(
       'Paused · 66% · 6.0\u00a0MB · MP4\u00a0720p',
     );
+    // Once made, its size is the mp4’s, which the engine read from the file.
+    expect(stream({ status: DownloadStatus.Completed, totalBytes: 5 * MIB })).toBe(
+      '5.0\u00a0MB · Completed · MP4\u00a0720p',
+    );
   });
 
   it('says the address the site gave for a video stopped working, and that trying again reads the page for a new one', () => {
@@ -243,13 +247,14 @@ describe('statusLine', () => {
       'The video on this page is protected. Scia does not download protected videos.',
     ],
     [PageFailure.SiteBusy, 'The site did not answer properly. Try again later.'],
+    [PageFailure.Live, 'This video is a live stream. Scia does not record live streams yet.'],
     [
       PageFailure.VideoUnavailable,
       'The site says this video cannot be played. It may be private, removed, or not available in your country.',
     ],
     [
       PageFailure.FormatUnsupported,
-      'The site offers this video only in a form Scia cannot download yet.',
+      'The site offers this video in a form Scia cannot download yet.',
     ],
     [
       PageFailure.Playlist,

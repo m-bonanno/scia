@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
+import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { type Download, type Settings, type SettingsPatch, type Snapshot } from '@scia/contracts';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
@@ -129,11 +129,18 @@ interface Progress {
   readonly downloadedBytes: number;
   readonly segments: Segment[];
   readonly timeline: Timeline | null;
+  // Of a stream, the bytes of its whole pieces; of a file, its bytes.
+  readonly wholeBytes?: number;
 }
 
+// A stream's task says nothing until it has read its playlist: the record says what was kept,
+// so that the row does not drop to nothing on a resume.
 function progressOf(task: DownloadTask | HlsTask | undefined): Progress | undefined {
   if (task === undefined) return undefined;
-  if (task instanceof HlsTask) return { ...task.progress(), segments: [] };
+  if (task instanceof HlsTask) {
+    const progress = task.progress();
+    return progress.timeline === null ? undefined : { ...progress, segments: [] };
+  }
   return { ...task.progress(), timeline: null };
 }
 
@@ -394,7 +401,13 @@ export class DownloadManager {
     const running = this.#running.get(record.id);
     const progress = progressOf(running?.task) ?? record;
     const bytesPerSecond = running?.meter.bytesPerSecond(this.#now()) ?? 0;
-    const left = bytesLeft(record.totalBytes, progress.downloadedBytes, progress.timeline);
+    const left = bytesLeft(
+      record.totalBytes,
+      'wholeBytes' in progress
+        ? (progress.wholeBytes ?? progress.downloadedBytes)
+        : progress.downloadedBytes,
+      progress.timeline,
+    );
     return {
       id: record.id,
       url: record.url,
@@ -511,6 +524,8 @@ export class DownloadManager {
     const { signal } = running.controller;
     try {
       const { url, headers, remote, kind } = await this.#locate(record, signal);
+      // A stream that a new reading made a file: its pieces are of nothing now.
+      if (kind === 'file') await rm(piecesOf(partPathOf(record)), { recursive: true, force: true });
       await mkdir(record.directory, { recursive: true }).catch((error: unknown) => {
         throw new DiskError('The folder could not be made.', { cause: error });
       });
@@ -584,7 +599,15 @@ export class DownloadManager {
     this.#changed();
     await task.run(signal);
     this.#keepProgress(record, task);
-    record.totalBytes = record.downloadedBytes;
+    // The mp4's own size: not the pieces', which MPEG-TS weighs more and fMP4 less, its init
+    // segment uncounted.
+    record.totalBytes = await stat(partPathOf(record)).then(
+      (made) => made.size,
+      (error: unknown) => {
+        throw new DiskError('The made file could not be read.', { cause: error });
+      },
+    );
+    record.downloadedBytes = record.totalBytes;
     await this.#finish(record);
   }
 

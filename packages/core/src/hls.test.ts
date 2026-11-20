@@ -22,7 +22,15 @@ describe('parsePlaylist', () => {
     if (playlist.kind !== 'media') return;
     expect(playlist.ends).toBe(true);
     expect(playlist.segments).toEqual([
-      { uri: 'segment0.ts', duration: 4, sequence: 7, key: null, map: null, byteRange: null },
+      {
+        uri: 'segment0.ts',
+        duration: 4,
+        sequence: 7,
+        key: null,
+        map: null,
+        byteRange: null,
+        discontinuity: false,
+      },
       {
         uri: 'https://cdn.example/segment1.ts',
         duration: 3.5,
@@ -30,6 +38,7 @@ describe('parsePlaylist', () => {
         key: null,
         map: null,
         byteRange: null,
+        discontinuity: false,
       },
     ]);
   });
@@ -127,6 +136,25 @@ describe('parsePlaylist', () => {
         { uri: 'high/index.m3u8', bandwidth: 2800000, height: 720 },
       ],
     });
+  });
+
+  it('refuses a piece whose length no stream has: below zero, not a number, longer than a day', () => {
+    for (const length of ['-1', '1e300', 'NaN', '90000']) {
+      expect(
+        () => parsePlaylist(vod.replace('#EXTINF:3.5,title', `#EXTINF:${length},`)),
+        length,
+      ).toThrow(HlsRefusal.NotAPlaylist);
+    }
+  });
+
+  it('marks the piece after a discontinuity', () => {
+    const playlist = parsePlaylist(
+      vod.replace('#EXTINF:3.5,title', '#EXT-X-DISCONTINUITY\n#EXTINF:3.5,'),
+    );
+
+    expect(
+      playlist.kind === 'media' && playlist.segments.map((segment) => segment.discontinuity),
+    ).toEqual([false, true]);
   });
 
   it('says why a stream cannot be fetched: protected, or not a playlist at all', () => {

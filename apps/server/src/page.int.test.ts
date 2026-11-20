@@ -378,6 +378,30 @@ describe('DownloadManager and a link that is a page', () => {
     expect(Buffer.compare(await readFile(inDownloads('Clip.mp4')), video)).toBe(0);
   });
 
+  it('loads a state written before streams: no timeline, a source with no kind', async () => {
+    const stateFile = join(folder.path, 'data', 'state.json');
+    const downloads = await open();
+    downloads.add({ urls: ['http://127.0.0.1:9/old.html'] });
+    await downloads.pause(downloads.snapshot().downloads[0]!.id);
+    await downloads.close();
+    manager = undefined;
+    const state = JSON.parse(await readFile(stateFile, 'utf8')) as {
+      downloads: Record<string, unknown>[];
+    };
+    const record = state.downloads[0]!;
+    delete record.timeline;
+    record.video = {
+      media: { ext: 'mp4', height: 720 },
+      source: { url: 'https://cdn.example/v.mp4', headers: {} },
+    };
+    await writeFile(stateFile, JSON.stringify(state));
+
+    const loaded = await new JsonStateStore(stateFile).load();
+
+    expect(loaded?.downloads[0]?.timeline).toBeNull();
+    expect(loaded?.downloads[0]?.video?.source?.kind).toBe('file');
+  });
+
   describe('a video offered as an HLS stream', () => {
     const FIXTURES = join(import.meta.dirname, 'testing', 'hls');
     let streams: FolderServer | undefined;
@@ -416,6 +440,9 @@ describe('DownloadManager and a link that is a page', () => {
         done.timeline?.segments.every((piece) => piece.downloaded === piece.end - piece.start),
       ).toBe(true);
       const mp4 = await readFile(inDownloads('A stream.mp4'));
+      // The file's size, not the pieces': MPEG-TS loses its packets' weight in the mp4.
+      expect(done.totalBytes).toBe(mp4.length);
+      expect(done.downloadedBytes).toBe(mp4.length);
       expect(fragments(mp4).slice(0, 2)).toEqual(['ftyp', 'moov']);
       expect(await readdir(join(folder.path, 'downloads'))).toEqual(['A stream.mp4']);
     });
@@ -456,6 +483,8 @@ describe('DownloadManager and a link that is a page', () => {
       expect(
         Buffer.compare(await readFile(inDownloads('Paused stream.mp4')), Buffer.concat(parts)),
       ).toBe(0);
+      // Its init segment counted with its pieces.
+      expect(again.find(added!.id).totalBytes).toBe(Buffer.concat(parts).length);
     });
 
     it('throws away what it had of a quality the page no longer offers when it reads it again', async () => {

@@ -45,6 +45,8 @@ export interface HlsSegment {
   // The init segment fragmented mp4 pieces need before them.
   readonly map: { readonly uri: string; readonly byteRange: ByteRange | null } | null;
   readonly byteRange: ByteRange | null;
+  // The stream jumps before this piece: its timestamps or its encoding start again.
+  readonly discontinuity: boolean;
 }
 
 export interface HlsVariant {
@@ -71,6 +73,18 @@ function numberOf(text: string | undefined): number | null {
   if (text === undefined || text.trim() === '') return null;
   const value = Number(text);
   return Number.isFinite(value) ? value : null;
+}
+
+// A piece lasts from nothing to a day: a length outside that is no stream's, and would make a line
+// of time no contract takes.
+const LONGEST_PIECE_SECONDS = 24 * 60 * 60;
+
+function lengthOf(text: string | undefined): number {
+  const seconds = numberOf(text);
+  if (seconds === null || seconds < 0 || seconds > LONGEST_PIECE_SECONDS) {
+    throw new HlsError(HlsRefusal.NotAPlaylist);
+  }
+  return seconds;
 }
 
 // `length[@offset]`; with no offset, the range starts where the one before ended.
@@ -115,6 +129,7 @@ export function parsePlaylist(text: string): HlsPlaylist {
   let byteRange: ByteRange | null = null;
   let rangeEnd = 0;
   let variant: Omit<HlsVariant, 'uri'> | null = null;
+  let discontinuity = false;
 
   for (const line of lines.slice(1)) {
     if (!line.startsWith('#')) {
@@ -122,10 +137,11 @@ export function parsePlaylist(text: string): HlsPlaylist {
         variants.push({ uri: line, ...variant });
         variant = null;
       } else if (duration !== null) {
-        segments.push({ uri: line, duration, sequence, key, map, byteRange });
+        segments.push({ uri: line, duration, sequence, key, map, byteRange, discontinuity });
         sequence += 1;
         duration = null;
         byteRange = null;
+        discontinuity = false;
       }
       continue;
     }
@@ -134,7 +150,10 @@ export function parsePlaylist(text: string): HlsPlaylist {
     const value = colon === -1 ? '' : line.slice(colon + 1);
     switch (tag) {
       case '#EXTINF':
-        duration = numberOf(value.split(',')[0]) ?? 0;
+        duration = lengthOf(value.split(',')[0]);
+        break;
+      case '#EXT-X-DISCONTINUITY':
+        discontinuity = true;
         break;
       case '#EXT-X-MEDIA-SEQUENCE':
         sequence = numberOf(value) ?? 0;

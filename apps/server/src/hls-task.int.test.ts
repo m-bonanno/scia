@@ -1,5 +1,6 @@
 import { cp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { timelineSchema } from '@scia/contracts';
 import { PageFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { HlsTask, type HlsTaskOptions } from './hls-task.ts';
@@ -113,6 +114,8 @@ describe('HlsTask against a real HTTP host', () => {
       ],
     });
     expect(stream.progress().downloadedBytes).toBe(6580 + 6204 + 6204);
+    // What the row is sent passes the contract the page and main read it with.
+    expect(() => timelineSchema.parse(stream.progress().timeline)).not.toThrow();
   });
 
   it('goes on after a pause with the pieces it has, asking for none of them again', async () => {
@@ -168,6 +171,126 @@ describe('HlsTask against a real HTTP host', () => {
       6580 + 6204 + 6204 + (await readFile(join(FIXTURES, 'ts', 'index.m3u8'))).length,
     );
     expect(settled).toBe(4);
+  });
+
+  it('fetches pieces and an init segment that are ranges of one file, with and without an offset', async () => {
+    const parts = await Promise.all(
+      ['init.mp4', 'segment0.m4s', 'segment1.m4s', 'segment2.m4s'].map((name) =>
+        readFile(join(FIXTURES, 'fmp4', name)),
+      ),
+    );
+    const [init, a, b, c] = parts as [Buffer, Buffer, Buffer, Buffer];
+    const site = join(folder.path, 'site');
+    await cp(join(FIXTURES, 'fmp4'), site, { recursive: true });
+    await writeFile(join(site, 'all.mp4'), Buffer.concat(parts));
+    await writeFile(
+      join(site, 'ranges.m3u8'),
+      [
+        '#EXTM3U',
+        '#EXT-X-TARGETDURATION:1',
+        `#EXT-X-MAP:URI="all.mp4",BYTERANGE="${String(init.length)}@0"`,
+        '#EXTINF:1,',
+        `#EXT-X-BYTERANGE:${String(a.length)}@${String(init.length)}`,
+        'all.mp4',
+        '#EXTINF:1,',
+        `#EXT-X-BYTERANGE:${String(b.length)}`,
+        'all.mp4',
+        '#EXTINF:1,',
+        `#EXT-X-BYTERANGE:${String(c.length)}`,
+        'all.mp4',
+        '#EXT-X-ENDLIST',
+      ].join('\n'),
+    );
+    server = await startFolderServer({ root: site });
+
+    await task(`${server.url}/ranges.m3u8`).run(new AbortController().signal);
+
+    expect(Buffer.compare(await output(), Buffer.concat(parts))).toBe(0);
+  });
+
+  it('stops every connection when a piece fails for good, and fetches nothing after', async () => {
+    const copy = join(folder.path, 'site');
+    await cp(join(FIXTURES, 'ts'), copy, { recursive: true });
+    const names = [
+      'segment0',
+      'gone',
+      'segment1',
+      'segment2',
+      'segment0',
+      'segment1',
+      'segment2',
+      'segment0',
+    ];
+    await writeFile(
+      join(copy, 'index.m3u8'),
+      `#EXTM3U\n#EXT-X-TARGETDURATION:1\n${names.map((name) => `#EXTINF:1,\n${name}.mpegts`).join('\n')}\n#EXT-X-ENDLIST\n`,
+    );
+    server = await startFolderServer({ root: copy, delayMs: 100 });
+
+    await expect(
+      task(`${server.url}/index.m3u8`).run(new AbortController().signal),
+    ).rejects.toThrow();
+    const askedThen = server.asked.length;
+    // The other connection stopped at the piece it had: not every piece was asked for.
+    expect(server.asked.filter((path) => path.endsWith('.mpegts')).length).toBeLessThan(
+      names.length,
+    );
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    expect(server.asked.length).toBe(askedThen);
+  });
+
+  it('stops waiting to ask again when it is told to stop', async () => {
+    const host = await serve({ failOnce: ['/ts/segment0.mpegts'] });
+    const stopped = new AbortController();
+    const running = task(`${host.url}/ts/index.m3u8`, { retryDelayMs: () => 10_000 }).run(
+      stopped.signal,
+    );
+    await until(() => host.asked.includes('/ts/segment0.mpegts'));
+
+    const startedAt = Date.now();
+    stopped.abort(new Error('paused'));
+    await expect(running).rejects.toThrow('paused');
+    expect(Date.now() - startedAt).toBeLessThan(2000);
+  });
+
+  it('refuses, before fetching a piece, a stream that changes partway: Scia cannot make one mp4 of it yet', async () => {
+    const copy = join(folder.path, 'site');
+    await cp(FIXTURES, copy, { recursive: true });
+    const ts = await readFile(join(copy, 'ts', 'index.m3u8'), 'utf8');
+    await writeFile(
+      join(copy, 'ts', 'jump.m3u8'),
+      ts.replace(
+        '#EXTINF:1.000000,\nsegment1',
+        '#EXT-X-DISCONTINUITY\n#EXTINF:1.000000,\nsegment1',
+      ),
+    );
+    const fmp4 = await readFile(join(copy, 'fmp4', 'index.m3u8'), 'utf8');
+    await writeFile(
+      join(copy, 'fmp4', 'two-inits.m3u8'),
+      fmp4.replace(
+        '#EXTINF:1.000000,\nsegment2',
+        '#EXT-X-MAP:URI="other-init.mp4"\n#EXTINF:1.000000,\nsegment2',
+      ),
+    );
+    // An init segment under a key: encrypted, it would be no mp4's as fetched (#123).
+    await writeFile(
+      join(copy, 'fmp4', 'locked-init.m3u8'),
+      fmp4.replace('#EXT-X-MAP', '#EXT-X-KEY:METHOD=AES-128,URI="key.bin"\n#EXT-X-MAP'),
+    );
+    server = await startFolderServer({ root: copy });
+    const failureOf = (path: string) =>
+      task(`${server!.url}/${path}`)
+        .run(new AbortController().signal)
+        .then(
+          () => undefined,
+          (error: unknown) => (error instanceof PageError ? error.failure : error),
+        );
+
+    expect(await failureOf('ts/jump.m3u8')).toBe(PageFailure.FormatUnsupported);
+    expect(await failureOf('fmp4/two-inits.m3u8')).toBe(PageFailure.FormatUnsupported);
+    expect(await failureOf('fmp4/locked-init.m3u8')).toBe(PageFailure.FormatUnsupported);
+    expect(server.asked.filter((path) => !path.endsWith('.m3u8'))).toEqual([]);
   });
 
   it('says a stream that does not end is live, and a protected or unreadable one why not', async () => {

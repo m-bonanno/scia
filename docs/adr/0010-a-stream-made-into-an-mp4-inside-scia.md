@@ -15,6 +15,13 @@ The owner decided, the same day:
 - **AES-128 is downloaded when its key is public**: Scia does what the page's player does for anyone. DRM stays excluded;
 - **live streams are recorded until the person stops them**, in a piece of their own (#121).
 
+And on the review of #122 ([their answers](https://github.com/m-bonanno/scia/issues/98#issuecomment-7050627893)):
+
+- the library is mux.js, under the Apache License 2.0 — not the "MIT/BSD" first named to them — with four small dependencies bundled with it; accepted;
+- the row measures a stream by its pieces;
+- the check on a real site is theirs, on the beta that comes out after the merge;
+- a stream that changes partway is refused for now (#123).
+
 ## Decision
 
 1. **A stream is a format like a file.** `chooseMedia` takes a format with `m3u8`/`m3u8_native` as its protocol, picture and sound, and no DRM.
@@ -24,9 +31,12 @@ The owner decided, the same day:
 2. **The engine reads the playlist** (`parsePlaylist` in `@scia/core`, RFC 8216): the pieces, how long each lasts, their number, their key, their init segment and their byte ranges.
    - The address yt-dlp gives is the playlist of one quality. A playlist of qualities instead is `PAGE_UNREADABLE`.
    - A playlist with no end (`#EXT-X-ENDLIST`) is live: `PAGE_LIVE` until #121.
+   - A stream that changes partway — a discontinuity, an init segment that is not the first piece's, or one under a key — fails with `PAGE_FORMAT_UNSUPPORTED` before a piece is fetched (the owner; #123): made into one mp4 it would be a broken file.
+   - A piece's length is from nothing to a day; any other is no playlist.
 3. **The pieces are fetched as files are** (`HlsTask`):
    - over the connections the settings allow, each read booked against the one speed limit (`Throttle`), a failure that heals asked again;
-   - written one file per piece into a folder beside the part file (`<name>.scia.pieces`), each written under another name and renamed once whole;
+   - written one file per piece into a folder beside the part file (`<name>.scia.pieces`), each written under another name, synced to the disk, and renamed once whole; a piece of more than 256 MB is refused;
+   - a piece that fails for good ends every connection, and the task waits for them all before it says so; a wait to ask again ends with a pause;
    - after a pause or a restart, what is in the folder is not asked for again;
    - a label in the folder says which quality the pieces are of. Pieces of another quality, found after the page was read again, are thrown away.
 4. **AES-128 with a key the playlist names is opened.**
@@ -35,7 +45,7 @@ The owner decided, the same day:
 5. **The mp4 is made in the part file, nothing re-encoded.**
    - Fragmented mp4 pieces are put behind their init segment as they are.
    - MPEG-TS pieces are transmuxed by mux.js (Apache 2.0, bundled in the engine), one piece at a time. The init segment is written once, the timestamps start at zero, and each piece gives a fragment of picture and one of sound.
-   - The folder of pieces is then removed, and the part file is marked and renamed as any download is (ADR 0003).
+   - The part file is synced, the folder of pieces removed, and the part file marked and renamed as any download is (ADR 0003). The download's size is the mp4's own, read from the file.
 6. **The row says how far it is by the pieces.** A stream's size is not known before, but its length is.
    - The contract carries a `timeline` (milliseconds, each piece a segment of it). It is kept in `state.json` for the row of a stream that is not running.
    - The bar draws the pieces on that line: the segment bar stays Scia's signature.
@@ -56,4 +66,4 @@ The owner decided, the same day:
 - The pieces of a stream take as much room again while it downloads: the mp4 is written beside them, and they are removed after.
 - A stream's percentage counts time, not bytes. Pieces of unequal weight make the time left an estimate.
 - What mux.js does not transmux fails as unreadable. Its output was checked with ffprobe and decoded by ffmpeg, on this repository's fixtures, by hand: 30 frames of picture, all the sound, timestamps from zero. Neither tool is shipped or used by a spec. The fixtures under `apps/server/src/testing/hls/` were made with ffmpeg by `generate.mjs`.
-- No site's stream has been seen in the real app. That check is the owner's, before the merge or on the beta (the owner, 20 November 2026).
+- No site's stream has been seen in the real app. That check is the owner's, on the beta that comes out after the merge ([the owner, 20 November 2026](https://github.com/m-bonanno/scia/issues/98#issuecomment-7050627893)).
