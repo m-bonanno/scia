@@ -1,6 +1,7 @@
 import { tmpdir } from 'node:os';
 import { DEFAULT_API_PORT } from '@scia/contracts';
 import { ALLDEBRID_API } from './alldebrid.ts';
+import { isRelease, YT_DLP_RELEASES } from './yt-dlp-releases.ts';
 
 export interface ServerConfig {
   readonly port: number;
@@ -17,6 +18,12 @@ export interface ServerConfig {
   // The yt-dlp that reads the page of a video (docs/adr/0009); without one, a page is fetched as
   // it stands — under plain Node, and where Scia ships no build of it.
   readonly ytDlp: string | undefined;
+  // What main says of the yt-dlp it shipped, for bringing it up to date (docs/adr/0011): the
+  // release it is, and its build's name in a release. Without both, it is never updated.
+  readonly ytDlpUpdates: { readonly version: string; readonly asset: string } | undefined;
+  // Where yt-dlp's releases are read: its project's own, unless a run names a host that answers
+  // as it does.
+  readonly ytDlpReleases: string;
   // The system's folder for temporary files, which main names: the engine's environment does not
   // carry the system's own variables. The programs the engine runs write theirs there.
   readonly tempDir: string;
@@ -59,6 +66,15 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
   const staticDir = env.SCIA_STATIC_DIR;
   const ytDlp = env.SCIA_YT_DLP;
   const tempDir = env.SCIA_TEMP_DIR;
+  const shippedVersion = env.SCIA_YT_DLP_VERSION ?? '';
+  const asset = env.SCIA_YT_DLP_ASSET ?? '';
+  if (shippedVersion !== '' && !isRelease(shippedVersion)) {
+    throw new Error(`SCIA_YT_DLP_VERSION is not a release of yt-dlp: ${shippedVersion}`);
+  }
+  // A name in a release, and of the file kept under the profile: never a path.
+  if (asset !== '' && !/^\w[\w.-]*$/.test(asset)) {
+    throw new Error(`SCIA_YT_DLP_ASSET is not the name of a build: ${asset}`);
+  }
   return {
     port,
     apiToken,
@@ -68,6 +84,15 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
     version: env.SCIA_VERSION ?? '0.0.0',
     alldebridApi: serviceAddress(env.SCIA_ALLDEBRID_API, 'SCIA_ALLDEBRID_API', ALLDEBRID_API),
     ytDlp: ytDlp === undefined || ytDlp === '' ? undefined : ytDlp,
+    ytDlpUpdates:
+      ytDlp === undefined || ytDlp === '' || shippedVersion === '' || asset === ''
+        ? undefined
+        : { version: shippedVersion, asset },
+    ytDlpReleases: serviceAddress(
+      env.SCIA_YT_DLP_RELEASES,
+      'SCIA_YT_DLP_RELEASES',
+      YT_DLP_RELEASES,
+    ),
     tempDir: tempDir === undefined || tempDir === '' ? tmpdir() : tempDir,
   };
 }

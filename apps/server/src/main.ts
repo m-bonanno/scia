@@ -11,10 +11,14 @@ import { HttpSource } from './http-source.ts';
 import { Integrations } from './integrations.ts';
 import { MemoryVault, ParentVault } from './key-vault.ts';
 import { createJsonLogger, describeFailure, type Logger } from './logger.ts';
+import { signingKeyOf } from './openpgp.ts';
 import type { PageReader } from './page-reader.ts';
 import { parentPort } from './parent-port.ts';
 import { JsonStateStore } from './state-store.ts';
 import { YtDlp } from './yt-dlp.ts';
+import { YtDlpReleases } from './yt-dlp-releases.ts';
+import { YT_DLP_SIGNING_KEY } from './yt-dlp-signing-key.ts';
+import { YtDlpUpdates } from './yt-dlp-updates.ts';
 
 // The engine tells main where it listens; main tells it to stop before quitting.
 export interface ReadyMessage {
@@ -43,20 +47,41 @@ async function extensionTokenIn(dataDir: string): Promise<string> {
 const PAGE_READ_LIMIT_MS = 90_000;
 
 // A yt-dlp that is named and missing reads no page: pages are fetched as they stand, as without
-// one, rather than every page failing for a program that is not there.
-function pageReaderOf(
-  config: Pick<ServerConfig, 'ytDlp' | 'tempDir'>,
+// one, rather than every page failing for a program that is not there. One that main says the
+// release of is brought up to date (docs/adr/0011), and each read runs the build in use then.
+async function pageReaderOf(
+  config: Pick<
+    ServerConfig,
+    'ytDlp' | 'ytDlpUpdates' | 'ytDlpReleases' | 'tempDir' | 'dataDir' | 'version'
+  >,
   logger: Logger,
-): { pageReader?: PageReader } {
-  const command = config.ytDlp;
-  if (command === undefined) return {};
-  if (!existsSync(command)) {
+): Promise<{ pageReader?: PageReader; updates?: YtDlpUpdates }> {
+  const shipped = config.ytDlp;
+  if (shipped === undefined) return {};
+  if (!existsSync(shipped)) {
     logger.warn('page_reader_missing', {});
     return {};
   }
-  return {
-    pageReader: new YtDlp({ command, timeoutMs: PAGE_READ_LIMIT_MS, tempDir: config.tempDir }),
-  };
+  const updates =
+    config.ytDlpUpdates === undefined
+      ? undefined
+      : await YtDlpUpdates.open({
+          shipped: { path: shipped, version: config.ytDlpUpdates.version },
+          asset: config.ytDlpUpdates.asset,
+          folder: join(config.dataDir, 'yt-dlp'),
+          releases: new YtDlpReleases({
+            address: config.ytDlpReleases,
+            userAgent: `Scia/${config.version}`,
+          }),
+          signingKey: signingKeyOf(YT_DLP_SIGNING_KEY),
+          logger,
+        });
+  const pageReader = new YtDlp({
+    command: () => updates?.command() ?? shipped,
+    timeoutMs: PAGE_READ_LIMIT_MS,
+    tempDir: config.tempDir,
+  });
+  return updates === undefined ? { pageReader } : { pageReader, updates };
 }
 
 export async function main(
@@ -76,6 +101,7 @@ export async function main(
     hostsFile: join(config.dataDir, 'alldebrid-hosts.json'),
   });
 
+  const { pageReader, updates } = await pageReaderOf(config, logger);
   const source = new HttpSource(`Mozilla/5.0 (compatible; Scia/${config.version})`);
   const manager = await DownloadManager.open({
     source,
@@ -83,7 +109,7 @@ export async function main(
     defaultDirectory: config.downloadDir,
     logger,
     resolver: integrations,
-    ...pageReaderOf(config, logger),
+    ...(pageReader === undefined ? {} : { pageReader }),
   });
 
   let port = config.port;
@@ -102,6 +128,8 @@ export async function main(
     port = info.port;
     logger.info('listening', { port, version: config.version, node: process.versions.node });
     parentPort()?.postMessage({ type: 'ready', port } satisfies ReadyMessage);
+    // Once the engine answers: nothing in its start waits on yt-dlp's releases.
+    updates?.start(manager);
   });
   server.on('error', (error) => {
     logger.error('listen_failed', { port: config.port, error: describeFailure(error) });
@@ -112,8 +140,7 @@ export async function main(
   const shutdown = () => {
     if (stopping) return;
     stopping = true;
-    void manager
-      .close()
+    void Promise.all([manager.close(), updates?.close()])
       .catch((error: unknown) => {
         logger.error('shutdown_failed', { error: describeFailure(error) });
       })

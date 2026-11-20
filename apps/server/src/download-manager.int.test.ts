@@ -675,4 +675,27 @@ describe('DownloadManager', () => {
     expect(await next).toBeGreaterThan(version);
     expect(downloads.settings().connectionsPerDownload).toBe(2);
   });
+
+  it('says when a download starts to run or wait, and when none does any more', async () => {
+    const { url } = await host({ chunkBytes: 64 * 1024, chunkDelayMs: 20 });
+    const downloads = await open();
+    downloads.updateSettings({ maxConcurrentDownloads: 1 });
+    const told: boolean[] = [];
+    const stop = downloads.onBusyChange((busy) => told.push(busy));
+    expect(downloads.isBusy()).toBe(false);
+
+    const [first, second] = downloads.add({ urls: [url, url] });
+    expect(downloads.isBusy()).toBe(true);
+    // The second waits its turn while the first runs: still busy, and not said again.
+    await downloads.pause(first!.id);
+    expect(downloads.isBusy()).toBe(true);
+    await downloads.pause(second!.id);
+    expect(downloads.isBusy()).toBe(false);
+    expect(told).toEqual([true, false]);
+
+    stop();
+    downloads.resume(first!.id);
+    expect(downloads.isBusy()).toBe(true);
+    expect(told).toEqual([true, false]);
+  });
 });

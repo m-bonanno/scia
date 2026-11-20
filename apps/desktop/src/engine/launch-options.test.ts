@@ -10,7 +10,15 @@ describe('parseLaunchOptions', () => {
       userDataDir: undefined,
       port: undefined,
       alldebridApi: undefined,
+      ytDlpReleases: undefined,
     });
+  });
+
+  it('passes on the address of a host of yt-dlp’s releases, for the engine to judge', () => {
+    expect(parseLaunchOptions(['--yt-dlp-releases=http://127.0.0.1:8081'], cwd).ytDlpReleases).toBe(
+      'http://127.0.0.1:8081',
+    );
+    expect(parseLaunchOptions(['--yt-dlp-releases='], cwd).ytDlpReleases).toBeUndefined();
   });
 
   it('passes on the address of a simulated AllDebrid, for the engine to judge', () => {

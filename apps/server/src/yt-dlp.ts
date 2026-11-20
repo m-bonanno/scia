@@ -140,8 +140,9 @@ function refusalOf(stderr: string): PageError | undefined {
 }
 
 export interface YtDlpOptions {
-  // The program to run: yt-dlp itself, or whatever stands in for it.
-  readonly command: string;
+  // The program to run: yt-dlp itself, or whatever stands in for it. Asked at each read: the build
+  // in use changes when a newer one is taken (docs/adr/0011), and a read under way keeps its own.
+  readonly command: string | (() => string);
   // Arguments that come before Scia's own: a script, when `command` is an interpreter.
   readonly prefix?: readonly string[];
   // A page that has said nothing by then is given up.
@@ -235,7 +236,9 @@ export class YtDlp implements PageReader {
         reject(signal.reason as Error);
         return;
       }
-      const { command, prefix = [], timeoutMs } = this.#options;
+      const { prefix = [], timeoutMs } = this.#options;
+      const command =
+        typeof this.#options.command === 'string' ? this.#options.command : this.#options.command();
       const mostOutputBytes = this.#options.mostOutputBytes ?? MOST_OUTPUT_BYTES;
       const child = spawn(command, [...prefix, ...ALWAYS, '--', url], {
         env: environmentOf(temp),

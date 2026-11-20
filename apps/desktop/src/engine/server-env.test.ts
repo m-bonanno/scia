@@ -47,9 +47,12 @@ describe('buildServerEnv', () => {
     expect(env.SCIA_ALLDEBRID_API).toBe('http://127.0.0.1:8080');
   });
 
-  it('names the reader of pages only where one was shipped', () => {
+  it('names the reader of pages only where one was shipped, with its release and its build’s name', () => {
     const env = buildServerEnv({
-      layout: { ...layout, ytDlp: 'tools/yt-dlp.exe' },
+      layout: {
+        ...layout,
+        ytDlp: { path: 'tools/yt-dlp.exe', version: '2026.10.26', asset: 'yt-dlp.exe' },
+      },
       apiToken: 'token',
       port: 0,
       version: '1.0.0',
@@ -57,6 +60,21 @@ describe('buildServerEnv', () => {
       tempDir: 'temp',
     });
     expect(env.SCIA_YT_DLP).toBe('tools/yt-dlp.exe');
+    expect(env.SCIA_YT_DLP_VERSION).toBe('2026.10.26');
+    expect(env.SCIA_YT_DLP_ASSET).toBe('yt-dlp.exe');
+  });
+
+  it('names another host of yt-dlp’s releases only when the launch gave one', () => {
+    const env = buildServerEnv({
+      layout,
+      apiToken: 'token',
+      port: 0,
+      version: '1.0.0',
+      systemRoot: undefined,
+      tempDir: 'temp',
+      ytDlpReleases: 'http://127.0.0.1:8081',
+    });
+    expect(env.SCIA_YT_DLP_RELEASES).toBe('http://127.0.0.1:8081');
   });
 
   it('keeps SystemRoot on Windows, where the network stack needs it', () => {

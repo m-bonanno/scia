@@ -255,6 +255,17 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     );
   });
 
+  it('runs at each read the program named then: a build taken meanwhile reads the next page', async () => {
+    let command = process.execPath;
+    const updated = reader({ command: () => command });
+    expect((await updated.read('https://site.example/video/1', never))?.title).toBe('A video');
+
+    command = join(folder.path, 'the-build-taken-since.exe');
+    expect(await failureOf(updated.read('https://site.example/video/1', never))).toBe(
+      PageFailure.Unreadable,
+    );
+  });
+
   it('stops reading when it is told to, with the reason it was given, and ends the reader', async () => {
     const stopped = new AbortController();
     const reading = reader().read('https://site.example/slow', stopped.signal);

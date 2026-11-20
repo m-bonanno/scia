@@ -5,8 +5,7 @@ import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { type RangeServer, startRangeServer } from '@scia/server/testing/range-server.ts';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
-import { YT_DLP_VERSION } from '../scripts/fetch-tools.ts';
-import { YT_DLP_OF_PLATFORM } from '../src/engine/runtime-layout.ts';
+import { YT_DLP_OF_PLATFORM, YT_DLP_VERSION } from '../src/engine/runtime-layout.ts';
 import {
   launchScia,
   paste,
