@@ -137,7 +137,7 @@ else if (url.includes('/one-url')) {
       formats: [format({ url: 'https://cdn.example/v.MP4', ext: 'MP4' })],
     }),
   );
-} else if (url.includes('/audio-capitals')) {
+} else if (url.includes('/mp3-in-capitals')) {
   process.stdout.write(
     JSON.stringify({
       _type: 'video',

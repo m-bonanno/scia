@@ -171,7 +171,7 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
   it('reads a container however the site spells it', async () => {
     const media = await reader().read('https://site.example/capitals', never);
     expect(media?.formats.map((format) => format.ext)).toEqual(['mp4']);
-    expect(await reader().read('https://site.example/audio-capitals', never)).toBeUndefined();
+    expect(await reader().read('https://site.example/mp3-in-capitals', never)).toBeUndefined();
   });
 
   it('never takes a video it cannot name the container of for a page with no video', async () => {
