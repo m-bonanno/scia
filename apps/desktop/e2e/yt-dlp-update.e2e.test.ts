@@ -86,12 +86,24 @@ describe('the real app brings its yt-dlp up to date', () => {
     await mkdir(join(profile.path, 'engine'), { recursive: true });
     await writeFile(join(profile.path, 'engine', 'yt-dlp'), 'not a folder');
 
-    await run.launch(profile, { args: [`--yt-dlp-releases=${host.address}`] });
+    const scia = await run.launch(profile, { args: [`--yt-dlp-releases=${host.address}`] });
 
     const log = await profile.log();
     expect(log).toContain('yt_dlp_updates_off');
     expect(log).not.toContain('engine_start_failed');
     expect(host.asked).toEqual([]);
+
+    // With no updater, the only build there is reads the page: one that cannot be run fails the
+    // row, and the page is never saved.
+    const page = Buffer.from('<html>a page</html>');
+    const site = run.keep(
+      await startRangeServer({ body: page, contentType: 'text/html', fileName: 'page.html' }),
+    );
+    await paste(scia.page, site.url);
+    await rowOf(scia.page, 'page.html')
+      .getByRole('button', { name: 'Show in folder' })
+      .waitFor({ timeout: 60_000 });
+    expect(Buffer.compare(await readFile(join(profile.downloads, 'page.html')), page)).toBe(0);
   });
 
   it('refuses a build whose bytes are not those its signed sums give, and keeps the one it ships', async () => {
