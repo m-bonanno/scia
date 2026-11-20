@@ -224,24 +224,48 @@ describe('a link that goes through a service', () => {
     it('reads the list once for the links that wait, and again after six hours', async () => {
       const alldebrid = await serviceWith({ links: {} });
       let clock = 0;
-      const integrations = await noneConnected(alldebrid, () => clock);
+      // Counted where a reading starts: a reading again goes on behind the links, unseen.
+      let readings = 0;
+      let last: Promise<unknown> = Promise.resolve();
+      class Counting extends AllDebrid {
+        override publicDomains(signal?: AbortSignal): Promise<string[]> {
+          readings += 1;
+          const reading = super.publicDomains(signal);
+          last = reading.catch(() => undefined);
+          return reading;
+        }
+      }
+      const integrations = await Integrations.open({
+        vault: new MemoryVault(),
+        alldebrid: new Counting({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+        logger,
+        now: () => clock,
+      });
       const ask = () => integrations.serviceFor('https://elsewhere.example/f', never);
+      // The last reading answered, and what the engine does with the answer done.
+      const settled = async () => {
+        await last;
+        await new Promise((resolve) => setImmediate(resolve));
+      };
 
       await Promise.all([ask(), ask(), ask()]);
       clock += 6 * 60 * 60_000 - 1;
       await ask();
-      expect(publicListAsked(alldebrid)).toBe(1);
+      expect(readings).toBe(1);
 
       clock += 1;
       await ask();
-      expect(publicListAsked(alldebrid)).toBe(2);
+      expect(readings).toBe(2);
+      await settled();
 
-      // A list that cannot be read again is still the list.
+      // A list that cannot be read again is still the list, also once that reading failed.
       alldebrid.misbehave({ status: 503 });
       clock += 6 * 60 * 60_000;
-      await expect(integrations.serviceFor(LINK, never)).rejects.toMatchObject({
-        failure: UnlockFailure.NeedsService,
-      });
+      const needsService = { failure: UnlockFailure.NeedsService };
+      await expect(integrations.serviceFor(LINK, never)).rejects.toMatchObject(needsService);
+      await settled();
+      await expect(integrations.serviceFor(LINK, never)).rejects.toMatchObject(needsService);
+      expect(readings).toBe(3);
     });
 
     it('fetches a link as it stands while the list cannot be read, and asks again an hour later', async () => {
@@ -288,6 +312,59 @@ describe('a link that goes through a service', () => {
       answer?.(['hoster.example']);
 
       expect(await asked).toBe('alldebrid');
+    });
+
+    it('goes on by the list it has while it reads it again: nobody waits on a refresh', async () => {
+      const alldebrid = await serviceWith({ links: {} });
+      let clock = 0;
+      let readings = 0;
+      class SlowSecond extends AllDebrid {
+        override publicDomains(signal?: AbortSignal): Promise<string[]> {
+          readings += 1;
+          // The second reading never answers.
+          return readings === 1 ? super.publicDomains(signal) : new Promise(() => undefined);
+        }
+      }
+      const integrations = await Integrations.open({
+        vault: new MemoryVault(),
+        alldebrid: new SlowSecond({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+        logger,
+        now: () => clock,
+      });
+      const needsService = { failure: UnlockFailure.NeedsService };
+      await expect(integrations.serviceFor(LINK, never)).rejects.toMatchObject(needsService);
+
+      clock += 6 * 60 * 60_000;
+      await expect(integrations.serviceFor(LINK, never)).rejects.toMatchObject(needsService);
+      // And for the next link, while that reading is still on its way.
+      await expect(integrations.serviceFor(LINK, never)).rejects.toMatchObject(needsService);
+      expect(readings).toBe(2);
+    });
+
+    it('is paused at once while the public list is being read', async () => {
+      const host = await fileHost();
+      const alldebrid = await serviceWith({ links: {} });
+      class Silent extends AllDebrid {
+        override publicDomains(): Promise<string[]> {
+          return new Promise(() => undefined);
+        }
+      }
+      const downloads = await open(
+        await Integrations.open({
+          vault: new MemoryVault(),
+          alldebrid: new Silent({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+          logger,
+        }),
+      );
+      const [added] = downloads.add({ urls: [host.url] });
+      await until(() => downloads.find(added!.id).status === DownloadStatus.Downloading);
+
+      const started = performance.now();
+      const paused = await downloads.pause(added!.id);
+
+      expect(performance.now() - started).toBeLessThan(2000);
+      expect(paused.status).toBe(DownloadStatus.Paused);
+      expect(paused.failure).toBeNull();
     });
 
     it('asks for no public list once a service is connected', async () => {

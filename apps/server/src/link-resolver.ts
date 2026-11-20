@@ -14,7 +14,8 @@ export interface UnlockedLink {
 export interface LinkResolver {
   // The connected service that takes this link; undefined for a link that is fetched as it
   // stands. Rejects with a ServiceError while a connected service cannot say which links it
-  // takes: a link is not started on a guess.
+  // takes — a link is not started on a guess — and, with no service connected, for a file
+  // host's link, which needs one (docs/adr/0006).
   serviceFor(url: string, signal: AbortSignal): Promise<IntegrationId | undefined>;
   // The direct link the service gives for it. Rejects with a ServiceError that says why not,
   // or with the reason of `signal`.

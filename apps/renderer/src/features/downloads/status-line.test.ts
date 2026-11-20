@@ -130,7 +130,7 @@ describe('statusLine', () => {
         }),
       ),
     ).toBe(
-      'This link is on a file host: Scia downloads it through AllDebrid. Connect AllDebrid in Settings, then try again.',
+      'This link is on a file host: Scia downloads links like this through AllDebrid. Connect AllDebrid in Settings, then try again.',
     );
   });
 
