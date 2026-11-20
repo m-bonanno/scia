@@ -97,6 +97,26 @@ describe('AllDebrid', () => {
     });
   });
 
+  it('gives no date to an account that is no longer premium, though the service still names a day', async () => {
+    const client = clientOf(
+      await serviceWith({
+        accounts: { [KEY]: { username: 'ada', premium: false, premiumUntil: PREMIUM_UNTIL } },
+      }),
+    );
+
+    expect(await client.account(KEY)).toEqual({ name: 'ada', premium: false, premiumUntil: null });
+  });
+
+  it('says an account is premium without a date when the service gives none', async () => {
+    const client = clientOf(
+      await serviceWith({
+        accounts: { [KEY]: { username: 'ada', premium: true, premiumUntil: 0 } },
+      }),
+    );
+
+    expect(await client.account(KEY)).toEqual({ name: 'ada', premium: true, premiumUntil: null });
+  });
+
   it.each([200, 401])(
     'tells an unknown key from a blocked one and from a banned account, whatever status (%i) comes with it',
     async (refusalStatus) => {

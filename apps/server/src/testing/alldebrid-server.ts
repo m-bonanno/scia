@@ -42,6 +42,8 @@ export interface SimulatedAccount {
   readonly username: string;
   // Seconds since 1970, as the service counts; absent or 0 for an account that is not premium.
   readonly premiumUntil?: number;
+  // What the service says of the account, when it is not what the date alone would say.
+  readonly premium?: boolean;
   // The service knows the key and refuses it all the same.
   readonly refusal?: 'AUTH_BLOCKED' | 'AUTH_USER_BANNED';
 }
@@ -144,7 +146,7 @@ function accountOf(
 }
 
 function isPremium(account: SimulatedAccount): boolean {
-  return (account.premiumUntil ?? 0) > 0;
+  return account.premium ?? (account.premiumUntil ?? 0) > 0;
 }
 
 function hostOf(link: string, options: AllDebridServerOptions): string | undefined {

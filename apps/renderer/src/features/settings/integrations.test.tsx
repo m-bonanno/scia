@@ -16,7 +16,7 @@ const notConnected: Integration = {
 const connected: Integration = {
   id: 'alldebrid',
   connected: true,
-  // Midday in UTC: the same day wherever the spec runs, but twelve hours and more east of it.
+  // The specs run in UTC (vitest.config.ts): the day is the one written here.
   account: { name: 'ada', premium: true, premiumUntil: '2027-06-30T12:00:00.000Z' },
   failure: null,
 };
@@ -247,11 +247,18 @@ describe('IntegrationsSection', () => {
 
     await userEvent.keyboard('{Enter}{Enter}');
 
-    expect(service.getByRole('button', { name: 'Checking…' })).toBeDisabled();
+    // It does nothing, and is not taken out of the order: the focus a press gave it stays.
+    const checking = service.getByRole('button', { name: 'Checking…' });
+    expect(checking).toHaveAttribute('aria-disabled', 'true');
+    expect(checking).toBeEnabled();
+    await userEvent.click(checking);
     expect(connect).toHaveBeenCalledTimes(1);
-    // The check cannot be taken back: while it lasts there is no Cancel to press, and whoever
-    // does not see the button is told as well.
-    expect(service.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    // The check cannot be taken back: while it lasts Cancel does nothing, and says so to
+    // who cannot see it dimmed — and whoever does not see the button is told of the check.
+    const cancel = service.getByRole('button', { name: 'Cancel' });
+    expect(cancel).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(cancel);
+    expect(service.getByLabelText('AllDebrid API key')).toHaveValue(KEY);
     expect(
       service
         .getAllByRole('status')
@@ -259,6 +266,84 @@ describe('IntegrationsSection', () => {
     ).toBe(true);
     answer(connected);
     expect(await service.findByRole('status')).toHaveTextContent(/^Connected as ada/);
+  });
+
+  it('tells a refusal by the field, with the key still in it, when Cancel was pressed during the check', async () => {
+    listing([notConnected]);
+    let refuse: (error: unknown) => void = ignore;
+    vi.spyOn(api, 'connectIntegration').mockReturnValue(
+      new Promise((_resolve, reject) => {
+        refuse = reject;
+      }),
+    );
+    render(<IntegrationsSection open onError={ignore} />);
+    const service = await typeAKey();
+    await userEvent.keyboard('{Enter}');
+
+    await userEvent.click(service.getByRole('button', { name: 'Cancel' }));
+    refuse(new ApiError(422, ApiErrorCode.KeyRefused, 'no'));
+
+    expect(await service.findByRole('alert')).toHaveTextContent(
+      'AllDebrid does not know this key.',
+    );
+    const field = service.getByLabelText('AllDebrid API key');
+    expect(field).toHaveValue(KEY);
+    expect(field).toBeInvalid();
+    expect(service.getByRole('button', { name: 'Cancel' })).toHaveAttribute(
+      'aria-disabled',
+      'false',
+    );
+  });
+
+  it('leaves the focus where it went while the service was being disconnected', async () => {
+    listing([connected]);
+    let done: () => void = ignore;
+    vi.spyOn(api, 'disconnectIntegration').mockReturnValue(
+      new Promise((resolve) => {
+        done = resolve;
+      }),
+    );
+    render(
+      <>
+        <IntegrationsSection open onError={ignore} />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    const service = await theService();
+    await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+    await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+    const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+    elsewhere.focus();
+
+    done();
+
+    expect(await service.findByText('Not connected')).toBeInTheDocument();
+    expect(elsewhere).toHaveFocus();
+  });
+
+  it('leaves the focus where it went while the key was checked', async () => {
+    listing([notConnected]);
+    let answer: (integration: Integration) => void = ignore;
+    vi.spyOn(api, 'connectIntegration').mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      }),
+    );
+    render(
+      <>
+        <IntegrationsSection open onError={ignore} />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    const service = await typeAKey();
+    await userEvent.keyboard('{Enter}');
+    const elsewhere = screen.getByRole('button', { name: 'Elsewhere' });
+    elsewhere.focus();
+
+    answer(connected);
+
+    expect(await service.findByRole('button', { name: 'Disconnect' })).toBeInTheDocument();
+    expect(elsewhere).toHaveFocus();
   });
 
   it('closes the field at Cancel, forgets what was typed and what was said of it, and gives the focus back to Connect', async () => {
