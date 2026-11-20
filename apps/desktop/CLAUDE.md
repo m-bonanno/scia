@@ -13,10 +13,10 @@ main (Electron: lifecycle, supervision, the window, the tray, the system's notif
 
 ## The rule that shapes everything: pure engine + thin IO adapter
 
-| Piece       | Holds                                                                                       | Tested by                  |
-| ----------- | ------------------------------------------------------------------------------------------- | -------------------------- |
-| **Engine**  | decisions with zero Electron: restart backoff, paths from a root, argv, the env, colours    | Vitest unit, no Electron   |
-| **Adapter** | the IO the engine describes: `utilityProcess.fork`, `BrowserWindow`, `shell`, `safeStorage` | the real app (`npm start`) |
+| Piece       | Holds                                                                                       | Tested by                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| **Engine**  | decisions with zero Electron: restart backoff, paths from a root, argv, the env, colours    | Vitest unit, no Electron                                                                      |
+| **Adapter** | the IO the engine describes: `utilityProcess.fork`, `BrowserWindow`, `shell`, `safeStorage` | the E2E suite (`apps/desktop/e2e/`) where it reaches; the real app (`npm start`) for the rest |
 
 **`src/engine/**` never imports `electron`** — ESLint enforces it. A new capability = engine + spec first, adapter second, wiring in `main.ts` third.
 

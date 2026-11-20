@@ -41,7 +41,9 @@ npm run build
 
 With untracked files of other work in the tree, check the format of tracked files only: `git ls-files | xargs npx prettier --check --ignore-unknown`.
 
-CI runs them on Ubuntu, and all but format, lint and types again on Windows, the system Scia ships for; it runs them once more on the commit a merge makes, before that commit is released ([`testing.md`](./testing.md), "Where CI runs them"). A gate green here and red on one of CI's systems is red.
+A PR that touches the app's runtime — `apps/desktop`, `apps/server`, `apps/renderer`, `packages/` — also runs the E2E suite, after the build, on Windows: `npm run test:e2e` ([`testing.md`](./testing.md), "E2E"). It opens Scia's window while it runs.
+
+CI runs them on Ubuntu, and all but format, lint and types again on Windows, the system Scia ships for, with the E2E suite on every PR; it runs them once more on the commit a merge makes, before that commit is released ([`testing.md`](./testing.md), "Where CI runs them"). A gate green here and red on one of CI's systems is red.
 
 ## What is blocking
 

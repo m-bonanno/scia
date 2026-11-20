@@ -1,0 +1,95 @@
+import { randomBytes } from 'node:crypto';
+import { mkdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { startAllDebridServer } from '@scia/server/testing/alldebrid-server.ts';
+import { startRangeServer } from '@scia/server/testing/range-server.ts';
+import { describe, expect, it } from 'vitest';
+import { allCompleted, paste, rowOf, until, useRun } from './scia.ts';
+
+const KIB = 1024;
+// A key the simulated service was given: made up, as every key of a spec.
+const KEY = 'e2e-made-up-key-0123456789';
+// Far in the future, in the service's seconds.
+const PREMIUM_UNTIL = 4_102_444_800;
+
+describe('the real app, with what Settings says', () => {
+  const run = useRun();
+
+  it('holds a download at the speed limit chosen in Settings', async () => {
+    const profile = await run.profile();
+    // 2 MB at 256 KB/s is owed eight seconds, counted from the host's first range, past the probe
+    // of the first byte and whatever is asked of a service. The host sends as fast as it is read:
+    // without the limit the file arrives in well under a second, at twice the limit in four.
+    const body = randomBytes(2048 * KIB);
+    const host = run.keep(await startRangeServer({ body }));
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('combobox', { name: 'Speed limit' }).selectOption(String(256 * KIB));
+    await page.getByRole('button', { name: 'Close' }).click();
+
+    await paste(page, host.url);
+    await until(() => host.ranges.some((range) => range !== undefined && range !== 'bytes=0-0'));
+    const started = performance.now();
+    await until(() => allCompleted(page));
+
+    expect(performance.now() - started).toBeGreaterThan(6000);
+    const written = await readFile(join(profile.downloads, 'sample.bin'));
+    expect(Buffer.compare(written, body)).toBe(0);
+  });
+
+  it('downloads into the folder chosen in Settings', async () => {
+    const profile = await run.profile();
+    const chosen = join(profile.path, 'chosen');
+    await mkdir(chosen);
+    const body = randomBytes(256 * KIB);
+    const host = run.keep(await startRangeServer({ body }));
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    // The system's dialog is the one thing answered for the person: a script cannot press it.
+    await scia.app.evaluate(({ dialog }, folder) => {
+      dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [folder] });
+    }, chosen);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Change folder' }).click();
+    await page.getByText(chosen, { exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Close' }).click();
+
+    await paste(page, host.url);
+
+    await rowOf(page, 'sample.bin').getByRole('button', { name: 'Show in folder' }).waitFor();
+    const written = await readFile(join(chosen, 'sample.bin'));
+    expect(Buffer.compare(written, body)).toBe(0);
+  });
+
+  it("unlocks a file host's link through a connected AllDebrid, and downloads it", async () => {
+    const profile = await run.profile();
+    const body = randomBytes(512 * KIB);
+    const host = run.keep(await startRangeServer({ body }));
+    const link = 'https://hoster.example/file/e2e';
+    const service = run.keep(
+      await startAllDebridServer({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+        hosts: { hoster: ['hoster.example'] },
+        links: { [link]: { direct: host.url, filename: 'via-service.bin' } },
+      }),
+    );
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const { page } = scia;
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Connect' }).click();
+    await page.getByLabel('AllDebrid API key').fill(KEY);
+    await page.getByRole('button', { name: 'Connect' }).click();
+    await page.getByRole('button', { name: 'Disconnect' }).waitFor();
+    await page.getByRole('button', { name: 'Close' }).click();
+
+    await paste(page, link);
+
+    await rowOf(page, 'via-service.bin').getByRole('button', { name: 'Show in folder' }).waitFor();
+    const written = await readFile(join(profile.downloads, 'via-service.bin'));
+    expect(Buffer.compare(written, body)).toBe(0);
+    expect(service.requests.some((request) => request.form.link === link)).toBe(true);
+    // The key reached the service, and nowhere a person reads.
+    expect(await profile.log()).not.toContain(KEY);
+  });
+});

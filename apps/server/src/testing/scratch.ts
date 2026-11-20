@@ -34,14 +34,15 @@ export async function refusingFiles(folder: string): Promise<() => Promise<void>
 }
 
 // Waits for something a download does in its own time, without a fixed sleep.
-// The condition may have to ask something to know.
+// The condition may have to ask something to know. On `performance.now()`: the system's clock
+// steps (.claude/gotchas.md, Engine).
 export async function until(
   condition: () => boolean | Promise<boolean>,
   limitMs = 10_000,
 ): Promise<void> {
-  const deadline = Date.now() + limitMs;
+  const deadline = performance.now() + limitMs;
   while (!(await condition())) {
-    if (Date.now() > deadline) throw new Error('The condition never held.');
+    if (performance.now() > deadline) throw new Error('The condition never held.');
     await sleep(10);
   }
 }
