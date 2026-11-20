@@ -107,15 +107,33 @@ describe('parsePlaylist', () => {
     if (playlist.kind !== 'media') throw new Error('not media');
     expect(playlist.segments.map((segment) => [segment.map, segment.byteRange])).toEqual([
       [
-        { uri: 'init.mp4', byteRange: { offset: 0, length: 720 } },
+        { uri: 'init.mp4', byteRange: { offset: 0, length: 720 }, keyed: false },
         { offset: 720, length: 1000 },
       ],
       // With no offset, a range starts where the one before ended.
       [
-        { uri: 'init.mp4', byteRange: { offset: 0, length: 720 } },
+        { uri: 'init.mp4', byteRange: { offset: 0, length: 720 }, keyed: false },
         { offset: 1720, length: 500 },
       ],
     ]);
+  });
+
+  it('says whether an init segment was named under a key, which the standard encrypts with it', () => {
+    const mapOf = (text: string) => {
+      const playlist = parsePlaylist(text);
+      return playlist.kind === 'media' ? playlist.segments[0]?.map : undefined;
+    };
+
+    expect(
+      mapOf(
+        '#EXTM3U\n#EXT-X-MAP:URI="i.mp4"\n#EXT-X-KEY:METHOD=AES-128,URI="k"\n#EXTINF:1,\na.m4s\n#EXT-X-ENDLIST',
+      ),
+    ).toEqual({ uri: 'i.mp4', byteRange: null, keyed: false });
+    expect(
+      mapOf(
+        '#EXTM3U\n#EXT-X-KEY:METHOD=AES-128,URI="k"\n#EXT-X-MAP:URI="i.mp4"\n#EXTINF:1,\na.m4s\n#EXT-X-ENDLIST',
+      ),
+    ).toEqual({ uri: 'i.mp4', byteRange: null, keyed: true });
   });
 
   it('tells a playlist of qualities from a playlist of pieces', () => {

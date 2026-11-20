@@ -31,7 +31,8 @@ And on the review of #122 ([their answers](https://github.com/m-bonanno/scia/iss
 2. **The engine reads the playlist** (`parsePlaylist` in `@scia/core`, RFC 8216): the pieces, how long each lasts, their number, their key, their init segment and their byte ranges.
    - The address yt-dlp gives is the playlist of one quality. A playlist of qualities instead is `PAGE_UNREADABLE`.
    - A playlist with no end (`#EXT-X-ENDLIST`) is live: `PAGE_LIVE` until #121.
-   - A stream that changes partway — a discontinuity, an init segment that is not the first piece's, or one under a key — fails with `PAGE_FORMAT_UNSUPPORTED` before a piece is fetched (the owner; #123): made into one mp4 it would be a broken file.
+   - A stream that changes partway — a discontinuity, or an init segment that is not the first piece's — fails with `PAGE_FORMAT_UNSUPPORTED` before a piece is fetched (the owner; #123): made into one mp4 it would be a broken file.
+   - So does an init segment named under a key, which the key encrypts too (RFC 8216, 4.3.2.4) and Scia does not open yet (#123). An init segment named before the key is clear, and its encrypted pieces are downloaded.
    - A piece's length is from nothing to a day; any other is no playlist.
 3. **The pieces are fetched as files are** (`HlsTask`):
    - over the connections the settings allow, each read booked against the one speed limit (`Throttle`), a failure that heals asked again;

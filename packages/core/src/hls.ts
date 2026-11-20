@@ -42,8 +42,13 @@ export interface HlsSegment {
   // Its media sequence number, which an AES-128 key without an IV is used with.
   readonly sequence: number;
   readonly key: HlsKey | null;
-  // The init segment fragmented mp4 pieces need before them.
-  readonly map: { readonly uri: string; readonly byteRange: ByteRange | null } | null;
+  // The init segment fragmented mp4 pieces need before them; `keyed` when it was named under a
+  // key, which then encrypts it too (RFC 8216, 4.3.2.4).
+  readonly map: {
+    readonly uri: string;
+    readonly byteRange: ByteRange | null;
+    readonly keyed: boolean;
+  } | null;
   readonly byteRange: ByteRange | null;
   // The stream jumps before this piece: its timestamps or its encoding start again.
   readonly discontinuity: boolean;
@@ -174,6 +179,7 @@ export function parsePlaylist(text: string): HlsPlaylist {
         map = {
           uri: attributes.get('URI') ?? '',
           byteRange: range === undefined ? null : byteRangeOf(range, 0),
+          keyed: key !== null,
         };
         break;
       }

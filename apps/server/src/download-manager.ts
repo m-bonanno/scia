@@ -524,8 +524,16 @@ export class DownloadManager {
     const { signal } = running.controller;
     try {
       const { url, headers, remote, kind } = await this.#locate(record, signal);
-      // A stream that a new reading made a file: its pieces are of nothing now.
-      if (kind === 'file') await rm(piecesOf(partPathOf(record)), { recursive: true, force: true });
+      // A stream of its own — named, with pieces kept — that a new reading made a file: its pieces
+      // are of nothing now. Never another download's: a name not yet final is no one's.
+      if (kind === 'file' && record.named && record.timeline !== null) {
+        await rm(piecesOf(partPathOf(record)), { recursive: true, force: true }).catch(
+          (error: unknown) => {
+            throw new DiskError('The pieces of the stream could not be removed.', { cause: error });
+          },
+        );
+        record.timeline = null;
+      }
       await mkdir(record.directory, { recursive: true }).catch((error: unknown) => {
         throw new DiskError('The folder could not be made.', { cause: error });
       });

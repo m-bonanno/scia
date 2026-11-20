@@ -105,7 +105,7 @@ export class HlsTask {
   async run(signal: AbortSignal): Promise<void> {
     const folder = piecesOf(this.#options.partPath);
     const pieces = await this.#readPlaylist(signal);
-    await this.#keepOnlyPiecesOf(folder);
+    await this.#keepOnlyPiecesOf(folder, pieces);
     for (const name of await disk(() => readdir(folder))) {
       const index = /^(\d+)\.piece$/.exec(name)?.[1];
       if (index !== undefined) {
@@ -113,6 +113,8 @@ export class HlsTask {
         this.#done.set(Number(index), size);
       }
     }
+    // Said only now: before the folder was read, every piece would read as nothing kept.
+    this.#pieces = pieces;
     const waiting = pieces.filter((piece) => !this.#done.has(piece.index));
     // A piece that fails for good ends every connection, and the task waits for them all: nothing
     // is fetched or written for a download that has failed, and the limit is not booked for it.
@@ -136,6 +138,8 @@ export class HlsTask {
     );
     this.#inFlight = 0;
     signal.throwIfAborted();
+    // Every connection ended by a failure rejects with that failure (its wait's reason): the first
+    // rejection is the piece that failed.
     const first = ended.find((outcome) => outcome.status === 'rejected');
     if (first !== undefined) throw first.reason;
     await this.#assemble(folder, signal);
@@ -147,9 +151,9 @@ export class HlsTask {
     return Promise.resolve();
   }
 
-  async #keepOnlyPiecesOf(folder: string): Promise<void> {
+  async #keepOnlyPiecesOf(folder: string, pieces: readonly Piece[]): Promise<void> {
     const label = join(folder, 'variant');
-    const durations = this.#pieces.map((piece) => String(piece.endMs - piece.startMs)).join(',');
+    const durations = pieces.map((piece) => String(piece.endMs - piece.startMs)).join(',');
     const wanted = `${this.#options.variant ?? ''}|${durations}`;
     const kept = await readFile(label, 'utf8').catch(() => undefined);
     if (kept !== undefined && kept !== wanted) {
@@ -182,14 +186,12 @@ export class HlsTask {
       JSON.stringify(map) === JSON.stringify(head?.map ?? null);
     // An init segment under a key is encrypted, and written as fetched it would be no mp4's (#123).
     const changes = (segment: HlsSegment) =>
-      segment.discontinuity ||
-      !sameMap(segment.map) ||
-      (segment.map !== null && segment.key !== null);
+      segment.discontinuity || !sameMap(segment.map) || segment.map?.keyed === true;
     if (playlist.segments.some(changes)) {
       throw new PageError(PageFailure.FormatUnsupported, 'The stream changes partway.');
     }
     let at = 0;
-    this.#pieces = playlist.segments.map((segment, index) => {
+    return playlist.segments.map((segment, index) => {
       const startMs = at;
       at += Math.round(segment.duration * 1000);
       return {
@@ -200,7 +202,6 @@ export class HlsTask {
         segment,
       };
     });
-    return [...this.#pieces];
   }
 
   async #fetchPiece(piece: Piece, folder: string, signal: AbortSignal): Promise<void> {
@@ -297,8 +298,13 @@ export class HlsTask {
         if (signal.aborted || !heals || attempt >= MOST_ATTEMPTS) {
           throw signal.aborted ? signal.reason : asRemote(error);
         }
-        // A pause in the wait ends it.
-        await sleep(this.#options.retryDelayMs?.(attempt) ?? 1000 * attempt, undefined, { signal });
+        // A pause in the wait ends it, with the reason it was given: the download's, or the failure
+        // of another piece that ended every connection.
+        await sleep(this.#options.retryDelayMs?.(attempt) ?? 1000 * attempt, undefined, {
+          signal,
+        }).catch(() => {
+          throw signal.reason;
+        });
       } finally {
         allowance?.settle();
       }
@@ -326,12 +332,12 @@ export class HlsTask {
           const bytes = await disk(() => readFile(join(folder, pieceName(piece.index))));
           await disk(() => output.write(bytes));
         }
-        return;
+      } else {
+        await this.#transmux(folder, output, signal);
       }
-      await this.#transmux(folder, output, signal);
+      // On the disk before the manager marks it, renames it and says it is complete.
+      await disk(() => output.datasync());
     } finally {
-      // The manager marks and renames it, and says it is complete, next.
-      await output.datasync().catch(() => undefined);
       await output.close();
     }
   }

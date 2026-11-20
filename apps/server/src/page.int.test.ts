@@ -487,6 +487,64 @@ describe('DownloadManager and a link that is a page', () => {
       expect(again.find(added!.id).totalBytes).toBe(Buffer.concat(parts).length);
     });
 
+    it('shows what it kept while a resumed stream reads its playlist again', async () => {
+      const site = await host({ body: page, contentType: 'text/html' });
+      streams = await startFolderServer({ root: FIXTURES, delayMs: 150 });
+      const { reader } = aReader(async () => ({
+        title: 'Kept',
+        formats: [formatAt(`${streams!.url}/fmp4/index.m3u8`, { protocol: 'm3u8_native' })],
+      }));
+      const first = await open({ pageReader: reader });
+      const [added] = first.add({ urls: [site.url] });
+      await until(() =>
+        (first.find(added!.id).timeline?.segments ?? []).some((piece) => piece.downloaded > 0),
+      );
+      await first.pause(added!.id);
+      await first.close();
+      manager = undefined;
+
+      const again = await open({ pageReader: reader });
+      again.resume(added!.id);
+      // The host answers after 150 ms: the playlist is still on its way.
+      await new Promise((resolve) => setTimeout(resolve, 60));
+
+      // The playlist is still on its way: the row says what was kept, not nothing.
+      expect(again.find(added!.id).status).toBe(DownloadStatus.Downloading);
+      expect(again.find(added!.id).downloadedBytes).toBeGreaterThan(0);
+      expect(again.find(added!.id).timeline?.segments.some((piece) => piece.downloaded > 0)).toBe(
+        true,
+      );
+    });
+
+    it("leaves another download's pieces alone when a file of the same name is added", async () => {
+      const site = await host({ body: page, contentType: 'text/html' });
+      streams = await startFolderServer({ root: FIXTURES, delayMs: 150 });
+      const plain = await startRangeServer({ body: video });
+      servers.push(plain);
+      const { reader } = aReader(async (url) =>
+        url === site.url
+          ? {
+              title: 'sample',
+              formats: [formatAt(`${streams!.url}/fmp4/index.m3u8`, { protocol: 'm3u8_native' })],
+            }
+          : undefined,
+      );
+      const downloads = await open({ pageReader: reader });
+      const [stream] = downloads.add({ urls: [site.url] });
+      await until(() =>
+        (downloads.find(stream!.id).timeline?.segments ?? []).some((piece) => piece.downloaded > 0),
+      );
+      await downloads.pause(stream!.id);
+      const pieces = join(folder.path, 'downloads', 'sample.mp4.scia.pieces');
+      const kept = await readdir(pieces);
+
+      // A file whose name from its address is the stream's.
+      const [file] = downloads.add({ urls: [plain.url.replace('sample.bin', 'sample.mp4')] });
+      await until(() => statusOf(downloads, file!.id) === DownloadStatus.Completed);
+
+      expect(await readdir(pieces)).toEqual(kept);
+    });
+
     it('throws away what it had of a quality the page no longer offers when it reads it again', async () => {
       const site = await host({ body: page, contentType: 'text/html' });
       streams = await startFolderServer({ root: FIXTURES, delayMs: 150 });

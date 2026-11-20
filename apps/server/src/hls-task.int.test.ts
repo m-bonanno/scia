@@ -1,3 +1,4 @@
+import { createCipheriv } from 'node:crypto';
 import { cp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { timelineSchema } from '@scia/contracts';
@@ -6,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { HlsTask, type HlsTaskOptions } from './hls-task.ts';
 import { HttpSource } from './http-source.ts';
 import { PageError } from './media-choice.ts';
+import { RemoteError } from './remote-source.ts';
 import { type FolderServer, startFolderServer } from './testing/folder-server.ts';
 import { scratchFolder, until } from './testing/scratch.ts';
 
@@ -206,6 +208,59 @@ describe('HlsTask against a real HTTP host', () => {
     await task(`${server.url}/ranges.m3u8`).run(new AbortController().signal);
 
     expect(Buffer.compare(await output(), Buffer.concat(parts))).toBe(0);
+  });
+
+  it('opens encrypted fragmented pieces behind an init segment named before the key, which is clear', async () => {
+    const site = join(folder.path, 'site');
+    await cp(join(FIXTURES, 'fmp4'), site, { recursive: true });
+    const key = Buffer.from('000102030405060708090a0b0c0d0e0f', 'hex');
+    const iv = Buffer.alloc(16, 7);
+    for (const name of ['segment0.m4s', 'segment1.m4s', 'segment2.m4s']) {
+      const clear = await readFile(join(site, name));
+      const cipher = createCipheriv('aes-128-cbc', key, iv);
+      await writeFile(join(site, name), Buffer.concat([cipher.update(clear), cipher.final()]));
+    }
+    await writeFile(join(site, 'key.bin'), key);
+    const playlist = await readFile(join(site, 'index.m3u8'), 'utf8');
+    await writeFile(
+      join(site, 'locked.m3u8'),
+      playlist.replace(
+        /(#EXT-X-MAP:[^\n]*\n)/,
+        `$1#EXT-X-KEY:METHOD=AES-128,URI="key.bin",IV=0x${iv.toString('hex')}\n`,
+      ),
+    );
+    server = await startFolderServer({ root: site });
+
+    await task(`${server.url}/locked.m3u8`).run(new AbortController().signal);
+
+    const plain = await Promise.all(
+      ['init.mp4', 'segment0.m4s', 'segment1.m4s', 'segment2.m4s'].map((name) =>
+        readFile(join(FIXTURES, 'fmp4', name)),
+      ),
+    );
+    expect(Buffer.compare(await output(), Buffer.concat(plain))).toBe(0);
+  });
+
+  it('says the failure of the piece that failed, not the end of a wait to ask again', async () => {
+    const site = join(folder.path, 'site');
+    await cp(join(FIXTURES, 'ts'), site, { recursive: true });
+    await writeFile(
+      join(site, 'index.m3u8'),
+      '#EXTM3U\n#EXT-X-TARGETDURATION:1\n#EXTINF:1,\nsegment0.mpegts\n#EXTINF:1,\ngone.mpegts\n#EXT-X-ENDLIST\n',
+    );
+    // The first piece answers 503, and its connection waits to ask again, while the second's is
+    // refused for good.
+    server = await startFolderServer({ root: site, failOnce: ['/segment0.mpegts'], delayMs: 50 });
+
+    const failure = await task(`${server.url}/index.m3u8`, { retryDelayMs: () => 10_000 })
+      .run(new AbortController().signal)
+      .then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    expect(failure).toBeInstanceOf(RemoteError);
+    expect((failure as RemoteError).status).toBe(404);
   });
 
   it('stops every connection when a piece fails for good, and fetches nothing after', async () => {
