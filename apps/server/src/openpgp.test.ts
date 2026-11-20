@@ -76,6 +76,16 @@ describe('a signature made with a key of the spec', () => {
     ).toBeUndefined();
   });
 
+  it('takes its date only from what it signs, never from the part anyone may change', () => {
+    const date = Buffer.alloc(4);
+    date.writeUInt32BE(Math.floor(at.getTime() / 1000));
+    const undated = signDetached(data, made.privateKey, {
+      withoutDate: true,
+      unhashed: [[2, date]],
+    });
+    expect(signedAt(data, undated, key)).toBeUndefined();
+  });
+
   it('is refused when it carries a condition marked critical that Scia does not read', () => {
     const critical = signDetached(data, made.privateKey, {
       extra: [[0x80 | 100, Buffer.from([1])]],

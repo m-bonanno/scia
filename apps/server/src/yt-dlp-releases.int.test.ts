@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { scratchFolder } from './testing/scratch.ts';
+import { scratchFolder, until } from './testing/scratch.ts';
 import { type ReleasesServer, startReleasesServer } from './testing/yt-dlp-releases-server.ts';
 import { ReleaseError, YtDlpReleases } from './yt-dlp-releases.ts';
 
@@ -84,9 +84,8 @@ describe('YtDlpReleases against a host that answers as github.com does', () => {
     const path = join(folder.path, 'yt-dlp.exe.part');
     const stop = new AbortController();
     const saving = releases().save('2026.11.18', 'yt-dlp.exe', path, 1024 * 1024, stop.signal);
-    setTimeout(() => {
-      stop.abort();
-    }, 60);
+    await until(async () => ((await stat(path).catch(() => undefined))?.size ?? 0) > 0);
+    stop.abort();
     await expect(saving).rejects.toThrow();
     expect(existsSync(path)).toBe(false);
   });

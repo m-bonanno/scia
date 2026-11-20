@@ -118,7 +118,7 @@ function shellOf(app: ElectronApplication): number {
 
 // Starts Scia as a person starts it, with its own profile and a free port for its engine — and,
 // unless the spec names them, a simulated AllDebrid that knows no account and a host of yt-dlp's
-// releases that publishes none: with no service connected Scia still asks AllDebrid which hosts
+// releases whose latest is the release Scia ships, with no files: with no service connected Scia still asks AllDebrid which hosts
 // are its own (ADR 0006), and an app whose yt-dlp was fetched asks for yt-dlp's latest release
 // (ADR 0011). A spec reaches no host but this computer's.
 export async function launchScia(profile: Profile, options: LaunchOptions = {}): Promise<Scia> {

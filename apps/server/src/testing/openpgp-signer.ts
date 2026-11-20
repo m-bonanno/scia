@@ -76,6 +76,8 @@ export interface SignOptions {
   // Hashed subpackets added after the date, as [type, data].
   readonly extra?: readonly (readonly [number, Buffer])[];
   readonly withoutDate?: boolean;
+  // Subpackets in the part the signature does not cover, as [type, data].
+  readonly unhashed?: readonly (readonly [number, Buffer])[];
 }
 
 export function signDetached(data: Buffer, key: KeyObject, options: SignOptions = {}): Buffer {
@@ -96,6 +98,17 @@ export function signDetached(data: Buffer, key: KeyObject, options: SignOptions 
   const signed = Buffer.concat([data, portion, trailer]);
   const digest = createHash(hash).update(signed).digest();
   const signature = sign(hash, signed, key);
-  const body = Buffer.concat([portion, Buffer.from([0, 0]), digest.subarray(0, 2), mpi(signature)]);
+  const unhashed = Buffer.concat(
+    (options.unhashed ?? []).map(([type, value]) => subpacket(type, value)),
+  );
+  const unhashedLength = Buffer.alloc(2);
+  unhashedLength.writeUInt16BE(unhashed.length);
+  const body = Buffer.concat([
+    portion,
+    unhashedLength,
+    unhashed,
+    digest.subarray(0, 2),
+    mpi(signature),
+  ]);
   return packet(2, body);
 }

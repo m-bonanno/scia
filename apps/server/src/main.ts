@@ -18,7 +18,7 @@ import { JsonStateStore } from './state-store.ts';
 import { YtDlp } from './yt-dlp.ts';
 import { YtDlpReleases } from './yt-dlp-releases.ts';
 import { YT_DLP_SIGNING_KEY } from './yt-dlp-signing-key.ts';
-import { YtDlpUpdates } from './yt-dlp-updates.ts';
+import { openYtDlpUpdates, type YtDlpUpdates } from './yt-dlp-updates.ts';
 
 // The engine tells main where it listens; main tells it to stop before quitting.
 export interface ReadyMessage {
@@ -65,7 +65,7 @@ async function pageReaderOf(
   const updates =
     config.ytDlpUpdates === undefined
       ? undefined
-      : await YtDlpUpdates.open({
+      : await openYtDlpUpdates({
           shipped: { path: shipped, version: config.ytDlpUpdates.version },
           asset: config.ytDlpUpdates.asset,
           folder: join(config.dataDir, 'yt-dlp'),

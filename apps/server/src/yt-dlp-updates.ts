@@ -97,6 +97,19 @@ async function stateIn(folder: string): Promise<State> {
   }
 }
 
+// The updater, or none when it cannot be opened: a failure of its own — a folder it cannot make,
+// a state it cannot write — leaves the shipped build reading pages, and never stops the engine.
+export async function openYtDlpUpdates(
+  options: YtDlpUpdatesOptions,
+): Promise<YtDlpUpdates | undefined> {
+  try {
+    return await YtDlpUpdates.open(options);
+  } catch (error) {
+    options.logger.warn('yt_dlp_updates_off', { error: describeFailure(error) });
+    return undefined;
+  }
+}
+
 // yt-dlp brought up to date from its own releases, at most once a day (docs/adr/0011). A build is
 // taken only when its bytes match the release's SHA2-256SUMS, and those sums carry a good
 // signature by yt-dlp's key, made no earlier than the day the release is named after. Anything
@@ -136,8 +149,13 @@ export class YtDlpUpdates {
       }
     }
     for (const entry of await readdir(folder)) {
-      if (entry !== STATE && entry !== (inUse === shipped ? undefined : inUse.version)) {
+      if (entry === STATE || entry === (inUse === shipped ? undefined : inUse.version)) continue;
+      try {
         await rm(join(folder, entry), { recursive: true, force: true });
+      } catch (error) {
+        // A build a yt-dlp still runs — one an engine that ended left running — or that the
+        // system holds: left for the next start, never a reason not to start.
+        logger.warn('yt_dlp_not_removed', { entry, error: describeFailure(error) });
       }
     }
     const updates = new YtDlpUpdates(options, inUse, state);
@@ -164,7 +182,7 @@ export class YtDlpUpdates {
     const last = this.#state.checkedAt === null ? undefined : Date.parse(this.#state.checkedAt);
     // A last check the clock puts in the future is no reason to wait: the clock was set back.
     const due = last === undefined || last > now ? 0 : Math.max(0, last + day - now);
-    this.#after(Math.min(due, day));
+    this.#after(due);
   }
 
   async close(): Promise<void> {
@@ -254,6 +272,8 @@ export class YtDlpUpdates {
       const stopHearing = activity.onBusyChange((busy) => {
         if (busy) yielded.abort(new Yielded('A download started.'));
       });
+      // One that started between the wait's end and this listener is not heard by it.
+      if (activity.isBusy()) yielded.abort(new Yielded('A download started.'));
       try {
         return await releases.save(
           tag,
@@ -275,6 +295,8 @@ export class YtDlpUpdates {
     const { logger } = this.#options;
     const activity = this.#activityOf();
     if (!activity.isBusy()) return Promise.resolve();
+    // A stop that came before this wait is never heard by a listener added now.
+    if (signal.aborted) return Promise.reject(signal.reason as Error);
     logger.info('yt_dlp_waiting_for_downloads', {});
     return new Promise((resolve, reject) => {
       const stopHearing = activity.onBusyChange((busy) => {

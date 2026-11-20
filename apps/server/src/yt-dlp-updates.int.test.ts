@@ -1,6 +1,7 @@
+import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import { chmod, copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Logger } from './logger.ts';
@@ -13,7 +14,12 @@ import {
   startReleasesServer,
 } from './testing/yt-dlp-releases-server.ts';
 import { YtDlpReleases } from './yt-dlp-releases.ts';
-import { type Activity, YtDlpUpdates, type YtDlpUpdatesOptions } from './yt-dlp-updates.ts';
+import {
+  type Activity,
+  openYtDlpUpdates,
+  YtDlpUpdates,
+  type YtDlpUpdatesOptions,
+} from './yt-dlp-updates.ts';
 
 const SHIPPED = '2026.10.26';
 const NEWER = '2026.11.18';
@@ -233,6 +239,97 @@ describe('YtDlpUpdates against a host that publishes releases as yt-dlp does', (
     expect(second.command()).toBe(shipped);
     expect(second.version()).toBe(NEWER);
     expect(existsSync(join(updatesFolder(), NEWER))).toBe(false);
+  });
+
+  it('starts when a build it no longer uses cannot be removed, and removes it at a later start', async () => {
+    const left = join(updatesFolder(), '2026.11.01');
+    await mkdir(left, { recursive: true });
+    // Held as Windows holds a program that runs; elsewhere, by a folder that refuses removals.
+    let release: () => Promise<void>;
+    if (process.platform === 'win32') {
+      const program = join(left, 'yt-dlp.exe');
+      await copyFile(process.execPath, program);
+      const running = spawn(program, ['-e', 'setTimeout(() => {}, 60000)'], { stdio: 'ignore' });
+      await until(() => running.pid !== undefined);
+      release = async () => {
+        running.kill();
+        await new Promise((done) => running.once('exit', done));
+      };
+    } else {
+      await writeFile(join(left, 'yt-dlp'), 'old');
+      await chmod(left, 0o500);
+      release = () => chmod(left, 0o700);
+    }
+
+    const updates = await open();
+    expect(updates.command()).toBe(shipped);
+    expect(events()).toContain('yt_dlp_not_removed');
+    await release();
+
+    await open();
+    expect(existsSync(left)).toBe(false);
+  });
+
+  it('leaves the shipped build reading pages when it cannot be opened at all', async () => {
+    await mkdir(join(folder.path, 'engine'), { recursive: true });
+    // Its folder is a file: nothing can be kept there.
+    await writeFile(updatesFolder(), 'not a folder');
+    const updates = await openYtDlpUpdates({
+      shipped: { path: shipped, version: SHIPPED },
+      asset: 'yt-dlp.exe',
+      folder: updatesFolder(),
+      releases: new YtDlpReleases({ address: host.address, userAgent: 'Scia/test' }),
+      signingKey: signingKeyOf(key.armored),
+      logger,
+    });
+    expect(updates).toBeUndefined();
+    expect(events()).toContain('yt_dlp_updates_off');
+  });
+
+  it('never takes a release older than the build in use, however well it is signed', async () => {
+    publish('2026.10.21');
+    const updates = await open();
+    updates.start(downloads);
+    await until(() => events().includes('yt_dlp_checked'));
+    expect(updates.command()).toBe(shipped);
+    expect(builds()).toEqual([]);
+    expect(host.asked).toEqual(['/releases/latest']);
+  });
+
+  it('ends at once when it is closed just before it would wait for the downloads', async () => {
+    publish(NEWER);
+    let closed = false;
+    // The stop arrives as the updater looks at the downloads, before it starts listening to them.
+    const stopping: Activity = {
+      isBusy: () => {
+        void updates.close().then(() => {
+          closed = true;
+        });
+        return true;
+      },
+      onBusyChange: () => () => undefined,
+    };
+    const updates = await open();
+    updates.start(stopping);
+    await until(() => closed, 5_000);
+    expect(builds()).toEqual([]);
+  });
+
+  it('gives a build up for a download that started between its wait and its listening', async () => {
+    publish(NEWER);
+    let looks = 0;
+    // Idle when it waits; busy the moment after, before any change could be heard.
+    const between: Activity = {
+      isBusy: () => {
+        looks += 1;
+        return looks === 2;
+      },
+      onBusyChange: () => () => undefined,
+    };
+    const updates = await open();
+    updates.start(between);
+    await until(() => updates.version() === NEWER);
+    expect(events()).toContain('yt_dlp_fetch_yielded');
   });
 
   it('removes at its start whatever is left of builds it no longer uses', async () => {

@@ -56,7 +56,7 @@ describe('the real app brings its yt-dlp up to date', () => {
     // The build Scia ships is never changed.
     expect(Buffer.compare(await readFile(SHIPPED), build)).toBe(0);
 
-    // A page no reader of yt-dlp knows is read by the build taken, and fetched as it stands.
+    // A page no reader of yt-dlp knows is still read after the update, and fetched as it stands.
     const site = run.keep(
       await startRangeServer({
         body: Buffer.from('<html>a page</html>'),
@@ -70,9 +70,13 @@ describe('the real app brings its yt-dlp up to date', () => {
       .waitFor({ timeout: 60_000 });
 
     await scia.quit();
-    host.misbehave = 'busy';
+    const checks = () => host.asked.filter((path) => path === '/releases/latest').length;
+    const before = checks();
     await run.launch(profile, { args: [`--yt-dlp-releases=${host.address}`] });
     await until(async () => /yt_dlp_in_use[^\n]*"kept":true/.exec(await profile.log()) !== null);
+    // A check at this start would have been asked as the engine began to listen, before the
+    // window had its page: the last one is minutes old, the next due a day after it.
+    expect(checks()).toBe(before);
   });
 
   it('refuses a build whose bytes are not those its signed sums give, and keeps the one it ships', async () => {
