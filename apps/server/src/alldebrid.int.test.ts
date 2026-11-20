@@ -356,6 +356,18 @@ describe('AllDebrid', () => {
     await until(() => server.requests.length === 2);
     retrying.abort(new Error('removed'));
     await expect(retried).rejects.toThrow('removed');
+
+    // While its last question is on its way: no wait comes after it to say so.
+    server.misbehave({ silent: true });
+    const asking = new AbortController();
+    const last = between({ retryDelayMs: () => 1, answerLimitMs: 100 }).unlock(
+      KEY,
+      LINK,
+      asking.signal,
+    );
+    await until(() => server.requests.length === 5);
+    asking.abort(new Error('quitting'));
+    await expect(last).rejects.toThrow('quitting');
   });
 
   it.each([
