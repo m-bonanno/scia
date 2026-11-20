@@ -57,7 +57,7 @@ The owner asked whether the pipeline had E2E, unit, integration, feature and smo
 
 ### What it costs
 
-Nothing. The repository is public: GitHub's standard hosted runners, Linux and Windows, are free for it, and so are their minutes. `playwright-core` is free software (Apache-2.0). No larger runner, no paid service. Time is what it costs. Measured on #94: the Ubuntu job took 1 min 22 s and the Windows job 1 min 24 s, side by side, so a PR and a beta's gates wait about a minute and a half, as before. Estimated, once the E2E job (#91) and the smoke test (#92) are in, from the release's installer job (1 min 39 s to 2 min 45 s) and the E2E suite's first runs: a PR waits about seven minutes, its jobs running side by side, and a beta about seven minutes more than before this pipeline. The estimate is replaced by the measured times as each lands.
+Nothing. The repository is public: GitHub's standard hosted runners, Linux and Windows, are free for it, and so are their minutes. `playwright-core` is free software (Apache-2.0). No larger runner, no paid service. Time is what it costs. Measured on #94: the Ubuntu job took 1 min 11 s to 1 min 22 s and the Windows job 1 min 24 s to 1 min 40 s, side by side, so a PR waits about a minute and a half, as before, and a beta, which waited for nothing until now, waits that long for its gates before its tag. Estimated, once the E2E job (#91) and the smoke test (#92) are in, from the release's installer job (1 min 39 s to 2 min 45 s) and an install and build like the Windows job's: a PR waits about seven minutes, its jobs running side by side, and a beta about seven minutes more than before this pipeline. The estimate is replaced by the measured times as each lands.
 
 ### What a person still does
 
