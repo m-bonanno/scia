@@ -4,10 +4,10 @@
 
 ## Channels
 
-| Branch    | A merge produces                       | What is published                              |
-| --------- | -------------------------------------- | ---------------------------------------------- |
-| `develop` | `vX.Y.Z-beta.N` (a GitHub pre-release) | The tag and its notes. No installer by default |
-| `main`    | `vX.Y.Z` (a GitHub release)            | The tag, its notes, and the Windows installer  |
+| Branch    | A merge produces                       | What is published                                                    |
+| --------- | -------------------------------------- | -------------------------------------------------------------------- |
+| `develop` | `vX.Y.Z-beta.N` (a GitHub pre-release) | The tag, its notes, the Windows installer and what the updater reads |
+| `main`    | `vX.Y.Z` (a GitHub release)            | The same                                                             |
 
 Which commit moves which number (`.releaserc.json`, the Angular preset):
 
@@ -23,9 +23,9 @@ This is why PR titles are checked: a squash merge makes the title the commit, an
 ## The Release workflow (`.github/workflows/release.yml`)
 
 1. **Semantic release** — on every push to `develop` or `main`: reads the commits since the last tag of that channel, and if any calls for a release, creates the tag and the GitHub release with its notes. A push with nothing to release ends here, green.
-2. **Installers** — only when step 1 made a **stable** tag: one job on Windows (NSIS `.exe`). The Linux job (AppImage, `.deb`) is off until Linux is tried (the owner, #28): the workflow keeps its entry in a comment. The job checks out the tag, builds, packages with the version passed in (`-c.extraMetadata.version`), checks the files exist and are not empty, and attaches them to the release.
+2. **Installers** — for every tag step 1 made, beta or stable: one job on Windows (NSIS `.exe`). The Linux job (AppImage, `.deb`) is off until Linux is tried (the owner, #28): the workflow keeps its entry in a comment. The job checks out the tag, builds, packages with the version passed in (`-c.extraMetadata.version`), checks the files exist and are not empty, and attaches them to the release: `Scia-Setup-<v>.exe`, its `.blockmap` and `latest.yml`, which the updater reads ([ADR 0007](../adr/0007-automatic-updates.md)). electron-builder writes the last two because `electron-builder.yml` names this repository under `publish`; it uploads nothing itself (`--publish never`). The release is published before its files: for a few minutes — the job itself took between 1 min 39 s and 2 min 45 s in its first three runs — the newest release carries notes only, and an updater that reads it then tries again later.
 
-To get the installers of a beta, or to build again those of a stable: **Actions → Release → Run workflow**, with `installer_tag` set to the existing tag.
+To build again the files of a tag: **Actions → Release → Run workflow**, with `installer_tag` set to the existing tag. A tag made before #83 has no `publish` in its `electron-builder.yml`: its run stops at the check of `latest.yml`.
 
 ## Releasing
 
@@ -41,11 +41,11 @@ To get the installers of a beta, or to build again those of a stable: **Actions 
 - **Never edit or delete a published tag.** A bad release is followed by a fixed one.
 - **Never push a tag by hand.** A tag semantic-release did not make confuses its next computation.
 - **Closed is not released.** An issue closes when its PR merges into `develop`; it has reached people when a stable release's notes list it.
-- **Installers on a stable by default.** The repository is public, so GitHub's runners cost nothing; a beta still carries notes only, and its installers are built when someone asks for them (`installer_tag`), to try it.
+- **Every release carries its installer and the updater's files**, beta or stable (the owner, 20 November 2026, #82): an installed Scia follows the stables, and the betas when its switch in Settings is on, and reads them from the releases. The repository is public, so GitHub's runners cost nothing.
 
 ## Not there yet
 
-- **Auto-update.** The app does not look for new versions (roadmap M1). When it does, it reads the installers of the releases of this repository, public on the owner's decision of 20 November 2026 (#28), with no token.
-- **Signed installers.** Windows shows SmartScreen's warning for an unsigned `.exe`.
+- **Auto-update.** The app does not look for new versions yet (#82, roadmap M1). The releases carry what it is to read from #83 on, and how it will read them is decided ([ADR 0007](../adr/0007-automatic-updates.md)): the stables, and the betas when a switch in Settings is on, from the public releases of this repository, with no token.
+- **Signed installers.** Windows shows SmartScreen's warning for an unsigned `.exe`, at the first install; an update is not signed either, and is checked only against the SHA-512 of its release's `latest.yml` (ADR 0007).
 - **Linux.** The first stable release ships for Windows only, and the Linux job of the workflow is off until Linux is tried (roadmap, "After the first stable release").
-- **No installer has come out of CI, and the Linux packages have never been built anywhere.** The installers job has never run: its first run is to be the beta whose installers prove automatic updates, before the first stable release — expect to fix it there.
+- **The Linux packages have never been built anywhere.** The Windows installer has come out of CI three times, each on request (`v1.0.0-beta.10` to `.12`): the first was installed and run (#78). No release has carried `latest.yml` yet: the first is the first beta after #83.
