@@ -9,6 +9,7 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → Node runs the workspaces' TypeScript directly: imports carry the `.ts` extension, and a package's `exports` point at `src/`.
 - → `@typescript-eslint/no-unnecessary-condition` reads a flag changed in a callback, or re-read after an `await`, as constant. Read it through a function (`#isStopping()`, `stopped()`), do not disable the rule.
 - → Husky runs whatever hook a checked-out tree carries: `core.hooksPath` is `.husky/_`, whose wrappers run `.husky/<hook>` when the file exists. Checking out a contributor's branch puts their `.husky/post-checkout` there and runs it on this machine — `/team-review` said "check out the PR's branch" (#28). A fork's PR is read with `gh pr diff` and `git show`, or in a tree made with `git -c core.hooksPath=/dev/null worktree add`.
+- → A branch is deleted after the merge is read back, not after the merge command: `gh pr merge --match-head-commit` takes the full SHA, refused a short one, and the `git push --delete` chained after it closed the PR it had not merged (#74). Read `gh pr view <n> --json state` first.
 - → `@typescript-eslint/unbound-method` fires on `expect(object.method)` when the interface declares a method. Declare callbacks as properties (`readonly pause: (id) => void`).
 
 ## Formatting numbers

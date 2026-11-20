@@ -34,7 +34,7 @@ Everything is written in English: code, comments, commits, the PR. Changes that 
 - **CI runs once the owner approves it.** The checks of a PR from a fork wait for that approval, every time.
 - **The owner chooses which PRs are reviewed.** A PR taken up is reviewed by the project's review team, which reads the diff and CI's results ([`docs/development/review-flow.md`](./docs/development/review-flow.md)). The findings are posted on the PR, and the verdict on its issue too.
 - **You fix what is blocking** with new commits on the same branch — no force-push — and the next round reviews the new head. A PR whose findings stay unanswered is closed.
-- **Approved, with CI green, it is squash-merged into `develop`** by the owner; its title becomes the commit, and, if its type releases something (`fix`, `feat`), the next beta's notes name it.
+- **Approved, with CI green, it is squash-merged into `develop`** by the owner; its title becomes the commit, and, if its type releases something (`feat`, `fix`, `perf`, a breaking change: the table in [`release-flow.md`](./docs/development/release-flow.md)), the next beta's notes name it.
 
 You cannot merge, push to this repository or change its settings: nobody outside it can. What you can always do is answer on your PR and on its issue.
 
