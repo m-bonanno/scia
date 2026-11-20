@@ -1,27 +1,17 @@
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { type RangeServer, startRangeServer } from '@scia/server/testing/range-server.ts';
-import { afterEach, describe, expect, it } from 'vitest';
-import { launchScia, paste, type Profile, rowOf, type Scia, scratchProfile } from './scia.ts';
+import { startRangeServer } from '@scia/server/testing/range-server.ts';
+import { describe, expect, it } from 'vitest';
+import { paste, rowOf, useRun } from './scia.ts';
 
 describe('the real app downloads', () => {
-  let profile: Profile;
-  let scia: Scia | undefined;
-  let host: RangeServer | undefined;
-
-  afterEach(async () => {
-    await scia?.app.close().catch(() => undefined);
-    await host?.close();
-    await profile.remove();
-    scia = undefined;
-    host = undefined;
-  });
+  const run = useRun();
 
   it('starts, and its engine serves the page on the port it took', async () => {
-    profile = await scratchProfile();
+    const profile = await run.profile();
 
-    scia = await launchScia(profile);
+    const scia = await run.launch(profile);
 
     const log = await profile.log();
     expect(log).toContain('engine_ready');
@@ -30,10 +20,10 @@ describe('the real app downloads', () => {
   });
 
   it('fetches a pasted link over several connections, byte for byte', async () => {
-    profile = await scratchProfile();
+    const profile = await run.profile();
     const body = randomBytes(8 * 1024 * 1024);
-    host = await startRangeServer({ body, fileName: 'sample.bin' });
-    scia = await launchScia(profile);
+    const host = run.keep(await startRangeServer({ body, fileName: 'sample.bin' }));
+    const scia = await run.launch(profile);
 
     await paste(scia.page, host.url);
 
@@ -42,8 +32,8 @@ describe('the real app downloads', () => {
       .waitFor({ timeout: 30_000 });
     const written = await readFile(join(profile.downloads, 'sample.bin'));
     expect(Buffer.compare(written, body)).toBe(0);
-    expect(
-      host.ranges.filter((range) => range !== undefined && range !== 'bytes=0-0').length,
-    ).toBeGreaterThan(1);
+    // Besides the probe of the first byte, the host was asked for more than one range.
+    const ranges = host.ranges.filter((range) => range !== undefined && range !== 'bytes=0-0');
+    expect(ranges.length).toBeGreaterThan(1);
   });
 });

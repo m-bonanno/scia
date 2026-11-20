@@ -1,23 +1,10 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import {
-  type AllDebridServer,
-  startAllDebridServer,
-} from '@scia/server/testing/alldebrid-server.ts';
-import { type RangeServer, startRangeServer } from '@scia/server/testing/range-server.ts';
-import { afterEach, describe, expect, it } from 'vitest';
-import {
-  allCompleted,
-  sayWhyItFailed,
-  launchScia,
-  paste,
-  type Profile,
-  rowOf,
-  type Scia,
-  scratchProfile,
-  until,
-} from './scia.ts';
+import { startAllDebridServer } from '@scia/server/testing/alldebrid-server.ts';
+import { startRangeServer } from '@scia/server/testing/range-server.ts';
+import { describe, expect, it } from 'vitest';
+import { allCompleted, paste, rowOf, until, useRun } from './scia.ts';
 
 const KIB = 1024;
 // A key the simulated service was given: made up, as every key of a spec.
@@ -26,50 +13,38 @@ const KEY = 'e2e-made-up-key-0123456789';
 const PREMIUM_UNTIL = 4_102_444_800;
 
 describe('the real app, with what Settings says', () => {
-  let profile: Profile;
-  let scia: Scia | undefined;
-  let host: RangeServer | undefined;
-  let service: AllDebridServer | undefined;
-
-  afterEach(async ({ task }) => {
-    await sayWhyItFailed(task, profile);
-    await scia?.app.close().catch(() => undefined);
-    await host?.close();
-    await service?.close();
-    await profile.remove();
-    scia = undefined;
-    host = undefined;
-    service = undefined;
-  });
+  const run = useRun();
 
   it('holds a download at the speed limit chosen in Settings', async () => {
-    profile = await scratchProfile();
-    // 1 MB at 256 KB/s is owed four seconds; the host sends as fast as it is read, and without
-    // the limit the whole file arrives in well under half a second.
-    const body = randomBytes(1024 * KIB);
-    host = await startRangeServer({ body });
-    scia = await launchScia(profile);
+    const profile = await run.profile();
+    // 2 MB at 256 KB/s is owed eight seconds, counted from the host's first range, past the probe
+    // of the first byte and whatever is asked of a service. The host sends as fast as it is read:
+    // without the limit the file arrives in well under a second, at twice the limit in four.
+    const body = randomBytes(2048 * KIB);
+    const host = run.keep(await startRangeServer({ body }));
+    const scia = await run.launch(profile);
     const { page } = scia;
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByRole('combobox', { name: 'Speed limit' }).selectOption(String(256 * KIB));
     await page.getByRole('button', { name: 'Close' }).click();
 
-    const started = performance.now();
     await paste(page, host.url);
+    await until(() => host.ranges.some((range) => range !== undefined && range !== 'bytes=0-0'));
+    const started = performance.now();
     await until(() => allCompleted(page));
 
-    expect(performance.now() - started).toBeGreaterThan(2000);
+    expect(performance.now() - started).toBeGreaterThan(6000);
     const written = await readFile(join(profile.downloads, 'sample.bin'));
     expect(Buffer.compare(written, body)).toBe(0);
   });
 
   it('downloads into the folder chosen in Settings', async () => {
-    profile = await scratchProfile();
+    const profile = await run.profile();
     const chosen = join(profile.path, 'chosen');
     await mkdir(chosen);
     const body = randomBytes(256 * KIB);
-    host = await startRangeServer({ body });
-    scia = await launchScia(profile);
+    const host = run.keep(await startRangeServer({ body }));
+    const scia = await run.launch(profile);
     const { page } = scia;
     // The system's dialog is the one thing answered for the person: a script cannot press it.
     await scia.app.evaluate(({ dialog }, folder) => {
@@ -88,16 +63,18 @@ describe('the real app, with what Settings says', () => {
   });
 
   it("unlocks a file host's link through a connected AllDebrid, and downloads it", async () => {
-    profile = await scratchProfile();
+    const profile = await run.profile();
     const body = randomBytes(512 * KIB);
-    host = await startRangeServer({ body });
+    const host = run.keep(await startRangeServer({ body }));
     const link = 'https://hoster.example/file/e2e';
-    service = await startAllDebridServer({
-      accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
-      hosts: { hoster: ['hoster.example'] },
-      links: { [link]: { direct: host.url, filename: 'via-service.bin' } },
-    });
-    scia = await launchScia(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const service = run.keep(
+      await startAllDebridServer({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+        hosts: { hoster: ['hoster.example'] },
+        links: { [link]: { direct: host.url, filename: 'via-service.bin' } },
+      }),
+    );
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
     const { page } = scia;
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByRole('button', { name: 'Connect' }).click();

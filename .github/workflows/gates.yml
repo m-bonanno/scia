@@ -84,7 +84,7 @@ jobs:
         with:
           node-version-file: .nvmrc
           cache: npm
-      # Electron is pinned in apps/desktop/package.json: its download changes only with it.
+      # Electron is pinned in apps/desktop/package.json: the key changes with that file.
       - name: Cache Electron's download
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

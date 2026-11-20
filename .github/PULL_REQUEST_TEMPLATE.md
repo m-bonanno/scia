@@ -35,7 +35,8 @@ _What this PR deliberately does not do._
 ## Test plan
 
 - [ ] The gates, all of them (`docs/development/review-flow.md`) — green: _N tests passed_
-- [ ] Real-runtime evidence _(shell, boot, quit, packaging)_: _what ran, what the log says_
+- [ ] E2E specs _(shell, boot, quit, a download in the real app)_: _which spec holds it, seen failing with its line taken away_
+- [ ] Real-runtime evidence _(what the E2E suite cannot reach: what the system draws, packaging, a long run)_: _what ran, what the log says_
 - [ ] Keyboard-only path checked _(UI changes)_
 - [ ] Light and dark variants checked, in the default theme _(UI changes; every theme when a token or a pairing of tokens changes)_
 - [ ] Manual smoke: _what to do → expected outcome_

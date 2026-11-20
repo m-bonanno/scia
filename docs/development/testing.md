@@ -1,12 +1,12 @@
 # Testing
 
-| Layer       | Command                    | What it proves                                                                                               |
-| ----------- | -------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Unit        | `npm run test:unit`        | Rules: the domain, desktop engines, extension logic, React components                                        |
-| Integration | `npm run test:integration` | The downloader against a real HTTP host and a real folder; main's ear on the engine against a real HTTP host |
-| Feature     | `npm run test:feature`     | The engine's API: tokens, scopes, status codes                                                               |
-| All         | `npm test`                 | The three above                                                                                              |
-| E2E         | `npm run test:e2e`         | The built app, started by Electron: what a person does, against local hosts (`npm run build` first)          |
+| Layer       | Command                    | What it proves                                                                                                 |
+| ----------- | -------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| Unit        | `npm run test:unit`        | Rules: the domain, desktop engines, extension logic, React components                                          |
+| Integration | `npm run test:integration` | The downloader against a real HTTP host and a real folder; main's ear on the engine against a real HTTP host   |
+| Feature     | `npm run test:feature`     | The engine's API: tokens, scopes, status codes                                                                 |
+| All         | `npm test`                 | The three above                                                                                                |
+| E2E         | `npm run test:e2e`         | The built app, started by Electron: what a person does, against hosts on this computer (`npm run build` first) |
 
 ## Where CI runs them
 
@@ -37,14 +37,15 @@ A spec that holds on one system and not on the other is a bug of the spec or of 
 
 `apps/desktop/e2e/`, run by Vitest as the project `e2e` with `playwright-core`'s Electron driver ([ADR 0008](../adr/0008-the-delivery-pipeline.md)). It starts the app `npm run build` made, as `npm start` does — not the packaged exe, whose installer is the smoke test's (#92).
 
-- **One app at a time** (`fileParallelism: false`), each started by `launchScia` (`e2e/scia.ts`) with a profile of its own (`scratchProfile`: its log, its engine's state, its downloads) and `--port=0`, the engine taking a free port: a spec never meets another, another session's run, or the installed Scia.
-- **Hosts and services are local**, the ones the other layers use: `startRangeServer` and `startAllDebridServer`, imported from `@scia/server/testing/*`. Every key is made up.
-- **A person's road**: links are pasted in the bar and its button pressed (`paste`), Settings is opened and its controls used, the window is closed with `BrowserWindow.close()` from main — Electron's documented equivalent of its X: a close the window prevents and hands to main. The one thing answered for the person is the system's folder dialog, which a script cannot press (`dialog.showOpenDialog` replaced in main).
+- **One app at a time** (`fileParallelism: false`), each started by `launchScia` (`e2e/scia.ts`) with a profile of its own (`scratchProfile`: its log, its engine's state, its downloads) and `--port=0`, the engine taking a free port: a spec never meets another, another session's run, or the installed Scia. `launchScia` sets the port and the profile itself, and refuses a spec's own.
+- **What a spec starts ends after it, whatever happened** (`useRun`): its apps — closed, and killed when they do not end, also when their start failed — its hosts and services, its profiles; and the log of main is printed for a spec that failed, as a CI runner keeps nothing else.
+- **Hosts and services are local**, the ones the other layers use: `startRangeServer` and `startAllDebridServer`, imported from `@scia/server/testing/*`, and `until` from `@scia/server/testing/scratch.ts`. **No spec reaches a host that is not on this computer**: with no service connected, Scia still asks AllDebrid which hosts are its own (ADR 0006), so `launchScia` points every app at a simulated AllDebrid that knows no account, unless the spec names its own. Every key is made up.
+- **A person's road**: links are pasted in the bar and its button pressed (`paste`), Settings is opened and its controls used, the window is closed with `BrowserWindow.close()` from main — Electron's documented equivalent of its X: a close the window prevents and hands to main, the same road as the system's close message of "Proving the real app", item 5. The one thing answered for the person is the system's folder dialog, which a script cannot press (`dialog.showOpenDialog` replaced in main).
 - **What a row does not say is read from the engine**, as the page reads it (`downloadsOf`): the bytes that arrived, the status of every download. `allCompleted` is false for an empty list.
-- **Every wait is for a state** (`until`, on `performance.now()`), with bounds set for a cold start on a CI runner. A bound on a time is set against what the app does without the thing held — the speed limit's spec is owed four seconds, waits for more than two, and the file arrives in well under half a second without the limit.
+- **Every wait is for a state** (`until`, on `performance.now()`), with bounds set for a cold start on a CI runner. A bound on a time is set against what the app does without the thing held, and counted from where the thing begins — the speed limit's spec is owed eight seconds from the host's first range, waits for more than six, and the file arrives in milliseconds without the limit, also when AllDebrid's public list never answers; at twice the limit it would take four.
 - Each spec was seen failing with the line it holds taken away; a new one is too (`.claude/gotchas.md`, "Specs").
 
-What it does not reach, and stays with a person or with a harness: the system's notifications and the tray as they are drawn, a hand on the mouse or the keys, the packaged app (the smoke test, #92), Linux.
+Run locally, its windows open on the screen, and a first close into the tray shows the system's notification, every profile being new. What it does not reach, and stays with a person or with a harness: the system's notifications and the tray as they are drawn, a hand on the mouse or the keys, the packaged app (the smoke test, #92), Linux.
 
 ## Proving the real app
 
