@@ -1,0 +1,54 @@
+# ADR 0007 — Automatic updates, from the releases of this repository
+
+- **Status**: accepted
+- **Date**: 2026-11-20
+
+## Context
+
+An installed Scia never looks for a new version (roadmap M1, "Automatic updates"; #82). Whoever installed a release keeps it until they go back to the releases page by themselves.
+
+The owner decided how Scia updates itself (20 November 2026, on #82):
+
+1. **An installed Scia receives stable releases only.** A switch in Settings, **off by default**, lets it receive the betas too: the owner turns it on to try them.
+2. **It downloads an update by itself, in silence, and installs it when Scia is quit.** No question, and **never a restart while a download is running**.
+3. **Every release carries the installer and what the updater reads, betas included.** Until now a beta carried notes only, its installers built on request ([`release-flow.md`](../development/release-flow.md)); the beta switch would have nothing to read.
+4. **After the install at quit, Scia stays closed.** The person asked to quit; Scia is the new version the next time it is opened.
+5. **The update is downloaded only while Scia downloads nothing** — nothing running, nothing waiting. It is fetched by main, outside the speed limit of Settings, and must not take the person's bandwidth or pass the limit they chose.
+
+The installers are not signed: a certificate is a paid service, which needs the owner's decision and an ADR of its own (root `CLAUDE.md`, "Zero infrastructure cost").
+
+What follows was read on 20 November 2026 in the code of the versions Scia uses — electron-updater 6.8.11, electron-builder 26.18.0 and its NSIS templates — and in an installer built from this repository with `--publish never`.
+
+## Decision
+
+1. **electron-updater, with its GitHub provider, reading the releases of this repository** (`publish` in `apps/desktop/electron-builder.yml`: provider `github`, owner `m-bonanno`, repo `scia`). electron-builder writes from it `app-update.yml` inside the app — where to look, and the cache folder `scia-updater` under `%LOCALAPPDATA%` — and, beside the installer, `latest.yml` (the version, the installer's name, size and SHA-512) and the installer's `.blockmap`, also with `--publish never`. The repository is public (#28): the provider reads `github.com/m-bonanno/scia/releases.atom` and `/releases/latest` and downloads from `/releases/download/<tag>/…`, with no token and not through the API, whose limit it does not meet. electron-updater is plain JavaScript, bundled into `main.cjs` with the rest of main: no native module.
+2. **Every release the workflow makes carries `Scia-Setup-<v>.exe`, its `.blockmap` and `latest.yml`**, beta or stable (decision 3). electron-builder names the file `latest.yml` for a beta too — the GitHub provider has no channel files unless one is configured — and electron-updater reads `latest.yml` of a pre-release when it finds no `beta.yml` there.
+3. **Which releases are read is the setting `betaUpdates`** of the engine (`state.json`, default `false`), which main asks the engine for, as it asks for the theme. Off, electron-updater's `allowPrerelease` is off and it reads `/releases/latest`, which is GitHub's newest release that is not a pre-release. On, it reads the newest release of the feed, beta or stable. **Never a version older than the one installed** (`allowDowngrade` stays off): a beta whose switch is turned off waits for a stable newer than itself.
+4. **Main checks once the engine is ready, then every six hours while Scia runs; after a check that failed, an hour later.** A check whose setting the engine did not say in time is put off an hour: no channel is guessed. Main checks only where a release carries an installer for its system — Windows today — and only in the packaged app.
+5. **`autoDownload` is off: main downloads the update when the engine has nothing running or waiting**, told by the engine's own events, which main already follows — never by asking on a timer. A download of the person's that starts while the update is being fetched cancels that fetch; it starts again when the engine is idle again. The SHA-512 of `latest.yml` is checked before the file is kept.
+6. **The update is installed on Scia's own quit path, not on electron-updater's.** Its `autoInstallOnAppQuit` is off. The `before-quit` handler ([`apps/desktop/CLAUDE.md`](../../apps/desktop/CLAUDE.md), "Quitting never hangs") hides the window, stops the engine — which writes its state, and is stopped anyway after `STOP_LIMIT_MS` — and only then, when an update is downloaded, starts its installer, detached, silent and with no `--force-run`; then `app.exit(0)`. Starting the installer is a spawn: it adds no wait to the quit.
+   - **Only a quit the person asked for installs**: "Quit" in the tray, or closing the window with nothing left to download (`WindowCloser`). Not a quit that comes from the system, such as the end of a session: the installer would be cut off with it.
+   - **A beta downloaded while the switch was on is installed only if the switch is still on at the quit**: main asks the engine, before stopping it, within `ENGINE_ANSWER_LIMIT_MS`, and only when the update waiting is a beta. An engine that does not say leaves it uninstalled.
+   - **The order is the reason for it.** The NSIS installer started with `--updated` waits 300 ms, then a second, for Scia to exit, and then ends whatever runs from the install folder, forcibly at the end (`_CHECK_APP_RUNNING` in electron-builder's templates). electron-updater's own hook starts it from Electron's `quit` event, with no say over the engine, which could be ended while it writes its state; and `app.exit`, how Scia's quit ends, does not emit `will-quit`.
+7. **Scia's start never depends on the updater.** The first check comes after the engine is ready, nothing in the start waits on it, and every failure of the updater — a check, a download, a file that does not match its SHA-512, an installer that does not start — is a line in `logs/main.log` and a later try, never a dialog and never a stop.
+
+## Alternatives considered
+
+- **Install as soon as the update is downloaded** (`quitAndInstall`): a restart nobody asked for, in the middle of a download (decision 2).
+- **electron-updater's own install on quit** (`autoInstallOnAppQuit`): the installer could end the engine before its state is written (decision 6).
+- **Download at once, under or beside the speed limit**: the person's limit is for everything Scia takes from the network; electron-updater has no limit of its own, and an update is not urgent (decision 5).
+- **A beta carries no installer, built on request** (as until now): the newest release of the feed would carry no `latest.yml`, and a Scia following the betas would fail every check until a beta with installers came (decision 3).
+- **A manifest signed with a key of the project** (electron-updater's `updateManifestPublicKey`): not in the version used. It would protect against a release whose files were replaced, not against an account or a workflow that publishes — which signs too.
+- **Squirrel.Windows, or an updater of Scia's own**: electron-builder already makes the NSIS installer, and electron-updater is its pair.
+
+## Consequences
+
+- **The installers are not signed, and an update is installed all the same.** With no `publisherName` in `app-update.yml`, electron-updater does not verify a signature on Windows; what it checks is the SHA-512 that `latest.yml` gives, read from the same release over HTTPS. Scia trusts an update as much as a person trusts the installer on the release page, and no more: whoever can publish a release of this repository can change every Scia that follows it.
+- **SmartScreen speaks once, at the first install.** The browser marks the installer it saves, and Windows shows SmartScreen's warning for an unsigned program. An update is fetched by Scia, not by a browser, and started by Scia: it does not pass through SmartScreen. That is how an updater works, not a protection taken away: no mark is removed, and none is written on a file Scia fetches for itself (ADR 0003 marks what the person downloads).
+- **Scia speaks to GitHub**: once the engine is ready, then every six hours while it runs (an hour after a failure), for the feed of releases and `latest.yml` — and for the installer, when there is one to take. GitHub sees the address of the computer and electron-updater's user agent. The README and `docs/product/vision.md` have to say so, from the version that checks.
+- **A release is readable before it is complete.** semantic-release publishes the release, and the installers job attaches its files minutes later. A check that comes in between, or after an installers job that failed, finds no `latest.yml` on the newest release: the check fails, and the next one tries again. A Scia following the betas does not fall back to an older release meanwhile. A stable is read only through `/releases/latest`, so the betas never get in the way of a Scia that does not follow them.
+- **Every merge into `develop` that releases builds a Windows installer**: some fifteen minutes of a GitHub runner, free for a public repository.
+- **The first update downloads the whole installer** (about 120 MB); the blockmap lets a later one fetch only what changed, and electron-updater falls back to the whole file when it cannot.
+- **An installer cut off midway is the installer's window, not Scia's.** In update mode it runs the old version's uninstaller, which removes the program files — never `%APPDATA%\Scia`, where the downloads, the settings and the keys are — and then writes the new ones. Cut off between the two — a power cut — no Scia is left to start, and the installer of the release page puts it back with nothing lost. Scia keeps that window as small as it can: the installer it starts is complete and checked, and it starts only at a quit the person asked for, never at the end of a session.
+- **A Scia already installed has no updater**: updates begin with the first version that has one; the ones before are updated by hand once.
+- **Linux is not updated.** The updater runs where a release carries an installer for the system, and the Linux job of the workflow is off (#73). When it is on, AppImage is what electron-updater updates.

@@ -1,7 +1,8 @@
 name: Release
 
-# develop → vX.Y.Z-beta.N (tag and notes only). main → vX.Y.Z, with the installers attached.
-# Dispatch with `installer_tag` to build the installers of a tag that already exists.
+# develop → vX.Y.Z-beta.N, main → vX.Y.Z: each with its notes, the installer and what the updater
+# reads (docs/adr/0007-automatic-updates.md). Dispatch with `installer_tag` to build them again for a
+# tag that already exists.
 on:
   push:
     branches: [main, develop]
@@ -54,26 +55,28 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "Tag at HEAD: ${TAG:-none}"
 
-  # A stable only by default; a beta's installers when asked for, with installer_tag.
+  # Every tag the release made, beta or stable: the beta switch of Settings reads the betas' files.
   installers:
     name: Installer (${{ matrix.name }})
     needs: release
     if: |
       always() &&
       (github.event.inputs.installer_tag != '' ||
-       (needs.release.result == 'success' && needs.release.outputs.tag != '' && !contains(needs.release.outputs.tag, '-')))
+       (needs.release.result == 'success' && needs.release.outputs.tag != ''))
     permissions:
       contents: write
     strategy:
       fail-fast: false
       # Linux is off until it is tried (#28). Its entry, then: os ubuntu-latest,
-      # cache ~/.cache/electron-builder, artefacts 'Scia-$V.AppImage Scia-$V.deb'.
+      # cache ~/.cache/electron-builder, artefacts 'Scia-$V.AppImage Scia-$V.deb latest-linux.yml'.
       matrix:
         include:
           - name: Windows
             os: windows-latest
             cache: ~/AppData/Local/electron-builder/Cache
-            artefacts: 'Scia-Setup-$V.exe'
+            # The installer, the blocks a later update fetches only the changes of, and what the
+            # updater reads first: its version, its name and its SHA-512.
+            artefacts: 'Scia-Setup-$V.exe Scia-Setup-$V.exe.blockmap latest.yml'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 25
     defaults:
