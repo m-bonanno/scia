@@ -1,10 +1,10 @@
-// A stand-in for yt-dlp in the specs of its adapter: it answers by the address it is given, and
-// writes the arguments it was given where SCIA_FAKE_YT_DLP_ARGS says.
+// A stand-in for yt-dlp in the specs of its adapter: it answers by the address it is given. Its
+// first argument is a file it writes what it was given into — its arguments and its environment —
+// since the adapter hands it no environment of the spec's.
 import { writeFileSync } from 'node:fs';
 
-const args = process.argv.slice(2);
-if (process.env.SCIA_FAKE_YT_DLP_ARGS)
-  writeFileSync(process.env.SCIA_FAKE_YT_DLP_ARGS, JSON.stringify(args));
+const [given, ...args] = process.argv.slice(2);
+writeFileSync(given, JSON.stringify({ args, env: process.env }));
 const url = args.at(-1) ?? '';
 const fail = (message) => {
   process.stderr.write(`ERROR: ${message}\n`);

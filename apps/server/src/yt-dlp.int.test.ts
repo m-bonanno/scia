@@ -10,21 +10,29 @@ const FAKE = join(import.meta.dirname, 'testing', 'fake-yt-dlp.mjs');
 
 describe('YtDlp against a process that answers as yt-dlp does', () => {
   let folder: Awaited<ReturnType<typeof scratchFolder>>;
-  let argsFile: string;
+  let givenFile: string;
   const never = new AbortController().signal;
 
   beforeEach(async () => {
     folder = await scratchFolder();
-    argsFile = join(folder.path, 'args.json');
-    process.env.SCIA_FAKE_YT_DLP_ARGS = argsFile;
+    givenFile = join(folder.path, 'given.json');
   });
   afterEach(async () => {
-    delete process.env.SCIA_FAKE_YT_DLP_ARGS;
     await folder.remove();
   });
 
   const reader = (timeoutMs = 10_000) =>
-    new YtDlp({ command: process.execPath, prefix: [FAKE], timeoutMs });
+    new YtDlp({
+      command: process.execPath,
+      prefix: [FAKE, givenFile],
+      timeoutMs,
+      tempDir: join(folder.path, 'temp'),
+    });
+  const given = () =>
+    JSON.parse(readFileSync(givenFile, 'utf8')) as {
+      args: string[];
+      env: Record<string, string>;
+    };
   const failureOf = (promise: Promise<unknown>) =>
     promise.then(
       () => undefined,
@@ -57,7 +65,7 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
   it('never lets a site be guessed, a restriction be got around, a cookie or a setting of this computer be read', async () => {
     await reader().read('https://site.example/video/1', never);
 
-    const args = JSON.parse(readFileSync(argsFile, 'utf8')) as string[];
+    const { args } = given();
     const valueOf = (option: string) => args[args.indexOf(option) + 1];
     expect(args).toEqual(
       expect.arrayContaining([
@@ -76,6 +84,23 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     ).toBe(false);
     // The address last, after "--": an address that begins with a dash is not an option.
     expect(args.slice(-2)).toEqual(['--', 'https://site.example/video/1']);
+  });
+
+  it('hands yt-dlp nothing of the engine’s environment — not its token — but a folder for its temporary files', async () => {
+    process.env.SCIA_API_TOKEN = 'the-engine-token-0000';
+    try {
+      await reader().read('https://site.example/video/1', never);
+    } finally {
+      delete process.env.SCIA_API_TOKEN;
+    }
+
+    const { env } = given();
+    expect(JSON.stringify(env)).not.toContain('the-engine-token-0000');
+    expect(Object.keys(env).filter((name) => name.startsWith('SCIA_'))).toEqual([]);
+    // Each system's name for it: yt-dlp's builds unpack themselves there before they start.
+    expect(env.TEMP).toBe(join(folder.path, 'temp'));
+    expect(env.TMP).toBe(join(folder.path, 'temp'));
+    expect(env.TMPDIR).toBe(join(folder.path, 'temp'));
   });
 
   it('answers nothing for a page of a site it does not know, so that the page is fetched as it stands', async () => {
@@ -111,6 +136,7 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     const missing = new YtDlp({
       command: join(folder.path, 'no-such-program.exe'),
       timeoutMs: 5000,
+      tempDir: folder.path,
     });
     expect(await failureOf(missing.read('https://site.example/video/1', never))).toBe(
       PageFailure.Unreadable,

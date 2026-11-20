@@ -1,3 +1,4 @@
+import { tmpdir } from 'node:os';
 import { DEFAULT_API_PORT } from '@scia/contracts';
 import { ALLDEBRID_API } from './alldebrid.ts';
 
@@ -16,6 +17,9 @@ export interface ServerConfig {
   // The yt-dlp that reads the page of a video (docs/adr/0008); without one, a page is fetched as
   // it stands — under plain Node, and where Scia ships no build of it.
   readonly ytDlp: string | undefined;
+  // The system's folder for temporary files, which main names: the engine's environment does not
+  // carry the system's own variables. The programs the engine runs write theirs there.
+  readonly tempDir: string;
 }
 
 // The key of the person's account goes wherever this address says. It is replaced only by an
@@ -54,6 +58,7 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
   }
   const staticDir = env.SCIA_STATIC_DIR;
   const ytDlp = env.SCIA_YT_DLP;
+  const tempDir = env.SCIA_TEMP_DIR;
   return {
     port,
     apiToken,
@@ -63,5 +68,6 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
     version: env.SCIA_VERSION ?? '0.0.0',
     alldebridApi: serviceAddress(env.SCIA_ALLDEBRID_API, 'SCIA_ALLDEBRID_API', ALLDEBRID_API),
     ytDlp: ytDlp === undefined || ytDlp === '' ? undefined : ytDlp,
+    tempDir: tempDir === undefined || tempDir === '' ? tmpdir() : tempDir,
   };
 }

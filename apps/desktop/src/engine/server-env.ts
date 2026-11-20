@@ -6,6 +6,8 @@ export interface ServerEnvInput {
   readonly port: number;
   readonly version: string;
   readonly systemRoot: string | undefined;
+  // The system's folder for temporary files: what the engine's own programs (yt-dlp) write there.
+  readonly tempDir: string;
   // A simulated AllDebrid for this run (engine/launch-options.ts); the engine refuses one that
   // is not on this computer.
   readonly alldebridApi?: string | undefined;
@@ -21,6 +23,7 @@ export function buildServerEnv(input: ServerEnvInput): Record<string, string> {
     SCIA_DOWNLOAD_DIR: input.layout.downloadDir,
     SCIA_STATIC_DIR: input.layout.rendererDir,
     SCIA_VERSION: input.version,
+    SCIA_TEMP_DIR: input.tempDir,
     ...(input.alldebridApi === undefined ? {} : { SCIA_ALLDEBRID_API: input.alldebridApi }),
     ...(input.layout.ytDlp === undefined ? {} : { SCIA_YT_DLP: input.layout.ytDlp }),
     ...(input.systemRoot === undefined ? {} : { SystemRoot: input.systemRoot }),

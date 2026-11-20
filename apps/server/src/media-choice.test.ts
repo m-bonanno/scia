@@ -44,14 +44,24 @@ describe('chooseMedia', () => {
     expect(chosen.info).toEqual({ ext: 'mp4', height: 240 });
   });
 
-  it('prefers an mp4 between two of the same height, and the later one the site lists between equals', () => {
+  it('takes an mp4, which every player opens, over a format with more lines of picture in another container', () => {
     expect(
       chooseMedia([
-        file({ url: 'https://cdn.example/a.webm', ext: 'webm' }),
-        file({ url: 'https://cdn.example/b.mp4', ext: 'mp4' }),
-        file({ url: 'https://cdn.example/c.webm', ext: 'webm' }),
+        file({ url: 'https://cdn.example/a.webm', ext: 'webm', height: 1080 }),
+        file({ url: 'https://cdn.example/b.mp4', ext: 'mp4', height: 240 }),
+        file({ url: 'https://cdn.example/c.ogv', ext: 'ogv', height: 304 }),
       ]).url,
     ).toBe('https://cdn.example/b.mp4');
+    // With no mp4 at all, the most lines of picture in whatever container.
+    expect(
+      chooseMedia([
+        file({ url: 'https://cdn.example/a.webm', ext: 'webm', height: 480 }),
+        file({ url: 'https://cdn.example/c.ogv', ext: 'ogv', height: 304 }),
+      ]).url,
+    ).toBe('https://cdn.example/a.webm');
+  });
+
+  it('takes the later one the site lists between equals', () => {
     expect(
       chooseMedia([
         file({ url: 'https://cdn.example/first.mp4' }),

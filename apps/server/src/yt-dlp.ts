@@ -90,6 +90,21 @@ export interface YtDlpOptions {
   readonly prefix?: readonly string[];
   // A page that has said nothing by then is given up.
   readonly timeoutMs: number;
+  // Where yt-dlp may write its temporary files: its builds unpack themselves there each time they
+  // start, and stop at once without one.
+  readonly tempDir: string;
+}
+
+// yt-dlp's whole environment, built from nothing: the engine's own holds the API's token, which
+// is no business of a program that reads pages. SystemRoot is what Windows' network needs.
+function environmentOf(tempDir: string): Record<string, string> {
+  const systemRoot = process.env.SystemRoot;
+  return {
+    ...(systemRoot === undefined ? {} : { SystemRoot: systemRoot }),
+    TEMP: tempDir,
+    TMP: tempDir,
+    TMPDIR: tempDir,
+  };
 }
 
 interface Run {
@@ -138,8 +153,9 @@ export class YtDlp implements PageReader {
   #run(url: string, signal: AbortSignal): Promise<Run> {
     return new Promise((resolve, reject) => {
       signal.throwIfAborted();
-      const { command, prefix = [], timeoutMs } = this.#options;
+      const { command, prefix = [], timeoutMs, tempDir } = this.#options;
       const child = spawn(command, [...prefix, ...ALWAYS, '--', url], {
+        env: environmentOf(tempDir),
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
       });

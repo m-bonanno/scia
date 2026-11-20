@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { serve } from '@hono/node-server';
 import { AllDebrid } from './alldebrid.ts';
 import { createApp } from './app.ts';
-import { parseConfig } from './config.ts';
+import { parseConfig, type ServerConfig } from './config.ts';
 import { DownloadManager } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
 import { Integrations } from './integrations.ts';
@@ -44,13 +44,19 @@ const PAGE_READ_LIMIT_MS = 90_000;
 
 // A yt-dlp that is named and missing reads no page: pages are fetched as they stand, as without
 // one, rather than every page failing for a program that is not there.
-function pageReaderOf(command: string | undefined, logger: Logger): { pageReader?: PageReader } {
+function pageReaderOf(
+  config: Pick<ServerConfig, 'ytDlp' | 'tempDir'>,
+  logger: Logger,
+): { pageReader?: PageReader } {
+  const command = config.ytDlp;
   if (command === undefined) return {};
   if (!existsSync(command)) {
     logger.warn('page_reader_missing', {});
     return {};
   }
-  return { pageReader: new YtDlp({ command, timeoutMs: PAGE_READ_LIMIT_MS }) };
+  return {
+    pageReader: new YtDlp({ command, timeoutMs: PAGE_READ_LIMIT_MS, tempDir: config.tempDir }),
+  };
 }
 
 export async function main(
@@ -77,7 +83,7 @@ export async function main(
     defaultDirectory: config.downloadDir,
     logger,
     resolver: integrations,
-    ...pageReaderOf(config.ytDlp, logger),
+    ...pageReaderOf(config, logger),
   });
 
   let port = config.port;

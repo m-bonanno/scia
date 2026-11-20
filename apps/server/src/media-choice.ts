@@ -45,9 +45,14 @@ function isOneFileWithSound(format: PageFormat): boolean {
   );
 }
 
-// Higher is better: the lines of picture, then an mp4, which every player opens.
+// Higher is better: an mp4 — every player opens one, and it is what the owner asked for (#89) —
+// then the lines of picture.
 function rank(format: PageFormat): [number, number] {
-  return [format.height ?? -1, format.ext === 'mp4' ? 1 : 0];
+  return [format.ext === 'mp4' ? 1 : 0, format.height ?? -1];
+}
+
+function isAtLeast(a: readonly [number, number], b: readonly [number, number]): boolean {
+  return a[0] > b[0] || (a[0] === b[0] && a[1] >= b[1]);
 }
 
 // The best the site offers that Scia can fetch as it stands: one file, with picture and sound,
@@ -57,9 +62,7 @@ export function chooseMedia(formats: readonly PageFormat[]): ChosenMedia {
   let best: PageFormat | undefined;
   for (const format of formats) {
     if (!isOneFileWithSound(format)) continue;
-    const [height, mp4] = rank(format);
-    const [bestHeight, bestMp4] = best === undefined ? [-2, 0] : rank(best);
-    if (height > bestHeight || (height === bestHeight && mp4 >= bestMp4)) best = format;
+    if (best === undefined || isAtLeast(rank(format), rank(best))) best = format;
   }
   if (best !== undefined) {
     return { url: best.url, headers: best.headers, info: { ext: best.ext, height: best.height } };

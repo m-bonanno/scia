@@ -87,6 +87,7 @@ async function boot(): Promise<void> {
     port: enginePort,
     version: app.getVersion(),
     systemRoot: process.env.SystemRoot,
+    tempDir: app.getPath('temp'),
     alldebridApi: launch.alldebridApi,
   });
   // The keys of the services the engine is connected to: the engine asks, main keeps them
