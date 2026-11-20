@@ -47,5 +47,4 @@ To get the installers of a beta, or to build again those of a stable: **Actions 
 
 - **Auto-update.** The app does not look for new versions (roadmap M1). When it does, it reads the installers of the releases of this repository, public on the owner's decision of 20 November 2026 (#28), with no token.
 - **Signed installers.** Windows shows SmartScreen's warning for an unsigned `.exe`.
-- **Linux.** The first stable release ships for Windows only, and the Linux job of the workflow is off until Linux is tried (roadmap, "After the first stable release").
-- **No installer has come out of CI, and the Linux packages have never been built anywhere.** The installers job has never run: its first run is to be the beta whose installers prove automatic updates, before the first stable release — expect to fix it there.
+- **Linux.** The first stable release ships for Windows only, the Linux job of the workflow is off until Linux is tried (roadmap, "After the first stable release"), and the Linux packages have never been built anywhere.

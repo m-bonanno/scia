@@ -5,7 +5,7 @@ The state is the real one: an item is "done" only if it was verified in the real
 ## M0 — Foundations (done)
 
 - Monorepo, tooling, hooks, tests on four layers.
-- Repository on GitHub with GitFlow, checks on PRs, automatic versions and release notes (semantic-release). The Windows installer builds locally, and the app it is made from starts and quits cleanly on a scratch profile; the installer itself has not been run. **No installer has been produced by CI yet, and the Linux packages have never been built** (`docs/development/release-flow.md`, "Not there yet").
+- Repository on GitHub with GitFlow, checks on PRs, automatic versions and release notes (semantic-release). The Windows installer is built by CI (the Release workflow, on a dispatch with `installer_tag`; first for `v1.0.0-beta.10`, 20 November 2026) and was installed and run on the owner's Windows machine: the installed app downloaded a file on a scratch profile and quit cleanly (#78, #79). It has not been tried on a clean machine (M1, below). **The Linux packages have never been built** (`docs/development/release-flow.md`, "Not there yet").
 - Engine: downloads over several connections with dynamic segmentation, pause and resume, a queue, retries after an interruption, safe names that never overwrite, state saved on disk.
 - Electron app: a window with its own title bar, supervision of the engine, orderly quit, resume after a restart.
 - Interface: adding by paste, a list with the segment bar, filters, basic settings.
