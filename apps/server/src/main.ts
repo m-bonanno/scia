@@ -57,6 +57,7 @@ export async function main(
     store: new JsonStateStore(join(config.dataDir, 'state.json')),
     defaultDirectory: config.downloadDir,
     logger,
+    resolver: integrations,
   });
 
   let port = config.port;

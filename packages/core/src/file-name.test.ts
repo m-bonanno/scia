@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   FALLBACK_FILE_NAME,
   fileNameFromContentDisposition,
+  fileNameFromHost,
   fileNameFromUrl,
   sanitizeFileName,
   uniqueFileName,
@@ -85,6 +86,29 @@ describe('fileNameFromContentDisposition', () => {
   it('answers nothing when the header names no file', () => {
     expect(fileNameFromContentDisposition('inline')).toBeUndefined();
     expect(fileNameFromContentDisposition('attachment; filename=""')).toBeUndefined();
+  });
+});
+
+describe('fileNameFromHost', () => {
+  it('keeps a plain name as it is', () => {
+    expect(fileNameFromHost('Film (2026).mkv')).toBe('Film (2026).mkv');
+  });
+
+  it('keeps only the name of a path, whichever way its slashes lean', () => {
+    expect(fileNameFromHost('../../etc/passwd')).toBe('passwd');
+    expect(fileNameFromHost('..\\..\\Start Menu\\run.exe')).toBe('run.exe');
+    expect(fileNameFromHost('C:\\Windows/system.ini')).toBe('system.ini');
+  });
+
+  it('makes the name one the disk takes', () => {
+    expect(fileNameFromHost('what: a "file"?.txt')).toBe('what_ a _file__.txt');
+    expect(fileNameFromHost('con.txt')).toBe('_con.txt');
+  });
+
+  it('answers nothing when there is no name', () => {
+    expect(fileNameFromHost('')).toBeUndefined();
+    expect(fileNameFromHost('   ')).toBeUndefined();
+    expect(fileNameFromHost('folder/')).toBeUndefined();
   });
 });
 

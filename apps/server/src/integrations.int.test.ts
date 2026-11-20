@@ -1,10 +1,11 @@
 import { IntegrationId } from '@scia/contracts';
 import { ServiceFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { AllDebrid, ServiceError } from './alldebrid.ts';
+import { AllDebrid } from './alldebrid.ts';
 import { Integrations, KeyNotKeptError } from './integrations.ts';
 import { type KeyVault, MemoryVault } from './key-vault.ts';
 import type { Logger } from './logger.ts';
+import { ServiceError } from './service-error.ts';
 import { type AllDebridServer, startAllDebridServer } from './testing/alldebrid-server.ts';
 
 // Made up: no account anywhere has these keys.

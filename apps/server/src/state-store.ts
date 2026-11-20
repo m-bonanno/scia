@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
-import { segmentSchema, settingsSchema } from '@scia/contracts';
+import { IntegrationId, segmentSchema, settingsSchema } from '@scia/contracts';
 import { z } from 'zod';
 
 export const recordSchema = z.object({
@@ -20,6 +20,10 @@ export const recordSchema = z.object({
   downloadedBytes: z.number(),
   failure: z.enum(DownloadFailure).nullable(),
   failureStatus: z.number().nullable(),
+  // The service the link goes through, and the direct link it gave: asked for once, used again
+  // after a pause or a restart. A state written before services existed has neither.
+  via: z.enum(IntegrationId).nullable().catch(null),
+  unlockedUrl: z.string().nullable().catch(null),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });

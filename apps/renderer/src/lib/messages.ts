@@ -1,5 +1,5 @@
 import { ApiErrorCode, type IntegrationId } from '@scia/contracts';
-import { ServiceFailure } from '@scia/core';
+import { ServiceFailure, UnlockFailure } from '@scia/core';
 import { ApiError } from './api.ts';
 
 // Errors: the fact, then the remedy. No blame, no "Oops".
@@ -33,6 +33,8 @@ const KEY_NOT_TAKEN: Readonly<Record<string, (service: string) => string>> = {
   [ApiErrorCode.KeyBlocked]: (service) =>
     `${service} refuses this key from this network. Check your ${service} account, then try again.`,
   [ApiErrorCode.AccountBanned]: (service) => `${service} says this account is banned.`,
+  [ApiErrorCode.NetworkRefused]: (service) =>
+    `${service} does not serve this network: it refuses servers and some VPNs.`,
   [ApiErrorCode.Unavailable]: (service) => `${service} is not answering. Try again in a moment.`,
   [ApiErrorCode.KeyNotKept]: () =>
     'Scia could not store the key safely on this computer. Nothing was connected.',
@@ -52,11 +54,49 @@ const SERVICE_TROUBLE: Readonly<Record<ServiceFailure, (service: string) => stri
   [ServiceFailure.KeyBlocked]: (service) =>
     `${service} refuses the key from this network. Check your ${service} account.`,
   [ServiceFailure.AccountBanned]: (service) => `${service} says this account is banned.`,
+  [ServiceFailure.NetworkRefused]: (service) =>
+    `${service} does not serve this network: it refuses servers and some VPNs.`,
   [ServiceFailure.Unavailable]: (service) => `${service} is not answering right now.`,
 };
 
 export function serviceTroubleMessage(failure: ServiceFailure, id: IntegrationId): string {
   return SERVICE_TROUBLE[failure](SERVICE_NAME[id]);
+}
+
+// Said on the row of a download whose link goes through a service, when the service did not
+// give a link for it. Every sentence begins with who said so.
+const LINK_NOT_UNLOCKED: Readonly<
+  Record<ServiceFailure | UnlockFailure, (service: string) => string>
+> = {
+  [ServiceFailure.KeyRefused]: (service) =>
+    `${service} no longer accepts the key. Connect it again in Settings, then retry.`,
+  [ServiceFailure.KeyBlocked]: (service) =>
+    `${service} refuses the key from this network. Check your account with it, then retry.`,
+  [ServiceFailure.AccountBanned]: (service) => `${service} says the account is banned.`,
+  [ServiceFailure.NetworkRefused]: (service) =>
+    `${service} does not serve this network: it refuses servers and some VPNs.`,
+  [ServiceFailure.Unavailable]: (service) => `${service} is not answering. Try again in a moment.`,
+  [UnlockFailure.NotPremium]: (service) =>
+    `${service} unlocks this link for premium accounts only.`,
+  [UnlockFailure.LinkDown]: (service) => `${service} says the file is no longer on its host.`,
+  [UnlockFailure.LinkPassword]: (service) =>
+    `${service} says the link asks for a password, which Scia cannot give yet.`,
+  [UnlockFailure.HostUnavailable]: (service) =>
+    `${service} cannot reach this host right now. Try again later.`,
+  [UnlockFailure.HostLimit]: (service) =>
+    `${service} says the account has reached its limit for this host. Try again later.`,
+  [UnlockFailure.LinkRefused]: (service) => `${service} could not unlock this link.`,
+  [UnlockFailure.NotConnected]: (service) =>
+    `${service} is no longer connected. Connect it in Settings, then retry.`,
+};
+
+// `via` is null when the service failed before it could say whether the link is one of its
+// own: the link belongs to no service yet, and the one that did not answer is not named.
+export function linkNotUnlockedMessage(
+  failure: ServiceFailure | UnlockFailure,
+  via: IntegrationId | null,
+): string {
+  return LINK_NOT_UNLOCKED[failure](via === null ? 'The connected service' : SERVICE_NAME[via]);
 }
 
 export function errorMessage(error: unknown): string {

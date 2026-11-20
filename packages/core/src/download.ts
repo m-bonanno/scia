@@ -1,3 +1,5 @@
+import { ServiceFailure, UnlockFailure } from './service.ts';
+
 export const DownloadStatus = {
   Queued: 'queued',
   Downloading: 'downloading',
@@ -17,6 +19,9 @@ export const DownloadFailure = {
   Disk: 'DISK',
   // The host closed the transfer before the announced size.
   Incomplete: 'INCOMPLETE',
+  // The link goes through a service, and the service refused or did not answer (service.ts).
+  ...ServiceFailure,
+  ...UnlockFailure,
 } as const;
 export type DownloadFailure = (typeof DownloadFailure)[keyof typeof DownloadFailure];
 

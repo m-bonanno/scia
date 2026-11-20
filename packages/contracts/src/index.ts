@@ -1,5 +1,6 @@
 import { DownloadFailure, DownloadStatus, FileKind, ServiceFailure } from '@scia/core';
 import { z } from 'zod';
+import { IntegrationId } from './integrations.ts';
 
 export { API_PREFIX, DEFAULT_API_PORT } from './endpoint.ts';
 export * from './integrations.ts';
@@ -46,6 +47,8 @@ export const downloadSchema = z.object({
   failure: z.enum(DownloadFailure).nullable(),
   // The host's answer behind an HTTP_STATUS failure.
   failureStatus: z.number().int().nullable(),
+  // The service the link goes through, or went through: it was not fetched as it stands.
+  via: z.enum(IntegrationId).nullable(),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });

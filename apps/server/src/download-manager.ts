@@ -10,6 +10,7 @@ import {
   DownloadStatus,
   etaSeconds,
   fileKindOfName,
+  fileNameFromHost,
   fileNameFromUrl,
   nextToStart,
   planSegments,
@@ -17,6 +18,7 @@ import {
   uniqueFileName,
 } from '@scia/core';
 import { DownloadTask } from './download-task.ts';
+import type { LinkResolver } from './link-resolver.ts';
 import { describeFailure, type Logger } from './logger.ts';
 import { type MarkDownloaded, markerFor } from './origin-mark.ts';
 import {
@@ -26,6 +28,7 @@ import {
   type RemoteSource,
   type RequestHeaders,
 } from './remote-source.ts';
+import { ServiceError } from './service-error.ts';
 import type { DownloadRecord, StateStore } from './state-store.ts';
 import { Throttle } from './throttle.ts';
 
@@ -62,6 +65,9 @@ export interface ManagerDeps {
   readonly store: StateStore;
   readonly defaultDirectory: string;
   readonly logger: Logger;
+  // What turns a hoster's link into a direct one, through a connected service. Without it
+  // every link is fetched as it stands.
+  readonly resolver?: LinkResolver;
   // What marks a finished file as coming from the network; the running system's by default.
   readonly markDownloaded?: MarkDownloaded;
   readonly now?: () => number;
@@ -82,8 +88,10 @@ interface Running {
   settled: Promise<void>;
 }
 
+// The page a link was on is said to the host of that link, never to the host a service sent
+// Scia to instead.
 function headersOf(record: DownloadRecord): RequestHeaders {
-  return record.referrer === null ? {} : { referer: record.referrer };
+  return record.referrer === null || record.via !== null ? {} : { referer: record.referrer };
 }
 
 function partPathOf(record: DownloadRecord): string {
@@ -172,6 +180,8 @@ export class DownloadManager {
         downloadedBytes: 0,
         failure: null,
         failureStatus: null,
+        via: null,
+        unlockedUrl: null,
         createdAt: new Date(this.#now()).toISOString(),
         completedAt: null,
       };
@@ -203,6 +213,8 @@ export class DownloadManager {
     if (!canResume(record.status)) {
       throw new ManagerError(ManagerRefusal.Conflict, 'Only a paused or failed download resumes.');
     }
+    // A link a service gave does not last: after a failure the service is asked for another.
+    if (record.status === DownloadStatus.Failed) record.unlockedUrl = null;
     record.status = DownloadStatus.Queued;
     record.failure = null;
     record.failureStatus = null;
@@ -325,6 +337,7 @@ export class DownloadManager {
       segments: progress.segments,
       failure: record.failure,
       failureStatus: record.failureStatus,
+      via: record.via,
       createdAt: record.createdAt,
       completedAt: record.completedAt,
     };
@@ -420,14 +433,15 @@ export class DownloadManager {
   async #run(record: DownloadRecord, running: Running): Promise<void> {
     const { signal } = running.controller;
     try {
-      const remote = await this.#deps.source.probe(record.url, headersOf(record), signal);
+      const url = await this.#address(record, signal);
+      const remote = await this.#deps.source.probe(url, headersOf(record), signal);
       await mkdir(record.directory, { recursive: true }).catch((error: unknown) => {
         throw new DiskError('The folder could not be made.', { cause: error });
       });
       this.#adopt(record, remote);
       const task = new DownloadTask({
         source: this.#deps.source,
-        url: record.url,
+        url,
         headers: headersOf(record),
         partPath: partPathOf(record),
         totalBytes: record.totalBytes,
@@ -464,7 +478,7 @@ export class DownloadManager {
     } else {
       record.status = DownloadStatus.Failed;
       record.failure =
-        error instanceof RemoteError
+        error instanceof RemoteError || error instanceof ServiceError
           ? error.failure
           : error instanceof DiskError
             ? DownloadFailure.Disk
@@ -476,6 +490,30 @@ export class DownloadManager {
         error: describeFailure(error),
       });
     }
+  }
+
+  // Where the bytes are: at the link itself, or — for a link a connected service takes — at
+  // the direct link the service gives for it. The service is asked once: its link is kept, and
+  // used again after a pause or a restart. The link that was added stays what the download
+  // is known by; the one the service gave is never shown and never logged.
+  async #address(record: DownloadRecord, signal: AbortSignal): Promise<string> {
+    const { resolver } = this.#deps;
+    if (resolver === undefined) return record.url;
+    if (record.unlockedUrl !== null) return record.unlockedUrl;
+    // A link that was a service's stays that service's: it is never fetched as it stands.
+    const service = record.via ?? (await resolver.serviceFor(record.url, signal));
+    if (service === undefined) return record.url;
+    if (record.via === null) {
+      record.via = service;
+      this.#changed();
+    }
+    const unlocked = await resolver.unlock(service, record.url, signal);
+    record.unlockedUrl = unlocked.url;
+    // The host of the direct link names the file when it does (#adopt); the service's name
+    // is the one to fall back on, and is a name from a host like any other.
+    const named = unlocked.fileName === undefined ? undefined : fileNameFromHost(unlocked.fileName);
+    if (!record.named && named !== undefined) record.fileName = named;
+    return unlocked.url;
   }
 
   // What the host says of the file, into the record: its name the first time, its size, whether
