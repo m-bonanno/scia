@@ -504,9 +504,12 @@ describe('DownloadManager and a link that is a page', () => {
       manager = undefined;
 
       const again = await open({ pageReader: reader });
+      const askedBefore = streams.asked.filter((path) => path.endsWith('.m3u8')).length;
       again.resume(added!.id);
-      // The host answers after 150 ms: the playlist is still on its way.
-      await new Promise((resolve) => setTimeout(resolve, 60));
+      // The task has asked for its playlist again, which the host holds for 150 ms.
+      await until(
+        () => streams!.asked.filter((path) => path.endsWith('.m3u8')).length > askedBefore,
+      );
 
       // The playlist is still on its way: the row says what was kept, not nothing.
       expect(again.find(added!.id).status).toBe(DownloadStatus.Downloading);
@@ -514,6 +517,33 @@ describe('DownloadManager and a link that is a page', () => {
       expect(again.find(added!.id).timeline?.segments.some((piece) => piece.downloaded > 0)).toBe(
         true,
       );
+    });
+
+    it('removes its own pieces when a stream comes back as a file on a retry', async () => {
+      const site = await host({ body: page, contentType: 'text/html' });
+      streams = await startFolderServer({ root: FIXTURES, delayMs: 150 });
+      const files = await host({ body: video });
+      let offered: PageFormat[] = [
+        formatAt(`${streams.url}/fmp4/index.m3u8`, { protocol: 'm3u8_native' }),
+      ];
+      const { reader } = aReader(async () => ({ title: 'Became a file', formats: offered }));
+      const downloads = await open({ pageReader: reader });
+      const [added] = downloads.add({ urls: [site.url] });
+      await until(() =>
+        (downloads.find(added!.id).timeline?.segments ?? []).some((piece) => piece.downloaded > 0),
+      );
+      await streams.close();
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+      const pieces = join(folder.path, 'downloads', 'Became a file.mp4.scia.pieces');
+      expect((await readdir(pieces)).some((name) => name.endsWith('.piece'))).toBe(true);
+
+      offered = [formatAt(files.url)];
+      downloads.resume(added!.id);
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+      expect(await readdir(join(folder.path, 'downloads'))).toEqual(['Became a file.mp4']);
+      expect(downloads.find(added!.id).timeline).toBeNull();
+      expect(Buffer.compare(await readFile(inDownloads('Became a file.mp4')), video)).toBe(0);
     });
 
     it("leaves another download's pieces alone when a file of the same name is added", async () => {
