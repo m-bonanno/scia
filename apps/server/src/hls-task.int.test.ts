@@ -130,15 +130,22 @@ describe('HlsTask against a real HTTP host', () => {
     );
     pause.abort(new Error('paused'));
     await expect(running).rejects.toThrow('paused');
-    const kept = first.progress().downloadedBytes;
-    const askedBefore = host.asked.filter((path) => path.endsWith('.mpegts')).length;
+    const kept = (first.progress().timeline?.segments ?? []).flatMap((piece, index) =>
+      piece.downloaded > 0 ? [index] : [],
+    );
 
     const second = task(`${host.url}/ts/index.m3u8`);
     await second.run(new AbortController().signal);
 
-    const piecesAsked = host.asked.filter((path) => path.endsWith('.mpegts'));
-    expect(kept).toBeGreaterThan(0);
-    expect(piecesAsked.length - askedBefore).toBe(3 - kept / 6580);
+    // Counted per piece, not after a moment: a request the first task sent before the pause can
+    // reach the host after it (#127).
+    const timesAsked = (index: number) =>
+      host.asked.filter((path) => path.endsWith(`/segment${String(index)}.mpegts`)).length;
+    expect(kept.length).toBeGreaterThan(0);
+    for (const index of [0, 1, 2]) {
+      if (kept.includes(index)) expect(timesAsked(index), `segment${String(index)}`).toBe(1);
+      else expect(timesAsked(index), `segment${String(index)}`).toBeGreaterThanOrEqual(1);
+    }
     expectAnMp4Of(await output(), 3);
   });
 
