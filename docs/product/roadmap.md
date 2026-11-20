@@ -66,7 +66,7 @@ The first stable release waits for every line below but magnets and a second ser
 
 In this order (the owner, 19 November 2026): Linux first, before the rest of M2 to M4 goes on; other languages after M4.
 
-- Linux: the packages (AppImage, deb) built and tried on a clean machine, the tray on a desktop that draws one and on one that does not — nothing of the tray has been tried there, and its tooltip cannot follow the downloads (#13). Until then Scia is untried and unpackaged on Linux. The Release workflow builds the Linux packages on a stable tag today: that job is to be turned off until Linux is tried (the owner's decision), in a PR of its own before the release PR (#28).
+- Linux: the packages (AppImage, deb) built and tried on a clean machine, the tray on a desktop that draws one and on one that does not — nothing of the tray has been tried there, and its tooltip cannot follow the downloads (#13). Until then Scia is untried and unpackaged on Linux, and the Linux job of the Release workflow is off (the owner's decision, #28): it is turned on again with this item.
 - The interface in other languages (i18n), a feature of its own. Italian will be the first one added.
 
 ## Not planned

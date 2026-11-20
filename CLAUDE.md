@@ -105,7 +105,7 @@ The rule is [`docs/development/review-flow.md`](./docs/development/review-flow.m
 Mechanics in [`docs/development/release-flow.md`](./docs/development/release-flow.md).
 
 - **semantic-release owns versioning.** No `version` field in the root `package.json`; `apps/desktop/package.json` stays `0.0.0` and CI injects the real version.
-- Squash merge to `develop` → tag `vX.Y.Z-beta.N`, notes only. Merge commit to `main` → `vX.Y.Z`, with the Windows and Linux installers attached to the GitHub release.
+- Squash merge to `develop` → tag `vX.Y.Z-beta.N`, notes only. Merge commit to `main` → `vX.Y.Z`, with the Windows installer attached to the GitHub release (the Linux job is off until Linux is tried).
 - The commit type decides the number: `fix`/`perf`/`hotfix` a patch, `feat` a minor, a breaking change a major; `chore`, `docs`, `ci`, `test`, `refactor` release nothing. Choose the type for what the change is to whoever uses Scia.
 - **Verify the artefact, not the build**: download the published installer, install it, launch it on a scratch profile, read its log.
 - Never push a tag by hand, never edit a published one.
