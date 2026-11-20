@@ -50,7 +50,7 @@ describe('connectIntegrationSchema', () => {
       'two words',
       'line\nbreak',
       'tab\there',
-      'k\\u00e9y',
+      'k\u00e9y',
       'k'.repeat(257),
     ]) {
       expect(connectIntegrationSchema.safeParse({ apiKey }).success, JSON.stringify(apiKey)).toBe(
