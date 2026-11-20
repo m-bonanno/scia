@@ -7,7 +7,7 @@ export interface PageMedia {
   readonly formats: readonly PageFormat[];
 }
 
-// The PORT a reader of sites plugs into (docs/adr/0008): a step after the host said a link is a
+// The PORT a reader of sites plugs into (docs/adr/0009): a step after the host said a link is a
 // page, which finds the video the page plays. `YtDlp` is its adapter; a manager with no reader
 // fetches every page as it stands.
 export interface PageReader {

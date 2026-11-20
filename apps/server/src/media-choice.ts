@@ -1,4 +1,4 @@
-import { type MediaInfo, PageFailure } from '@scia/core';
+import { type MediaInfo, PageFailure, type VideoContainer } from '@scia/core';
 import type { RequestHeaders } from './remote-source.ts';
 
 // One way a site offers the video of a page, as its reader describes it.
@@ -7,7 +7,7 @@ export interface PageFormat {
   // How it is fetched: `http`/`https` is one file; `m3u8`, `m3u8_native`, `http_dash_segments`
   // and the rest are streams.
   readonly protocol: string;
-  readonly ext: string;
+  readonly ext: VideoContainer;
   // `none` when the format has no picture, or no sound; undefined when the site does not say.
   readonly vcodec: string | undefined;
   readonly acodec: string | undefined;
@@ -58,10 +58,13 @@ function isAtLeast(a: readonly [number, number], b: readonly [number, number]): 
 // The best the site offers that Scia can fetch as it stands: one file, with picture and sound,
 // not protected. Between equals the later one the site lists, which its reader orders from worst
 // to best. Throws a PageError that says why there is none.
-export function chooseMedia(formats: readonly PageFormat[]): ChosenMedia {
+// `container`, when given, is the only one taken: a download that already holds bytes of an mp4
+// goes on as an mp4, or not at all.
+export function chooseMedia(formats: readonly PageFormat[], container?: string): ChosenMedia {
   let best: PageFormat | undefined;
   for (const format of formats) {
     if (!isOneFileWithSound(format)) continue;
+    if (container !== undefined && format.ext !== container) continue;
     if (best === undefined || isAtLeast(rank(format), rank(best))) best = format;
   }
   if (best !== undefined) {

@@ -1,4 +1,4 @@
-# ADR 0008 — The video of a page is found by yt-dlp and downloaded by the engine
+# ADR 0009 — The video of a page is found by yt-dlp and downloaded by the engine
 
 - **Status**: accepted
 - **Date**: 2026-11-20

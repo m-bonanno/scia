@@ -1,5 +1,5 @@
 // The programs Scia ships beside its engine, fetched at build time at the version fixed here and
-// refused unless their bytes match the checksum their project published (docs/adr/0008).
+// refused unless their bytes match the checksum their project published (docs/adr/0009).
 // Run by itself for this computer (`npm start`), and by electron-builder before it packs, for the
 // system it packs for (`beforePack` in electron-builder.yml).
 import { createHash } from 'node:crypto';

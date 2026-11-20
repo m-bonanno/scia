@@ -25,12 +25,18 @@ export const recordSchema = z.object({
   // after a pause or a restart. A state written before services existed has neither.
   via: z.enum(IntegrationId).nullable().catch(null),
   unlockedUrl: z.string().nullable().catch(null),
-  // The video a page plays, when the link was a page: what the row says of it, and the address
-  // and headers its site gave — used again after a pause or a restart, asked for again after a
-  // failure. A state written before pages were read has none.
-  media: mediaSchema.nullable().catch(null),
-  mediaUrl: z.string().nullable().catch(null),
-  mediaHeaders: z.record(z.string(), z.string()).nullable().catch(null),
+  // The video a page plays, when the link was a page: what the row says of it (`media`), and the
+  // address and headers its site gave (`source`) — used again after a pause or a restart, cleared
+  // after a failure so that the page is read again. One value, read whole or not at all: a video
+  // whose `media` were dropped and whose address stayed would be fetched as a page (#101). A
+  // state written before pages were read has none.
+  video: z
+    .object({
+      media: mediaSchema,
+      source: z.object({ url: z.string(), headers: z.record(z.string(), z.string()) }).nullable(),
+    })
+    .nullable()
+    .catch(null),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });

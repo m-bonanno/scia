@@ -12,7 +12,7 @@ export interface RuntimeLayout {
   readonly noticesPath: string;
   // The keys of the connected services, each sealed by the system (engine/key-vault.ts).
   readonly keysDir: string;
-  // yt-dlp, which reads the page of a video (docs/adr/0008); undefined on a system Scia ships
+  // yt-dlp, which reads the page of a video (docs/adr/0009); undefined on a system Scia ships
   // no build of it for, where pages are fetched as they stand.
   readonly ytDlp: string | undefined;
 }

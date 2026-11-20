@@ -1,4 +1,10 @@
-import { DownloadFailure, DownloadStatus, FileKind, ServiceFailure } from '@scia/core';
+import {
+  DownloadFailure,
+  DownloadStatus,
+  FileKind,
+  ServiceFailure,
+  VIDEO_CONTAINERS,
+} from '@scia/core';
 import { z } from 'zod';
 import { IntegrationId } from './integrations.ts';
 import { Theme } from './theme.ts';
@@ -32,8 +38,9 @@ export const segmentSchema = z.object({ start: byteCount, end: byteCount, downlo
 
 // The container of a video and its lines of picture, when the site says them.
 export const mediaSchema = z.object({
-  ext: z.string(),
-  height: z.number().nonnegative().nullable(),
+  // It ends the name of the file.
+  ext: z.enum(VIDEO_CONTAINERS),
+  height: z.number().int().positive().nullable(),
 });
 
 export const downloadSchema = z.object({

@@ -29,7 +29,7 @@ electronFuses:
   onlyLoadAppFromAsar: true
 
 # Fetches the programs shipped beside the engine for the system being packed, at the version and
-# checksum fixed in it (docs/adr/0008).
+# checksum fixed in it (docs/adr/0009).
 beforePack: scripts/fetch-tools.mjs
 
 # Mirrored by src/engine/runtime-layout.ts — change both together.

@@ -10,18 +10,37 @@ export const PageFailure = {
   // The site offers the video only in forms Scia does not download yet: a stream, or picture and
   // sound as two files (#89).
   FormatUnsupported: 'PAGE_FORMAT_UNSUPPORTED',
-  // The page lists several videos — a playlist, a channel, a profile — which Scia does not
-  // expand yet (#8).
+  // The page lists several items — a playlist, a channel, an album — which Scia does not expand
+  // yet (#8).
   Playlist: 'PAGE_PLAYLIST',
-  // The page could not be read: the reader failed, said nothing in time, or said something Scia
-  // does not understand.
+  // The site did not answer properly — busy, in maintenance, too many requests — or not in time:
+  // what waiting can mend.
+  SiteBusy: 'PAGE_SITE_BUSY',
+  // The reader of pages itself failed: it could not be started, or said something Scia does not
+  // understand.
   Unreadable: 'PAGE_UNREADABLE',
 } as const;
 export type PageFailure = (typeof PageFailure)[keyof typeof PageFailure];
 
+// The containers of a video a page's file may be, which end its name. What a site says beyond them
+// — an audio file, a document, a program — is not the video of the page.
+export const VIDEO_CONTAINERS = [
+  'mp4',
+  'm4v',
+  'webm',
+  'mkv',
+  'mov',
+  'ogv',
+  'flv',
+  '3gp',
+  'avi',
+  'wmv',
+] as const;
+export type VideoContainer = (typeof VIDEO_CONTAINERS)[number];
+
 // What was taken from a page: the kind of file, and how many lines of picture it has when the
 // site says. The row names it ("MP4 1080p").
 export interface MediaInfo {
-  readonly ext: string;
+  readonly ext: VideoContainer;
   readonly height: number | null;
 }

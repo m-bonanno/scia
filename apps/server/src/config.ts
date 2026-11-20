@@ -14,7 +14,7 @@ export interface ServerConfig {
   readonly version: string;
   // Where AllDebrid answers: its own address, unless a run names a simulated service.
   readonly alldebridApi: string;
-  // The yt-dlp that reads the page of a video (docs/adr/0008); without one, a page is fetched as
+  // The yt-dlp that reads the page of a video (docs/adr/0009); without one, a page is fetched as
   // it stands — under plain Node, and where Scia ships no build of it.
   readonly ytDlp: string | undefined;
   // The system's folder for temporary files, which main names: the engine's environment does not

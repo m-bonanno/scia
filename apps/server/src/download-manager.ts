@@ -209,9 +209,7 @@ export class DownloadManager {
         failureStatus: null,
         via: null,
         unlockedUrl: null,
-        media: null,
-        mediaUrl: null,
-        mediaHeaders: null,
+        video: null,
         createdAt: new Date(this.#now()).toISOString(),
         completedAt: null,
       };
@@ -246,8 +244,7 @@ export class DownloadManager {
     // A link a service or a site gave does not last: after a failure another is asked for.
     if (record.status === DownloadStatus.Failed) {
       record.unlockedUrl = null;
-      record.mediaUrl = null;
-      record.mediaHeaders = null;
+      if (record.video !== null) record.video = { ...record.video, source: null };
     }
     record.status = DownloadStatus.Queued;
     record.failure = null;
@@ -373,7 +370,7 @@ export class DownloadManager {
       failure: record.failure,
       failureStatus: record.failureStatus,
       via: record.via,
-      media: record.media,
+      media: record.video?.media ?? null,
       createdAt: record.createdAt,
       completedAt: record.completedAt,
     };
@@ -528,12 +525,12 @@ export class DownloadManager {
   }
 
   // Where the bytes are, and how they are asked for. A link whose host answers a web page, of a
-  // site the page reader knows, is the video the page plays (docs/adr/0008). The page is read
+  // site the page reader knows, is the video the page plays (docs/adr/0009). The page is read
   // when the download first starts; the video it chose is used again after a pause or a
   // restart, and the page is read again after a failure, as a service's link is asked for
   // again. A link that went through a service is not read: the service said what it is.
   async #locate(record: DownloadRecord, signal: AbortSignal): Promise<Located> {
-    if (record.media !== null) return this.#locateVideo(record, signal);
+    if (record.video !== null) return this.#locateVideo(record, signal);
     const url = await this.#address(record, signal);
     const headers = headersOf(record);
     const remote = await this.#deps.source.probe(url, headers, signal);
@@ -544,19 +541,18 @@ export class DownloadManager {
   }
 
   async #locateVideo(record: DownloadRecord, signal: AbortSignal): Promise<Located> {
-    const kept =
-      record.mediaUrl === null ? undefined : { url: record.mediaUrl, headers: record.mediaHeaders };
-    const chosen = kept ?? (await this.#readPage(record, signal));
+    const chosen = record.video?.source ?? (await this.#readPage(record, signal));
     if (chosen === undefined) {
       throw new PageError(PageFailure.Unreadable, 'The page no longer says what video it plays.');
     }
-    const headers = chosen.headers ?? {};
-    const remote = await this.#deps.source.probe(chosen.url, headers, signal);
-    return { url: chosen.url, headers, remote };
+    const remote = await this.#deps.source.probe(chosen.url, chosen.headers, signal);
+    return { url: chosen.url, headers: chosen.headers, remote };
   }
 
-  // The video the page plays, into the record: undefined when there is no reader, or the page
-  // is not of a site it knows. A video it finds and Scia cannot fetch is a PageError.
+  // The video the page plays, into the record: undefined when there is no reader, or when the
+  // page is not of a site it knows or plays no video. A video it finds and Scia cannot fetch is a
+  // PageError. Read again for a download whose name is final, it keeps the container that name
+  // carries: its part file holds that container's bytes.
   async #readPage(
     record: DownloadRecord,
     signal: AbortSignal,
@@ -565,16 +561,17 @@ export class DownloadManager {
     if (reader === undefined) return undefined;
     const found = await reader.read(record.url, signal);
     if (found === undefined) return undefined;
-    const chosen = chooseMedia(found.formats);
-    record.media = chosen.info;
-    record.mediaUrl = chosen.url;
-    record.mediaHeaders = { ...chosen.headers };
+    const chosen = chooseMedia(found.formats, record.named ? record.video?.media.ext : undefined);
+    const source = { url: chosen.url, headers: { ...chosen.headers } };
+    record.video = { media: chosen.info, source };
     // What the site calls the video is a title, not a path: a slash in it is a character.
     if (!record.named) {
-      record.fileName = sanitizeFileName(`${found.title ?? UNTITLED}.${chosen.info.ext}`);
+      const title = found.title?.trim();
+      const stem = title === undefined || title === '' ? UNTITLED : title;
+      record.fileName = sanitizeFileName(`${stem}.${chosen.info.ext}`);
     }
     this.#changed();
-    return chosen;
+    return source;
   }
 
   // Where the bytes are: at the link itself, or — for a link a connected service takes — at
@@ -606,7 +603,7 @@ export class DownloadManager {
   #adopt(record: DownloadRecord, remote: RemoteFile): void {
     if (!record.named) {
       // A page's video is named after what its site calls it, not after its server's file.
-      const wanted = record.media === null ? (remote.fileName ?? record.fileName) : record.fileName;
+      const wanted = record.video === null ? (remote.fileName ?? record.fileName) : record.fileName;
       record.fileName = this.#freeName(record, wanted);
       record.named = true;
     }

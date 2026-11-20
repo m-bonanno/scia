@@ -2,7 +2,7 @@ yt-dlp
 https://github.com/yt-dlp/yt-dlp
 
 Scia ships yt-dlp's own build for this system, unchanged, as a separate program it runs to read
-the page of a video (docs/adr/0008-the-video-of-a-page.md in Scia's repository). The version and
+the page of a video (docs/adr/0009-the-video-of-a-page.md in Scia's repository). The version and
 the checksum of each build are fixed in apps/desktop/scripts/fetch-tools.mjs.
 
 yt-dlp's code is released under the Unlicense. Its builds bundle Python and other libraries, and

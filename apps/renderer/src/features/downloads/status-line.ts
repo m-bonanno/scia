@@ -5,6 +5,7 @@ import {
   formatDuration,
   formatPercent,
   formatSpeed,
+  NBSP,
   SEPARATOR,
 } from '@/lib/format.ts';
 import { directLinkFailedMessage, linkNotUnlockedMessage, SERVICE_NAME } from '@/lib/messages.ts';
@@ -20,9 +21,22 @@ const PAGE_NOT_DOWNLOADED: Readonly<Record<PageFailure, string>> = {
   // A stream, or picture and sound as two files: the sentence is true of both.
   [PageFailure.FormatUnsupported]:
     'The site offers this video only in a form Scia cannot download yet.',
-  [PageFailure.Playlist]: 'This page is a list of videos. Add the link of one video.',
-  [PageFailure.Unreadable]: 'Scia could not read the video on this page. Try again later.',
+  // A list of videos, of tracks, of episodes: the sentence names none of them.
+  [PageFailure.Playlist]:
+    'This page lists several items, not one video. Add the link of one of them.',
+  // Busy, in maintenance, too many requests, or no answer in time: waiting mends all of them.
+  [PageFailure.SiteBusy]: 'The site did not answer properly. Try again later.',
+  // An error Scia does not know, a reader that could not start or said nothing it understands:
+  // none is mended by waiting, so no remedy is offered.
+  [PageFailure.Unreadable]: 'Scia could not read the video on this page.',
 };
+
+// The address a page's site gave for its video does not last: trying again reads the page for a
+// new one (docs/adr/0009-the-video-of-a-page.md, point 6).
+function videoAddressFailedMessage(status: number | null): string {
+  const code = status === null ? '' : ` (${String(status)})`;
+  return `The address the site gave for this video no longer works${code}. Try again: Scia reads the page for a new one.`;
+}
 
 function isPageFailure(failure: DownloadFailure): failure is PageFailure {
   return Object.hasOwn(PAGE_NOT_DOWNLOADED, failure);
@@ -31,24 +45,22 @@ function isPageFailure(failure: DownloadFailure): failure is PageFailure {
 // "MP4 1080p": the container, then the lines of picture when the site says them.
 function mediaText(media: NonNullable<Download['media']>): string {
   const container = media.ext.toUpperCase();
-  return media.height === null ? container : `${container} ${String(media.height)}p`;
+  // Held together: "MP4" alone at the end of a line and "1080p" at the start of the next say less.
+  return media.height === null ? container : `${container}${NBSP}${String(media.height)}p`;
 }
 
 // The fact, then the remedy where there is one: trying again does not bring back a deleted file.
 function failureText(download: Download): string {
-  // The host a service sent Scia to: the address is the service's, and so is the remedy.
+  // The host a service or a page's site sent Scia to: the address is theirs, and so is the
+  // remedy.
   const { via } = download;
-  if (
-    via !== null &&
-    (download.failure === DownloadFailure.HttpStatus ||
-      download.failure === DownloadFailure.Network ||
-      download.failure === DownloadFailure.Incomplete)
-  ) {
-    return directLinkFailedMessage(
-      download.failure === DownloadFailure.HttpStatus ? download.failureStatus : null,
-      via,
-    );
-  }
+  const atAnAddressGiven =
+    download.failure === DownloadFailure.HttpStatus ||
+    download.failure === DownloadFailure.Network ||
+    download.failure === DownloadFailure.Incomplete;
+  const status = download.failure === DownloadFailure.HttpStatus ? download.failureStatus : null;
+  if (atAnAddressGiven && via !== null) return directLinkFailedMessage(status, via);
+  if (atAnAddressGiven && download.media !== null) return videoAddressFailedMessage(status);
   switch (download.failure) {
     case DownloadFailure.HttpStatus:
       if (download.failureStatus === 404) return 'The file is no longer at this address.';
