@@ -135,7 +135,7 @@ docs/
 1. **Propose the branch name (with issue number) before starting**, and work only on that branch.
 2. **Test first**, in every layer the change touches; prove runtime changes against the real runtime.
 3. **Respect the local canon** of the area you are in (the sub-files above).
-4. **Have the team review every PR but a release's back-merge** (`/team-review`) and merge a work branch into `develop` only on its approval with CI green; never merge into `main` without the owner's word.
+4. **Have the team review every PR but a release's back-merge** (`/team-review`) and merge a work branch into `develop` only on the team's approval with CI green, and as the "Merging" table of `review-flow.md` says; never merge into `main` without the owner's word.
 5. **Read `.claude/gotchas.md` before every push**; add an entry in the same PR when a mistake of that kind bites again.
 6. **Keep docs in lock-step**, and keep the roadmap honest — never mark done what is partial.
 7. **Report outcomes faithfully** — failing tests with their output, skipped steps named, what was not verified said plainly.
