@@ -129,6 +129,14 @@ jobs:
           for f in ${{ matrix.artefacts }}; do
             test -s "$f" || { echo "::error::$f is missing or empty"; ls -la; exit 1; }
           done
+      # The installer the release is about to carry, installed silently on this runner, started on a
+      # scratch profile, used, quit and uninstalled (apps/desktop/e2e/installer.smoke.test.ts). A
+      # failure attaches nothing: no updater is offered an installer nobody started.
+      - name: Smoke test
+        env:
+          SCIA_INSTALLER: apps/desktop/release/Scia-Setup-${{ env.V }}.exe
+          SCIA_VERSION: ${{ env.V }}
+        run: npm run test:smoke
       - name: Attach to the release
         working-directory: apps/desktop/release
         env:

@@ -46,7 +46,7 @@ The owner asked whether the pipeline had E2E, unit, integration, feature and smo
 | Smoke       | The installer: installed silently, started, one download, quit, its log read, uninstalled                 | Windows, every PR and every release      |
 
 - **The E2E suite is `playwright-core` under Vitest** (the owner's decision 1): a fifth Vitest project, `e2e`, outside `npm test`, which needs a build. `playwright-core` has no dependency and downloads no browser; its `_electron` driver starts the app and reaches both main and the page. The specs use what the other layers already have — `until` for a state, `startRangeServer` and `startAllDebridServer` for hosts. Each spec starts the app with a temporary profile (`--user-data-dir=`) and `--port=0`, the engine taking a free port: specs never meet each other, another session's runs or an installed Scia.
-- **The smoke test is a script, not a spec**: what it drives is an installer and an installed exe, on a machine where it may install. It runs only on a CI runner, never on a person's computer, where an install replaces the installed Scia.
+- **The smoke test runs only on a CI runner**, never on a person's computer, where an install replaces the installed Scia. _Amended with #92, the same day:_ it was to be a script; it is a spec of a Vitest project of its own, `smoke`, which drives the installed exe with the E2E suite's harness — one way to start, drive and end the app — and refuses to start outside a Windows CI runner.
 
 ### Keeping flaky specs out
 
@@ -61,7 +61,7 @@ Nothing. The repository is public: GitHub's standard hosted runners, Linux and W
 
 ### What a person still does
 
-- **A stable is installed over the previous stable, when there is one**, and run, before the release PR is called done: the smoke test installs on a clean runner, not over an earlier Scia. `release-flow.md` is to say so with the smoke test (#92).
+- **A stable is installed over the previous stable, when there is one**, and run, before the release PR is called done: the smoke test installs on a clean runner, not over an earlier Scia. [`release-flow.md`](../development/release-flow.md), "Releasing", says so.
 - **What the system draws and only a person sees** — a notification, the tray, a hand on the mouse, SmartScreen on a downloaded installer — stays with a person, as the roadmap lists it.
 - **The author runs the gates before opening a PR** ([`review-flow.md`](../development/review-flow.md)): on Windows, the E2E suite too, once it exists (#91), when the change touches the app's runtime.
 

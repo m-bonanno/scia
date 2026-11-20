@@ -47,6 +47,16 @@ export default defineConfig({
           hookTimeout: 60_000,
         },
       },
+      // The installer, installed, started and removed: on a Windows CI runner only (ADR 0008).
+      {
+        test: {
+          name: 'smoke',
+          environment: 'node',
+          include: ['apps/desktop/e2e/**/*.smoke.test.ts'],
+          testTimeout: 180_000,
+          hookTimeout: 60_000,
+        },
+      },
     ],
   },
 });
