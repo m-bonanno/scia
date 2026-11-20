@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import { startReleasesServer } from '@scia/server/testing/yt-dlp-releases-server.ts';
@@ -77,6 +77,21 @@ describe('the real app brings its yt-dlp up to date', () => {
     // A check at this start would have been asked as the engine began to listen, before the
     // window had its page: the last one is minutes old, the next due a day after it.
     expect(checks()).toBe(before);
+  });
+
+  it('starts, and reads pages with the build it ships, when its updater cannot be opened', async () => {
+    const host = await releaseOf(await readFile(SHIPPED));
+    const profile = await run.profile();
+    // Where the builds taken are kept is a file: nothing can be kept there.
+    await mkdir(join(profile.path, 'engine'), { recursive: true });
+    await writeFile(join(profile.path, 'engine', 'yt-dlp'), 'not a folder');
+
+    await run.launch(profile, { args: [`--yt-dlp-releases=${host.address}`] });
+
+    const log = await profile.log();
+    expect(log).toContain('yt_dlp_updates_off');
+    expect(log).not.toContain('engine_start_failed');
+    expect(host.asked).toEqual([]);
   });
 
   it('refuses a build whose bytes are not those its signed sums give, and keeps the one it ships', async () => {
