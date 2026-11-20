@@ -69,3 +69,30 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  # The built app, started by Electron on the system it ships for, against local hosts only
+  # (docs/development/testing.md, "E2E").
+  e2e:
+    name: E2E (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      # Electron is pinned in apps/desktop/package.json: its download changes only with it.
+      - name: Cache Electron's download
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/AppData/Local/electron/Cache
+          key: electron-${{ runner.os }}-${{ hashFiles('apps/desktop/package.json') }}
+      - name: Install
+        run: npm ci
+      - name: Build
+        run: npm run build
+      - name: E2E
+        run: npm run test:e2e

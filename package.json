@@ -29,6 +29,7 @@
     "test:unit": "vitest run --project unit --project unit-renderer",
     "test:integration": "vitest run --project integration",
     "test:feature": "vitest run --project feature",
+    "test:e2e": "vitest run --project e2e",
     "release": "semantic-release"
   },
   "lint-staged": {
