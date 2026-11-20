@@ -268,8 +268,15 @@ describe('AllDebrid', () => {
     expect(server.requests).toHaveLength(2);
   });
 
-  it('waits three seconds at most for the public list', () => {
+  it('waits three seconds at most for the public list', async () => {
     expect(PUBLIC_ANSWER_LIMIT_MS).toBe(3000);
+    // Through the client as the app makes it, with no limit of its own.
+    const server = await serviceWith({ hosts });
+    server.misbehave({ silent: true });
+    const started = performance.now();
+
+    expect(await failureOf(clientOf(server).publicDomains())).toBe(ServiceFailure.Unavailable);
+    expect(performance.now() - started).toBeLessThan(PUBLIC_ANSWER_LIMIT_MS + 1000);
   });
 
   it('unlocks a link: the direct link and the name the service gives, the link sent in a form', async () => {

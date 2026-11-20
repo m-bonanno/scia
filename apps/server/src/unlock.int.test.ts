@@ -266,6 +266,14 @@ describe('a link that goes through a service', () => {
       await settled();
       await expect(integrations.serviceFor(LINK, never)).rejects.toMatchObject(needsService);
       expect(readings).toBe(3);
+
+      // A refresh that failed is asked again an hour later, not sooner.
+      clock += 60 * 60_000 - 1;
+      await ask();
+      expect(readings).toBe(3);
+      clock += 1;
+      await ask();
+      expect(readings).toBe(4);
     });
 
     it('fetches a link as it stands while the list cannot be read, and asks again an hour later', async () => {

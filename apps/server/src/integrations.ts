@@ -305,7 +305,6 @@ export class Integrations implements LinkResolver {
       .then(
         (domains) => {
           this.#publicHosts = { domains, readAt: this.#now() };
-          this.#publicHostsFailedAt = undefined;
           return domains;
         },
         (error: unknown) => {
