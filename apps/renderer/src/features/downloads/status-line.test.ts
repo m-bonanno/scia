@@ -76,16 +76,16 @@ describe('statusLine', () => {
   it.each([
     [
       ServiceFailure.KeyRefused,
-      'AllDebrid no longer accepts the key. Connect it again in Settings, then retry.',
+      'AllDebrid no longer accepts the key. In Settings, disconnect it and connect a new key, then try again.',
     ],
     [
       ServiceFailure.KeyBlocked,
-      'AllDebrid refuses the key from this network. Check your account with it, then retry.',
+      'AllDebrid is blocking the key from here. If it emailed you about a new sign-in, confirm it; otherwise check your network, then try again.',
     ],
     [ServiceFailure.AccountBanned, 'AllDebrid says the account is banned.'],
     [
       ServiceFailure.NetworkRefused,
-      'AllDebrid does not serve this network: it refuses servers and some VPNs.',
+      'AllDebrid does not serve this network: it refuses servers and some VPNs. Try again from another network.',
     ],
     [
       ServiceFailure.Unavailable,
@@ -97,20 +97,47 @@ describe('statusLine', () => {
       UnlockFailure.LinkPassword,
       'AllDebrid says the link asks for a password, which Scia cannot give yet.',
     ],
-    [UnlockFailure.HostUnavailable, 'AllDebrid cannot reach this host right now. Try again later.'],
+    [
+      UnlockFailure.HostUnavailable,
+      'AllDebrid cannot get this file from its host right now. Try again later.',
+    ],
     [
       UnlockFailure.HostLimit,
       'AllDebrid says the account has reached its limit for this host. Try again later.',
     ],
     [UnlockFailure.LinkRefused, 'AllDebrid could not unlock this link.'],
     [
+      UnlockFailure.NotReady,
+      'AllDebrid was still preparing this link after 30 minutes. Try again later.',
+    ],
+    [
       UnlockFailure.NotConnected,
-      'AllDebrid is no longer connected. Connect it in Settings, then retry.',
+      'AllDebrid is no longer connected. Connect it in Settings, then try again.',
     ],
   ] as const)('says in words what the service said when it answered %s', (failure, text) => {
     expect(
       statusLine(aDownload({ status: DownloadStatus.Failed, failure, via: 'alldebrid' })),
     ).toBe(text);
+  });
+
+  it('says the link a service gave stopped answering, and that trying again asks for another', () => {
+    const failed = (overrides: Partial<Download>) =>
+      statusLine(aDownload({ status: DownloadStatus.Failed, via: 'alldebrid', ...overrides }));
+
+    expect(failed({ failure: DownloadFailure.HttpStatus, failureStatus: 404 })).toBe(
+      'The link AllDebrid gave no longer answers (404). Try again: AllDebrid gives a new one.',
+    );
+    expect(failed({ failure: DownloadFailure.HttpStatus, failureStatus: 204 })).toBe(
+      'The link AllDebrid gave no longer answers (204). Try again: AllDebrid gives a new one.',
+    );
+    expect(failed({ failure: DownloadFailure.Network })).toBe(
+      'The link AllDebrid gave no longer answers. Try again: AllDebrid gives a new one.',
+    );
+    expect(failed({ failure: DownloadFailure.Incomplete })).toBe(
+      'The link AllDebrid gave no longer answers. Try again: AllDebrid gives a new one.',
+    );
+    // The disk is the disk, whoever gave the link.
+    expect(failed({ failure: DownloadFailure.Disk })).toContain('free space');
   });
 
   it('names no service for a link that was never known to be one', () => {

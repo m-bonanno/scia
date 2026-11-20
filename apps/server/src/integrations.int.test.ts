@@ -272,6 +272,19 @@ describe('Integrations', () => {
     expect(await kept.read(IntegrationId.AllDebrid)).toBe(KEY);
   });
 
+  it("says the service is unavailable, not a link's refusal, when it answers one about the account", async () => {
+    const vault = new MemoryVault();
+    await vault.write(IntegrationId.AllDebrid, KEY);
+    service.misbehave({ error: 'LINK_DOWN' });
+
+    const integrations = await open(vault);
+
+    expect((await integrations.list())[0]).toMatchObject({
+      connected: true,
+      failure: ServiceFailure.Unavailable,
+    });
+  });
+
   it('keeps what it knew of the account while the service does not answer, and says that it does not', async () => {
     const integrations = await open();
     await integrations.connect(IntegrationId.AllDebrid, KEY);

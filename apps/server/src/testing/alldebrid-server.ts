@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { setTimeout as sleep } from 'node:timers/promises';
 
 // The service's own words for its refusals, as its documentation lists them
 // (https://docs.alldebrid.com, "All errors").
@@ -46,6 +47,8 @@ export interface SimulatedAccount {
   readonly premium?: boolean;
   // The service knows the key and refuses it all the same.
   readonly refusal?: 'AUTH_BLOCKED' | 'AUTH_USER_BANNED';
+  // The hosts, by name, this account unlocks links of; every host of the service if absent.
+  readonly hosts?: readonly string[];
 }
 
 // A link the service unlocks: what it gives for it, and how.
@@ -73,6 +76,8 @@ export type Misbehaviour = (
   // No answer at all, until the client gives up.
   | { readonly silent: true }
   | { readonly redirectTo: string }
+  // The right answer, this long after the question.
+  | { readonly slowMs: number }
 ) & {
   // For this many requests, then it answers as it should again; until told otherwise if absent.
   readonly times?: number;
@@ -175,6 +180,7 @@ export async function startAllDebridServer(
       misbehaved += 1;
     }
     if ('silent' in misbehaviour) return true;
+    if ('slowMs' in misbehaviour) return false;
     if ('status' in misbehaviour) {
       response.writeHead(misbehaviour.status).end();
     } else if ('nonsense' in misbehaviour) {
@@ -206,13 +212,15 @@ export async function startAllDebridServer(
     });
   }
 
-  function hosts(response: ServerResponse): void {
+  function hosts(response: ServerResponse, account: SimulatedAccount): void {
     succeed(response, {
       hosts: Object.fromEntries(
-        Object.entries(options.hosts ?? {}).map(([name, domains]) => [
-          name,
-          { name, type: 'premium', domains, regexps: [`${domains[0] ?? name}/.+`], status: true },
-        ]),
+        Object.entries(options.hosts ?? {})
+          .filter(([name]) => account.hosts?.includes(name) ?? true)
+          .map(([name, domains]) => [
+            name,
+            { name, type: 'premium', domains, regexps: [`${domains[0] ?? name}/.+`], status: true },
+          ]),
       ),
     });
   }
@@ -273,7 +281,7 @@ export async function startAllDebridServer(
   }
 
   const server = createServer((request, response) => {
-    void formOf(request).then((form) => {
+    void formOf(request).then(async (form) => {
       const url = new URL(request.url ?? '/', 'http://simulated');
       requests.push({
         method: request.method ?? '',
@@ -282,7 +290,14 @@ export async function startAllDebridServer(
         userAgent: request.headers['user-agent'],
         form,
       });
+      const slow =
+        misbehaviour !== undefined && 'slowMs' in misbehaviour ? misbehaviour : undefined;
+      const misbehavedBefore = misbehaved;
       if (misbehaves(response)) return;
+      // A slow answer is still the right one: it is only late — for as many requests as it says.
+      if (slow !== undefined && (slow.times === undefined || misbehaved > misbehavedBefore)) {
+        await sleep(slow.slowMs);
+      }
 
       const route = `${request.method ?? ''} ${url.pathname}`;
       if (!ROUTES.includes(route)) {
@@ -295,7 +310,7 @@ export async function startAllDebridServer(
       } else if (route === 'GET /v4/user') {
         user(response, account);
       } else if (route === 'GET /v4.1/user/hosts') {
-        hosts(response);
+        hosts(response, account);
       } else if (route === 'POST /v4/link/unlock') {
         unlock(response, account, form.link);
       } else {

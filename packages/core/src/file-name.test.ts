@@ -109,6 +109,9 @@ describe('fileNameFromHost', () => {
     expect(fileNameFromHost('')).toBeUndefined();
     expect(fileNameFromHost('   ')).toBeUndefined();
     expect(fileNameFromHost('folder/')).toBeUndefined();
+    expect(fileNameFromHost('..')).toBeUndefined();
+    expect(fileNameFromHost('a/..')).toBeUndefined();
+    expect(fileNameFromHost('.')).toBeUndefined();
   });
 });
 

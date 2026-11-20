@@ -29,6 +29,8 @@ export const UnlockFailure = {
   LinkRefused: 'LINK_REFUSED',
   // The link was a service's when it was added, and that service is no longer connected.
   NotConnected: 'SERVICE_NOT_CONNECTED',
+  // The service was still preparing the link after the longest wait Scia gives it.
+  NotReady: 'LINK_NOT_READY',
 } as const;
 export type UnlockFailure = (typeof UnlockFailure)[keyof typeof UnlockFailure];
 

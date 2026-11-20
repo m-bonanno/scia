@@ -7,10 +7,23 @@ import {
   formatSpeed,
   SEPARATOR,
 } from '@/lib/format.ts';
-import { linkNotUnlockedMessage, SERVICE_NAME } from '@/lib/messages.ts';
+import { directLinkFailedMessage, linkNotUnlockedMessage, SERVICE_NAME } from '@/lib/messages.ts';
 
 // The fact, then the remedy where there is one: trying again does not bring back a deleted file.
 function failureText(download: Download): string {
+  // The host a service sent Scia to: the address is the service's, and so is the remedy.
+  const { via } = download;
+  if (
+    via !== null &&
+    (download.failure === DownloadFailure.HttpStatus ||
+      download.failure === DownloadFailure.Network ||
+      download.failure === DownloadFailure.Incomplete)
+  ) {
+    return directLinkFailedMessage(
+      download.failure === DownloadFailure.HttpStatus ? download.failureStatus : null,
+      via,
+    );
+  }
   switch (download.failure) {
     case DownloadFailure.HttpStatus:
       if (download.failureStatus === 404) return 'The file is no longer at this address.';

@@ -162,6 +162,16 @@ describe('DownloadTask against a real HTTP host', () => {
     expect(download.progress()).toEqual({ segments: [], downloadedBytes: body.length });
   });
 
+  it('waits for a host that has no content yet for some ranges, and takes them when it has', async () => {
+    const { url, ranges } = await host({ noContent: 6 });
+
+    await task(url).run(new AbortController().signal);
+
+    expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+    // Each range refused was asked again: four connections, six refusals.
+    expect(ranges.length).toBeGreaterThanOrEqual(4 + 6);
+  });
+
   it('does not retry a refusal', async () => {
     const { url, ranges } = await host({ status: 404 });
 
@@ -422,6 +432,28 @@ describe('HttpSource.probe', () => {
     expect(remote.acceptsRanges).toBe(false);
     expect(remote.totalBytes).toBe(body.length);
     expect(remote.fileName).toBeUndefined();
+  });
+
+  it('does not take a one-byte answer to its first question for the size of the file', async () => {
+    server = await startRangeServer({ body, fileName: 'Film.mkv', firstByteAs200: 1 });
+
+    const remote = await source.probe(server.url, {}, new AbortController().signal);
+
+    // A 200 that carries only the byte asked is a range answered with the wrong status: the
+    // length is asked again without a range, and ranges are not trusted on this host.
+    expect(remote.totalBytes).toBe(body.length);
+    expect(remote.acceptsRanges).toBe(false);
+    expect(remote.fileName).toBe('Film.mkv');
+    expect(server.ranges).toEqual(['bytes=0-0', undefined]);
+  });
+
+  it('still reads a file of one byte as one byte long', async () => {
+    server = await startRangeServer({ body: body.subarray(0, 1), ranges: false });
+
+    const remote = await source.probe(server.url, {}, new AbortController().signal);
+
+    expect(remote.totalBytes).toBe(1);
+    expect(remote.acceptsRanges).toBe(false);
   });
 
   it('reports a refusal with its status', async () => {

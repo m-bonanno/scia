@@ -45,7 +45,8 @@ export function sanitizeFileName(raw: string): string {
 // disk. Undefined when it gives no name.
 export function fileNameFromHost(raw: string): string | undefined {
   const name = lastPathSegment(raw.trim());
-  return name === '' ? undefined : sanitizeFileName(name);
+  // A path's own steps are no name.
+  return name === '' || name === '.' || name === '..' ? undefined : sanitizeFileName(name);
 }
 
 // The path of an address, without its query and fragment. Read by hand: the domain has no URL

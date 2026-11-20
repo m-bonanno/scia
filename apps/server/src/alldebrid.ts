@@ -12,6 +12,9 @@ const ANSWER_LIMIT_MS = 10_000;
 // A link that is being prepared is asked about this often: the documentation says "every 5
 // seconds or more".
 const DELAYED_POLL_MS = 5000;
+// A link the service is still preparing after this long is given up on, and the place it held
+// in the queue given back (the owner's decision, #7). Retry starts again.
+export const DELAYED_LIMIT_MS = 30 * 60_000;
 // How many times in a row a link's request is made while the service cannot be asked.
 const ATTEMPTS = 3;
 
@@ -93,6 +96,7 @@ export interface AllDebridOptions {
   readonly userAgent: string;
   readonly answerLimitMs?: number;
   readonly delayedPollMs?: number;
+  readonly delayedLimitMs?: number;
   readonly retryDelayMs?: (attempt: number) => number;
 }
 
@@ -166,7 +170,11 @@ export class AllDebrid {
     id: number,
     signal: AbortSignal | undefined,
   ): Promise<string | null | undefined> {
+    const giveUpAt = performance.now() + (this.#options.delayedLimitMs ?? DELAYED_LIMIT_MS);
     for (;;) {
+      if (performance.now() >= giveUpAt) {
+        throw refused(UnlockFailure.NotReady, 'AllDebrid was still preparing the link.');
+      }
       await sleep(this.#options.delayedPollMs ?? DELAYED_POLL_MS, undefined, { signal });
       const { status, link } = await this.#insist(
         () => this.#ask('/v4/link/delayed', apiKey, delayedSchema, { id: String(id) }, signal),

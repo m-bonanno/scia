@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
-import { mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { IntegrationId } from '@scia/contracts';
-import { DownloadFailure, DownloadStatus } from '@scia/core';
+import { DownloadFailure, DownloadStatus, ServiceFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
 import { DownloadManager } from './download-manager.ts';
@@ -75,10 +75,12 @@ describe('a link that goes through a service', () => {
     return service;
   }
 
+  const hostsFile = () => join(folder.path, 'data', 'alldebrid-hosts.json');
   async function connected(to: AllDebridServer, vault = new MemoryVault()): Promise<Integrations> {
     await vault.write(IntegrationId.AllDebrid, KEY);
     return Integrations.open({
       vault,
+      hostsFile: hostsFile(),
       alldebrid: new AllDebrid({
         api: to.api,
         userAgent: 'Scia/spec',
@@ -214,6 +216,86 @@ describe('a link that goes through a service', () => {
     alldebrid.misbehave({ status: 503 });
     clock += 6 * 60 * 60_000;
     expect(await ask()).toBe('alldebrid');
+    const afterTheFailure = alldebrid.requests.length;
+
+    // Not asked again for every link while it does not answer: a minute later, it is.
+    clock += 59_000;
+    await ask();
+    expect(alldebrid.requests).toHaveLength(afterTheFailure);
+    clock += 2000;
+    await ask();
+    expect(alldebrid.requests.length).toBeGreaterThan(afterTheFailure);
+  });
+
+  it('keeps the last list of hosts it read between runs, and goes by it while the service cannot be asked', async () => {
+    const host = await fileHost({ fileName: 'direct.bin' });
+    const alldebrid = await serviceWith({ links: {} });
+    const vault = new MemoryVault();
+    const never = new AbortController().signal;
+    expect(await (await connected(alldebrid, vault)).serviceFor(LINK, never)).toBe('alldebrid');
+
+    // The next run: AllDebrid down, or refusing this network.
+    alldebrid.misbehave({ error: 'NO_SERVER' });
+    const restarted = await connected(alldebrid, vault);
+
+    expect(await restarted.serviceFor(LINK, never)).toBe('alldebrid');
+    // A direct link is no hoster's on the kept list: it is fetched as it stands.
+    expect(await restarted.serviceFor(host.url, never)).toBeUndefined();
+    // The kept list is old: the service was asked again, and its refusal is in the log.
+    expect(alldebrid.requests.filter((r) => r.url === '/v4.1/user/hosts')).toHaveLength(2);
+    expect(logged.join('\n')).toContain('service_hosts_not_read');
+  });
+
+  it("fails on a link while it has never been told which links are the service's", async () => {
+    const alldebrid = await serviceWith({ links: {} });
+    alldebrid.misbehave({ error: 'NO_SERVER' });
+    const integrations = await connected(alldebrid);
+
+    const refused = integrations.serviceFor(LINK, new AbortController().signal);
+
+    await expect(refused).rejects.toMatchObject({ failure: ServiceFailure.NetworkRefused });
+  });
+
+  it('forgets the kept list when another account is connected, and when none is', async () => {
+    const alldebrid = await serviceWith({ links: {} });
+    const integrations = await connected(alldebrid);
+    await integrations.serviceFor(LINK, new AbortController().signal);
+    expect(existsSync(hostsFile())).toBe(true);
+
+    await integrations.connect(IntegrationId.AllDebrid, KEY);
+    expect(existsSync(hostsFile())).toBe(false);
+    await integrations.serviceFor(LINK, new AbortController().signal);
+    expect(existsSync(hostsFile())).toBe(true);
+
+    await integrations.disconnect(IntegrationId.AllDebrid);
+    expect(existsSync(hostsFile())).toBe(false);
+  });
+
+  it('goes by the hosts of the account connected now, not by a reading started under the key before', async () => {
+    const other = 'other-key-000000000000000';
+    const alldebrid = await serviceWith({
+      accounts: {
+        [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL, hosts: ['hoster'] },
+        [other]: { username: 'grace', premiumUntil: PREMIUM_UNTIL, hosts: ['elsewhere'] },
+      },
+      hosts: { hoster: ['hoster.example'], elsewhere: ['elsewhere.example'] },
+      links: {},
+    });
+    const integrations = await connected(alldebrid);
+    const never = new AbortController().signal;
+    // The first account's list is slow to come; the second account is connected meanwhile.
+    alldebrid.misbehave({ slowMs: 300, times: 1 });
+    const underTheFirstKey = integrations.serviceFor(LINK, never);
+    await until(() => alldebrid.requests.some((r) => r.url === '/v4.1/user/hosts'));
+    await integrations.connect(IntegrationId.AllDebrid, other);
+
+    const elsewhere = await integrations.serviceFor('https://elsewhere.example/f/1', never);
+    await underTheFirstKey;
+
+    expect(elsewhere).toBe('alldebrid');
+    // The first account's list came last, and is not taken for the second's.
+    expect(await integrations.serviceFor('https://elsewhere.example/f/2', never)).toBe('alldebrid');
+    expect(await integrations.serviceFor(LINK, never)).toBeUndefined();
   });
 
   it('reads the hosts again for the account that is connected next', async () => {

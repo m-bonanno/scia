@@ -1,7 +1,7 @@
 import { integrationAccountSchema } from '@scia/contracts';
 import { ServiceFailure, UnlockFailure } from '@scia/core';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AllDebrid } from './alldebrid.ts';
+import { AllDebrid, DELAYED_LIMIT_MS } from './alldebrid.ts';
 import { ServiceError } from './service-error.ts';
 import {
   type AllDebridServer,
@@ -294,6 +294,30 @@ describe('AllDebrid', () => {
     });
 
     expect(await failureOf(clientOf(server).unlock(KEY, LINK))).toBe(UnlockFailure.LinkRefused);
+  });
+
+  it('gives up on a link the service is still preparing after the longest wait, and says so', async () => {
+    const server = await serviceWith({
+      hosts,
+      links: { [LINK]: { direct: 'http://127.0.0.1:9/x', delayedPolls: 1_000_000 } },
+    });
+    const client = new AllDebrid({
+      api: server.api,
+      userAgent: 'Scia/spec',
+      delayedPollMs: 10,
+      delayedLimitMs: 100,
+    });
+
+    const started = performance.now();
+    expect(await failureOf(client.unlock(KEY, LINK))).toBe(UnlockFailure.NotReady);
+
+    // About the limit, not a question more: the wait is the case itself.
+    expect(performance.now() - started).toBeLessThan(1000);
+    expect(server.requests.length).toBeLessThan(20);
+  });
+
+  it('waits thirty minutes at most for a link being prepared, as the owner decided', () => {
+    expect(DELAYED_LIMIT_MS).toBe(30 * 60_000);
   });
 
   it('stops waiting for a link when whoever asked stops', async () => {
