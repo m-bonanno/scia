@@ -7,6 +7,19 @@
 | Feature     | `npm run test:feature`     | The engine's API: tokens, scopes, status codes                                                               |
 | All         | `npm test`                 | The three above                                                                                              |
 
+## Where CI runs them
+
+The pipeline is [ADR 0008](../adr/0008-the-delivery-pipeline.md). The gates are one workflow, `.github/workflows/gates.yml`, run on every PR and, called by `release.yml`, on the commit a merge into `develop` or `main` makes, before it is tagged:
+
+| Job                                 | Runner           | Runs                                                   |
+| ----------------------------------- | ---------------- | ------------------------------------------------------ |
+| `Format, lint, types, tests, build` | `ubuntu-latest`  | format, lint, types, the three layers above, the build |
+| `Windows tests, build`              | `windows-latest` | the three layers above, the build                      |
+
+A spec that holds on one system and not on the other is a bug of the spec or of the app on that system: Windows rounds a timer under 16 ms up to 16, and forgives a path written with the wrong separator, which Linux does not.
+
+**No retries.** A spec that fails in CI without a cause in the change is not run again until it passes: it is filed as an issue with its log, then fixed, or skipped with that issue's number beside it until it is.
+
 ## Writing a spec
 
 - The name of a spec is the rule it holds: `'never overwrites a file already in the folder'`.
@@ -16,7 +29,7 @@
 - Each spec gets its own temp folder and its own host (`startRangeServer`), and removes them.
 - A host that misbehaves is an option of `startRangeServer` (`drops`, `ranges: false`, `status`, `announcesLength: false`), not a mock of `http`.
 - A service Scia connects to is a local host as well: `startAllDebridServer` (`apps/server/src/testing/alldebrid-server.ts`) answers as AllDebrid's documentation says, and refuses or misbehaves when told to. Every key in a spec is made up; no spec and no run uses a real one.
-- Never hardcode a Windows path separator in a spec: build paths with `path.join`. CI runs on Linux.
+- Never hardcode a Windows path separator in a spec: build paths with `path.join`. CI runs every spec on Linux and on Windows.
 
 ## Proving the real app
 
