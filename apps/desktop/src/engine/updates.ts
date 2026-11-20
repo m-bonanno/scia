@@ -27,19 +27,18 @@ export function updatesApply(app: {
 // after it — the person asked to quit (the owner, #82). electron-updater passes `--updated /S`.
 export const INSTALL_AT_QUIT = { silent: true, runAfter: false } as const;
 
-// Until the first stable release, GitHub sends /releases/latest to the list of releases, a page
-// electron-updater cannot read as the JSON it asked for: nothing to take, not a failure. It wraps
-// every failure to reach that address in the same words, so the cause is read too — a host that
-// failed or a network that is down are failures, retried an hour later.
-const NO_LATEST_RELEASE = 'please ensure a production release exists';
-const NOT_JSON = 'SyntaxError';
+// What electron-updater says when the releases it may read hold no version for it — until the
+// first stable release, for a Scia whose betas are off. Nothing to take, not a failure: a quiet
+// line, and the next check six hours later.
+const NOTHING_PUBLISHED = 'ERR_UPDATER_NO_PUBLISHED_VERSIONS';
 
-export function isNoStableRelease(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    error.message.includes(NO_LATEST_RELEASE) &&
-    error.message.includes(NOT_JSON)
-  );
+export function isNothingPublished(error: unknown): boolean {
+  return error instanceof Error && 'code' in error && error.code === NOTHING_PUBLISHED;
+}
+
+// electron-updater puts an answer's headers and body in its messages: the log keeps the first line.
+function firstLine(error: unknown): string {
+  return String(error).split('\n', 1)[0] ?? '';
 }
 
 // A pre-release is a beta: semantic-release makes no other kind.
@@ -124,7 +123,7 @@ export class Updates {
       this.#options.log.warn('update_not_installed', {
         version: ready,
         reason: 'betas_unknown',
-        error: String(error),
+        error: firstLine(error),
       });
       return false;
     }
@@ -155,7 +154,7 @@ export class Updates {
     try {
       betas = await this.#options.betas();
     } catch (error) {
-      log.warn('update_check_put_off', { error: String(error) });
+      log.warn('update_check_put_off', { error: firstLine(error) });
       this.#schedule(UPDATE_RETRY_MS);
       return;
     }
@@ -164,7 +163,7 @@ export class Updates {
     try {
       found = await this.#options.check(betas);
     } catch (error) {
-      log.warn('update_check_failed', { error: String(error) });
+      log.warn('update_check_failed', { error: firstLine(error) });
       this.#schedule(UPDATE_RETRY_MS);
       return;
     }
@@ -204,7 +203,7 @@ export class Updates {
           this.#putOff(version);
           return;
         }
-        this.#options.log.warn('update_fetch_failed', { version, error: String(error) });
+        this.#options.log.warn('update_fetch_failed', { version, error: firstLine(error) });
       },
     );
   }

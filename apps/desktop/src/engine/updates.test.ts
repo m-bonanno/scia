@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   INSTALL_AT_QUIT,
   isBeta,
-  isNoStableRelease,
+  isNothingPublished,
   UPDATE_CHECK_EVERY_MS,
   UPDATE_RETRY_MS,
   Updates,
@@ -120,32 +120,30 @@ describe('INSTALL_AT_QUIT', () => {
   });
 });
 
-describe('isNoStableRelease', () => {
-  // What electron-updater 6.8.11 throws when /releases/latest leads to no release: GitHub sends
-  // a repository with pre-releases alone to its list of releases.
-  const noStable = new Error(
-    'Cannot parse releases feed: Error: Unable to find latest version on GitHub (https://github.com/m-bonanno/scia/releases/latest), please ensure a production release exists: SyntaxError: Unexpected token',
-  );
+describe('isNothingPublished', () => {
+  // electron-updater's errors carry a code. Read in the packaged app against this repository on
+  // 20 November 2026, with the betas off and no stable release: "No published versions on GitHub".
+  const withCode = (message: string, code: string) => Object.assign(new Error(message), { code });
 
-  it('tells a repository with no stable release yet from a check that failed', () => {
-    expect(isNoStableRelease(noStable)).toBe(true);
+  it('tells releases that hold no version to take from a check that failed', () => {
     expect(
-      isNoStableRelease(new Error('Cannot find latest.yml in the latest release artifacts')),
-    ).toBe(false);
-    expect(isNoStableRelease(new Error('net::ERR_INTERNET_DISCONNECTED'))).toBe(false);
-    expect(isNoStableRelease('please ensure a production release exists')).toBe(false);
-  });
-
-  it('takes a failure to reach /releases/latest for a failure, not for no stable release', () => {
-    for (const cause of [
-      'HttpError: 503 Service Unavailable',
-      'Error: net::ERR_INTERNET_DISCONNECTED',
+      isNothingPublished(
+        withCode('No published versions on GitHub', 'ERR_UPDATER_NO_PUBLISHED_VERSIONS'),
+      ),
+    ).toBe(true);
+    for (const [message, code] of [
+      [
+        'Cannot find latest.yml in the latest release artifacts',
+        'ERR_UPDATER_CHANNEL_FILE_NOT_FOUND',
+      ],
+      ['Unable to find latest version on GitHub', 'ERR_UPDATER_LATEST_VERSION_NOT_FOUND'],
+      ['Cannot parse releases feed', 'ERR_UPDATER_INVALID_RELEASE_FEED'],
+      ['net::ERR_INTERNET_DISCONNECTED', 'ERR_INTERNET_DISCONNECTED'],
     ]) {
-      const failed = new Error(
-        `Cannot parse releases feed: Error: Unable to find latest version on GitHub (https://github.com/m-bonanno/scia/releases/latest), please ensure a production release exists: ${cause}`,
-      );
-      expect(isNoStableRelease(failed), cause).toBe(false);
+      expect(isNothingPublished(withCode(message!, code!)), code).toBe(false);
     }
+    expect(isNothingPublished(new Error('No published versions on GitHub'))).toBe(false);
+    expect(isNothingPublished('ERR_UPDATER_NO_PUBLISHED_VERSIONS')).toBe(false);
   });
 });
 
@@ -164,10 +162,12 @@ describe('Updates', () => {
       expect(UPDATE_CHECK_EVERY_MS).toBe(6 * 60 * 60 * 1000);
     });
 
-    it('checks again an hour after a check that failed, and says why in the log', async () => {
+    it('checks again an hour after a check that failed, and says why in one line of the log', async () => {
       const { updates, timers, lines } = updating({
         check: async () => {
-          throw new Error('Cannot find latest.yml in the latest release artifacts');
+          throw new Error(
+            'Cannot find latest.yml in the latest release artifacts\nHeaders: {\n  "server": "github.com"\n}',
+          );
         },
       });
 
