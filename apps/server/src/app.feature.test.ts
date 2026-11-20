@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { API_PREFIX, ApiErrorCode, DEFAULT_API_PORT, SETTINGS_LIMITS } from '@scia/contracts';
 import { DownloadFailure } from '@scia/core';
 import type { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { createApp } from './app.ts';
 import { DownloadManager } from './download-manager.ts';
 import { type RemoteSource, RemoteError } from './remote-source.ts';
@@ -49,6 +49,7 @@ describe('the engine API', () => {
     });
   });
   afterEach(async () => {
+    vi.restoreAllMocks();
     await manager.close();
     await folder.remove();
   });
@@ -152,6 +153,40 @@ describe('the engine API', () => {
     expect(heard.startsWith('event: snapshot\ndata: {"downloads":[]}\n\n')).toBe(true);
     expect(heard.match(/event: snapshot/g)).toHaveLength(1);
     expect(heard.split(comment).length).toBeGreaterThanOrEqual(4);
+  });
+
+  it('leaves nothing behind for a stream of events whose listener has gone', async () => {
+    const quiet = createApp({
+      manager,
+      apiToken: APP_TOKEN,
+      extensionToken: EXTENSION_TOKEN,
+      version: '1.2.3',
+      port: () => DEFAULT_API_PORT,
+      staticDir: undefined,
+      logger: silentLogger,
+      eventsKeepAliveMs: 37,
+    });
+    const asked = vi.spyOn(manager, 'nextChange');
+    const started = vi.spyOn(globalThis, 'setInterval');
+    const cleared = vi.spyOn(globalThis, 'clearInterval');
+    const response = await quiet.request(`${ORIGIN}${API_PREFIX}/events`, {
+      headers: { authorization: `Bearer ${APP_TOKEN}` },
+    });
+    const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+    await reader.read();
+    // Nothing changes: the route is waiting on the manager, with a sign of life every 37 ms.
+    await vi.waitFor(() => {
+      expect(asked.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    const stillHere = started.mock.results[started.mock.calls.findIndex((call) => call[1] === 37)];
+
+    await reader.cancel();
+
+    // The wait is called off through the signal the route handed over, and its timer stopped.
+    await vi.waitFor(() => {
+      expect(asked.mock.calls.at(-1)?.[1]?.aborted).toBe(true);
+      expect(cleared).toHaveBeenCalledWith(stillHere?.value);
+    });
   });
 
   it('refuses what is not an http address', async () => {

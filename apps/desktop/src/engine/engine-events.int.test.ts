@@ -27,12 +27,69 @@ function aDownload(id: string, status: string) {
 const snapshot = (...downloads: unknown[]) =>
   `event: snapshot\ndata: ${JSON.stringify({ downloads })}\n\n`;
 
+// What the follower logged, with the reason it gave.
+function aLog() {
+  const lost: string[] = [];
+  const back: string[] = [];
+  return {
+    lost,
+    back,
+    log: {
+      warn: (message: string, details: object) => {
+        lost.push(`${message} ${JSON.stringify(details)}`);
+      },
+      info: (message: string) => {
+        back.push(message);
+      },
+    },
+  };
+}
+
 describe('followDownloads against a real host, with the real fetch', () => {
   let server: Server | undefined;
   afterEach(() => {
     server?.closeAllConnections();
     server?.close();
     server = undefined;
+  });
+
+  it('gives up a host that begins its answer and says nothing more, and says why', async () => {
+    let requests = 0;
+    const host = createServer((_request, response) => {
+      requests += 1;
+      response.writeHead(200, { 'content-type': 'text/event-stream' });
+      response.flushHeaders();
+      // The first answer is headers and nothing else; the one after it has a list.
+      if (requests > 1) response.write(Buffer.from(snapshot(aDownload('a', 'queued'))));
+    });
+    server = host;
+    await new Promise<void>((resolve) => host.listen(0, '127.0.0.1', resolve));
+    const { port } = host.address() as AddressInfo;
+    const stopped = new AbortController();
+    const names: string[] = [];
+    const { lost, back, log } = aLog();
+
+    const done = followDownloads({
+      engine: () => ({ origin: `http://127.0.0.1:${String(port)}`, apiToken: 'token', fetch }),
+      onDownloads: (downloads) => {
+        names.push(...downloads.map((download) => download.fileName));
+      },
+      signal: stopped.signal,
+      answerLimitMs: 2000,
+      silenceLimitMs: 250,
+      retryMs: 20,
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      log,
+    });
+    await vi.waitFor(() => {
+      expect(names).toEqual(['a.bin']);
+    });
+
+    expect(requests).toBe(2);
+    expect(lost).toEqual(['engine_events_lost {"reason":"Error: The engine went silent."}']);
+    expect(back).toEqual(['engine_events_back']);
+    stopped.abort();
+    await done;
   });
 
   it('keeps the stream it was answered on, past the time an answer has to begin, and reads a name cut in two', async () => {

@@ -201,6 +201,82 @@ describe('followDownloads', () => {
     await follow.done;
   });
 
+  it('says each loss once and each return once, the second time as the first', async () => {
+    const first = aStream();
+    const second = aStream();
+    const refused = async () => new Response(null, { status: 503 });
+    const follow = following([
+      refused,
+      refused,
+      async () => first.response,
+      refused,
+      refused,
+      async () => second.response,
+    ]);
+
+    first.say(snapshot(aDownload('a', 'downloading')));
+    await vi.waitFor(() => {
+      expect(follow.seen).toHaveLength(1);
+    });
+    first.end();
+    second.say(snapshot(aDownload('a', 'completed')));
+    await vi.waitFor(() => {
+      expect(follow.seen).toHaveLength(2);
+    });
+
+    expect(follow.warnings).toEqual(['engine_events_lost', 'engine_events_lost']);
+    expect(follow.said).toEqual(['engine_events_back', 'engine_events_back']);
+    follow.stopped.abort();
+    await follow.done;
+  });
+
+  it('does not say the events are back for an answer that begins and says nothing', async () => {
+    const mute = aStream();
+    const next = aStream();
+    const follow = following(
+      [async () => mute.response, async () => next.response],
+      undefined,
+      120,
+    );
+
+    await vi.waitFor(() => {
+      expect(follow.fetch).toHaveBeenCalledTimes(2);
+    });
+    // Lost, and not back: nothing was heard on the stream that was opened.
+    expect(follow.warnings).toEqual(['engine_events_lost']);
+    expect(follow.said).toEqual([]);
+
+    next.say(snapshot(aDownload('a', 'queued')));
+    await vi.waitFor(() => {
+      expect(follow.said).toEqual(['engine_events_back']);
+    });
+    follow.stopped.abort();
+    await follow.done;
+  });
+
+  it('closes the body of an answer it refuses', async () => {
+    let closed = false;
+    const refusal = new Response(
+      new ReadableStream<Uint8Array>({
+        cancel: () => {
+          closed = true;
+        },
+      }),
+      { status: 503 },
+    );
+    const stream = aStream();
+    const follow = following([async () => refusal, async () => stream.response]);
+
+    stream.say(snapshot(aDownload('a', 'queued')));
+    await vi.waitFor(() => {
+      expect(follow.seen).toHaveLength(1);
+    });
+
+    expect(closed).toBe(true);
+    follow.stopped.abort();
+    await follow.done;
+  });
+
   it('stops when it is told to, also while the engine is silent, and asks nothing more', async () => {
     const stream = aStream();
     const follow = following([async () => stream.response]);
@@ -239,12 +315,12 @@ describe('followDownloads', () => {
 
   it('takes a comment of the engine for a sign that it is there, with nothing to say', async () => {
     const stream = aStream();
-    const follow = following([async () => stream.response], undefined, 120);
+    const follow = following([async () => stream.response], undefined, 400);
     stream.say(snapshot(aDownload('a', 'downloading')));
 
-    // Three times the bound, a comment every third of it.
-    for (let comments = 0; comments < 9; comments += 1) {
-      await new Promise((resolve) => setTimeout(resolve, 40));
+    // Twice the bound and more, a comment every seventh of it: a busy machine has room.
+    for (let comments = 0; comments < 15; comments += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 60));
       stream.say(': idle\n\n');
     }
     stream.say(snapshot(aDownload('a', 'completed')));

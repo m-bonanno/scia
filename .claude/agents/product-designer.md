@@ -25,7 +25,7 @@ What earlier reviews taught, each with the PR that taught it.
 
 - A capture shows one screen. For a change that touches every string, ask what each dialog reads in the real app, not only the main view. (#4)
 
-- A text the system draws has the system's limits: count its lines against them, bound a name to one, and put last what can be lost — never the sentence the issue asks for. (#51)
+- A text the system draws has the system's limits: count its lines against them, bound a name to one — between characters as a person sees them, not units of the text — and keep within the count what must not be lost, wherever it stands. (#51)
 
 ## Output
 

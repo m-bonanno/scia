@@ -109,16 +109,16 @@ async function followOnce(options: FollowOptions, opened: () => void): Promise<v
       throw new Error('The engine did not open its events.');
     }
     heard();
-    opened();
     reader = response.body.getReader();
     const frames = new SseFrames();
     const decoder = new TextDecoder();
     for (;;) {
       const { done, value } = await reader.read();
-      if (silence.fell) throw new Error('The engine went silent.');
       if (done) return;
-      // Anything at all, a comment included: the engine is there.
+      // Anything at all, a comment included: the engine is there, and its events are back —
+      // said here and not when the answer began, which an engine can do and then say nothing.
       heard();
+      opened();
       for (const frame of frames.push(decoder.decode(value, { stream: true }))) {
         if (frame.event !== SNAPSHOT_EVENT) continue;
         const downloads = downloadsIn(frame.data);
@@ -126,6 +126,9 @@ async function followOnce(options: FollowOptions, opened: () => void): Promise<v
         else options.onDownloads(downloads);
       }
     }
+  } catch (error) {
+    // Given up for its silence, the read ends as any aborted one: the reason is said here.
+    throw silence.fell ? new Error('The engine went silent.') : error;
   } finally {
     clearTimeout(silent);
     options.signal.removeEventListener('abort', giveUp);

@@ -42,6 +42,8 @@ What earlier reviews taught, each with the PR that taught it.
 
 - A thing that lasts as long as the app is left alone for longer than every timer under it: a stream approved on runs of a minute was cut at five. (#51)
 
+- A flag the runtime gives is checked against what the system says, in the state a person can be in: `isFocused()` was true for a window that was never in use, and a run from a window that had been in use could not show it. (#51)
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.

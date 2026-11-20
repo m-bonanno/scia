@@ -107,4 +107,31 @@ describe('endedNotice', () => {
     expect(marked.startsWith('Failed: Big Buck Bunny')).toBe(true);
     expect(marked.length).toBeLessThanOrEqual(40);
   });
+
+  it('cuts a name between characters, never through one: an emoji and a flag stay whole', () => {
+    const characters = (text: string) =>
+      Array.from(new Intl.Segmenter(undefined, { granularity: 'grapheme' }).segment(text)).length;
+    // Half of a character that takes two units of the text: what a cut by units leaves behind.
+    const halved = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+
+    // Emoji where the beginning is cut, and where the end that is kept begins.
+    const smiling = endedNotice(
+      [completed(`${'1234567890'.repeat(2)}1234${'😀'.repeat(13)}-holiday.mp4`)],
+      going,
+    ).body;
+    const laughing = endedNotice([completed(`Trip to the sea ${'😂'.repeat(40)}.mp4`)], going).body;
+    // A flag is two characters of two units each, shown as one.
+    const flags = endedNotice(
+      [completed(`Trip ${'🇮🇹'.repeat(30)} and back again.mp4`)],
+      going,
+    ).body;
+
+    for (const line of [smiling, laughing, flags]) {
+      expect(halved.test(line), line).toBe(false);
+      expect(characters(line), line).toBeLessThanOrEqual(40);
+      expect(line).toContain('…');
+      expect(line.endsWith('.mp4')).toBe(true);
+    }
+    expect(flags.replaceAll('🇮🇹', '')).not.toMatch(/[\u{1F1E6}-\u{1F1FF}]/u);
+  });
 });
