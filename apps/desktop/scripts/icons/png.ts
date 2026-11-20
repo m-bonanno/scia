@@ -9,7 +9,6 @@ export interface Raster {
 const SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 const BIT_DEPTH = 8;
 const COLOUR_TYPE_RGBA = 6;
-const FILTER_NONE = 0;
 
 function chunk(type: string, data: Buffer): Buffer {
   const typed = Buffer.concat([Buffer.from(type, 'latin1'), data]);
@@ -36,9 +35,9 @@ export function encodePng(raster: Raster): Buffer {
   header.set([BIT_DEPTH, COLOUR_TYPE_RGBA, 0, 0, 0], 8);
 
   const stride = size * 4;
+  // Each row begins with its filter byte: 0, none, which Buffer.alloc has already written.
   const rows = Buffer.alloc((stride + 1) * size);
   for (let y = 0; y < size; y++) {
-    rows[y * (stride + 1)] = FILTER_NONE;
     rows.set(rgba.subarray(y * stride, (y + 1) * stride), y * (stride + 1) + 1);
   }
 

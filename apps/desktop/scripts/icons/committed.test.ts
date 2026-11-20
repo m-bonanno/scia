@@ -13,6 +13,15 @@ const read = (path: string): Buffer => readFileSync(join(DESKTOP_DIR, path));
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 const lock = JSON.parse(read(ICON_LOCK).toString('utf8')) as IconLock;
 
+// A key two spaces under a section at the top of a YAML file, wherever it is in the section:
+// the repository has no YAML parser, and the config has no deeper nesting to tell apart.
+function childOf(yaml: string, section: string, key: string): string | undefined {
+  const block = new RegExp(`^${section}:[ \\t]*\\n((?:[ \\t]+.*\\n|[ \\t]*\\n)*)`, 'm').exec(
+    yaml,
+  )?.[1];
+  return new RegExp(`^  ${key}:[ \\t]*(\\S+)[ \\t]*$`, 'm').exec(block ?? '')?.[1];
+}
+
 describe('the committed icons', () => {
   it('were drawn from the source as it is now', () => {
     expect(lock.source).toBe(sha256(read(ICON_SOURCE)));
@@ -35,14 +44,19 @@ describe('the committed icons', () => {
     );
   });
 
-  // electron-builder reads its own file: these are the paths it is given.
+  // electron-builder reads its own file: these are the paths it is given — the .ico for Windows,
+  // and for Linux the folder that holds the PNGs of the list and nothing else of it.
   it('are the ones the packager is given', () => {
     const config = read('electron-builder.yml').toString('utf8');
-    const paths = ICON_OUTPUTS.map((output) => output.path);
+    const linuxFolder = 'build/icons';
 
-    expect(paths).toContain(/^win:\s*\n\s+icon:\s*(\S+)$/m.exec(config)?.[1]);
-    const linux = /^linux:(?:\n\s+.*)*?\n\s+icon:\s*(\S+)$/m.exec(config)?.[1];
-    expect(paths.filter((path) => path.startsWith(`${linux ?? '-'}/`))).toHaveLength(8);
+    expect(childOf(config, 'win', 'icon')).toBe('assets/icon.ico');
+    expect(childOf(config, 'linux', 'icon')).toBe(linuxFolder);
+    expect(
+      ICON_OUTPUTS.filter((output) => output.path.startsWith(`${linuxFolder}/`)).map(
+        (output) => output.sizes,
+      ),
+    ).toEqual([16, 24, 32, 48, 64, 128, 256, 512].map((size) => [size]));
   });
 
   // The owner's choice (#81): the mark in the default theme's dark variant, the colours the

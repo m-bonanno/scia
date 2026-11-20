@@ -28,5 +28,11 @@ describe('the icons drawn from the source', () => {
 
   it('draws each size once, smallest first', () => {
     expect(sizesToDraw(ICON_OUTPUTS)).toEqual([16, 24, 32, 48, 64, 128, 256, 512]);
+    expect(
+      sizesToDraw([
+        { path: 'a.png', format: 'png', sizes: [48] },
+        { path: 'b.ico', format: 'ico', sizes: [32, 16, 48] },
+      ]),
+    ).toEqual([16, 32, 48]);
   });
 });

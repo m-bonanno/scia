@@ -18,6 +18,8 @@ import {
 } from './outputs.ts';
 import { encodePng, type Raster } from './png.ts';
 
+const DRAWING_LIMIT_MS = 60_000;
+
 const sha256 = (bytes: Buffer): string => createHash('sha256').update(bytes).digest('hex');
 
 function rasterise(svgPath: string, sizes: readonly number[]): Map<number, Raster> {
@@ -34,8 +36,10 @@ function rasterise(svgPath: string, sizes: readonly number[]): Map<number, Raste
         ...sizes.map(String),
         `--user-data-dir=${join(scratch, 'profile')}`,
       ],
-      { stdio: 'inherit' },
+      // A whole run takes about a second; a drawing that never ends is stopped, not waited for.
+      { stdio: 'inherit', timeout: DRAWING_LIMIT_MS },
     );
+    if (run.error) throw new Error(`Electron drew no icon: ${run.error.message}`);
     if (run.status !== 0) throw new Error(`Electron drew no icon (exit ${String(run.status)})`);
     return new Map(
       sizes.map((size) => [

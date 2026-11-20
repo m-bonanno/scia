@@ -6,10 +6,10 @@ import { app, BrowserWindow } from 'electron';
 
 const [svgPath, outDir, ...sizes] = process.argv.slice(2).filter((arg) => !arg.startsWith('--'));
 
-// Drawn by the CPU, so that two machines draw the same pixels.
+// Drawn by the CPU, so that a run is repeatable: the lock turns any change of pixels into a diff.
 app.disableHardwareAcceleration();
 
-app.whenReady().then(async () => {
+async function draw() {
   const window = new BrowserWindow({ show: false });
   await window.loadURL('about:blank');
   const svg = readFileSync(svgPath).toString('base64');
@@ -17,7 +17,10 @@ app.whenReady().then(async () => {
     const pixels = await window.webContents.executeJavaScript(`(async () => {
       const image = new Image();
       image.src = 'data:image/svg+xml;base64,${svg}';
-      await image.decode();
+      // A DOMException crosses executeJavaScript as an empty object: say it as a sentence.
+      await image.decode().catch((error) => {
+        throw new Error('the SVG does not decode: ' + String(error?.message ?? error));
+      });
       const canvas = document.createElement('canvas');
       canvas.width = ${String(size)};
       canvas.height = ${String(size)};
@@ -31,5 +34,16 @@ app.whenReady().then(async () => {
     })()`);
     writeFileSync(join(outDir, `${String(size)}.rgba`), Buffer.from(pixels, 'base64'));
   }
-  app.exit(0);
-});
+}
+
+// Every way out ends the process: a rejection left alone keeps Electron alive with its window.
+app
+  .whenReady()
+  .then(draw)
+  .then(
+    () => app.exit(0),
+    (error) => {
+      console.error(`Chromium could not draw ${svgPath}: ${error?.message ?? String(error)}`);
+      app.exit(1);
+    },
+  );

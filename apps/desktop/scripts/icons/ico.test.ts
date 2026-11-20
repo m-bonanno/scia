@@ -30,6 +30,17 @@ describe('encodeIco', () => {
     expect(ico[7]).toBe(0);
   });
 
+  it('says of every entry its width, its height, one plane and 32 bits a pixel', () => {
+    const ico = encodeIco([opaque(16), opaque(48)]);
+
+    for (const [i, size] of [16, 48].entries()) {
+      const at = 6 + 16 * i;
+      expect([ico[at], ico[at + 1]]).toEqual([size, size]);
+      expect(ico.readUInt16LE(at + 4)).toBe(1);
+      expect(ico.readUInt16LE(at + 6)).toBe(32);
+    }
+  });
+
   it('points every entry at bytes of its own, one after the other, to the end', () => {
     const ico = encodeIco([opaque(16), opaque(32), opaque(256)]);
     const entries = readIcoDirectory(ico);
@@ -43,46 +54,59 @@ describe('encodeIco', () => {
   // The layout Windows itself ships: a PNG for 256, bitmaps below it, which every reader of
   // icons takes — NSIS's compiler and resource editors among them.
   it('stores 256 as a PNG and every smaller size as a 32-bit bitmap', () => {
-    const ico = encodeIco([opaque(16), opaque(256)]);
-    const [small, large] = readIcoDirectory(ico);
+    const ico = encodeIco([opaque(16), opaque(128), opaque(256)]);
+    const [small, middle, large] = readIcoDirectory(ico);
 
     expect([...ico.subarray(large?.offset, (large?.offset ?? 0) + 4)]).toEqual(PNG_SIGNATURE);
-    expect(ico.readUInt32LE(small?.offset ?? 0)).toBe(40);
-    expect(ico.readUInt16LE((small?.offset ?? 0) + 14)).toBe(32);
-    expect(small?.bitsPerPixel).toBe(32);
+    for (const entry of [small, middle]) {
+      expect(ico.readUInt32LE(entry?.offset ?? 0)).toBe(40);
+      expect(ico.readUInt16LE((entry?.offset ?? 0) + 14)).toBe(32);
+      expect(entry?.bitsPerPixel).toBe(32);
+    }
   });
 
   // A bitmap of an icon counts the mask in its height.
-  it('gives a bitmap twice its height, for the mask below its colours', () => {
+  it('gives a bitmap one plane, and twice its height for the mask below its colours', () => {
     const ico = encodeIco([opaque(16)]);
     const [entry] = readIcoDirectory(ico);
 
     expect(ico.readInt32LE((entry?.offset ?? 0) + 4)).toBe(16);
     expect(ico.readInt32LE((entry?.offset ?? 0) + 8)).toBe(32);
+    expect(ico.readUInt16LE((entry?.offset ?? 0) + 12)).toBe(1);
   });
 
   it('writes the colours bottom row first, as blue, green, red, alpha', () => {
-    const top = [200, 100, 50, 255];
+    const top = [200, 100, 50, 128];
     const ico = encodeIco([square(16, (_x, y) => (y === 0 ? top : [0, 0, 0, 255]))]);
     const [entry] = readIcoDirectory(ico);
     const pixels = (entry?.offset ?? 0) + 40;
     const lastRow = pixels + 15 * 16 * 4;
 
-    expect([...ico.subarray(lastRow, lastRow + 4)]).toEqual([50, 100, 200, 255]);
+    expect([...ico.subarray(lastRow, lastRow + 4)]).toEqual([50, 100, 200, 128]);
     expect([...ico.subarray(pixels, pixels + 4)]).toEqual([0, 0, 0, 255]);
   });
 
   // Each row of the mask is a bit a pixel, padded to four bytes.
   it('marks in the mask the pixels that are fully transparent, and no other', () => {
+    const clear = new Set(['0,0', '9,0', '15,15']);
     const ico = encodeIco([
-      square(16, (x, y) => (x === 0 && y === 0 ? [0, 0, 0, 0] : [9, 9, 9, 1])),
+      square(16, (x, y) => (clear.has(`${String(x)},${String(y)}`) ? [0, 0, 0, 0] : [9, 9, 9, 1])),
     ]);
     const [entry] = readIcoDirectory(ico);
     const mask = (entry?.offset ?? 0) + 40 + 16 * 16 * 4;
-    const topRow = mask + 15 * 4;
+    const rows = Array.from({ length: 16 }, (_, row) => [
+      ...ico.subarray(mask + row * 4, mask + row * 4 + 4),
+    ]);
 
-    expect(ico[topRow]).toBe(0b1000_0000);
-    expect([...ico.subarray(mask, topRow)].every((byte) => byte === 0)).toBe(true);
+    // Bottom row first: (15, 15) is the last bit of the first row, (0, 0) and (9, 0) in the last.
+    expect(rows[0]).toEqual([0, 0b0000_0001, 0, 0]);
+    expect(rows[15]).toEqual([0b1000_0000, 0b0100_0000, 0, 0]);
+    expect(
+      rows
+        .slice(1, 15)
+        .flat()
+        .every((byte) => byte === 0),
+    ).toBe(true);
     expect(entry?.bytes).toBe(40 + 16 * 16 * 4 + 16 * 4);
   });
 
