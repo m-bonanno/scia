@@ -1,11 +1,12 @@
 import { type Pairing, type Settings, SETTINGS_LIMITS, type SettingsPatch } from '@scia/contracts';
-import { FolderChange, isFolderChange } from '@scia/contracts/bridge';
+import { FolderChange, isFolderChange, SELF_UPDATING_PLATFORMS } from '@scia/contracts/bridge';
 import { Check, Copy, FolderPen, Minus, Plus, X } from 'lucide-react';
 import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react';
 import { IconButton } from '@/components/icon-button.tsx';
 import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { FOLDER_REFUSED } from '@/lib/messages.ts';
+import { BetaUpdates } from './beta-updates.tsx';
 import { IntegrationsSection } from './integrations.tsx';
 import { SpeedLimit } from './speed-limit.tsx';
 import { ThemeChoice } from './theme-choice.tsx';
@@ -50,6 +51,9 @@ export function SettingsDialog({
   const [pairing, setPairing] = useState<Pairing | null>(null);
   const [folderRefused, setFolderRefused] = useState(false);
   const shell = bridge();
+  // The betas are offered where Scia updates itself: in the app, on a system with an installer.
+  const updatesItself =
+    shell !== undefined && (SELF_UPDATING_PLATFORMS as readonly string[]).includes(shell.platform);
 
   useEffect(() => {
     const element = dialog.current;
@@ -168,6 +172,14 @@ export function SettingsDialog({
         )}
         <IntegrationsSection open={open} onError={onError} />
         {pairing !== null && <PairingSection pairing={pairing} onError={onError} />}
+        {settings !== null && updatesItself && (
+          <BetaUpdates
+            value={settings.betaUpdates}
+            onChange={(betaUpdates) => {
+              change({ betaUpdates });
+            }}
+          />
+        )}
         <p className="text-sm text-muted-foreground">Scia {shell?.version ?? 'development'}</p>
       </div>
     </dialog>
