@@ -30,6 +30,8 @@ export function createUpdater(
   updater.autoDownload = false;
   updater.autoInstallOnAppQuit = false;
   updater.allowDowngrade = false;
+  // The release carries the whole installer, not a web installer that fetches a package.
+  updater.disableWebInstaller = true;
   // An updater with nobody listening for its errors throws them: each is also the rejection of
   // the call that caused it, which engine/updates.ts logs.
   updater.on('error', () => undefined);
