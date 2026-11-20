@@ -10,6 +10,8 @@ export interface RuntimeLayout {
   readonly downloadDir: string;
   // The notices this computer was already shown (engine/shown-notices.ts).
   readonly noticesPath: string;
+  // The keys of the connected services, each sealed by the system (engine/key-vault.ts).
+  readonly keysDir: string;
 }
 
 export interface LayoutInput {
@@ -29,6 +31,7 @@ export function resolveRuntimeLayout(input: LayoutInput): RuntimeLayout {
     dataDir: join(input.userDataDir, 'engine'),
     logsDir: join(input.userDataDir, 'logs'),
     noticesPath: join(input.userDataDir, 'notices.json'),
+    keysDir: join(input.userDataDir, 'keys'),
     downloadDir: input.scratchProfile ? join(input.userDataDir, 'downloads') : input.downloadsDir,
   };
   if (input.isPackaged) {

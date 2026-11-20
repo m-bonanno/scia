@@ -9,7 +9,15 @@ describe('parseLaunchOptions', () => {
     expect(parseLaunchOptions(['scia.exe'], cwd)).toEqual({
       userDataDir: undefined,
       port: undefined,
+      alldebridApi: undefined,
     });
+  });
+
+  it('passes on the address of a simulated AllDebrid, for the engine to judge', () => {
+    expect(parseLaunchOptions(['--alldebrid-api=http://127.0.0.1:8080'], cwd).alldebridApi).toBe(
+      'http://127.0.0.1:8080',
+    );
+    expect(parseLaunchOptions(['--alldebrid-api='], cwd).alldebridApi).toBeUndefined();
   });
 
   it('resolves a relative profile against the folder it was launched from', () => {

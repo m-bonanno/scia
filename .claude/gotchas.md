@@ -23,6 +23,7 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → A word given a new meaning is searched for in its old one, in the whole tree and not in the files the change touched: "theme" went to the palette and "variant" to light or dark, and "both themes" stayed in the PR template, in a role file and in the roadmap line beside the new one — `git grep -nIiE "(dark|light|either|both) themes?"` found the four (#52, the rule above a second time).
 
 - → A sentence that names a cause is shown for that cause alone. One `catch` around a call that rejects in five ways said "choose a folder Scia can write to" to someone whose engine was restarting and who had chosen nothing: try a `catch` against every way the call rejects, and have the callee say which it was, as data (#38).
+- → A sentence written for one code is checked against everything that code covers: "AllDebrid is not answering" was the text of a code that also means maintenance, an unknown answer and too many requests — it named one cause of four (#53: #38 again). Write what is true of the whole group.
 
 ## Specs
 
@@ -39,9 +40,13 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 - → A bound in a timing spec is set against what the code does without the thing held, not against what it does with it: "a pause under a limit takes less than a second" passed with the wait deaf to the pause, because one read at the floor is a second and the unguarded pause took 980 ms. Make what is owed several times the bound, and see the spec fail with the guard taken out (#44).
 - → A spec written after its code is seen failing by taking the code's line away, one at a time — also the ones that "obviously" hold: a read made "when the engine is reached, and again when it comes back" stayed green with the read made at mount only, because the spec's connection never changed (#44). A guard reached from several places is taken away at each of them: the late read of Settings was held at the opening and at a change, and not after a folder was chosen, where every spec stayed green without it (#52).
+- → A list of lines taken away names the lines, and a line no road of the specs reaches is not among the "caught": the plan said "each of the service's codes unmapped" and "the account asked at every listing", and two of those lines could be deleted with every spec green — a code the simulated service is never made to answer, and a line only an engine that read its key from the vault runs. Take the line away on each road that reaches it; a line no road reaches is taken out of the code (#53: the slips of #32 and #44, both again).
+- → The numbers of a run are read from that run's record, and a body that tells of several runs says which run each number belongs to: "two requests in the whole run" was the count of the last run, beside sentences from an earlier one that had made four (#53: #44 again).
 - → A number in a spec's comment, and in the PR body that quotes it, is counted from the run, not from the setting: eight connections were configured, and a file of four megabytes made four (#44).
 
 - → Two asks of the same thing answer in the order they like. Settings read the engine at every opening and kept whatever came back: a change made while that read was on its way was undone on screen when the read answered after it — the page went back to the theme of before, with the engine keeping the new one. No person is that fast; a harness on a window the system had put in the background was. An answer is kept only when nothing was asked after it, and the spec holds the late answer back by hand (#52).
+
+- → A way back is not offered beside something that cannot be taken back: "Cancel" stayed pressable while a key was being checked, the key was kept all the same, and a refusal that came back was drawn under a row with no field (#53). Try every control of a form while its request is on its way.
 
 ## Docs and runbooks
 
@@ -63,6 +68,9 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → A rate is proven against a host that sends as fast as it is read, and counted in bytes the engine took — not in bytes written, which lag, and not in the speed shown. A test host that pauses between pieces hid a limit passed twofold, in the specs and in the real app (#44).
 - → A list of values is tried at both ends, and over the transport people use. Every run of the speed limit sat between 256 KB/s and 2 MB/s, over plain http; at 25 MB/s a read's turn is two milliseconds, a timer under sixteen takes sixteen on Windows, and a wait that ended late was lost for good: a download got a third of its limit, on every head of the PR, and less over HTTPS, where a read is a quarter the size — until the third round measured it (#44).
 - → A guard that is taken away is searched for everything else it was guarding. The idle timer that left the socket was also what ended a redirect's drain and an answer nobody read (#44).
+- → A word from outside is not looked up in a plain object: `FAILURE_OF[code]` found `constructor` and `toString`, which every object has, and a service's code of that name became a refusal with no code, where the rule says "a code Scia does not know". A `Map`, or `Object.hasOwn` (#53).
+- → A number from outside is bounded before it becomes a date, and bounded by what the contract on the other side takes: `new Date(seconds * 1000).toISOString()` throws for a number no calendar holds, and a throw that is not the adapter's own error crosses the API as a 500; bounded at the last second a `Date` holds, it wrote `+010000-…` for the years past 9999, which the page's `z.iso.datetime()` refuses — a service connected, and a page that could neither say so nor disconnect it (#53, twice).
+- → Two changes of one thing kept outside the process are made one at a time, and one that was given up on is undone: a write to the vault that main finished after the engine stopped waiting left a key the person had been told was not kept (#53).
 - → Nothing that paces or times out runs on `Date.now()`: the system's clock steps. `performance.now()` does not (#44).
 
 ## Electron

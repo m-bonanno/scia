@@ -5,16 +5,21 @@ import {
   addDownloadsSchema,
   API_PREFIX,
   ApiErrorCode,
+  connectIntegrationSchema,
   downloadFolderSchema,
   type Health,
+  isIntegrationId,
   type Pairing,
   settingsPatchSchema,
   SNAPSHOT_EVENT,
 } from '@scia/contracts';
 import type { Theme } from '@scia/contracts/theme';
+import { ServiceFailure } from '@scia/core';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
+import { ServiceError } from './alldebrid.ts';
 import { type DownloadManager, ManagerError, ManagerRefusal } from './download-manager.ts';
+import { type Integrations, KeyNotKeptError } from './integrations.ts';
 import { describeFailure, type Logger } from './logger.ts';
 
 // How often a page hears of a running download: four times a second reads as continuous.
@@ -28,6 +33,7 @@ function wearing(page: string, theme: Theme): string {
 
 export interface AppDeps {
   readonly manager: DownloadManager;
+  readonly integrations: Integrations;
   // The desktop app's own token: every route.
   readonly apiToken: string;
   // The browser extension's token: it may add downloads and nothing else (docs/adr/0002).
@@ -71,7 +77,7 @@ function fail(status: number, code: ApiErrorCode, message: string): Response {
 }
 
 export function createApp(deps: AppDeps): Hono {
-  const { manager } = deps;
+  const { manager, integrations } = deps;
   const app = new Hono();
 
   // A page of any site can make the browser call 127.0.0.1 under a host name of its own (DNS
@@ -171,6 +177,26 @@ export function createApp(deps: AppDeps): Hono {
     return c.json({ data: await manager.setDownloadDirectory(parsed.data.directory) });
   });
 
+  app.get(`${API_PREFIX}/integrations`, async (c) => c.json({ data: await integrations.list() }));
+
+  // The key comes in and never goes back out: no route answers it.
+  app.put(`${API_PREFIX}/integrations/:id`, async (c) => {
+    const id = c.req.param('id');
+    if (!isIntegrationId(id)) return fail(404, ApiErrorCode.NotFound, 'No such service.');
+    const parsed = connectIntegrationSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(400, ApiErrorCode.InvalidRequest, 'Give the key of the service.');
+    }
+    return c.json({ data: await integrations.connect(id, parsed.data.apiKey) });
+  });
+
+  app.delete(`${API_PREFIX}/integrations/:id`, async (c) => {
+    const id = c.req.param('id');
+    if (!isIntegrationId(id)) return fail(404, ApiErrorCode.NotFound, 'No such service.');
+    await integrations.disconnect(id);
+    return c.body(null, 204);
+  });
+
   app.get(`${API_PREFIX}/extension/pairing`, (c) => {
     const pairing: Pairing = { token: deps.extensionToken, port: deps.port() };
     return c.json({ data: pairing });
@@ -211,6 +237,14 @@ export function createApp(deps: AppDeps): Hono {
       return error.refusal === ManagerRefusal.Invalid
         ? fail(400, ApiErrorCode.InvalidRequest, error.message)
         : fail(409, ApiErrorCode.Conflict, error.message);
+    }
+    if (error instanceof ServiceError) {
+      // The service was asked and said no (422), or could not be asked (502).
+      const status = error.failure === ServiceFailure.Unavailable ? 502 : 422;
+      return fail(status, error.failure, error.message);
+    }
+    if (error instanceof KeyNotKeptError) {
+      return fail(500, ApiErrorCode.KeyNotKept, error.message);
     }
     deps.logger.error('request_failed', { path: c.req.path, error: describeFailure(error) });
     return fail(500, ApiErrorCode.InternalError, 'The engine failed on this request.');

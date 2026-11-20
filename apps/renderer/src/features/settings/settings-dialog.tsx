@@ -6,6 +6,7 @@ import { IconButton } from '@/components/icon-button.tsx';
 import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { FOLDER_REFUSED } from '@/lib/messages.ts';
+import { IntegrationsSection } from './integrations.tsx';
 import { SpeedLimit } from './speed-limit.tsx';
 import { ThemeChoice } from './theme-choice.tsx';
 
@@ -165,6 +166,7 @@ export function SettingsDialog({
             />
           </section>
         )}
+        <IntegrationsSection open={open} onError={onError} />
         {pairing !== null && <PairingSection pairing={pairing} onError={onError} />}
         <p className="text-sm text-muted-foreground">Scia {shell?.version ?? 'development'}</p>
       </div>
@@ -242,7 +244,7 @@ function PairingSection({
   return (
     <section className="flex flex-col gap-2">
       <div>
-        <p className="text-sm font-medium">Browser extension</p>
+        <h3 className="text-sm font-medium">Browser extension</h3>
         <p className="text-sm text-muted-foreground">
           Paste this code into the extension’s options. From then on, the extension sends Scia the
           links and the media of your pages.

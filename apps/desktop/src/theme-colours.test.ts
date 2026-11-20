@@ -67,6 +67,8 @@ const PAIRS: readonly (readonly [string, string, number])[] = [
   ['foreground', 'surface', TEXT],
   ['foreground', 'surface-hover', TEXT],
   ['foreground', 'tonal', TEXT],
+  // A text button under the pointer (TEXT_BUTTON in apps/renderer/src/components/button-styles.ts).
+  ['foreground', 'border', TEXT],
   ['muted-foreground', 'background', TEXT],
   ['muted-foreground', 'surface', TEXT],
   ['muted-foreground', 'surface-hover', TEXT],

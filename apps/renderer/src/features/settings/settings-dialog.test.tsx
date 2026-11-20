@@ -30,6 +30,9 @@ describe('SettingsDialog', () => {
   beforeEach(() => {
     vi.spyOn(api, 'settings').mockResolvedValue(settings);
     vi.spyOn(api, 'pairing').mockResolvedValue({ token: 'pairing-code', port: 47821 });
+    vi.spyOn(api, 'integrations').mockResolvedValue([
+      { id: 'alldebrid', connected: false, account: null, failure: null },
+    ]);
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -60,6 +63,17 @@ describe('SettingsDialog', () => {
     expect(screen.getByText(/Paste this code into the extension’s options/)).toBeInTheDocument();
     // Whoever opened it learns what was read, not only what is changed here.
     expect(onSettings).toHaveBeenCalledExactlyOnceWith(settings);
+  });
+
+  it('lists the services Scia connects to, between the settings and the extension', async () => {
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+
+    const integrations = await screen.findByRole('region', { name: 'Integrations' });
+    expect(within(integrations).getByText('AllDebrid')).toBeInTheDocument();
+    const folder = screen.getByText('Download folder');
+    const extension = screen.getByText('Browser extension');
+    expect(folder.compareDocumentPosition(integrations)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(integrations.compareDocumentPosition(extension)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('changes the folder through the desktop shell, naming no path itself, and shows what the engine kept', async () => {

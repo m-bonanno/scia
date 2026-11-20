@@ -28,6 +28,9 @@ What earlier reviews taught, each with the PR that taught it.
 - Nothing waits on the engine without a bound: the rule is in `apps/desktop/CLAUDE.md` ("Main never waits on the engine without a bound"). (#12)
 - An Electron event may not exist on every platform: the rule, and the case that taught it, are in `apps/desktop/CLAUDE.md` ("The tray asks"). (#12)
 
+- What comes from outside is tried with the words every object knows and the numbers no calendar holds: a service's code looked up in a plain object answered for `constructor`, and a date past the last one threw outside the adapter's own error, a 500. Probe the adapter with a script, not only with the specs it came with. (#53)
+- Two changes of one thing kept outside the process are asked for at once, and one is made to land late: a key the person was told was not kept was found at the next start. (#53)
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.

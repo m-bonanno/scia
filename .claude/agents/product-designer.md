@@ -26,6 +26,8 @@ What earlier reviews taught, each with the PR that taught it.
 - A capture shows one screen. For a change that touches every string, ask what each dialog reads in the real app, not only the main view. (#4)
 - "Every pair the page uses" is checked against an inventory of what the page draws, its states included: the focus outline on each ground a focusable thing sits on — a row under the pointer, a box inside a dialog — and text that is selected. A list of pairs written from the classes of the resting page held the outline on two grounds of four, and not the selection, which fell to 3.85:1 in the default theme. (#52)
 
+- A sentence is read against every cause its code covers, in the engine: "is not answering" was the text of a code that also means maintenance, an unknown answer and too many requests. And a way back is not drawn beside what cannot be taken back. (#53)
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.

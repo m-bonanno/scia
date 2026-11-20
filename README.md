@@ -18,11 +18,11 @@ What comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
 
 ## Integrations
 
-None yet. Scia will connect to outside services one at a time, each listed here when it lands.
+Scia connects to outside services one at a time, each listed here when it lands. A service is connected once, in Settings, with the key of your account, which Scia keeps where the operating system protects it.
 
-| Service   | What it adds                                               | State        |
-| --------- | ---------------------------------------------------------- | ------------ |
-| AllDebrid | Hoster links are unlocked and downloaded like direct links | Planned (#7) |
+| Service   | What it adds                                               | State                                                                                                                                                                 |
+| --------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AllDebrid | Hoster links are unlocked and downloaded like direct links | It can be connected and disconnected in Settings — tried against a simulated service, not yet with a real account. It unlocks nothing yet: that is the next step (#7) |
 
 ## Development
 
