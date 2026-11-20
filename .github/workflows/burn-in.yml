@@ -1,0 +1,46 @@
+name: Burn-in
+
+# The gates, run several times side by side on one commit, started by hand. A new job becomes a
+# required check of develop and main only after ten such runs in a row, all green
+# (docs/adr/0008-the-delivery-pipeline.md, the owner's decision 4; docs/development/testing.md).
+on:
+  workflow_dispatch:
+    inputs:
+      runs:
+        description: 'How many times to run the gates on this commit (1 to 20)'
+        required: true
+        default: '10'
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    name: Plan
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      runs: ${{ steps.plan.outputs.runs }}
+    steps:
+      - id: plan
+        env:
+          RUNS: ${{ inputs.runs }}
+        run: |
+          [[ "$RUNS" =~ ^([1-9]|1[0-9]|20)$ ]] || { echo "::error::runs must be a number from 1 to 20, not '$RUNS'"; exit 1; }
+          echo "runs=[$(seq -s, 1 "$RUNS")]" >> "$GITHUB_OUTPUT"
+
+  gates:
+    name: Run ${{ matrix.run }}
+    needs: plan
+    strategy:
+      # Every run is counted: one that fails does not stop the others.
+      fail-fast: false
+      # Free runners are shared with every PR of the repository.
+      max-parallel: 5
+      matrix:
+        run: ${{ fromJSON(needs.plan.outputs.runs) }}
+    permissions:
+      contents: read
+    uses: ./.github/workflows/gates.yml
+    with:
+      run: ${{ matrix.run }}

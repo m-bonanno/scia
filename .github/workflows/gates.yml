@@ -7,13 +7,18 @@ on:
     branches: [main, develop]
     types: [opened, synchronize, reopened, ready_for_review]
   workflow_call:
+    inputs:
+      # Which of a burn-in's runs this is (burn-in.yml): side by side, each in its own group.
+      run:
+        type: string
+        default: ''
 
 permissions:
   contents: read
 
-# A new push to a PR replaces its run; a release's run is never cancelled.
+# A new push to a PR replaces its run; a release's run, and each of a burn-in's, is never cancelled.
 concurrency:
-  group: gates-${{ github.event.pull_request.number || github.run_id }}
+  group: gates-${{ github.event.pull_request.number || github.run_id }}-${{ inputs.run }}
   cancel-in-progress: true
 
 jobs:
@@ -101,12 +106,13 @@ jobs:
       - name: E2E
         run: npm run test:e2e
 
-  # The installer of the PR's head, installed silently, started, used, quit and uninstalled
-  # (apps/desktop/e2e/installer.smoke.test.ts). A release smokes its own installer, with its own
-  # version, before it attaches the files (release.yml): here it would only build one twice.
+  # The installer of the commit, installed silently, started, used, quit and uninstalled
+  # (apps/desktop/e2e/installer.smoke.test.ts): on a PR and in a burn-in. Not in a release's gates,
+  # on a push: the release smokes its own installer, with its own version, before it attaches the
+  # files (release.yml), and would only build one twice.
   smoke:
     name: Installer smoke (Windows)
-    if: github.event_name == 'pull_request'
+    if: github.event_name != 'push'
     runs-on: windows-latest
     timeout-minutes: 25
     defaults:

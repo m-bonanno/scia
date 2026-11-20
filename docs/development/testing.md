@@ -23,6 +23,14 @@ A spec that holds on one system and not on the other is a bug of the spec or of 
 
 **No retries.** A spec that fails in CI without a cause in the change is not run again until it passes: it is filed as an issue with its log, then fixed, or skipped with that issue's number beside it until it is.
 
+### Burn-in
+
+A new job of the gates becomes a required check of `develop` and `main` only once it has run ten times in a row green on CI (the owner's decision 4, [ADR 0008](../adr/0008-the-delivery-pipeline.md)). The **Burn-in** workflow (`.github/workflows/burn-in.yml`) runs them: **Actions → Burn-in → Run workflow**, or `gh workflow run burn-in.yml --ref develop -f runs=10`, on `develop`'s head.
+
+- It runs the whole of `gates.yml` — every job, the installer's smoke test included — `runs` times side by side, at most five at a time, each run in its own concurrency group; one that fails stops none of the others.
+- **Ten green runs of one commit are a burn-in.** A run that fails is a failed burn-in: its log goes into an issue, the job is mended, and the burn-in starts again from zero on the mended commit — never a run again until ten pass.
+- A burn-in uses free runners shared with every PR: it is started when nothing waits on them, and not again for a job already burned in, unless that job changed how it runs.
+
 ## Writing a spec
 
 - The name of a spec is the rule it holds: `'never overwrites a file already in the folder'`.
