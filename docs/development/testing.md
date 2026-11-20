@@ -10,14 +10,14 @@
 
 ## Where CI runs them
 
-The pipeline is [ADR 0008](../adr/0008-the-delivery-pipeline.md). The gates are one workflow, `.github/workflows/gates.yml`, run on every PR and, called by `release.yml`, on the commit a merge into `develop` or `main` makes, before it is tagged:
+The pipeline is [ADR 0008](../adr/0008-the-delivery-pipeline.md). The gates are one workflow, `.github/workflows/gates.yml`: run on every PR; called by `release.yml`, on the commit a merge into `develop` or `main` makes, before it is tagged — the smoke test left out, as the release smokes its own installer; and called by `burn-in.yml`, several times on one commit ("Burn-in", below):
 
 | Job                                 | Runner           | Runs                                                   |
 | ----------------------------------- | ---------------- | ------------------------------------------------------ |
 | `Format, lint, types, tests, build` | `ubuntu-latest`  | format, lint, types, the three layers above, the build |
 | `Windows tests, build`              | `windows-latest` | the three layers above, the build                      |
 | `E2E (Windows)`                     | `windows-latest` | the build, then the E2E suite                          |
-| `Installer smoke (Windows)`         | `windows-latest` | the installer of the PR's head, then the smoke test    |
+| `Installer smoke (Windows)`         | `windows-latest` | the installer of the commit, then the smoke test       |
 
 A spec that holds on one system and not on the other is a bug of the spec or of the app on that system: Windows rounds a timer under 16 ms up to 16, and forgives a path written with the wrong separator, which Linux does not.
 
@@ -27,7 +27,7 @@ A spec that holds on one system and not on the other is a bug of the spec or of 
 
 A new job of the gates becomes a required check of `develop` and `main` only once it has run ten times in a row green on CI (the owner's decision 4, [ADR 0008](../adr/0008-the-delivery-pipeline.md)). The **Burn-in** workflow (`.github/workflows/burn-in.yml`) runs them: **Actions → Burn-in → Run workflow**, or `gh workflow run burn-in.yml --ref develop -f runs=10`, on `develop`'s head.
 
-- It runs the whole of `gates.yml` — every job, the installer's smoke test included — `runs` times side by side, at most five at a time, each run in its own concurrency group; one that fails stops none of the others.
+- It runs the whole of `gates.yml` — every job, the installer's smoke test included — `runs` times side by side, at most four at a time — sixteen jobs of the twenty a free account runs at once, so that a PR still finds room — each run in its own concurrency group; one that fails stops none of the others.
 - **Ten green runs of one commit are a burn-in.** A run that fails is a failed burn-in: its log goes into an issue, the job is mended, and the burn-in starts again from zero on the mended commit — never a run again until ten pass.
 - A burn-in uses free runners shared with every PR: it is started when nothing waits on them, and not again for a job already burned in, unless that job changed how it runs.
 
@@ -61,7 +61,7 @@ Run locally, its windows open on the screen, and a first close into the tray sho
 `apps/desktop/e2e/installer.smoke.test.ts`, the Vitest project `smoke` (`npm run test:smoke`). One road, in order: it installs the NSIS installer named by `SCIA_INSTALLER` silently (`/S`); checks `Scia.exe` and its uninstaller are in `%LOCALAPPDATA%\Programs\scia`, and that the yt-dlp the packing fetched, in its `resources\tools`, answers `--version` with the version `apps/desktop/scripts/fetch-tools.ts` fixes; starts the installed exe with the E2E harness (`launchScia(profile, { executable })`) on a scratch profile and a free port, against a simulated AllDebrid; reads in its log that it is the packaged app of `SCIA_VERSION`, that its engine is ready and that nothing is an error, main's or the engine's; downloads a pasted link from a local host, byte for byte; quits by closing its window; and uninstalls silently until its folder is gone.
 
 - **It runs on a Windows CI runner only.** An install replaces the Scia installed on the machine: the spec refuses to start without `CI=true`, Windows, `SCIA_INSTALLER` and `SCIA_VERSION`. On a person's computer the packaged app is tried unpacked, which installs nothing: `npx electron-builder --config electron-builder.yml --dir --publish never` in `apps/desktop`, then `launchScia(profile, { executable: 'release/win-unpacked/Scia.exe' })`.
-- **Where it runs** ([ADR 0008](../adr/0008-the-delivery-pipeline.md)): on every PR, on an installer packaged from its head at version `0.0.0` (`gates.yml`, `Installer smoke (Windows)`); in every release, on the installer with the release's version, **before its files are attached** (`release.yml`): a failure attaches nothing.
+- **Where it runs** ([ADR 0008](../adr/0008-the-delivery-pipeline.md)): on every PR and in a burn-in, on an installer packaged from the commit at version `0.0.0` (`gates.yml`, `Installer smoke (Windows)`); in every release, on the installer with the release's version, **before its files are attached** (`release.yml`): a failure attaches nothing.
 - **A release's smoke test reaches GitHub.** At a release's version the updater is on (ADR 0007) and reads this repository's releases; at `0.0.0`, on a PR, it is off and nothing leaves the runner. The spec refuses a run in which an update was installed at the quit: what was tried is what is uninstalled.
 - **What it does not reach**: an install over an earlier Scia, and the update from one release to the next; SmartScreen on a downloaded installer; a person's hand. Those stay with a person ([`release-flow.md`](./release-flow.md), "Releasing").
 

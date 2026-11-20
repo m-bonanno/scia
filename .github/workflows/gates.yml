@@ -1,7 +1,8 @@
 name: Gates
 
-# The gates of docs/development/review-flow.md, on every PR and — called by release.yml — on the
-# commit a merge into develop or main made, before it is tagged (docs/adr/0008-the-delivery-pipeline.md).
+# The gates of docs/development/review-flow.md: on every PR; called by release.yml, on the commit a
+# merge into develop or main made, before it is tagged; called by burn-in.yml, several times on one
+# commit (docs/adr/0008-the-delivery-pipeline.md).
 on:
   pull_request:
     branches: [main, develop]
@@ -12,6 +13,11 @@ on:
       run:
         type: string
         default: ''
+      # The installer's smoke test too: a burn-in's caller says so. A release's does not, whether
+      # pushed or started by hand: the release smokes its own installer (release.yml).
+      smoke:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -107,12 +113,12 @@ jobs:
         run: npm run test:e2e
 
   # The installer of the commit, installed silently, started, used, quit and uninstalled
-  # (apps/desktop/e2e/installer.smoke.test.ts): on a PR and in a burn-in. Not in a release's gates,
-  # on a push: the release smokes its own installer, with its own version, before it attaches the
-  # files (release.yml), and would only build one twice.
+  # (apps/desktop/e2e/installer.smoke.test.ts): on a PR and in a burn-in. Not in a release's gates:
+  # the release smokes its own installer, with its own version, before it attaches the files
+  # (release.yml), and would only build one twice.
   smoke:
     name: Installer smoke (Windows)
-    if: github.event_name != 'push'
+    if: github.event_name == 'pull_request' || inputs.smoke
     runs-on: windows-latest
     timeout-minutes: 25
     defaults:

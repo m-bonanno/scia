@@ -33,6 +33,7 @@ The owner asked whether the pipeline had E2E, unit, integration, feature and smo
 | Every PR                     | `Conventional title`, `Linked issue` | `ubuntu-latest`  | Unchanged                                                                                              |
 
 - **The gates are one reusable workflow**, `.github/workflows/gates.yml`: it runs on every PR, and `release.yml` calls it on the push a merge into `develop` or `main` makes. **semantic-release runs only when it is green**: a red commit makes no tag and no release, and the next merge that mends it releases both.
+  - _Amended by #113, 20 November 2026:_ a third caller, `burn-in.yml`, started by hand, runs the gates several times on one commit for the burn-in of decision 4 — the installer's smoke test included, which the table gives to every PR only; a release's gates, pushed or started by hand, leave it out (`gates.yml`'s input `smoke`).
 - **Linux runs what does not need a desktop.** The E2E suite and the installer run on Windows alone: Linux is not tried and has no installer job (#28), and Electron there needs a virtual display. Ubuntu keeps finding what Windows forgives — a path written with `\`, a name whose case differs.
 
 ### The layers

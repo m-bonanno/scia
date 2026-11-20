@@ -35,8 +35,9 @@ jobs:
     strategy:
       # Every run is counted: one that fails does not stop the others.
       fail-fast: false
-      # Free runners are shared with every PR of the repository.
-      max-parallel: 5
+      # Four runs of four jobs are 16 of the 20 jobs a free account runs at once: a PR's checks
+      # still find room during a burn-in.
+      max-parallel: 4
       matrix:
         run: ${{ fromJSON(needs.plan.outputs.runs) }}
     permissions:
@@ -44,3 +45,4 @@ jobs:
     uses: ./.github/workflows/gates.yml
     with:
       run: ${{ matrix.run }}
+      smoke: true
