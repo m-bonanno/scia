@@ -35,11 +35,14 @@ const KEY_NOT_TAKEN: Readonly<Record<string, (service: string) => string>> = {
   [ApiErrorCode.AccountBanned]: (service) => `${service} says this account is banned.`,
   [ApiErrorCode.NetworkRefused]: (service) =>
     `${service} does not serve this network: it refuses servers and some VPNs.`,
-  [ApiErrorCode.Unavailable]: (service) => `${service} is not answering. Try again in a moment.`,
+  // Not answering, under maintenance, or answering what Scia does not understand: what is
+  // true of all of them is that the key was not checked.
+  [ApiErrorCode.Unavailable]: (service) =>
+    `Scia could not check this key with ${service}. Try again in a moment.`,
   [ApiErrorCode.KeyNotKept]: () =>
-    'Scia could not store the key safely on this computer. Nothing was connected.',
+    'Scia could not keep the key safely on this computer. Nothing was connected.',
   [ApiErrorCode.InvalidRequest]: (service) =>
-    `That is not a key. Copy it again from your ${service} account.`,
+    `This is not a key. Copy it again from your ${service} account.`,
 };
 
 export function connectFailureMessage(error: unknown, id: IntegrationId): string {
@@ -56,7 +59,8 @@ const SERVICE_TROUBLE: Readonly<Record<ServiceFailure, (service: string) => stri
   [ServiceFailure.AccountBanned]: (service) => `${service} says this account is banned.`,
   [ServiceFailure.NetworkRefused]: (service) =>
     `${service} does not serve this network: it refuses servers and some VPNs.`,
-  [ServiceFailure.Unavailable]: (service) => `${service} is not answering right now.`,
+  [ServiceFailure.Unavailable]: (service) =>
+    `Scia could not ask ${service} about this account just now.`,
 };
 
 export function serviceTroubleMessage(failure: ServiceFailure, id: IntegrationId): string {
@@ -75,7 +79,10 @@ const LINK_NOT_UNLOCKED: Readonly<
   [ServiceFailure.AccountBanned]: (service) => `${service} says the account is banned.`,
   [ServiceFailure.NetworkRefused]: (service) =>
     `${service} does not serve this network: it refuses servers and some VPNs.`,
-  [ServiceFailure.Unavailable]: (service) => `${service} is not answering. Try again in a moment.`,
+  // Not answering, under maintenance, or answering what Scia does not understand: what is
+  // true of all of them is that the link was not unlocked, and may be the next time.
+  [ServiceFailure.Unavailable]: (service) =>
+    `${service} could not be asked about this link. Try again in a moment.`,
   [UnlockFailure.NotPremium]: (service) =>
     `${service} unlocks this link for premium accounts only.`,
   [UnlockFailure.LinkDown]: (service) => `${service} says the file is no longer on its host.`,

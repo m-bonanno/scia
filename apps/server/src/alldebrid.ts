@@ -21,29 +21,35 @@ function defaultRetryDelayMs(attempt: number): number {
 
 // What each of the service's refusals means to Scia (https://docs.alldebrid.com, "All
 // errors"). Every other code — maintenance, one Scia does not know — means the service cannot
-// be asked right now: nothing is said of a key or of a link that the service did not say.
-const FAILURE_OF: Readonly<Record<string, ServiceFailure | UnlockFailure>> = {
-  AUTH_MISSING_APIKEY: ServiceFailure.KeyRefused,
-  AUTH_BAD_APIKEY: ServiceFailure.KeyRefused,
-  AUTH_BLOCKED: ServiceFailure.KeyBlocked,
-  AUTH_USER_BANNED: ServiceFailure.AccountBanned,
-  NO_SERVER: ServiceFailure.NetworkRefused,
-  MUST_BE_PREMIUM: UnlockFailure.NotPremium,
-  FREE_TRIAL_LIMIT_REACHED: UnlockFailure.NotPremium,
-  LINK_DOWN: UnlockFailure.LinkDown,
-  LINK_PASS_PROTECTED: UnlockFailure.LinkPassword,
-  LINK_HOST_UNAVAILABLE: UnlockFailure.HostUnavailable,
-  LINK_HOST_FULL: UnlockFailure.HostUnavailable,
-  LINK_TEMPORARY_UNAVAILABLE: UnlockFailure.HostUnavailable,
-  LINK_HOST_LIMIT_REACHED: UnlockFailure.HostLimit,
-  LINK_TOO_MANY_DOWNLOADS: UnlockFailure.HostLimit,
-  LINK_IS_MISSING: UnlockFailure.LinkRefused,
-  BAD_LINK: UnlockFailure.LinkRefused,
-  LINK_HOST_NOT_SUPPORTED: UnlockFailure.LinkRefused,
-  LINK_NOT_SUPPORTED: UnlockFailure.LinkRefused,
-  LINK_ERROR: UnlockFailure.LinkRefused,
-  DELAYED_INVALID_ID: UnlockFailure.LinkRefused,
-};
+// be asked right now: nothing is said of a key or of a link that the service did not say. A
+// map, not an object: a code is a word from outside, and "constructor" is one.
+const FAILURE_OF: ReadonlyMap<string, ServiceFailure | UnlockFailure> = new Map<
+  string,
+  ServiceFailure | UnlockFailure
+>([
+  ['AUTH_BAD_APIKEY', ServiceFailure.KeyRefused],
+  ['AUTH_BLOCKED', ServiceFailure.KeyBlocked],
+  ['AUTH_USER_BANNED', ServiceFailure.AccountBanned],
+  ['NO_SERVER', ServiceFailure.NetworkRefused],
+  ['MUST_BE_PREMIUM', UnlockFailure.NotPremium],
+  ['FREE_TRIAL_LIMIT_REACHED', UnlockFailure.NotPremium],
+  ['LINK_DOWN', UnlockFailure.LinkDown],
+  ['LINK_PASS_PROTECTED', UnlockFailure.LinkPassword],
+  ['LINK_HOST_UNAVAILABLE', UnlockFailure.HostUnavailable],
+  ['LINK_HOST_FULL', UnlockFailure.HostUnavailable],
+  ['LINK_TEMPORARY_UNAVAILABLE', UnlockFailure.HostUnavailable],
+  ['LINK_HOST_LIMIT_REACHED', UnlockFailure.HostLimit],
+  ['LINK_TOO_MANY_DOWNLOADS', UnlockFailure.HostLimit],
+  ['LINK_IS_MISSING', UnlockFailure.LinkRefused],
+  ['BAD_LINK', UnlockFailure.LinkRefused],
+  ['LINK_HOST_NOT_SUPPORTED', UnlockFailure.LinkRefused],
+  ['LINK_NOT_SUPPORTED', UnlockFailure.LinkRefused],
+  ['LINK_ERROR', UnlockFailure.LinkRefused],
+  ['DELAYED_INVALID_ID', UnlockFailure.LinkRefused],
+]);
+
+// The last second a date can name: a number past it is not an instant.
+const LAST_SECOND = 8_640_000_000_000;
 
 // The body says whether a request succeeded; the HTTP status that comes with it is not to be
 // relied on (the documentation says both that a refused key is a 401 and that it no longer is).
@@ -57,7 +63,7 @@ const userSchema = z.object({
     username: z.string(),
     isPremium: z.boolean(),
     // Seconds since 1970, written as a number or as text; 0 for an account that is not premium.
-    premiumUntil: z.coerce.number().nonnegative(),
+    premiumUntil: z.coerce.number().nonnegative().max(LAST_SECOND),
   }),
 });
 
@@ -113,16 +119,14 @@ export class AllDebrid {
     this.#options = options;
   }
 
-  // Whose account a key is. Asked once: someone is looking at Settings.
-  async account(apiKey: string, signal?: AbortSignal): Promise<IntegrationAccount> {
-    const { user } = await this.#ask('/v4/user', apiKey, userSchema, undefined, signal);
+  // Whose account a key is. Asked once, and of nobody who can stop the question: someone is
+  // looking at Settings.
+  async account(apiKey: string): Promise<IntegrationAccount> {
+    const { user } = await this.#ask('/v4/user', apiKey, userSchema, undefined, undefined);
     return {
       name: user.username,
       premium: user.isPremium,
-      premiumUntil:
-        user.isPremium && user.premiumUntil > 0
-          ? new Date(user.premiumUntil * 1000).toISOString()
-          : null,
+      premiumUntil: user.premiumUntil > 0 ? new Date(user.premiumUntil * 1000).toISOString() : null,
     };
   }
 
@@ -227,7 +231,7 @@ export class AllDebrid {
     if (envelope.data.status === 'error') {
       const { code } = envelope.data.error;
       throw refused(
-        FAILURE_OF[code] ?? ServiceFailure.Unavailable,
+        FAILURE_OF.get(code) ?? ServiceFailure.Unavailable,
         `AllDebrid answered ${code}.`,
         code,
       );

@@ -180,6 +180,30 @@ describe('KeyVault', () => {
     expect(unreadable.warn).toHaveBeenCalledOnce();
   });
 
+  it('does one thing at a time, in the order asked: a slow write never lands after the removal that followed it', async () => {
+    const store = someFiles();
+    const { write } = store.files;
+    const slow = someFiles({
+      read: store.files.read,
+      remove: store.files.remove,
+      write: async (name, data) => {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        await write(name, data);
+      },
+    });
+    const { vault } = aVault(aCipher(), { files: slow.files, kept: store.kept });
+
+    const answers = await Promise.all([
+      vault.answer({ type: 'key', id: 1, action: 'write', name: 'alldebrid', key: KEY }),
+      vault.answer({ type: 'key', id: 2, action: 'remove', name: 'alldebrid' }),
+      vault.answer({ type: 'key', id: 3, action: 'read', name: 'alldebrid' }),
+    ]);
+
+    expect(answers.map((answer) => answer?.ok)).toEqual([true, true, true]);
+    expect(answers[2]).toEqual({ type: 'key', id: 3, ok: true });
+    expect(store.kept.size).toBe(0);
+  });
+
   it('does not answer what is not a request for a key', async () => {
     const { vault } = aVault();
 

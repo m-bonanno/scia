@@ -1,7 +1,7 @@
 import type { Integration } from '@scia/contracts';
 import { Unplug } from 'lucide-react';
 import { type ReactNode, type SubmitEvent, useEffect, useId, useRef, useState } from 'react';
-import { FOCUS_RING, TEXT_BUTTON } from '@/components/button-styles.ts';
+import { FOCUS_RING, QUIET_BUTTON, TEXT_BUTTON } from '@/components/button-styles.ts';
 import { ConfirmButton } from '@/components/confirm-button.tsx';
 import { api } from '@/lib/api.ts';
 import { cn } from '@/lib/cn.ts';
@@ -46,7 +46,7 @@ export function IntegrationsSection({ open, onError }: IntegrationsSectionProps)
           Integrations
         </h3>
         <p className="text-sm text-muted-foreground">
-          Services Scia can download through. Each is connected once, with the key of your account.
+          Services Scia can use. Each is connected once, with the key of your account.
         </p>
       </div>
       <ul className="flex flex-col gap-2">
@@ -104,12 +104,10 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
 
   const connect = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    const key = apiKey.trim();
-    if (key === '' || busy) return;
     setBusy(true);
     setRefusal(null);
     api
-      .connectIntegration(id, key)
+      .connectIntegration(id, apiKey)
       .then((connected) => {
         handFocusOn.current = true;
         setEntering(false);
@@ -212,9 +210,12 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
             protects it.
           </p>
           <div className="flex justify-end gap-2">
+            {/* Not while the key is being checked: the check cannot be taken back, and a key
+                the service accepts meanwhile is kept. */}
             <button
               type="button"
-              className={TEXT_BUTTON}
+              disabled={busy}
+              className={QUIET_BUTTON}
               onClick={() => {
                 handFocusOn.current = true;
                 setEntering(false);
@@ -228,6 +229,10 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
               {busy ? 'Checking…' : 'Connect'}
             </button>
           </div>
+          {/* Said to who does not see the button change. */}
+          <p role="status" className="sr-only">
+            {busy ? `Checking the key with ${name}…` : ''}
+          </p>
         </form>
       )}
       {!entering && alert}

@@ -87,7 +87,10 @@ describe('statusLine', () => {
       ServiceFailure.NetworkRefused,
       'AllDebrid does not serve this network: it refuses servers and some VPNs.',
     ],
-    [ServiceFailure.Unavailable, 'AllDebrid is not answering. Try again in a moment.'],
+    [
+      ServiceFailure.Unavailable,
+      'AllDebrid could not be asked about this link. Try again in a moment.',
+    ],
     [UnlockFailure.NotPremium, 'AllDebrid unlocks this link for premium accounts only.'],
     [UnlockFailure.LinkDown, 'AllDebrid says the file is no longer on its host.'],
     [
@@ -113,6 +116,6 @@ describe('statusLine', () => {
   it('names no service for a link that was never known to be one', () => {
     expect(
       statusLine(aDownload({ status: DownloadStatus.Failed, failure: ServiceFailure.Unavailable })),
-    ).toBe('The connected service is not answering. Try again in a moment.');
+    ).toBe('The connected service could not be asked about this link. Try again in a moment.');
   });
 });

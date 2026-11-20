@@ -1,4 +1,5 @@
 import { type Integration, type IntegrationAccount, IntegrationId } from '@scia/contracts';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
 import type { AllDebrid } from './alldebrid.ts';
 import type { KeyVault } from './key-vault.ts';
@@ -33,6 +34,10 @@ function unlessStopped<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 function hostNameOf(url: string): string | undefined {
   return URL.parse(url)?.hostname.toLowerCase();
 }
+// A listing waits this long for the service to say whose account it is, and then answers what
+// it knows: Settings is not kept waiting by a service that is slow. The answer, when it comes,
+// is there for the next listing.
+const LIST_WAIT_MS = 2000;
 
 export class KeyNotKeptError extends Error {
   override readonly name = 'KeyNotKeptError';
@@ -44,6 +49,7 @@ export interface IntegrationsDeps {
   readonly logger: Logger;
   // A clock that never steps, in milliseconds.
   readonly now?: () => number;
+  readonly listWaitMs?: number;
 }
 
 // The services Scia is connected to: the key of each, held in memory and kept by the vault,
@@ -60,6 +66,9 @@ export class Integrations implements LinkResolver {
   // The domains the service unlocks links of, when they were read, and the reading under way.
   #hosts: { readonly domains: readonly string[]; readonly readAt: number } | undefined;
   #readingHosts: Promise<readonly string[]> | undefined;
+  // Connecting and disconnecting, one after the other: two at once would write one key over
+  // another, in an order nobody chose.
+  #changing: Promise<unknown> = Promise.resolve();
 
   constructor(deps: IntegrationsDeps, key: string | undefined) {
     this.#deps = deps;
@@ -81,19 +90,44 @@ export class Integrations implements LinkResolver {
   }
 
   async list(): Promise<Integration[]> {
-    await this.#refresh();
+    const given = new AbortController();
+    await Promise.race([
+      this.#refresh(),
+      sleep(this.#deps.listWaitMs ?? LIST_WAIT_MS, undefined, { signal: given.signal }).catch(
+        () => undefined,
+      ),
+    ]);
+    given.abort();
     return [this.#view()];
   }
 
   // Asks the service whose key it is, and only then keeps it. Rejects with a ServiceError when
   // the service does not take it or cannot be asked, with a KeyNotKeptError when the system
   // will not keep it — and what was connected before stays as it was.
-  async connect(id: IntegrationId, apiKey: string): Promise<Integration> {
+  connect(id: IntegrationId, apiKey: string): Promise<Integration> {
+    return this.#oneAtATime(() => this.#connect(id, apiKey));
+  }
+
+  // The key leaves the vault first: one that stayed there would connect Scia again by itself
+  // at its next start.
+  disconnect(id: IntegrationId): Promise<void> {
+    return this.#oneAtATime(() => this.#disconnect(id));
+  }
+
+  #oneAtATime<T>(change: () => Promise<T>): Promise<T> {
+    const done = this.#changing.then(change, change);
+    this.#changing = done.catch(() => undefined);
+    return done;
+  }
+
+  async #connect(id: IntegrationId, apiKey: string): Promise<Integration> {
     const account = await this.#deps.alldebrid.account(apiKey);
+    const before = this.#key;
     try {
       await this.#deps.vault.write(id, apiKey);
     } catch (error) {
       this.#deps.logger.error('key_not_kept', { service: id, error: describeFailure(error) });
+      await this.#putBack(id, before);
       throw new KeyNotKeptError('The key could not be kept.', { cause: error });
     }
     this.#key = apiKey;
@@ -105,9 +139,19 @@ export class Integrations implements LinkResolver {
     return this.#view();
   }
 
-  // The key leaves the vault first: one that stayed there would connect Scia again by itself
-  // at its next start.
-  async disconnect(id: IntegrationId): Promise<void> {
+  // A write that was given up on — a vault that answered too late — may still land. The vault
+  // is asked to be what it was, so that the next start finds what Scia says is connected, and
+  // never a key the person was told was not kept.
+  async #putBack(id: IntegrationId, before: string | undefined): Promise<void> {
+    try {
+      if (before === undefined) await this.#deps.vault.remove(id);
+      else await this.#deps.vault.write(id, before);
+    } catch (error) {
+      this.#deps.logger.error('key_not_put_back', { service: id, error: describeFailure(error) });
+    }
+  }
+
+  async #disconnect(id: IntegrationId): Promise<void> {
     await this.#deps.vault.remove(id);
     this.#key = undefined;
     this.#hosts = undefined;

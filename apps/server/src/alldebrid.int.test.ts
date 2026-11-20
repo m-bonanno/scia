@@ -63,13 +63,19 @@ describe('AllDebrid', () => {
     });
   });
 
-  it('sends the key in the Authorization header, and never in the address', async () => {
+  it('sends the key in the Authorization header, never in the address, and says it is Scia', async () => {
     const server = await serviceWith();
 
     await clientOf(server).account(KEY);
 
     expect(server.requests).toEqual([
-      { method: 'GET', url: '/v4/user', authorization: `Bearer ${KEY}`, form: {} },
+      {
+        method: 'GET',
+        url: '/v4/user',
+        authorization: `Bearer ${KEY}`,
+        userAgent: 'Scia/spec',
+        form: {},
+      },
     ]);
   });
 
@@ -156,15 +162,26 @@ describe('AllDebrid', () => {
     expect(elsewhere.requests).toEqual([]);
   });
 
-  it('stops when whoever asked stops, and does not call that a failure of the service', async () => {
-    const server = await serviceWith();
-    server.misbehave({ silent: true });
-    const asker = new AbortController();
+  it.each(['constructor', 'toString', '__proto__', 'hasOwnProperty'])(
+    'takes the code %s for one it does not know, though every object has a property of that name',
+    async (code) => {
+      const server = await serviceWith();
+      server.misbehave({ error: code });
 
-    const asked = clientOf(server).account(KEY, asker.signal);
-    asker.abort(new Error('the engine is stopping'));
+      const error = await clientOf(server)
+        .account(KEY)
+        .catch((caught: unknown) => caught);
 
-    await expect(asked).rejects.toThrow('the engine is stopping');
+      expect(error).toMatchObject({ failure: ServiceFailure.Unavailable, code });
+    },
+  );
+
+  it('says the service is unavailable when the date it gives is none a calendar holds', async () => {
+    const client = clientOf(
+      await serviceWith({ accounts: { [KEY]: { username: 'ada', premiumUntil: 9e12 } } }),
+    );
+
+    expect(await failureOf(client.account(KEY))).toBe(ServiceFailure.Unavailable);
   });
 
   it('lists the domains of the hosts the account can unlock, in lower case', async () => {
@@ -195,6 +212,7 @@ describe('AllDebrid', () => {
         method: 'POST',
         url: '/v4/link/unlock',
         authorization: `Bearer ${KEY}`,
+        userAgent: 'Scia/spec',
         form: { link: LINK },
       },
     ]);

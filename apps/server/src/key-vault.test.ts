@@ -1,5 +1,5 @@
 import { IntegrationId } from '@scia/contracts';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { type KeyAnswer, type KeyRequest, MemoryVault, ParentVault } from './key-vault.ts';
 import type { ParentPort } from './parent-port.ts';
 
@@ -25,6 +25,10 @@ function aParent() {
 }
 
 describe('ParentVault', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('asks main for a key, and answers the one main keeps', async () => {
     const parent = aParent();
     const vault = new ParentVault(parent.port);
@@ -93,6 +97,18 @@ describe('ParentVault', () => {
     const vault = new ParentVault(aParent().port, 20);
 
     await expect(vault.read(IntegrationId.AllDebrid)).rejects.toThrow('Main did not');
+  });
+
+  it('stops counting the time once main has answered', async () => {
+    vi.useFakeTimers();
+    const parent = aParent();
+    const vault = new ParentVault(parent.port);
+
+    const read = vault.read(IntegrationId.AllDebrid);
+    parent.say({ type: 'key', id: parent.sent[0]!.id, ok: true } satisfies KeyAnswer);
+    await read;
+
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('takes nothing else main says for an answer', async () => {

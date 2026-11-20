@@ -99,6 +99,7 @@ export interface SimulatedRequest {
   readonly authorization: string | undefined;
   // The fields of a form that was posted; empty for a GET.
   readonly form: Readonly<Record<string, string>>;
+  readonly userAgent: string | undefined;
 }
 
 export interface AllDebridServer {
@@ -120,7 +121,7 @@ function succeed(response: ServerResponse, data: unknown): void {
 function refuse(response: ServerResponse, status: number, code: string): void {
   send(response, status, {
     status: 'error',
-    error: { code, message: MESSAGES[code] ?? 'Unknown error' },
+    error: { code, message: Object.hasOwn(MESSAGES, code) ? MESSAGES[code] : 'Unknown error' },
   });
 }
 
@@ -276,6 +277,7 @@ export async function startAllDebridServer(
         method: request.method ?? '',
         url: request.url ?? '',
         authorization: request.headers.authorization,
+        userAgent: request.headers['user-agent'],
         form,
       });
       if (misbehaves(response)) return;

@@ -5,7 +5,7 @@ Loaded when working under `apps/desktop/`. **Extends** the root `CLAUDE.md`; win
 ## Process model
 
 ```
-main (Electron: lifecycle, supervision, the window, the tray, the shell's file manager)
+main (Electron: lifecycle, supervision, the window, the tray, the shell's file manager, the keys of services)
  ├─ utilityProcess → apps/server (Hono on 127.0.0.1:<port>, the downloads)
  └─ BrowserWindow → loads http://127.0.0.1:<port>/ (renderer served by the engine)
        └─ preload (sandboxed, CommonJS) → window.scia
@@ -13,10 +13,10 @@ main (Electron: lifecycle, supervision, the window, the tray, the shell's file m
 
 ## The rule that shapes everything: pure engine + thin IO adapter
 
-| Piece       | Holds                                                                                    | Tested by                  |
-| ----------- | ---------------------------------------------------------------------------------------- | -------------------------- |
-| **Engine**  | decisions with zero Electron: restart backoff, paths from a root, argv, the env, colours | Vitest unit, no Electron   |
-| **Adapter** | the IO the engine describes: `utilityProcess.fork`, `BrowserWindow`, `shell`             | the real app (`npm start`) |
+| Piece       | Holds                                                                                       | Tested by                  |
+| ----------- | ------------------------------------------------------------------------------------------- | -------------------------- |
+| **Engine**  | decisions with zero Electron: restart backoff, paths from a root, argv, the env, colours    | Vitest unit, no Electron   |
+| **Adapter** | the IO the engine describes: `utilityProcess.fork`, `BrowserWindow`, `shell`, `safeStorage` | the real app (`npm start`) |
 
 **`src/engine/**` never imports `electron`** — ESLint enforces it. A new capability = engine + spec first, adapter second, wiring in `main.ts` third.
 
@@ -27,7 +27,7 @@ main (Electron: lifecycle, supervision, the window, the tray, the shell's file m
 - **`window.scia` is the whole bridge, and it stays tiny**: the API token, the version, the platform, `revealDownload(id)`, `openDownload(id)`, `chooseDownloadFolder()`. Main answers a channel only through `MainWindow.answer(name, handler)`, which refuses any sender but the app's page. Adding a member means editing, in one PR: the preload, the main handler, `BridgeChannel` in `@scia/contracts/bridge`, and the renderer's `SciaBridge`. Never a generic `invoke(channel, …)`.
 - **Main never takes a path or a URL from the page.** The page names a download by id; main asks the engine for its file (`engine/download-location.ts`) and only then calls `shell`.
 - **The folder new downloads go to is chosen in the system's own dialog, which main shows** (`MainWindow.pickFolder`), and main tells the engine (`engine/download-folder.ts`): the page asks with no argument and reads back what the engine kept. Main answers what became of the folder as a value (`FolderChange` in `@scia/contracts/bridge`: changed, kept, refused) and rejects only for what is not about a folder — an engine that fails or is silent — so that the page never blames a folder nobody chose. One dialog at a time: an ask that arrives while one is open gets that one's answer (`oneAtATime`). The bound on the engine's answers is not a bound on the person, who takes the time they need in the dialog.
-- **Main keeps the keys of the connected services, sealed by the system** ([ADR 0004](../../docs/adr/0004-the-key-of-a-service.md); `engine/key-vault.ts`, `key-store.ts`). The engine asks on its own channel, never the page on the bridge: `startServer` answers the engine's messages from its first moment, because the engine asks for its keys before it listens. Main answers only for a name that is a service's id — the name becomes a file's name — keeps a key only where the system protects it (`isProtectedStorage`: on Linux Electron says it can encrypt with no keyring there), and never fails for it: a refusal is an answer. A key is never in main's log.
+- **Main keeps the keys of the connected services, sealed by the system** ([ADR 0004](../../docs/adr/0004-the-key-of-a-service.md); `engine/key-vault.ts`, `key-store.ts`). The engine asks on its own channel, never the page on the bridge: `startServer` answers the engine's messages from its first moment, because the engine asks for its keys before it listens. Main answers only for a name that is a service's id — the name becomes a file's name — keeps a key only where the system protects it (`isProtectedStorage`: on Linux Electron says it can encrypt with no keyring there), and never fails for it: a refusal is an answer. It does one thing at a time, in the order asked: a write that is slow never lands after the removal that followed it. A key is never in main's log.
 - **`ipcMain.handle` only.** No `sendSync`.
 - **The engine's environment is a whitelist** (`engine/server-env.ts`). Never spread `process.env` into a child.
 - **Supervision** (`engine/server-supervisor.ts`): the window follows the engine once it says `ready`; an engine that does not start the first time is given up on at once; one that exits by itself later is started again with a growing wait, and given up on after too many failures in a row. Either way the person is told, with the log's path, in words that depend on the cause (`engine/engine-failure.ts`): a cause to remove is named only where one is known — the port, for an engine that never started.

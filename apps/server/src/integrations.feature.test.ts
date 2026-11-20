@@ -197,6 +197,30 @@ describe('the engine API, for the services Scia connects to', () => {
     });
   });
 
+  it('answers 500, and stays connected, when the key cannot be removed', async () => {
+    const kept = new MemoryVault();
+    const stuck: KeyVault = {
+      read: (name) => kept.read(name),
+      write: (name, key) => kept.write(name, key),
+      remove: () => Promise.reject(new Error('The system said no.')),
+    };
+    const on = await appWith(stuck);
+    await connect(KEY, APP_TOKEN, on);
+
+    const removed = await call('/integrations/alldebrid', {
+      method: 'DELETE',
+      token: APP_TOKEN,
+      on,
+    });
+
+    expect(removed.status).toBe(500);
+    expect(await codeOf(removed)).toBe(ApiErrorCode.InternalError);
+    const listed = (await (await call('/integrations', { token: APP_TOKEN, on })).json()) as {
+      data: { connected: boolean }[];
+    };
+    expect(listed.data[0]?.connected).toBe(true);
+  });
+
   it('answers 404 for a service it does not know', async () => {
     const put = await call('/integrations/realdebrid', {
       method: 'PUT',
