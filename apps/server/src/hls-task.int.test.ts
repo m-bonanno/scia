@@ -142,6 +142,29 @@ describe('HlsTask against a real HTTP host', () => {
     expectAnMp4Of(await output(), 3);
   });
 
+  it('says its pieces only once it has read what it kept: never every piece at nothing on a resume', async () => {
+    const host = await serve({ delayMs: 100 });
+    const first = task(`${host.url}/ts/index.m3u8`, { connections: 1 });
+    const pause = new AbortController();
+    const running = first.run(pause.signal);
+    await until(
+      () => first.progress().timeline?.segments.some((piece) => piece.downloaded > 0) === true,
+    );
+    pause.abort(new Error('paused'));
+    await expect(running).rejects.toThrow('paused');
+
+    const second = task(`${host.url}/ts/index.m3u8`);
+    const resumed = second.run(new AbortController().signal);
+    let firstSeen: ReturnType<HlsTask['progress']>['timeline'] = null;
+    while (firstSeen === null) {
+      await new Promise((resolve) => setImmediate(resolve));
+      firstSeen = second.progress().timeline;
+    }
+    await resumed;
+
+    expect(firstSeen.segments.some((piece) => piece.downloaded > 0)).toBe(true);
+  });
+
   it('asks a host that failed a piece again', async () => {
     const host = await serve({ failOnce: ['/ts/segment1.mpegts'] });
 
