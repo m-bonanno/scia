@@ -22,6 +22,7 @@ export function buildServerEnv(input: ServerEnvInput): Record<string, string> {
     SCIA_STATIC_DIR: input.layout.rendererDir,
     SCIA_VERSION: input.version,
     ...(input.alldebridApi === undefined ? {} : { SCIA_ALLDEBRID_API: input.alldebridApi }),
+    ...(input.layout.ytDlp === undefined ? {} : { SCIA_YT_DLP: input.layout.ytDlp }),
     ...(input.systemRoot === undefined ? {} : { SystemRoot: input.systemRoot }),
   };
 }

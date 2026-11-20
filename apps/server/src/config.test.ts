@@ -18,7 +18,13 @@ describe('parseConfig', () => {
       staticDir: undefined,
       version: '0.0.0',
       alldebridApi: 'https://api.alldebrid.com',
+      ytDlp: undefined,
     });
+  });
+
+  it('reads pages with the yt-dlp it is given, and with none when it is given none', () => {
+    expect(parseConfig({ ...base, SCIA_YT_DLP: '/tools/yt-dlp' }).ytDlp).toBe('/tools/yt-dlp');
+    expect(parseConfig({ ...base, SCIA_YT_DLP: '' }).ytDlp).toBeUndefined();
   });
 
   it('takes the port, the renderer and the version it is given', () => {

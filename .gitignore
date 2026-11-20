@@ -42,5 +42,8 @@ Thumbs.db
 # Desktop dev profile (npm start in apps/desktop)
 .dev-profile/
 
+# Programs fetched at build time (apps/desktop/scripts/fetch-tools.mjs)
+apps/desktop/tools/
+
 # Partial downloads
 *.scia

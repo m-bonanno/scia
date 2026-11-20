@@ -30,6 +30,12 @@ const httpUrl = z.url({ protocol: /^https?$/ });
 
 export const segmentSchema = z.object({ start: byteCount, end: byteCount, downloaded: byteCount });
 
+// The container of a video and its lines of picture, when the site says them.
+export const mediaSchema = z.object({
+  ext: z.string(),
+  height: z.number().nonnegative().nullable(),
+});
+
 export const downloadSchema = z.object({
   id: z.string(),
   url: z.string(),
@@ -50,6 +56,9 @@ export const downloadSchema = z.object({
   failureStatus: z.number().int().nullable(),
   // The service the link goes through, or went through: it was not fetched as it stands.
   via: z.enum(IntegrationId).nullable(),
+  // The video of a page, as the site offers it: the link was a page, and this is what is
+  // fetched instead. Null for a link that is fetched as it stands.
+  media: mediaSchema.nullable(),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });

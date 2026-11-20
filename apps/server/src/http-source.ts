@@ -24,6 +24,7 @@ const SILENT = 'The host stopped answering.';
 // of AllDebrid answered it for parts of a file the service had, most likely, not fetched from
 // its hoster yet, and answered the same ranges a moment later (#65).
 const BUSY = new Set([204, 408, 425, 429]);
+const PAGE = /^\s*(text\/html|application\/xhtml\+xml)\s*(;|$)/i;
 
 interface Answer {
   readonly response: IncomingMessage;
@@ -140,6 +141,7 @@ export class HttpSource implements RemoteSource {
       acceptsRanges: status === 206 && totalBytes !== null,
       fileName: nameOf(answer),
       validator: headerOf(response, 'etag') ?? headerOf(response, 'last-modified') ?? null,
+      isPage: PAGE.test(headerOf(response, 'content-type') ?? ''),
     };
   }
 
@@ -190,9 +192,10 @@ export class HttpSource implements RemoteSource {
           headers: {
             'user-agent': this.#userAgent,
             accept: '*/*',
-            // A compressed body would not match the ranges asked for.
-            'accept-encoding': 'identity',
             ...headers,
+            // A compressed body would not match the ranges asked for. Last: the headers a site
+            // asks for (a page's video) do not change it, however they spell it.
+            'accept-encoding': 'identity',
           },
         },
         (response) => {

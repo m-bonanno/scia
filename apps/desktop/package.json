@@ -10,7 +10,7 @@
   "main": "dist/main.cjs",
   "scripts": {
     "build": "node build.mjs",
-    "start": "node build.mjs && electron . --user-data-dir=.dev-profile --port=47822",
+    "start": "node build.mjs && node scripts/fetch-tools.mjs && electron . --user-data-dir=.dev-profile --port=47822",
     "dist": "electron-builder --config electron-builder.yml --publish never",
     "dist:dir": "electron-builder --config electron-builder.yml --dir --publish never",
     "typecheck": "tsc -p tsconfig.json --noEmit"

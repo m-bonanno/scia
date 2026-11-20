@@ -64,6 +64,7 @@ async function boot(): Promise<void> {
     userDataDir: app.getPath('userData'),
     downloadsDir: app.getPath('downloads'),
     scratchProfile: launch.userDataDir !== undefined,
+    platform: process.platform,
   });
 
   const logPath = join(layout.logsDir, 'main.log');

@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
-import { IntegrationId, segmentSchema, settingsSchema } from '@scia/contracts';
+import { IntegrationId, mediaSchema, segmentSchema, settingsSchema } from '@scia/contracts';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
 import { z } from 'zod';
 
@@ -25,6 +25,12 @@ export const recordSchema = z.object({
   // after a pause or a restart. A state written before services existed has neither.
   via: z.enum(IntegrationId).nullable().catch(null),
   unlockedUrl: z.string().nullable().catch(null),
+  // The video a page plays, when the link was a page: what the row says of it, and the address
+  // and headers its site gave — used again after a pause or a restart, asked for again after a
+  // failure. A state written before pages were read has none.
+  media: mediaSchema.nullable().catch(null),
+  mediaUrl: z.string().nullable().catch(null),
+  mediaHeaders: z.record(z.string(), z.string()).nullable().catch(null),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });

@@ -28,12 +28,20 @@ electronFuses:
   enableNodeOptionsEnvironmentVariable: false
   onlyLoadAppFromAsar: true
 
+# Fetches the programs shipped beside the engine for the system being packed, at the version and
+# checksum fixed in it (docs/adr/0008).
+beforePack: scripts/fetch-tools.mjs
+
 # Mirrored by src/engine/runtime-layout.ts — change both together.
 extraResources:
   - from: ../server/dist/server.cjs
     to: server/server.cjs
   - from: ../renderer/dist
     to: renderer
+  - from: tools/${os}
+    to: tools
+  - from: third-party
+    to: third-party
 
 win:
   target:

@@ -1,5 +1,5 @@
 import type { Download } from '@scia/contracts';
-import { DownloadFailure, DownloadStatus } from '@scia/core';
+import { DownloadFailure, DownloadStatus, PageFailure } from '@scia/core';
 import {
   formatBytes,
   formatDuration,
@@ -8,6 +8,31 @@ import {
   SEPARATOR,
 } from '@/lib/format.ts';
 import { directLinkFailedMessage, linkNotUnlockedMessage, SERVICE_NAME } from '@/lib/messages.ts';
+
+// Said of a link that was a page, when its site's video was not downloaded. Each sentence is
+// true of every cause its code covers: "cannot be played" is a private, removed, sign-in or
+// country-limited video alike.
+const PAGE_NOT_DOWNLOADED: Readonly<Record<PageFailure, string>> = {
+  [PageFailure.Drm]:
+    'The video on this page is protected. Scia does not download protected videos.',
+  [PageFailure.VideoUnavailable]:
+    'The site says this video cannot be played. It may be private, removed, or not available in your country.',
+  // A stream, or picture and sound as two files: the sentence is true of both.
+  [PageFailure.FormatUnsupported]:
+    'The site offers this video only in a form Scia cannot download yet.',
+  [PageFailure.Playlist]: 'This page is a list of videos. Add the link of one video.',
+  [PageFailure.Unreadable]: 'Scia could not read the video on this page. Try again later.',
+};
+
+function isPageFailure(failure: DownloadFailure): failure is PageFailure {
+  return Object.hasOwn(PAGE_NOT_DOWNLOADED, failure);
+}
+
+// "MP4 1080p": the container, then the lines of picture when the site says them.
+function mediaText(media: NonNullable<Download['media']>): string {
+  const container = media.ext.toUpperCase();
+  return media.height === null ? container : `${container} ${String(media.height)}p`;
+}
 
 // The fact, then the remedy where there is one: trying again does not bring back a deleted file.
 function failureText(download: Download): string {
@@ -41,6 +66,7 @@ function failureText(download: Download): string {
     case null:
       return 'Connection interrupted. Try again.';
   }
+  if (isPageFailure(download.failure)) return PAGE_NOT_DOWNLOADED[download.failure];
   // What is left is a service's: it did not give a link for this one.
   return linkNotUnlockedMessage(download.failure, download.via);
 }
@@ -54,7 +80,11 @@ function progressText(download: Download): string {
 // goes through a service comes last, and stays when the file is there.
 export function statusLine(download: Download): string {
   const service = download.via === null ? undefined : SERVICE_NAME[download.via];
-  const via = service === undefined ? [] : [`via ${service}`];
+  // Which video of a page, then the service: both say where the bytes come from.
+  const origin = [
+    ...(download.media === null ? [] : [mediaText(download.media)]),
+    ...(service === undefined ? [] : [`via ${service}`]),
+  ];
   switch (download.status) {
     case DownloadStatus.Queued:
       return 'Queued';
@@ -62,7 +92,7 @@ export function statusLine(download: Download): string {
       return [
         formatBytes(download.totalBytes ?? download.downloadedBytes),
         'Completed',
-        ...via,
+        ...origin,
       ].join(SEPARATOR);
     case DownloadStatus.Failed:
       return failureText(download);
@@ -73,7 +103,7 @@ export function statusLine(download: Download): string {
         ...(download.resumable || download.downloadedBytes === 0
           ? []
           : ['will restart from the beginning']),
-        ...via,
+        ...origin,
       ].join(SEPARATOR);
     case DownloadStatus.Downloading: {
       if (download.totalBytes === null && download.downloadedBytes === 0) {
@@ -87,7 +117,7 @@ export function statusLine(download: Download): string {
         progressText(download),
         formatSpeed(download.bytesPerSecond),
         ...(download.etaSeconds === null ? [] : [`${formatDuration(download.etaSeconds)} left`]),
-        ...via,
+        ...origin,
       ].join(SEPARATOR);
     }
   }

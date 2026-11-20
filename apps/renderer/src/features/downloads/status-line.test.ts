@@ -1,5 +1,11 @@
 import type { Download } from '@scia/contracts';
-import { DownloadFailure, DownloadStatus, ServiceFailure, UnlockFailure } from '@scia/core';
+import {
+  DownloadFailure,
+  DownloadStatus,
+  PageFailure,
+  ServiceFailure,
+  UnlockFailure,
+} from '@scia/core';
 import { describe, expect, it } from 'vitest';
 import { aDownload } from '@/test/a-download.ts';
 import { statusLine } from './status-line.ts';
@@ -152,6 +158,47 @@ describe('statusLine', () => {
     );
     // The disk is the disk, whoever gave the link.
     expect(failed({ failure: DownloadFailure.Disk })).toContain('free space');
+  });
+
+  it('says which video of a page it fetches, while it runs, when paused and when it is there', () => {
+    const video = (overrides: Partial<Download>) =>
+      statusLine(aDownload({ media: { ext: 'mp4', height: 1080 }, ...overrides }));
+
+    expect(video({})).toBe('42% · 420 MB of 1,000 MB · 10.0 MB/s · 58 s left · MP4 1080p');
+    expect(video({ status: DownloadStatus.Paused })).toBe(
+      'Paused · 420 MB of 1,000 MB · MP4 1080p',
+    );
+    expect(video({ status: DownloadStatus.Completed, downloadedBytes: 1000 * MIB })).toBe(
+      '1,000 MB · Completed · MP4 1080p',
+    );
+    expect(
+      statusLine(
+        aDownload({
+          status: DownloadStatus.Completed,
+          downloadedBytes: 1000 * MIB,
+          media: { ext: 'webm', height: null },
+        }),
+      ),
+    ).toBe('1,000 MB · Completed · WEBM');
+  });
+
+  it.each([
+    [
+      PageFailure.Drm,
+      'The video on this page is protected. Scia does not download protected videos.',
+    ],
+    [
+      PageFailure.VideoUnavailable,
+      'The site says this video cannot be played. It may be private, removed, or not available in your country.',
+    ],
+    [
+      PageFailure.FormatUnsupported,
+      'The site offers this video only in a form Scia cannot download yet.',
+    ],
+    [PageFailure.Playlist, 'This page is a list of videos. Add the link of one video.'],
+    [PageFailure.Unreadable, 'Scia could not read the video on this page. Try again later.'],
+  ] as const)('says why the video of a page was not downloaded when it was %s', (failure, text) => {
+    expect(statusLine(aDownload({ status: DownloadStatus.Failed, failure }))).toBe(text);
   });
 
   it('names no service for a link that was never known to be one', () => {

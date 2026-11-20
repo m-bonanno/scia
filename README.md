@@ -15,6 +15,7 @@ A download manager for Windows, with Linux to follow: paste a link, Scia fetches
 - Marks what it downloads as coming from the network, as a browser does, so that Windows can ask before running it (Windows; seen with a script, not yet with an `.exe`, an installer or a document); and asks for a second press itself before running a downloaded program.
 - Keeps a queue: how many downloads at once and how many connections per download are settings, and so are the folder they go to and a speed limit for all of them together.
 - Wears one of nine colour themes, chosen in Settings, each in a light and a dark variant that follows the system (seen on a dark system; the light variant with the page told to be light, not yet on a light one); the default one is black and white.
+- Downloads the video a page plays, instead of the page, when the page is on a site [yt-dlp](https://github.com/yt-dlp/yt-dlp) knows and the site offers the video as one file: at the most lines of picture it offers that way, named after the video (Windows; covered by specs, not yet seen in the real app). yt-dlp is shipped with Scia and reads the page itself, with its own requests to that site; protected videos, and videos only offered as streams or as picture and sound apart, are not downloaded and the row says why ([ADR 0008](./docs/adr/0008-the-video-of-a-page.md), #89).
 - Takes links and media from the browser through the extension (`apps/extension`) — written and tested in its logic, not yet tried in a real browser.
 
 What comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
@@ -48,4 +49,4 @@ An issue first, then a pull request that closes it: [`CONTRIBUTING.md`](CONTRIBU
 
 ## Licence
 
-[MIT](LICENSE).
+[MIT](LICENSE). The installer also carries yt-dlp's own build, unchanged, under its licence: [`apps/desktop/third-party/yt-dlp`](apps/desktop/third-party/yt-dlp/README.txt).

@@ -18,6 +18,9 @@ integrations       the services Scia is connected to: the key of each, what each
 alldebrid          AllDebrid's API, as far as Scia uses it
 key-vault          the PORT the key of a service is kept through; main keeps it
 link-resolver      the PORT a debrid service plugs into: is this link a service's, and what is behind it
+page-reader        the PORT a reader of sites plugs into: what video a page plays
+yt-dlp             its adapter: yt-dlp run once per page, its JSON read
+media-choice       which of a page's formats the engine fetches, or why none
 ```
 
 ## Rules
@@ -55,6 +58,14 @@ link-resolver      the PORT a debrid service plugs into: is this link a service'
   - **With no service connected, a file host's link is not fetched as it stands** ([ADR 0006](../../docs/adr/0006-a-file-host-without-a-service.md)): Scia reads AllDebrid's public list of file hosts (`GET /v4/hosts/domains`, no key, `hosts` only — not `streams` or `redirectors`), when a run first needs it and every six hours, in memory, in one request given up on after three seconds (the first link of a run waits on it; a list in hand is used while it is read again); a link on one of those domains or its `www.` — never another subdomain: the servers of a host's files give them to anyone — fails with `SERVICE_NEEDED`. A service connected while it was read decides instead. A list that cannot be read leaves links to go as they stand, as before #49, and is asked again an hour later.
   - The referrer goes to the host of the link that was added, never to the host a service sent Scia to. The name a service gives a file is a name from a host (`fileNameFromHost`), second to the one the direct link's host gives.
   - A refusal of the service is a `DownloadFailure` with a code of its own (`ServiceFailure`, `UnlockFailure`); a code Scia does not know is `SERVICE_UNAVAILABLE`. What can heal — a service that cannot be asked — is asked again a few times, with a wait; what it refuses, it refuses at once. A link the service is preparing is asked about every five seconds, as its documentation says, until it is there, the download is stopped, or thirty minutes have gone by (the owner's decision on #7).
+- **A link whose host answers a web page is read for the video it plays, through `PageReader`** ([ADR 0008](../../docs/adr/0008-the-video-of-a-page.md); `YtDlp` is the adapter, `DownloadManager.#locate` the step). What holds:
+  - **yt-dlp reads, the engine downloads.** yt-dlp prints what it found and fetches nothing; the format chosen (`chooseMedia`) is fetched as any file. A link that is a file, or that a service unlocked, is never read.
+  - **What yt-dlp is always told is a spec** (`yt-dlp.int.test.ts`): the readers of known sites only (`--use-extractors default,-generic`), no restriction worked around (`--xff never`), no cookie read from a file or a browser, no configuration or cache of its own, one video, the address last after `--`. A new option is added there first.
+  - A page of a site it does not know is fetched as it stands. What it says on its error stream is read for a cause (`refusalOf`); what no rule matches is `PAGE_UNREADABLE`. A refusal is a `PageFailure`, and the row says it.
+  - The video is asked for with the headers its site gave and no others; `HttpSource` sends `Accept-Encoding: identity` after them, so no site changes it.
+  - `media` (shown), `mediaUrl` and `mediaHeaders` are kept in `state.json`: used again after a pause or a restart, cleared after a failure so that the page is read again. **`mediaUrl` is never in an answer of the API and never in a log.** A page that was being fetched as it stands is never read later: once its name is final, what was decided at its first start stays decided.
+  - The file is named after the title, through `sanitizeFileName` (a title is not a path), with the format's extension.
+  - The engine reads pages only when main names a yt-dlp that is there (`SCIA_YT_DLP`); under plain Node it fetches pages as they stand. Specs use `testing/fake-yt-dlp.mjs`, never the real program, and never a real site.
 - **Two tokens, two scopes** ([ADR 0002](../../docs/adr/0002-browser-extension-pairing.md)): the app's token (new at every launch) opens every route; the extension's token (persisted, shown in settings) opens `EXTENSION_ROUTES` and nothing else. A new route is app-only unless the ADR is amended.
 - **Only the engine's own host is answered** (`127.0.0.1:<port>` or `localhost:<port>`), and no CORS header is ever sent: a web page can neither read the API nor reach it under another name.
 - **The environment is the configuration** (`config.ts`): `SCIA_*` variables given by main, never a file beside the executable.
