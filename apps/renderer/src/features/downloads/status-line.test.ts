@@ -120,6 +120,20 @@ describe('statusLine', () => {
     ).toBe(text);
   });
 
+  it("says a file host's link needs a service, and which one to connect, when none is", () => {
+    expect(
+      statusLine(
+        aDownload({
+          status: DownloadStatus.Failed,
+          failure: UnlockFailure.NeedsService,
+          via: null,
+        }),
+      ),
+    ).toBe(
+      'This link is on a file host: Scia downloads links like this through AllDebrid. Connect AllDebrid in Settings, then try again.',
+    );
+  });
+
   it('says the link a service gave stopped working, and that trying again asks for another', () => {
     const failed = (overrides: Partial<Download>) =>
       statusLine(aDownload({ status: DownloadStatus.Failed, via: 'alldebrid', ...overrides }));

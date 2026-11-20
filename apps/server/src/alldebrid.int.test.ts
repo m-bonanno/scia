@@ -1,7 +1,7 @@
 import { integrationAccountSchema } from '@scia/contracts';
 import { ServiceFailure, UnlockFailure, PREPARE_LIMIT_SECONDS } from '@scia/core';
 import { afterEach, describe, expect, it } from 'vitest';
-import { AllDebrid, DELAYED_LIMIT_MS } from './alldebrid.ts';
+import { AllDebrid, DELAYED_LIMIT_MS, PUBLIC_ANSWER_LIMIT_MS } from './alldebrid.ts';
 import { ServiceError } from './service-error.ts';
 import {
   type AllDebridServer,
@@ -232,6 +232,51 @@ describe('AllDebrid', () => {
       'bighost.example',
     ]);
     expect(server.requests.at(-1)).toMatchObject({ method: 'GET', url: '/v4.1/user/hosts' });
+  });
+
+  it('lists the domains of the file hosts it supports to anyone, with no key, in lower case', async () => {
+    const server = await serviceWith({
+      hosts: { onefile: ['OneFile.example', '1f.example'], bighost: ['bighost.example'] },
+      streams: ['videos.example'],
+      redirectors: ['short.example'],
+    });
+
+    expect(await clientOf(server).publicDomains()).toEqual([
+      'onefile.example',
+      '1f.example',
+      'bighost.example',
+    ]);
+    expect(server.requests.at(-1)).toMatchObject({ method: 'GET', url: '/v4/hosts/domains' });
+    expect(server.requests.at(-1)?.authorization).toBeUndefined();
+  });
+
+  it('asks for the public list once, and gives up soon: a direct link waits on it', async () => {
+    const server = await serviceWith({ hosts });
+    server.misbehave({ status: 503, times: 1 });
+    expect(await failureOf(clientOf(server).publicDomains())).toBe(ServiceFailure.Unavailable);
+    expect(server.requests).toHaveLength(1);
+
+    server.misbehave({ silent: true });
+    const client = new AllDebrid({
+      api: server.api,
+      userAgent: 'Scia/spec',
+      publicAnswerLimitMs: 200,
+    });
+    const started = performance.now();
+    expect(await failureOf(client.publicDomains())).toBe(ServiceFailure.Unavailable);
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(server.requests).toHaveLength(2);
+  });
+
+  it('waits three seconds at most for the public list', async () => {
+    expect(PUBLIC_ANSWER_LIMIT_MS).toBe(3000);
+    // Through the client as the app makes it, with no limit of its own.
+    const server = await serviceWith({ hosts });
+    server.misbehave({ silent: true });
+    const started = performance.now();
+
+    expect(await failureOf(clientOf(server).publicDomains())).toBe(ServiceFailure.Unavailable);
+    expect(performance.now() - started).toBeLessThan(PUBLIC_ANSWER_LIMIT_MS + 1000);
   });
 
   it('unlocks a link: the direct link and the name the service gives, the link sent in a form', async () => {

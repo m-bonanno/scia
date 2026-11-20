@@ -17,6 +17,10 @@ const HOSTS_FRESH_MS = 6 * 60 * 60_000;
 // After a reading that failed, the list it had is used this long before the service is asked
 // again: a service that does not answer is not asked once for every link.
 const HOSTS_RETRY_MS = 60_000;
+// With no service connected, a public list that could not be read is asked again only this
+// much later: a direct link waits on each reading, and nobody asked Scia to speak to the
+// service (#49).
+const PUBLIC_HOSTS_RETRY_MS = 60 * 60_000;
 
 // `work`, or the reason of `signal` as soon as it stops: what many wait for together is not
 // stopped by one of them leaving.
@@ -100,6 +104,11 @@ export class Integrations implements LinkResolver {
   #hosts: HostList | undefined;
   // Forgotten with the list when another key, or none, is connected: that key asks again.
   #readingHosts: Promise<readonly string[]> | undefined;
+  // The file hosts the service lists to anyone, read while no service is connected (#49).
+  #publicHosts: HostList | undefined;
+  // When a first reading failed, with no list read before it: the next is an hour later.
+  #publicHostsFailedAt: number | undefined;
+  #readingPublicHosts: Promise<readonly string[]> | undefined;
   // Connecting and disconnecting, one after the other: two at once would write one key over
   // another, in an order nobody chose.
   #changing: Promise<unknown> = Promise.resolve();
@@ -201,7 +210,22 @@ export class Integrations implements LinkResolver {
   async serviceFor(url: string, signal: AbortSignal): Promise<IntegrationId | undefined> {
     const key = this.#key;
     const host = hostNameOf(url);
-    if (key === undefined || host === undefined) return undefined;
+    if (host === undefined) return undefined;
+    if (key === undefined) {
+      // A file host's page is on its own domain, or on its www; its other names are the
+      // servers of its files, which give them to anyone: those links go as they stand.
+      const domains = await unlessStopped(this.#publicDomains(), signal);
+      // A service connected while the list was read is the one that decides.
+      if (this.#key !== undefined) return this.serviceFor(url, signal);
+      if (domains.some((domain) => host === domain || host === `www.${domain}`)) {
+        throw new ServiceError(
+          IntegrationId.AllDebrid,
+          UnlockFailure.NeedsService,
+          "A file host's link, and no service is connected.",
+        );
+      }
+      return undefined;
+    }
     const domains = await unlessStopped(this.#domains(key), signal);
     return domains.some((domain) => host === domain || host.endsWith(`.${domain}`))
       ? IntegrationId.AllDebrid
@@ -259,6 +283,53 @@ export class Integrations implements LinkResolver {
       });
     this.#readingHosts = reading;
     return reading;
+  }
+
+  // As the account's list: read when first needed and every six hours, one reading for every
+  // link that waits. One that cannot be read leaves the links to go as they stand — as they
+  // did before #49 — and is asked again an hour later.
+  #publicDomains(): Promise<readonly string[]> {
+    const known = this.#publicHosts;
+    if (known !== undefined && this.#now() - known.readAt < HOSTS_FRESH_MS) {
+      return Promise.resolve(known.domains);
+    }
+    const failedAt = this.#publicHostsFailedAt;
+    if (known === undefined && failedAt !== undefined) {
+      if (this.#now() - failedAt < PUBLIC_HOSTS_RETRY_MS) return Promise.resolve([]);
+    }
+    if (this.#readingPublicHosts !== undefined) {
+      return known === undefined ? this.#readingPublicHosts : Promise.resolve(known.domains);
+    }
+    const reading = this.#deps.alldebrid
+      .publicDomains()
+      .then(
+        (domains) => {
+          this.#publicHosts = { domains, readAt: this.#now() };
+          return domains;
+        },
+        (error: unknown) => {
+          this.#deps.logger.warn('service_public_hosts_not_read', {
+            service: IntegrationId.AllDebrid,
+            error: describeFailure(error),
+          });
+          if (known === undefined) {
+            this.#publicHostsFailedAt = this.#now();
+            return [];
+          }
+          this.#publicHosts = {
+            domains: known.domains,
+            readAt: this.#now() - HOSTS_FRESH_MS + PUBLIC_HOSTS_RETRY_MS,
+          };
+          return known.domains;
+        },
+      )
+      .finally(() => {
+        this.#readingPublicHosts = undefined;
+      });
+    this.#readingPublicHosts = reading;
+    // A list read before goes on being the list while it is read again: nobody waits on a
+    // refresh. Only a run that has none waits, three seconds at most.
+    return known === undefined ? reading : Promise.resolve(known.domains);
   }
 
   async #keepHosts(domains: readonly string[]): Promise<void> {

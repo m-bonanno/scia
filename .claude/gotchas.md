@@ -59,6 +59,7 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 ## Engine
 
+- → A wait put in front of every download is measured against a service that never answers, and against one that refuses, before it is called harmless: the public list of #49, asked three times at ten seconds each, held a direct link for 33 s with no service connected — and every spec was green, because the simulated service always answered at once (#72). One request, a short bound, a list in hand used while it is read again.
 - → A question to the system is tried for its "no", on the system it will run on: `access(folder, W_OK)` has none on Windows, where it says yes for every folder that exists — read-only attribute, denying access list, `C:\Program Files`. What has to be possible is proven by doing it: make a file, remove it (#38).
 - → A name from a host that decides something is read as the system reads it, not as Scia numbers a copy: `setup.tar.exe` and a bare `.cmd` were not programs to a function that took `.tar.exe` as one extension and a leading dot as none. And a list that is a safety rule is drawn from the system (`PATHEXT`, `assoc`/`ftype`), not from memory: `vbs`, `js`, `hta`, `pif`, `lnk` run at a press (#32).
 - → A vitest `?raw` import of a `.css` file comes back empty. A spec that needs the stylesheet's text reads it with `node:fs`, from a workspace that has Node types.

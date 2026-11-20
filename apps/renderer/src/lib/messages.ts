@@ -71,7 +71,8 @@ export function serviceTroubleMessage(failure: ServiceFailure, id: IntegrationId
 }
 
 // Said on the row of a download whose link goes through a service, when the service did not
-// give a link for it. Every sentence begins with who said so.
+// give a link for it; and, for a file host's link added with no service connected, what to
+// connect. Every sentence of a service's refusal begins with who said so.
 const LINK_NOT_UNLOCKED: Readonly<
   Record<ServiceFailure | UnlockFailure, (service: string) => string>
 > = {
@@ -99,6 +100,9 @@ const LINK_NOT_UNLOCKED: Readonly<
   [UnlockFailure.LinkRefused]: (service) => `${service} could not unlock this link.`,
   [UnlockFailure.NotReady]: (service) =>
     `${service} was still preparing this link after ${formatDuration(PREPARE_LIMIT_SECONDS)}. Try again later.`,
+  // Said with no service connected, so it names the one there is to connect.
+  [UnlockFailure.NeedsService]: () =>
+    `This link is on a file host: Scia downloads links like this through ${SERVICE_NAME.alldebrid}. Connect ${SERVICE_NAME.alldebrid} in Settings, then try again.`,
   [UnlockFailure.NotConnected]: (service) =>
     `${service} is no longer connected. Connect it in Settings, then try again.`,
 };
@@ -113,7 +117,9 @@ export function directLinkFailedMessage(status: number | null, via: IntegrationI
 }
 
 // `via` is null when the service failed before it could say whether the link is one of its
-// own: the link belongs to no service yet, and the one that did not answer is not named.
+// own: the link belongs to no service yet, and the one that did not answer is not named. It
+// is null too for a file host's link added with no service connected, whose sentence names the
+// service to connect itself.
 export function linkNotUnlockedMessage(
   failure: ServiceFailure | UnlockFailure,
   via: IntegrationId | null,

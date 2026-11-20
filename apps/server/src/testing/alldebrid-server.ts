@@ -33,6 +33,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
 };
 
 const ROUTES: readonly string[] = [
+  'GET /v4/hosts/domains',
   'GET /v4/user',
   'GET /v4.1/user/hosts',
   'POST /v4/link/unlock',
@@ -88,6 +89,9 @@ export interface AllDebridServerOptions {
   readonly accounts: Readonly<Record<string, SimulatedAccount>>;
   // The hosts the service unlocks links of, each with its domains.
   readonly hosts?: Readonly<Record<string, readonly string[]>>;
+  // What it also lists to anyone besides its file hosts: sites of videos, shorteners of links.
+  readonly streams?: readonly string[];
+  readonly redirectors?: readonly string[];
   // The links it knows, by address. A link of one of its hosts that is not here is "down".
   readonly links?: Readonly<Record<string, SimulatedLink>>;
   // The HTTP status that goes with a refused key. The documentation says both that some errors
@@ -302,6 +306,15 @@ export async function startAllDebridServer(
       const route = `${request.method ?? ''} ${url.pathname}`;
       if (!ROUTES.includes(route)) {
         refuse(response, 404, '404');
+        return;
+      }
+      if (route === 'GET /v4/hosts/domains') {
+        // Public: the documentation says no key is needed.
+        succeed(response, {
+          hosts: Object.values(options.hosts ?? {}).flat(),
+          streams: options.streams ?? [],
+          redirectors: options.redirectors ?? [],
+        });
         return;
       }
       const account = accountOf(request, options);

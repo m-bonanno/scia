@@ -9,6 +9,9 @@ export const ALLDEBRID_API = 'https://api.alldebrid.com';
 
 // The service is far away, and someone is waiting: no answer by then is no answer.
 const ANSWER_LIMIT_MS = 10_000;
+// The public list is asked with no service connected, and a direct link waits on it: one
+// question, given up on soon, never asked again in the same breath (#49).
+export const PUBLIC_ANSWER_LIMIT_MS = 3000;
 // A link that is being prepared is asked about this often: the documentation says "every 5
 // seconds or more".
 const DELAYED_POLL_MS = 5000;
@@ -75,6 +78,10 @@ const hostsSchema = z.object({
   hosts: z.record(z.string(), z.object({ domains: z.array(z.string()) })),
 });
 
+// What the service lists to anyone: file hosts, and sites of videos and shorteners of links,
+// which are no file hosts and are not read.
+const publicHostsSchema = z.object({ hosts: z.array(z.string()) });
+
 const unlockSchema = z.object({
   // Empty, or absent, while the link is being prepared.
   link: z.string().nullish(),
@@ -95,6 +102,7 @@ export interface AllDebridOptions {
   readonly api: string;
   readonly userAgent: string;
   readonly answerLimitMs?: number;
+  readonly publicAnswerLimitMs?: number;
   readonly delayedPollMs?: number;
   readonly delayedLimitMs?: number;
   readonly retryDelayMs?: (attempt: number) => number;
@@ -161,6 +169,20 @@ export class AllDebrid {
     );
   }
 
+  // The domains of the file hosts the service supports, as it lists them to anyone: no key is
+  // sent, and nothing of any link (#49).
+  async publicDomains(signal?: AbortSignal): Promise<string[]> {
+    const { hosts } = await this.#ask(
+      '/v4/hosts/domains',
+      undefined,
+      publicHostsSchema,
+      undefined,
+      signal,
+      this.#options.publicAnswerLimitMs ?? PUBLIC_ANSWER_LIMIT_MS,
+    );
+    return hosts.map((domain) => domain.toLowerCase());
+  }
+
   // The direct link for a hoster's. A link the service needs time to prepare is waited for,
   // for as long as the service says it is preparing it and nobody stops the wait.
   async unlock(apiKey: string, link: string, signal?: AbortSignal): Promise<UnlockedLink> {
@@ -217,18 +239,19 @@ export class AllDebrid {
   // One request: a GET, or a POST of `form` when there is one.
   async #ask<T>(
     path: string,
-    apiKey: string,
+    apiKey: string | undefined,
     schema: z.ZodType<T>,
     form: Readonly<Record<string, string>> | undefined,
     signal: AbortSignal | undefined,
+    limitMs = this.#options.answerLimitMs ?? ANSWER_LIMIT_MS,
   ): Promise<T> {
-    const limit = AbortSignal.timeout(this.#options.answerLimitMs ?? ANSWER_LIMIT_MS);
+    const limit = AbortSignal.timeout(limitMs);
     let body: unknown;
     try {
       const response = await fetch(`${this.#options.api}${path}`, {
         ...(form === undefined ? {} : { method: 'POST', body: new URLSearchParams(form) }),
         headers: {
-          authorization: `Bearer ${apiKey}`,
+          ...(apiKey === undefined ? {} : { authorization: `Bearer ${apiKey}` }),
           accept: 'application/json',
           'user-agent': this.#options.userAgent,
         },
