@@ -44,6 +44,14 @@ win:
       arch: [x64]
   artifactName: ${productName}-Setup-${version}.${ext}
 
+# Where an installed Scia looks for its updates (docs/adr/0007-automatic-updates.md). Also what makes
+# electron-builder write latest.yml and the blockmap beside the installer, with --publish never,
+# and app-update.yml inside the app.
+publish:
+  provider: github
+  owner: m-bonanno
+  repo: scia
+
 nsis:
   oneClick: true
   perMachine: false
