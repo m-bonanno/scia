@@ -1,8 +1,8 @@
 name: Release
 
-# develop → vX.Y.Z-beta.N, main → vX.Y.Z: each with its notes, the installer and what the updater
-# reads (docs/adr/0007-automatic-updates.md). Dispatch with `installer_tag` to build them again for a
-# tag that already exists.
+# develop → vX.Y.Z-beta.N, main → vX.Y.Z, once the gates are green on the merged commit: each with
+# its notes, the installer and what the updater reads (docs/adr/0007-automatic-updates.md). Dispatch
+# with `installer_tag` to build them again for a tag that already exists.
 on:
   push:
     branches: [main, develop]
@@ -20,8 +20,18 @@ concurrency:
 permissions: {}
 
 jobs:
+  # The gates again, on the commit the merge made: a PR green against an older develop can still
+  # make a commit that is red, and a red commit is never tagged (docs/adr/0008-the-delivery-pipeline.md).
+  gates:
+    name: Gates
+    if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event.inputs.installer_tag == ''
+    permissions:
+      contents: read
+    uses: ./.github/workflows/gates.yml
+
   release:
     name: Semantic release
+    needs: gates
     if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop') && github.event.inputs.installer_tag == ''
     permissions:
       contents: write
