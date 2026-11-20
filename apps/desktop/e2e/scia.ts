@@ -66,6 +66,9 @@ export interface Scia {
 
 export interface LaunchOptions {
   readonly args?: readonly string[];
+  // A packaged Scia's exe — the installed one, for the installer's smoke test. The built app
+  // otherwise.
+  readonly executable?: string;
 }
 
 const within = <T>(promise: Promise<T>, ms: number, what: string): Promise<T> =>
@@ -103,6 +106,14 @@ async function end(app: ElectronApplication, main: number): Promise<void> {
   await until(() => !alive(main), CLOSE_LIMIT_MS);
 }
 
+// The process playwright-core started Electron with. Never 0: ended "by pid 0", a whole process
+// group would be — the runner's own.
+function shellOf(app: ElectronApplication): number {
+  const { pid } = app.process();
+  if (pid === undefined) throw new Error('Scia was started with no process to end.');
+  return pid;
+}
+
 // Starts Scia as a person starts it, with its own profile and a free port for its engine — and,
 // unless the spec names one, a simulated AllDebrid that knows no account: with no service
 // connected Scia still asks AllDebrid which hosts are its own (ADR 0006), and a spec reaches no
@@ -118,8 +129,10 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
     : await startAllDebridServer({ accounts: {} });
   const app = await _electron
     .launch({
+      // A packaged exe carries its app; Electron's own exe is told where the built one is.
+      ...(options.executable === undefined ? {} : { executablePath: options.executable }),
       args: [
-        APP_DIR,
+        ...(options.executable === undefined ? [APP_DIR] : []),
         `--user-data-dir=${profile.path}`,
         '--port=0',
         ...(service === undefined ? [] : [`--alldebrid-api=${service.api}`]),
@@ -143,7 +156,14 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
     app.evaluate(() => process.pid),
     PID_LIMIT_MS,
     'no pid',
-  ).catch(() => app.process().pid ?? 0);
+  ).catch(async () => {
+    try {
+      return shellOf(app);
+    } catch (error) {
+      await service?.close();
+      throw error;
+    }
+  });
   const close = async () => {
     await end(app, main);
     await service?.close();

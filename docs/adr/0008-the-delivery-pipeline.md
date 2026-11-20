@@ -33,6 +33,8 @@ The owner asked whether the pipeline had E2E, unit, integration, feature and smo
 | Every PR                     | `Conventional title`, `Linked issue` | `ubuntu-latest`  | Unchanged                                                                                              |
 
 - **The gates are one reusable workflow**, `.github/workflows/gates.yml`: it runs on every PR, and `release.yml` calls it on the push a merge into `develop` or `main` makes. **semantic-release runs only when it is green**: a red commit makes no tag and no release, and the next merge that mends it releases both.
+  - _Amended by #95, 20 November 2026:_ a merge GitHub started no workflow for (#86's, `e470681`) is released all the same: a Release watch (`release-watch.yml`) starts the Release workflow on `develop`'s head every three hours when that head has none, and whoever merges into `develop` or `main` reads the merge's run ([`release-flow.md`](../development/release-flow.md), "A merge nothing released"). `main` is never started by a timer.
+  - _Amended by #113, 20 November 2026:_ a third caller, `burn-in.yml`, started by hand, runs the gates several times on one commit for the burn-in of decision 4 — the installer's smoke test included, which the table gives to every PR only; a release's gates, pushed or started by hand, leave it out (`gates.yml`'s input `smoke`).
 - **Linux runs what does not need a desktop.** The E2E suite and the installer run on Windows alone: Linux is not tried and has no installer job (#28), and Electron there needs a virtual display. Ubuntu keeps finding what Windows forgives — a path written with `\`, a name whose case differs.
 
 ### The layers
@@ -47,6 +49,7 @@ The owner asked whether the pipeline had E2E, unit, integration, feature and smo
 
 - **The E2E suite is `playwright-core` under Vitest** (the owner's decision 1): a fifth Vitest project, `e2e`, outside `npm test`, which needs a build. `playwright-core` has no dependency and downloads no browser; its `_electron` driver starts the app and reaches both main and the page. The specs use what the other layers already have — `until` for a state, `startRangeServer` and `startAllDebridServer` for hosts. Each spec starts the app with a temporary profile (`--user-data-dir=`) and `--port=0`, the engine taking a free port: specs never meet each other, another session's runs or an installed Scia.
 - **The smoke test is a script, not a spec**: what it drives is an installer and an installed exe, on a machine where it may install. It runs only on a CI runner, never on a person's computer, where an install replaces the installed Scia.
+  - _Amended by #92, 20 November 2026:_ the smoke test is a spec, of a Vitest project of its own (`smoke`), not a script. What it drives is still an installer and an installed exe, but the installed exe is driven with the E2E suite's harness (`launchScia(profile, { executable })`), so that there is one way to start, drive and end the app, its bounds and its forced end included; the line above held that an installer called for a script, and the harness showed it does not. It still runs only on a CI runner: the spec refuses to start outside a Windows runner with `CI=true`.
 
 ### Keeping flaky specs out
 
@@ -57,11 +60,11 @@ The owner asked whether the pipeline had E2E, unit, integration, feature and smo
 
 ### What it costs
 
-Nothing. The repository is public: GitHub's standard hosted runners, Linux and Windows, are free for it, and so are their minutes. `playwright-core` is free software (Apache-2.0). No larger runner, no paid service. Time is what it costs. Measured on #94: the Ubuntu job took 1 min 11 s to 1 min 22 s and the Windows job 1 min 24 s to 1 min 40 s, side by side, so a PR waits about a minute and a half, as before, and a beta, which waited for nothing until now, waits that long for its gates before its tag. Measured on #104: `E2E (Windows)` took 1 min 54 s to 1 min 59 s, beside the other two jobs (1 min 10 s to 1 min 53 s), so a PR and a beta's gates wait about two minutes. Estimated, once the smoke test (#92) is in, from the release's installer job (1 min 39 s to 2 min 45 s) and an install and build like the Windows job's: a PR waits about five minutes, its jobs running side by side, and a beta's installer job about a minute more before its files are attached. The estimate is replaced by the measured times when it lands.
+Nothing. The repository is public: GitHub's standard hosted runners, Linux and Windows, are free for it, and so are their minutes. `playwright-core` is free software (Apache-2.0). No larger runner, no paid service. Time is what it costs. Measured on #94: the Ubuntu job took 1 min 11 s to 1 min 22 s and the Windows job 1 min 24 s to 1 min 40 s, side by side, so a PR waits about a minute and a half, as before, and a beta, which waited for nothing until now, waits that long for its gates before its tag. Measured on #104: `E2E (Windows)` took 1 min 54 s to 1 min 59 s, beside the other two jobs (1 min 10 s to 1 min 53 s), so a PR and a beta's gates wait about two minutes. Measured on #111: `Installer smoke (Windows)` took 2 min 17 s to 3 min 26 s — its install alone 20 s to 44 s — beside the other three jobs, so a PR waits about two and a half to three and a half minutes. Estimated, until the first beta after #111 measures it (#120): a beta's installer job takes about a minute more than before, the smoke test running before its files are attached.
 
 ### What a person still does
 
-- **A stable is installed over the previous stable, when there is one**, and run, before the release PR is called done: the smoke test installs on a clean runner, not over an earlier Scia. `release-flow.md` is to say so with the smoke test (#92).
+- **A stable is installed over the previous stable, when there is one**, and run, before the release PR is called done: the smoke test installs on a clean runner, not over an earlier Scia. [`release-flow.md`](../development/release-flow.md), "Releasing", says so.
 - **What the system draws and only a person sees** — a notification, the tray, a hand on the mouse, SmartScreen on a downloaded installer — stays with a person, as the roadmap lists it.
 - **The author runs the gates before opening a PR** ([`review-flow.md`](../development/review-flow.md)): on Windows, the E2E suite too, once it exists (#91), when the change touches the app's runtime.
 
@@ -84,5 +87,5 @@ Four PRs, each closing its issue: the Windows job and the gates before a tag (#9
 - A PR to `develop` or `main` waits for jobs on two systems — four, with #91 and #92 — and a beta for its gates before its tag ("What it costs").
 - A red new job blocks the team's merge and every beta from its first run, before it is required: one unstable Windows spec holds them all. The way out is to mend it, or skip it with the number of an issue that carries its log — never a retry.
 - A merge whose commit is red publishes nothing; whoever merged it mends it in the next PR.
-- The required checks change in #93, on the owner's word: `git-flow.md`, "Repository settings", lists them.
+- The required checks changed in #93, on the owner's word, after the burn-in of run 44800307641 (ten runs green): `git-flow.md`, "Repository settings", lists them.
 - A job's name is a required check's name: renaming one blocks every PR until the protection is changed with it.
