@@ -44,13 +44,13 @@ M3 does not wait for M2: a hoster link pasted into Scia needs nothing from it. O
 
 Integrations arrive one at a time. Each is visible in three places: an **Integrations** section in Settings that lists the services and shows which are connected; the Integrations table in the README; the release notes of the version that brings it (`feat(integrations): …`).
 
-The first stable release waits for the first five lines below — AllDebrid and the four after it, which are what #7 calls done — and not for magnets or a second service (M1, above).
+The first stable release waits for every line below but magnets and a second service: those lines are what #7 lists under "Done when", which has more that has no line here. Of the first of them it does not wait for the link sent by the extension: whether it does is not decided (M1, above).
 
-- **AllDebrid** (#7), connected once in Settings (API key kept by the operating system). From then on **a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically**, with nothing else to do — as a direct link would be. It has to be built and proven against a simulated service; the verification with a real account is the owner's, who pastes their own key into Settings. The first stable release waits for it, whole and tried by the owner (M1, above). It is built in small PRs, each with its issue: the connection in Settings (#47), the unlocking of a pasted link (#48), the link without a connected service (#49) — none of them built yet. The owner answered the question this item carried (19 November 2026): a debrid service is lawful under "Respect the hosts", and a hoster's wait or daily cap is not an access control Scia evades — the person pays the service, the service fetches the file with accounts of its own, and Scia downloads the link it is given. The principle says so (`CLAUDE.md`, #46).
-- A download that went through a service says so in its row.
-- A link that expires during a long download is unlocked again without losing the bytes.
-- A link that unlocks into several files shows the list before downloading.
-- A hoster link without a connected service says so, and says what to do.
+- **AllDebrid** (#7), connected once in Settings (API key kept by the operating system). From then on **a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically**, with nothing else to do — as a direct link would be. It has to be built and proven against a simulated service; the verification with a real account is the owner's, who pastes their own key into Settings. The first stable release waits for it, whole and tried by the owner (M1, above). It is built in small PRs, each with its issue: the connection in Settings (#47), then the unlocking of a pasted link (#48) — neither built yet. The owner answered the question this item carried (19 November 2026): a debrid service is lawful under "Respect the hosts", and a hoster's wait or daily cap is not an access control Scia evades — the person pays the service, the service fetches the file with accounts of its own, and Scia downloads the link it is given. The principle says so (`CLAUDE.md`, #46).
+- A download that went through a service says so in its row (#48).
+- A link that expires during a long download is unlocked again without losing the bytes. A PR of its own, after #48.
+- A link that unlocks into several files shows the list before downloading. A PR of its own, after #48.
+- A hoster link without a connected service says so, and says what to do (#49). How Scia knows such a link when no service is connected is not decided — asked on #49.
 - Magnets through AllDebrid.
 - A second service, to prove the abstraction holds.
 
