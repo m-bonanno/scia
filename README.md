@@ -10,8 +10,8 @@ A download manager for Windows, with Linux to follow: paste a link, Scia fetches
 
 - Downloads any http/https link over several connections in parallel, handing work over when one finishes before the others.
 - Pauses and resumes from the bytes it already has, even after the app was closed and opened again.
-- Keeps downloading from the system tray when the window is closed with downloads running or waiting; closing it with nothing left quits (Windows, verified by script: the icon, its menu and its tooltip not yet seen by a person, #13; Linux not yet tried).
-- Wears its own icon, drawn from its mark: the installer, the window, the taskbar and the tray (Windows, #81).
+- Keeps downloading from the system tray when the window is closed with downloads running or waiting; closing it with nothing left quits (Windows, verified by script: the icon, its menu, its tooltip and its click not yet seen or pressed by a person, #13; Linux not yet tried).
+- Wears its own icon, drawn from its mark: the installer, the installed program, its uninstaller and its shortcuts carry it, as read from the system (Windows, #81). How Windows draws it on screen — the taskbar, the tray, the Start menu — has not been seen, and on the owner's machine the taskbar names Scia "Electron" (#85).
 - Says when a download ends — completed or failed — with a notification of the system, while its window is not the one in use (Windows; asked of the system under a script, not yet seen or clicked; a Scia that opened behind the window in use can be silent until it has been used once, minimised, or closed into the tray; Linux not yet tried).
 - Marks what it downloads as coming from the network, as a browser does, so that Windows can ask before running it (Windows; seen with a script, not yet with an `.exe`, an installer or a document); and asks for a second press itself before running a downloaded program.
 - Keeps a queue: how many downloads at once and how many connections per download are settings, and so are the folder they go to and a speed limit for all of them together.
