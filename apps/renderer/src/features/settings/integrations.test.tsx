@@ -248,6 +248,8 @@ describe('IntegrationsSection', () => {
     await userEvent.keyboard('{Enter}{Enter}');
 
     // It does nothing, and is not taken out of the order: the focus a press gave it stays.
+    // The key being checked is not changed meanwhile: a refusal will be about what is there.
+    expect(service.getByLabelText('AllDebrid API key')).toHaveAttribute('readonly');
     const checking = service.getByRole('button', { name: 'Checking…' });
     expect(checking).toHaveAttribute('aria-disabled', 'true');
     expect(checking).toBeEnabled();

@@ -14,7 +14,7 @@ Captures of the real app: its page, read over the DevTools protocol while the ap
 | [`run-a-program.png`](./run-a-program.png)                             | A finished program whose "Open" was pressed once: the button asks, as "Run"                                                                                                     |
 | [`run-a-program-light.png`](./run-a-program-light.png)                 | The same, light theme                                                                                                                                                           |
 
-The pairing code and the folder in `settings.png` belong to that scratch profile, deleted after the capture: the code opens nothing. The AllDebrid account in it is the simulated service's (`apps/server/src/testing/alldebrid-server.ts`): no such account exists, and the key typed for these captures was made up.
+The pairing code and the folder in `settings.png` and `settings-light.png` belong to that scratch profile, deleted after the capture: the code opens nothing. The AllDebrid account in it is the simulated service's (`apps/server/src/testing/alldebrid-server.ts`): no such account exists, and the key typed for these captures was made up.
 
 A capture is retaken in the PR that changes what it shows (`apps/renderer/CLAUDE.md`, "Behaviour"; the product designer checks it).
 

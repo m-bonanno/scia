@@ -48,8 +48,9 @@ const FAILURE_OF: ReadonlyMap<string, ServiceFailure | UnlockFailure> = new Map<
   ['DELAYED_INVALID_ID', UnlockFailure.LinkRefused],
 ]);
 
-// The last second a date can name: a number past it is not an instant.
-const LAST_SECOND = 8_640_000_000_000;
+// The last second of the year 9999, in seconds since 1970: past it a date is written
+// `+010000-…`, which no ISO date-time the page takes is (integrations.ts of the contracts).
+const LAST_SECOND = 253_402_300_799;
 
 // The body says whether a request succeeded; the HTTP status that comes with it is not to be
 // relied on (the documentation says both that a refused key is a 401 and that it no longer is).

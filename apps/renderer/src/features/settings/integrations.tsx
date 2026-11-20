@@ -205,6 +205,8 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
             }}
             autoFocus
             autoComplete="off"
+            // What is being checked is what the field says: it is not changed meanwhile.
+            readOnly={busy}
             spellCheck={false}
             aria-invalid={refusal !== null}
             aria-describedby={refusal === null ? hintId : `${alertId} ${hintId}`}

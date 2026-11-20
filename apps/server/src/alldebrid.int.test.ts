@@ -1,3 +1,4 @@
+import { integrationAccountSchema } from '@scia/contracts';
 import { ServiceFailure, UnlockFailure } from '@scia/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
@@ -196,12 +197,28 @@ describe('AllDebrid', () => {
     },
   );
 
-  it('says the service is unavailable when the date it gives is none a calendar holds', async () => {
+  it.each([253_402_300_800, 8_640_000_000_000, 9e12])(
+    'says the service is unavailable when the date it gives (%d) is past what the page can be told',
+    async (premiumUntil) => {
+      const client = clientOf(
+        await serviceWith({ accounts: { [KEY]: { username: 'ada', premiumUntil } } }),
+      );
+
+      expect(await failureOf(client.account(KEY))).toBe(ServiceFailure.Unavailable);
+    },
+  );
+
+  it('takes the last day the page can be told, and gives it as the contract takes it', async () => {
     const client = clientOf(
-      await serviceWith({ accounts: { [KEY]: { username: 'ada', premiumUntil: 9e12 } } }),
+      await serviceWith({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: 253_402_300_799 } },
+      }),
     );
 
-    expect(await failureOf(client.account(KEY))).toBe(ServiceFailure.Unavailable);
+    const account = await client.account(KEY);
+
+    expect(account.premiumUntil).toBe('9999-12-31T23:59:59.000Z');
+    expect(integrationAccountSchema.safeParse(account).success).toBe(true);
   });
 
   it('lists the domains of the hosts the account can unlock, in lower case', async () => {
