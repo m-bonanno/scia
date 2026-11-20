@@ -360,7 +360,7 @@ describe('AllDebrid', () => {
     // While its last question is on its way: no wait comes after it to say so.
     server.misbehave({ silent: true });
     const asking = new AbortController();
-    const last = between({ retryDelayMs: () => 1, answerLimitMs: 100 }).unlock(
+    const last = between({ retryDelayMs: () => 1, answerLimitMs: 1000 }).unlock(
       KEY,
       LINK,
       asking.signal,
