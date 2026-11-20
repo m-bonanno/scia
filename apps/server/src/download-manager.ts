@@ -187,6 +187,8 @@ export class DownloadManager {
   readonly #running = new Map<string, Running>();
   #version = 0;
   #waiters: (() => void)[] = [];
+  #busy = false;
+  readonly #busyListeners = new Set<(busy: boolean) => void>();
   #checkpoint: ReturnType<typeof setInterval> | undefined;
   #checkpointing = false;
   #closed = false;
@@ -249,6 +251,23 @@ export class DownloadManager {
       this.#waiters.push(wake);
       gone?.addEventListener('abort', leave, { once: true });
     });
+  }
+
+  // Whether a download of the person's runs or waits its turn: what the engine's own fetches wait
+  // for (docs/adr/0011). A paused or failed download waits for the person, not for the engine.
+  isBusy(): boolean {
+    return this.#records.some(
+      ({ status }) => status === DownloadStatus.Downloading || status === DownloadStatus.Queued,
+    );
+  }
+
+  // Told each time that changes; answers how to stop being told.
+  onBusyChange(listener: (busy: boolean) => void): () => void {
+    this.#busy = this.isBusy();
+    this.#busyListeners.add(listener);
+    return () => {
+      this.#busyListeners.delete(listener);
+    };
   }
 
   add(input: {
@@ -517,6 +536,11 @@ export class DownloadManager {
   #changed(): void {
     this.#version += 1;
     for (const wake of this.#waiters.splice(0)) wake();
+    const busy = this.isBusy();
+    if (busy !== this.#busy) {
+      this.#busy = busy;
+      for (const listener of this.#busyListeners) listener(busy);
+    }
     void this.#save();
   }
 

@@ -11,6 +11,9 @@ export interface ServerEnvInput {
   // A simulated AllDebrid for this run (engine/launch-options.ts); the engine refuses one that
   // is not on this computer.
   readonly alldebridApi?: string | undefined;
+  // A host of yt-dlp's releases for this run (engine/launch-options.ts); the engine refuses one
+  // that is not on this computer.
+  readonly ytDlpReleases?: string | undefined;
 }
 
 // Built from scratch, never from `process.env`: inherited variables silently override
@@ -25,7 +28,14 @@ export function buildServerEnv(input: ServerEnvInput): Record<string, string> {
     SCIA_VERSION: input.version,
     SCIA_TEMP_DIR: input.tempDir,
     ...(input.alldebridApi === undefined ? {} : { SCIA_ALLDEBRID_API: input.alldebridApi }),
-    ...(input.layout.ytDlp === undefined ? {} : { SCIA_YT_DLP: input.layout.ytDlp }),
+    ...(input.ytDlpReleases === undefined ? {} : { SCIA_YT_DLP_RELEASES: input.ytDlpReleases }),
+    ...(input.layout.ytDlp === undefined
+      ? {}
+      : {
+          SCIA_YT_DLP: input.layout.ytDlp.path,
+          SCIA_YT_DLP_VERSION: input.layout.ytDlp.version,
+          SCIA_YT_DLP_ASSET: input.layout.ytDlp.asset,
+        }),
     ...(input.systemRoot === undefined ? {} : { SystemRoot: input.systemRoot }),
   };
 }

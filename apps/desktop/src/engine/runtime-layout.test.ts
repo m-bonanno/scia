@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { resolveRuntimeLayout } from './runtime-layout.ts';
+import { resolveRuntimeLayout, YT_DLP_VERSION } from './runtime-layout.ts';
 
 const input = {
   isPackaged: false,
@@ -26,15 +26,20 @@ describe('resolveRuntimeLayout', () => {
   });
 
   it('finds the reader of pages that was shipped for this system, and none where none is', () => {
-    expect(resolveRuntimeLayout({ ...input, isPackaged: true }).ytDlp).toBe(
-      join('install', 'resources', 'tools', 'yt-dlp.exe'),
-    );
-    expect(resolveRuntimeLayout(input).ytDlp).toBe(
+    expect(resolveRuntimeLayout({ ...input, isPackaged: true }).ytDlp).toEqual({
+      path: join('install', 'resources', 'tools', 'yt-dlp.exe'),
+      version: YT_DLP_VERSION,
+      asset: 'yt-dlp.exe',
+    });
+    expect(resolveRuntimeLayout(input).ytDlp?.path).toBe(
       join('repo', 'apps', 'desktop', 'tools', 'win', 'yt-dlp.exe'),
     );
-    expect(resolveRuntimeLayout({ ...input, isPackaged: true, platform: 'linux' }).ytDlp).toBe(
-      join('install', 'resources', 'tools', 'yt-dlp'),
-    );
+    // Its name in a release of yt-dlp is not the name it is shipped under.
+    expect(resolveRuntimeLayout({ ...input, isPackaged: true, platform: 'linux' }).ytDlp).toEqual({
+      path: join('install', 'resources', 'tools', 'yt-dlp'),
+      version: YT_DLP_VERSION,
+      asset: 'yt-dlp_linux',
+    });
     expect(resolveRuntimeLayout({ ...input, platform: 'darwin' }).ytDlp).toBeUndefined();
   });
 

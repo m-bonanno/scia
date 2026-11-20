@@ -20,8 +20,41 @@ describe('parseConfig', () => {
       version: '0.0.0',
       alldebridApi: 'https://api.alldebrid.com',
       ytDlp: undefined,
+      ytDlpUpdates: undefined,
+      ytDlpReleases: 'https://github.com/yt-dlp/yt-dlp',
       tempDir: tmpdir(),
     });
+  });
+
+  it('brings yt-dlp up to date only when main says which release it shipped and its build’s name', () => {
+    const shipped = {
+      ...base,
+      SCIA_YT_DLP: '/tools/yt-dlp.exe',
+      SCIA_YT_DLP_VERSION: '2026.10.26',
+      SCIA_YT_DLP_ASSET: 'yt-dlp.exe',
+    };
+    expect(parseConfig(shipped).ytDlpUpdates).toEqual({
+      version: '2026.10.26',
+      asset: 'yt-dlp.exe',
+    });
+    expect(parseConfig({ ...shipped, SCIA_YT_DLP: '' }).ytDlpUpdates).toBeUndefined();
+    expect(parseConfig({ ...shipped, SCIA_YT_DLP_VERSION: '' }).ytDlpUpdates).toBeUndefined();
+    expect(parseConfig({ ...shipped, SCIA_YT_DLP_ASSET: '' }).ytDlpUpdates).toBeUndefined();
+    expect(() => parseConfig({ ...shipped, SCIA_YT_DLP_VERSION: 'latest' })).toThrow(
+      'SCIA_YT_DLP_VERSION',
+    );
+    expect(() => parseConfig({ ...shipped, SCIA_YT_DLP_ASSET: '../yt-dlp.exe' })).toThrow(
+      'SCIA_YT_DLP_ASSET',
+    );
+  });
+
+  it('takes another address for yt-dlp’s releases only when it is on this computer', () => {
+    expect(
+      parseConfig({ ...base, SCIA_YT_DLP_RELEASES: 'http://127.0.0.1:8080/' }).ytDlpReleases,
+    ).toBe('http://127.0.0.1:8080');
+    expect(() =>
+      parseConfig({ ...base, SCIA_YT_DLP_RELEASES: 'https://github.com/someone/yt-dlp' }),
+    ).toThrow('SCIA_YT_DLP_RELEASES');
   });
 
   it('reads pages with the yt-dlp it is given, and with none when it is given none', () => {

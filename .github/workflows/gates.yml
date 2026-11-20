@@ -110,6 +110,11 @@ jobs:
         run: node node_modules/electron/install.js
       - name: Build
         run: npm run build
+      # The yt-dlp the app ships, at the version and checksum apps/desktop/src/engine/runtime-layout.ts
+      # fixes: the app reads pages with it, and the spec of its update publishes it again, from a
+      # local host, as a newer release (ADR 0011).
+      - name: yt-dlp
+        run: node apps/desktop/scripts/fetch-tools.ts
       - name: E2E
         run: npm run test:e2e
 

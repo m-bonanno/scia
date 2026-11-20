@@ -7,8 +7,10 @@ import { API_PREFIX, type Download } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
 import { startAllDebridServer } from '@scia/server/testing/alldebrid-server.ts';
 import { until as untilWithin } from '@scia/server/testing/scratch.ts';
+import { startReleasesServer } from '@scia/server/testing/yt-dlp-releases-server.ts';
 import { _electron, type ElectronApplication, type Page } from 'playwright-core';
 import { afterEach } from 'vitest';
+import { YT_DLP_VERSION } from '../src/engine/runtime-layout.ts';
 
 // The built app: `npm run build` first. main.cjs, the engine's bundle and the page's files are
 // what Electron loads from here, as it does under `npm start`.
@@ -115,9 +117,10 @@ function shellOf(app: ElectronApplication): number {
 }
 
 // Starts Scia as a person starts it, with its own profile and a free port for its engine — and,
-// unless the spec names one, a simulated AllDebrid that knows no account: with no service
-// connected Scia still asks AllDebrid which hosts are its own (ADR 0006), and a spec reaches no
-// host but this computer's.
+// unless the spec names them, a simulated AllDebrid that knows no account and a host of yt-dlp's
+// releases whose latest is the release Scia ships, with no files: with no service connected Scia still asks AllDebrid which hosts
+// are its own (ADR 0006), and an app whose yt-dlp was fetched asks for yt-dlp's latest release
+// (ADR 0011). A spec reaches no host but this computer's.
 export async function launchScia(profile: Profile, options: LaunchOptions = {}): Promise<Scia> {
   const args = options.args ?? [];
   if (args.some((arg) => arg.startsWith('--port=') || arg.startsWith('--user-data-dir='))) {
@@ -127,6 +130,15 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
   const service = args.some((arg) => arg.startsWith('--alldebrid-api='))
     ? undefined
     : await startAllDebridServer({ accounts: {} });
+  const releases = args.some((arg) => arg.startsWith('--yt-dlp-releases='))
+    ? undefined
+    : await startReleasesServer();
+  // Nothing newer than the release Scia ships.
+  if (releases !== undefined) releases.latest = YT_DLP_VERSION;
+  const hosts = async () => {
+    await service?.close();
+    await releases?.close();
+  };
   const app = await _electron
     .launch({
       // A packaged exe carries its app; Electron's own exe is told where the built one is.
@@ -136,12 +148,13 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
         `--user-data-dir=${profile.path}`,
         '--port=0',
         ...(service === undefined ? [] : [`--alldebrid-api=${service.api}`]),
+        ...(releases === undefined ? [] : [`--yt-dlp-releases=${releases.address}`]),
         ...args,
       ],
       timeout: START_LIMIT_MS,
     })
     .catch(async (error: unknown) => {
-      await service?.close();
+      await hosts();
       throw error;
     });
   const exited = new Promise<void>((done) => {
@@ -160,13 +173,13 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
     try {
       return shellOf(app);
     } catch (error) {
-      await service?.close();
+      await hosts();
       throw error;
     }
   });
   const close = async () => {
     await end(app, main);
-    await service?.close();
+    await hosts();
   };
   try {
     const page = await app.firstWindow({ timeout: START_LIMIT_MS });
@@ -188,7 +201,7 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
           electron.quit();
         });
         await within(exited, QUIT_LIMIT_MS, 'Scia did not end after a quit');
-        await service?.close();
+        await hosts();
       },
     };
   } catch (error) {
