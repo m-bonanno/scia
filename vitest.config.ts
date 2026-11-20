@@ -35,6 +35,18 @@ export default defineConfig({
           include: ['apps/server/src/**/*.feature.test.ts'],
         },
       },
+      // The built app, started by Electron: `npm run build` first. One app at a time, each with
+      // its own profile and port; a first start on a CI runner is slow.
+      {
+        test: {
+          name: 'e2e',
+          environment: 'node',
+          include: ['apps/desktop/e2e/**/*.e2e.test.ts'],
+          fileParallelism: false,
+          testTimeout: 120_000,
+          hookTimeout: 60_000,
+        },
+      },
     ],
   },
 });
