@@ -27,6 +27,8 @@ What earlier reviews taught, each with the PR that taught it.
 
 - A sentence is read against every cause its code covers, in the engine: "is not answering" was the text of a code that also means maintenance, an unknown answer and too many requests. And a way back is not drawn beside what cannot be taken back. (#53)
 
+- On a row that goes through a service, a host's answer is about the link the service gave, not the one the person pasted: read its sentence again there. "The file is no longer at this address" told someone to give up on a link whose remedy was one press of Retry (#65).
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.

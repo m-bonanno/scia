@@ -19,9 +19,9 @@ What comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
 
 Scia connects to outside services one at a time, each listed here when it lands. A service is connected once, in Settings, with the key of your account, which Scia keeps where the operating system protects it.
 
-| Service   | What it adds                                               | State                                                                                                                                                                                          |
-| --------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| AllDebrid | Hoster links are unlocked and downloaded like direct links | Connected once in Settings; a pasted hoster link is unlocked through it and downloaded, and its row says "via AllDebrid" — tried against a simulated service, not yet with a real account (#7) |
+| Service   | What it adds                                               | State                                                                                                                                                                                                                                                                                                           |
+| --------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| AllDebrid | Hoster links are unlocked and downloaded like direct links | Connected once in Settings; a pasted hoster link is unlocked through it and downloaded, and its row says "via AllDebrid" — tried against a simulated service; with a real account once, where AllDebrid's direct link stopped answering mid-file, which Scia now retries — that fix not yet tried for real (#7) |
 
 ## Development
 
