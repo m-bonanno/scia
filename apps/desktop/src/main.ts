@@ -327,7 +327,8 @@ async function boot(): Promise<void> {
     return;
   }
   log.info('engine_ready', { port });
-  await followEngine();
+  // The ear first: it reads the engine, not the theme or the page, and what ends before it
+  // listens is taken for what had already ended — never said.
   void followDownloads({
     engine,
     onDownloads: (downloads) => {
@@ -341,4 +342,5 @@ async function boot(): Promise<void> {
     sleep: (ms, signal) => sleep(ms, undefined, { signal }),
     log,
   });
+  await followEngine();
 }
