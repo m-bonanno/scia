@@ -121,7 +121,7 @@ export class Integrations implements LinkResolver {
         error: describeFailure(error),
       });
     }
-    return new Integrations(deps, key, key === undefined ? undefined : await keptHosts(deps));
+    return new Integrations(deps, key, await keptHosts(deps));
   }
 
   async list(): Promise<Integration[]> {

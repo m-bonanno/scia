@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { IntegrationId } from '@scia/contracts';
+import { type IntegrationAccount, IntegrationId } from '@scia/contracts';
 import { DownloadFailure, DownloadStatus, ServiceFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
@@ -256,32 +256,110 @@ describe('a link that goes through a service', () => {
     await expect(refused).rejects.toMatchObject({ failure: ServiceFailure.NetworkRefused });
   });
 
-  it('keeps no list behind a disconnection that comes as the list is answered', async () => {
-    const alldebrid = await serviceWith({ links: {} });
+  describe('while the list of the first account is being read', () => {
+    const OTHER = 'other-key-000000000000000';
+    const never = new AbortController().signal;
+    let server: AllDebridServer;
+    const hostsRead = () => server.requests.filter((r) => r.url === '/v4.1/user/hosts').length;
     let answer: ((domains: string[]) => void) | undefined;
-    class Answering extends AllDebrid {
-      override domains(): Promise<string[]> {
-        return new Promise((resolve) => {
-          answer = resolve;
-        });
+    let refuse: ((error: Error) => void) | undefined;
+
+    // AllDebrid as it is, but for the first account: its list is answered when the spec says,
+    // and the other account is accepted without a word, so that nothing stands between the
+    // answer and a change of key.
+    async function heldForTheFirstKey(): Promise<Integrations> {
+      answer = undefined;
+      refuse = undefined;
+      server = await serviceWith({
+        accounts: {
+          [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL, hosts: ['hoster'] },
+          [OTHER]: { username: 'grace', premiumUntil: PREMIUM_UNTIL, hosts: ['elsewhere'] },
+        },
+        hosts: { hoster: ['hoster.example'], elsewhere: ['elsewhere.example'] },
+        links: {},
+      });
+      class Holding extends AllDebrid {
+        override account(apiKey: string): Promise<IntegrationAccount> {
+          if (apiKey !== OTHER) return super.account(apiKey);
+          return Promise.resolve({ name: 'grace', premium: true, premiumUntil: null });
+        }
+        override domains(apiKey: string, signal?: AbortSignal): Promise<string[]> {
+          if (apiKey !== KEY) return super.domains(apiKey, signal);
+          return new Promise((resolve, reject) => {
+            answer = resolve;
+            refuse = reject;
+          });
+        }
       }
+      const vault = new MemoryVault();
+      await vault.write(IntegrationId.AllDebrid, KEY);
+      return Integrations.open({
+        vault,
+        hostsFile: hostsFile(),
+        alldebrid: new Holding({ api: server.api, userAgent: 'Scia/spec', retryDelayMs: () => 1 }),
+        logger,
+      });
     }
-    const vault = new MemoryVault();
-    await vault.write(IntegrationId.AllDebrid, KEY);
-    const integrations = await Integrations.open({
-      vault,
-      hostsFile: hostsFile(),
-      alldebrid: new Answering({ api: alldebrid.api, userAgent: 'Scia/spec' }),
-      logger,
+
+    it('keeps no list behind a disconnection that comes as the list is answered', async () => {
+      const integrations = await heldForTheFirstKey();
+      const reading = integrations.serviceFor(LINK, never);
+      await until(() => answer !== undefined);
+
+      answer?.(['hoster.example']);
+      await integrations.disconnect(IntegrationId.AllDebrid);
+      await reading;
+
+      expect(existsSync(hostsFile())).toBe(false);
     });
-    const reading = integrations.serviceFor(LINK, new AbortController().signal);
-    await until(() => answer !== undefined);
 
-    answer?.(['hoster.example']);
-    await integrations.disconnect(IntegrationId.AllDebrid);
-    await reading;
+    it('keeps no list of the first account once another is connected as it is answered', async () => {
+      const integrations = await heldForTheFirstKey();
+      const reading = integrations.serviceFor(LINK, never);
+      await until(() => answer !== undefined);
 
-    expect(existsSync(hostsFile())).toBe(false);
+      answer?.(['hoster.example']);
+      await integrations.connect(IntegrationId.AllDebrid, OTHER);
+      await reading;
+
+      expect(existsSync(hostsFile())).toBe(false);
+    });
+
+    it('does not take the kept list of the first account for the one connected while it was asked', async () => {
+      mkdirSync(join(folder.path, 'data'), { recursive: true });
+      await writeFile(hostsFile(), JSON.stringify({ domains: ['hoster.example'] }));
+      const integrations = await heldForTheFirstKey();
+      const reading = integrations.serviceFor(LINK, never);
+      await until(() => refuse !== undefined);
+
+      await integrations.connect(IntegrationId.AllDebrid, OTHER);
+      refuse?.(new Error('the service did not answer'));
+      // The first account's download goes by its own kept list.
+      expect(await reading).toBe('alldebrid');
+
+      expect(await integrations.serviceFor('https://elsewhere.example/f/1', never)).toBe(
+        'alldebrid',
+      );
+    });
+
+    it('asks once for the list of the account connected next, whatever the reading before it does', async () => {
+      const integrations = await heldForTheFirstKey();
+      const first = integrations.serviceFor(LINK, never).catch(() => undefined);
+      await until(() => refuse !== undefined);
+      await integrations.connect(IntegrationId.AllDebrid, OTHER);
+      server.misbehave({ slowMs: 300, times: 1 });
+      const one = integrations.serviceFor('https://elsewhere.example/f/1', never);
+      await until(() => hostsRead() === 1);
+
+      // The reading under the first key ends while the next one is on its way.
+      refuse?.(new Error('the service did not answer'));
+      await first;
+      const two = integrations.serviceFor('https://elsewhere.example/f/2', never);
+
+      expect(await one).toBe('alldebrid');
+      expect(await two).toBe('alldebrid');
+      expect(hostsRead()).toBe(1);
+    });
   });
 
   it('forgets the kept list when another account is connected, and when none is', async () => {
