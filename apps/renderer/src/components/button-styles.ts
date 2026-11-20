@@ -7,6 +7,7 @@ export const FOCUS_RING =
 export const TEXT_BUTTON = cn(
   'inline-flex h-8 shrink-0 items-center rounded-lg bg-tonal px-3 text-sm font-medium text-foreground transition-colors',
   'hover:bg-border disabled:opacity-40 disabled:hover:bg-tonal',
+  'aria-disabled:opacity-40 aria-disabled:hover:bg-tonal',
   FOCUS_RING,
 );
 

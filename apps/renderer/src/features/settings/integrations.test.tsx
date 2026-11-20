@@ -247,7 +247,11 @@ describe('IntegrationsSection', () => {
 
     await userEvent.keyboard('{Enter}{Enter}');
 
-    expect(service.getByRole('button', { name: 'Checking…' })).toBeDisabled();
+    // It does nothing, and is not taken out of the order: the focus a press gave it stays.
+    const checking = service.getByRole('button', { name: 'Checking…' });
+    expect(checking).toHaveAttribute('aria-disabled', 'true');
+    expect(checking).toBeEnabled();
+    await userEvent.click(checking);
     expect(connect).toHaveBeenCalledTimes(1);
     // The check cannot be taken back: while it lasts Cancel does nothing, and says so to
     // who cannot see it dimmed — and whoever does not see the button is told of the check.

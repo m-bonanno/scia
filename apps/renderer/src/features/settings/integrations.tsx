@@ -112,6 +112,8 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
 
   const connect = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
+    // Enter in the field while the key is checked: the button that would send it does nothing.
+    if (busy) return;
     setBusy(true);
     setRefusal(null);
     api
@@ -234,7 +236,14 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
             >
               Cancel
             </button>
-            <button type="submit" disabled={apiKey.trim() === '' || busy} className={TEXT_BUTTON}>
+            {/* While the key is checked it does nothing, and keeps the focus a press gave it:
+                a button the system disables drops the focus on the page. */}
+            <button
+              type="submit"
+              disabled={apiKey.trim() === ''}
+              aria-disabled={busy}
+              className={TEXT_BUTTON}
+            >
               {busy ? 'Checking…' : 'Connect'}
             </button>
           </div>
