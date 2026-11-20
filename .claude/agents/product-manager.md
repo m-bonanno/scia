@@ -34,6 +34,7 @@ What earlier reviews taught, each with the PR that taught it.
 - What a run "read" is checked against what the log can hold: "the script read what main asked the system to show" rested on a log that carried counts and no words. (#51)
 
 - The evidence of a run is read as one story: a count "in the whole run" beside sentences of a restart that must have asked again cannot both be true. And "all of it by keys, in both themes" — both variants, since #52 — on the roadmap is checked against the list of what was done by keys and looked at in each variant. (#53)
+- A condition the issue sets on the merge — "the owner sees the result before the PR is merged" — is a line of the body: done, with where the owner's words are, or an unchecked box the merge waits for. A body that said the owner chose from renderings and took the reads as enough said nothing of the result, and a merge with the admin bypass would have gone past it. (#86)
 
 ## Output
 

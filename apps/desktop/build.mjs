@@ -15,8 +15,8 @@ const common = {
 await build({ ...common, entryPoints: ['src/main.ts'], outfile: 'dist/main.cjs' });
 await build({ ...common, entryPoints: ['src/preload.cts'], outfile: 'dist/preload.cjs' });
 
-// A zero exit code is not proof: without its icon the tray is silently absent. The source is
-// checked, not the copy, which can survive from an earlier build.
-await access('assets/tray.png');
+// A zero exit code is not proof: without its icon the tray is silently absent, and the window
+// wears Electron's. The source is checked, not the copy, which can survive from an earlier build.
+for (const icon of ['tray.png', 'icon.ico', 'icon.png']) await access(`assets/${icon}`);
 // What main loads by path sits beside main.cjs, so the asar carries it.
 await cp('assets', 'dist/assets', { recursive: true });
