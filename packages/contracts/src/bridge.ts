@@ -22,3 +22,8 @@ export type FolderChange = (typeof FolderChange)[keyof typeof FolderChange];
 export function isFolderChange(value: unknown): value is FolderChange {
   return Object.values(FolderChange).some((change) => change === value);
 }
+
+// The systems whose releases carry an installer, which is what an installed Scia updates itself
+// from (docs/adr/0007-automatic-updates.md): main updates only there, and Settings offers the
+// betas only there. Electron's names, as `window.scia.platform` says them.
+export const SELF_UPDATING_PLATFORMS = ['win32'] as const;

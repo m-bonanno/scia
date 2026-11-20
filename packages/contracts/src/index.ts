@@ -103,6 +103,9 @@ export const settingsSchema = z.object({
     .nullable(),
   // Of the interface: the engine keeps it, and writes it into the page it serves.
   theme: z.enum(Theme),
+  // Whether an installed Scia updates itself to the betas too, not only to the stables (#82). Main
+  // reads it; the page switches it.
+  betaUpdates: z.boolean(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -112,6 +115,7 @@ export const settingsPatchSchema = settingsSchema
     connectionsPerDownload: true,
     speedLimitBytesPerSecond: true,
     theme: true,
+    betaUpdates: true,
   })
   .partial();
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;

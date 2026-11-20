@@ -40,6 +40,8 @@ const DEFAULT_SETTINGS = {
   connectionsPerDownload: 8,
   speedLimitBytesPerSecond: null,
   theme: DEFAULT_THEME,
+  // The stables only: the betas are for whoever turns them on (the owner, #82).
+  betaUpdates: false,
 } as const;
 // A connection is not opened for less than this.
 const MIN_SEGMENT_BYTES = 1024 * 1024;
@@ -268,6 +270,7 @@ export class DownloadManager {
         ? {}
         : { speedLimitBytesPerSecond: patch.speedLimitBytesPerSecond }),
       ...(patch.theme === undefined ? {} : { theme: patch.theme }),
+      ...(patch.betaUpdates === undefined ? {} : { betaUpdates: patch.betaUpdates }),
     };
     // At once, also for what is already running.
     if (patch.speedLimitBytesPerSecond !== undefined) {

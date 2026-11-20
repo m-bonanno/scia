@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -73,13 +74,31 @@ const within = <T>(promise: Promise<T>, ms: number, what: string): Promise<T> =>
     }),
   ]);
 
-async function end(app: ElectronApplication, exited: Promise<void>): Promise<void> {
+const alive = (pid: number) => {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+// Ends Scia's main and every process it started — the engine, the window's. On Windows
+// playwright-core starts Electron through a shell, and `app.process()` is that shell: killing it
+// leaves Electron running on the profile. Main is found by the pid it reports itself.
+async function end(app: ElectronApplication, main: number): Promise<void> {
   try {
     await within(app.close(), CLOSE_LIMIT_MS, 'Scia did not close');
   } catch {
-    app.process().kill();
-    await within(exited, CLOSE_LIMIT_MS, 'Scia did not end when killed').catch(() => undefined);
+    // Closing failed: main can be blocked on a dialog nobody will answer.
   }
+  if (!alive(main)) return;
+  if (process.platform === 'win32') {
+    spawnSync('taskkill', ['/pid', String(main), '/T', '/F'], { timeout: CLOSE_LIMIT_MS });
+  } else {
+    process.kill(main, 'SIGKILL');
+  }
+  await until(() => !alive(main), CLOSE_LIMIT_MS);
 }
 
 // Starts Scia as a person starts it, with its own profile and a free port for its engine — and,
@@ -115,8 +134,10 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
       done();
     });
   });
+  // When main cannot say, the shell is ended with its tree, while the tree is still whole.
+  const main = await app.evaluate(() => process.pid).catch(() => app.process().pid ?? 0);
   const close = async () => {
-    await end(app, exited);
+    await end(app, main);
     await service?.close();
   };
   try {

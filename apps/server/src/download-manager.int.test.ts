@@ -509,7 +509,29 @@ describe('DownloadManager', () => {
       downloadDirectory: join(folder.path, 'downloads'),
       speedLimitBytesPerSecond: null,
       theme: 'black-tie',
+      betaUpdates: false,
     });
+    expect(existsSync(`${statePath}.unreadable`)).toBe(false);
+  });
+
+  it('keeps the betas switch after a restart, and loads a state whose switch is not one with it off', async () => {
+    const first = await open();
+    expect(first.settings().betaUpdates).toBe(false);
+    first.updateSettings({ betaUpdates: true });
+    await first.close();
+    const statePath = join(folder.path, 'data', 'state.json');
+    const state = JSON.parse(await readFile(statePath, 'utf8')) as {
+      settings: Record<string, unknown>;
+    };
+    expect(state.settings.betaUpdates).toBe(true);
+
+    const second = await open();
+    expect(second.settings().betaUpdates).toBe(true);
+    await second.close();
+    state.settings.betaUpdates = 'yes';
+    await writeFile(statePath, JSON.stringify(state));
+
+    expect((await open()).settings().betaUpdates).toBe(false);
     expect(existsSync(`${statePath}.unreadable`)).toBe(false);
   });
 

@@ -16,6 +16,7 @@ const settings = {
   downloadDirectory: '/home/me/Downloads',
   speedLimitBytesPerSecond: null,
   theme: 'black-tie',
+  betaUpdates: false,
 } as const;
 
 // What the page hears of the engine: changed by a spec, then the page is rendered again.

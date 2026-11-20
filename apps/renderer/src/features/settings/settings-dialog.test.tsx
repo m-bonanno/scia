@@ -11,6 +11,7 @@ const settings = {
   downloadDirectory: '/home/me/Downloads',
   speedLimitBytesPerSecond: null,
   theme: 'black-tie',
+  betaUpdates: false,
 } as const;
 const MIB = 1024 * 1024;
 
@@ -63,6 +64,71 @@ describe('SettingsDialog', () => {
     expect(screen.getByText(/Paste this code into the extension’s options/)).toBeInTheDocument();
     // Whoever opened it learns what was read, not only what is changed here.
     expect(onSettings).toHaveBeenCalledExactlyOnceWith(settings);
+  });
+
+  describe('the beta versions', () => {
+    it('are off until the person turns them on, and the engine keeps the switch', async () => {
+      aShell(async () => 'kept');
+      const updateSettings = vi
+        .spyOn(api, 'updateSettings')
+        .mockResolvedValue({ ...settings, betaUpdates: true });
+      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+
+      const betas = await screen.findByRole('switch', { name: 'Beta versions' });
+      expect(betas).not.toBeChecked();
+      expect(betas).toHaveAccessibleDescription(
+        'Also update to versions still being tried. Scia updates itself when you quit it.',
+      );
+
+      await userEvent.click(betas);
+
+      expect(updateSettings).toHaveBeenCalledExactlyOnceWith({ betaUpdates: true });
+      expect(await screen.findByRole('switch', { name: 'Beta versions' })).toBeChecked();
+    });
+
+    it('are switched off again with the keyboard', async () => {
+      aShell(async () => 'kept');
+      vi.spyOn(api, 'settings').mockResolvedValue({ ...settings, betaUpdates: true });
+      const updateSettings = vi.spyOn(api, 'updateSettings').mockResolvedValue(settings);
+      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+
+      const betas = await screen.findByRole('switch', { name: 'Beta versions' });
+      expect(betas).toBeChecked();
+      betas.focus();
+      await userEvent.keyboard(' ');
+
+      expect(updateSettings).toHaveBeenCalledExactlyOnceWith({ betaUpdates: false });
+      expect(await screen.findByRole('switch', { name: 'Beta versions' })).not.toBeChecked();
+    });
+
+    it('stay as the engine keeps them when it refuses the change, and the refusal is told', async () => {
+      aShell(async () => 'kept');
+      const refusal = new Error('The engine is restarting.');
+      vi.spyOn(api, 'updateSettings').mockRejectedValue(refusal);
+      const onError = vi.fn();
+      render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
+
+      await userEvent.click(await screen.findByRole('switch', { name: 'Beta versions' }));
+
+      await vi.waitFor(() => {
+        expect(onError).toHaveBeenCalledWith(refusal);
+      });
+      expect(screen.getByRole('switch', { name: 'Beta versions' })).not.toBeChecked();
+    });
+
+    it('are offered only where Scia updates itself', async () => {
+      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+      await screen.findByText('Simultaneous downloads');
+      expect(screen.queryByRole('switch', { name: 'Beta versions' })).not.toBeInTheDocument();
+    });
+
+    it('are not offered on a system whose releases carry no installer', async () => {
+      aShell(async () => 'kept');
+      window.scia = { ...window.scia!, platform: 'linux' };
+      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+      await screen.findByText('Simultaneous downloads');
+      expect(screen.queryByRole('switch', { name: 'Beta versions' })).not.toBeInTheDocument();
+    });
   });
 
   it('lists the services Scia connects to, between the settings and the extension', async () => {
