@@ -22,6 +22,8 @@ const STATE_LIMIT_MS = 30_000;
 const QUIT_LIMIT_MS = 30_000;
 // A process that has not ended by then is ended: a spec never leaves a Scia behind it.
 const CLOSE_LIMIT_MS = 15_000;
+// Main answers in tens of milliseconds while it is not blocked.
+const PID_LIMIT_MS = 5_000;
 
 // Waits for a state of the app (`until` of the other layers, with the app's limit).
 export const until = (condition: () => boolean | Promise<boolean>, limitMs = STATE_LIMIT_MS) =>
@@ -134,8 +136,14 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
       done();
     });
   });
-  // When main cannot say, the shell is ended with its tree, while the tree is still whole.
-  const main = await app.evaluate(() => process.pid).catch(() => app.process().pid ?? 0);
+  // Asked at once and bounded: main stops answering once it shows the error box of an engine
+  // that never started, moments after the launch. When main cannot say, the shell is ended with
+  // its tree, Electron being its child.
+  const main = await within(
+    app.evaluate(() => process.pid),
+    PID_LIMIT_MS,
+    'no pid',
+  ).catch(() => app.process().pid ?? 0);
   const close = async () => {
     await end(app, main);
     await service?.close();
