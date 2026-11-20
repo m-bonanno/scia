@@ -1,6 +1,6 @@
 import { setTimeout as sleep } from 'node:timers/promises';
 import { type IntegrationAccount, IntegrationId } from '@scia/contracts';
-import { ServiceFailure, UnlockFailure } from '@scia/core';
+import { PREPARE_LIMIT_SECONDS, ServiceFailure, UnlockFailure } from '@scia/core';
 import { z } from 'zod';
 import type { UnlockedLink } from './link-resolver.ts';
 import { ServiceError } from './service-error.ts';
@@ -13,8 +13,8 @@ const ANSWER_LIMIT_MS = 10_000;
 // seconds or more".
 const DELAYED_POLL_MS = 5000;
 // A link the service is still preparing after this long is given up on, and the place it held
-// in the queue given back (the owner's decision, #7). Retry starts again.
-export const DELAYED_LIMIT_MS = 30 * 60_000;
+// in the queue given back. Retry starts again.
+export const DELAYED_LIMIT_MS = PREPARE_LIMIT_SECONDS * 1000;
 // How many times in a row a link's request is made while the service cannot be asked.
 const ATTEMPTS = 3;
 

@@ -1,6 +1,17 @@
 import { describe, expect, it } from 'vitest';
 import { DownloadFailure } from './download.ts';
-import { isServiceFailure, ServiceFailure, UnlockFailure } from './service.ts';
+import {
+  isServiceFailure,
+  PREPARE_LIMIT_SECONDS,
+  ServiceFailure,
+  UnlockFailure,
+} from './service.ts';
+
+describe('PREPARE_LIMIT_SECONDS', () => {
+  it('waits thirty minutes at most for a link being prepared, as the owner decided', () => {
+    expect(PREPARE_LIMIT_SECONDS).toBe(30 * 60);
+  });
+});
 
 describe('isServiceFailure', () => {
   it('knows what a service says of a key or of itself from what it says of a link', () => {

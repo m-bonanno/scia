@@ -256,6 +256,34 @@ describe('a link that goes through a service', () => {
     await expect(refused).rejects.toMatchObject({ failure: ServiceFailure.NetworkRefused });
   });
 
+  it('keeps no list behind a disconnection that comes as the list is answered', async () => {
+    const alldebrid = await serviceWith({ links: {} });
+    let answer: ((domains: string[]) => void) | undefined;
+    class Answering extends AllDebrid {
+      override domains(): Promise<string[]> {
+        return new Promise((resolve) => {
+          answer = resolve;
+        });
+      }
+    }
+    const vault = new MemoryVault();
+    await vault.write(IntegrationId.AllDebrid, KEY);
+    const integrations = await Integrations.open({
+      vault,
+      hostsFile: hostsFile(),
+      alldebrid: new Answering({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+      logger,
+    });
+    const reading = integrations.serviceFor(LINK, new AbortController().signal);
+    await until(() => answer !== undefined);
+
+    answer?.(['hoster.example']);
+    await integrations.disconnect(IntegrationId.AllDebrid);
+    await reading;
+
+    expect(existsSync(hostsFile())).toBe(false);
+  });
+
   it('forgets the kept list when another account is connected, and when none is', async () => {
     const alldebrid = await serviceWith({ links: {} });
     const integrations = await connected(alldebrid);

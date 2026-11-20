@@ -1,4 +1,4 @@
-import { DownloadStatus, FileKind } from '@scia/core';
+import { DownloadFailure, DownloadStatus, FileKind } from '@scia/core';
 import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
@@ -39,6 +39,23 @@ describe('DownloadRow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(row.resume).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows the whole sentence of a failure, remedy included, where a running line is cut', () => {
+    const failed = aDownload({
+      status: DownloadStatus.Failed,
+      failure: DownloadFailure.HttpStatus,
+      failureStatus: 404,
+      via: 'alldebrid',
+    });
+    const { rerender } = render(<DownloadRow download={failed} actions={actions()} />);
+
+    expect(screen.getByText(/^The link AllDebrid gave no longer works/)).not.toHaveClass(
+      'truncate',
+    );
+
+    rerender(<DownloadRow download={aDownload()} actions={actions()} />);
+    expect(screen.getByText(/MB\/s/)).toHaveClass('truncate');
   });
 
   it('asks once more before throwing away unfinished bytes', async () => {

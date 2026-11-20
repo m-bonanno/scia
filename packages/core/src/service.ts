@@ -34,6 +34,10 @@ export const UnlockFailure = {
 } as const;
 export type UnlockFailure = (typeof UnlockFailure)[keyof typeof UnlockFailure];
 
+// The longest Scia waits for a link the service is still preparing: the owner's decision (#7).
+// The engine gives up after it, and the page says how long it waited.
+export const PREPARE_LIMIT_SECONDS = 30 * 60;
+
 export function isServiceFailure(value: unknown): value is ServiceFailure {
   return Object.values(ServiceFailure).some((failure) => failure === value);
 }

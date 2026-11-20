@@ -81,8 +81,9 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
           </p>
           <p
             className={cn(
-              'truncate text-sm tabular-nums',
-              failed ? 'text-destructive' : 'text-muted-foreground',
+              'text-sm tabular-nums',
+              // A failure's sentence ends with its remedy: it wraps rather than lose it.
+              failed ? 'text-destructive' : 'truncate text-muted-foreground',
             )}
           >
             {statusLine(download)}

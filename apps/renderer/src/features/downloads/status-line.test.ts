@@ -80,7 +80,7 @@ describe('statusLine', () => {
     ],
     [
       ServiceFailure.KeyBlocked,
-      'AllDebrid is blocking the key from here. If it emailed you about a new sign-in, confirm it; otherwise check your network, then try again.',
+      'AllDebrid is blocking the key from here. If AllDebrid emailed you about a new sign-in, confirm it; otherwise check your network, then try again.',
     ],
     [ServiceFailure.AccountBanned, 'AllDebrid says the account is banned.'],
     [
@@ -108,7 +108,7 @@ describe('statusLine', () => {
     [UnlockFailure.LinkRefused, 'AllDebrid could not unlock this link.'],
     [
       UnlockFailure.NotReady,
-      'AllDebrid was still preparing this link after 30 minutes. Try again later.',
+      'AllDebrid was still preparing this link after 30\u00a0min. Try again later.',
     ],
     [
       UnlockFailure.NotConnected,
@@ -120,21 +120,21 @@ describe('statusLine', () => {
     ).toBe(text);
   });
 
-  it('says the link a service gave stopped answering, and that trying again asks for another', () => {
+  it('says the link a service gave stopped working, and that trying again asks for another', () => {
     const failed = (overrides: Partial<Download>) =>
       statusLine(aDownload({ status: DownloadStatus.Failed, via: 'alldebrid', ...overrides }));
 
     expect(failed({ failure: DownloadFailure.HttpStatus, failureStatus: 404 })).toBe(
-      'The link AllDebrid gave no longer answers (404). Try again: AllDebrid gives a new one.',
+      'The link AllDebrid gave no longer works (404). Try again: AllDebrid gives a new one.',
     );
     expect(failed({ failure: DownloadFailure.HttpStatus, failureStatus: 204 })).toBe(
-      'The link AllDebrid gave no longer answers (204). Try again: AllDebrid gives a new one.',
+      'The link AllDebrid gave no longer works (204). Try again: AllDebrid gives a new one.',
     );
     expect(failed({ failure: DownloadFailure.Network })).toBe(
-      'The link AllDebrid gave no longer answers. Try again: AllDebrid gives a new one.',
+      'The link AllDebrid gave no longer works. Try again: AllDebrid gives a new one.',
     );
     expect(failed({ failure: DownloadFailure.Incomplete })).toBe(
-      'The link AllDebrid gave no longer answers. Try again: AllDebrid gives a new one.',
+      'The link AllDebrid gave no longer works. Try again: AllDebrid gives a new one.',
     );
     // The disk is the disk, whoever gave the link.
     expect(failed({ failure: DownloadFailure.Disk })).toContain('free space');

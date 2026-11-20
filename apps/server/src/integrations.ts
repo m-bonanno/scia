@@ -45,8 +45,8 @@ function hostNameOf(url: string): string | undefined {
 // is there for the next listing.
 const LIST_WAIT_MS = 2000;
 
-// The list kept by an earlier run, read as old: it is used while the service is asked again,
-// and in its place when the service does not answer.
+// The list kept by an earlier run, read as old: the first link of a run waits for the service
+// to be asked again, and goes by the kept list when it does not answer.
 async function keptHosts(deps: IntegrationsDeps): Promise<HostList | undefined> {
   if (deps.hostsFile === undefined) return undefined;
   try {
@@ -229,11 +229,14 @@ export class Integrations implements LinkResolver {
       .domains(key)
       .then(
         async (domains) => {
-          // An answer about a key that is no longer the one: it is nobody's list now.
-          if (this.#key === key) {
+          // In turn with connecting and disconnecting, which forget the list: a list written
+          // while a key was being forgotten would outlive it.
+          await this.#oneAtATime(async () => {
+            // An answer about a key that is no longer the one: it is nobody's list now.
+            if (this.#key !== key) return;
             this.#hosts = { domains, readAt: this.#now() };
             await this.#keepHosts(domains);
-          }
+          });
           return domains;
         },
         (error: unknown) => {

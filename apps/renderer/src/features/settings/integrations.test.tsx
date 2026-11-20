@@ -115,7 +115,7 @@ describe('IntegrationsSection', () => {
     [
       ApiErrorCode.KeyBlocked,
       422,
-      'AllDebrid is blocking this key from here. If it emailed you about a new sign-in, confirm it; otherwise check your network, then try again.',
+      'AllDebrid is blocking this key from here. If AllDebrid emailed you about a new sign-in, confirm it; otherwise check your network, then try again.',
     ],
     [ApiErrorCode.AccountBanned, 422, 'AllDebrid says this account is banned.'],
     [
@@ -411,7 +411,7 @@ describe('IntegrationsSection', () => {
     ],
     [
       ApiErrorCode.KeyBlocked,
-      'AllDebrid is blocking the key from here. If it emailed you about a new sign-in, confirm it; otherwise check your network.',
+      'AllDebrid is blocking the key from here. If AllDebrid emailed you about a new sign-in, confirm it; otherwise check your network.',
     ],
     [ApiErrorCode.AccountBanned, 'AllDebrid says this account is banned.'],
     [

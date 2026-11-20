@@ -1,5 +1,5 @@
 import { integrationAccountSchema } from '@scia/contracts';
-import { ServiceFailure, UnlockFailure } from '@scia/core';
+import { ServiceFailure, UnlockFailure, PREPARE_LIMIT_SECONDS } from '@scia/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AllDebrid, DELAYED_LIMIT_MS } from './alldebrid.ts';
 import { ServiceError } from './service-error.ts';
@@ -316,8 +316,8 @@ describe('AllDebrid', () => {
     expect(server.requests.length).toBeLessThan(20);
   });
 
-  it('waits thirty minutes at most for a link being prepared, as the owner decided', () => {
-    expect(DELAYED_LIMIT_MS).toBe(30 * 60_000);
+  it('waits for a link being prepared as long as the domain says, and no longer', () => {
+    expect(DELAYED_LIMIT_MS).toBe(PREPARE_LIMIT_SECONDS * 1000);
   });
 
   it('stops waiting for a link when whoever asked stops', async () => {
