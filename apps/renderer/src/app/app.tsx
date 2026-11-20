@@ -11,6 +11,7 @@ import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { Connection, useLive } from '@/lib/live.ts';
 import { ENGINE_UNREACHABLE, errorMessage, FILE_NOT_OPENED } from '@/lib/messages.ts';
+import { wearTheme } from '@/lib/theme.ts';
 import { TitleBar } from './title-bar.tsx';
 
 function isTextField(target: EventTarget | null): boolean {
@@ -30,11 +31,13 @@ export function App(): ReactNode {
 
   const keepSettings = useCallback((settings: Settings) => {
     setSpeedLimit(settings.speedLimitBytesPerSecond);
+    wearTheme(settings.theme);
   }, []);
 
-  // The limit the title bar names is the engine's: read when the engine is reached, and again
-  // whenever it comes back. A read that fails all the same is not reported here: the limit
-  // still holds, and Settings, which reports its own read, tells this page what it learns.
+  // The limit the title bar names and the theme the page wears are the engine's: read when the
+  // engine is reached, and again whenever it comes back. A read that fails all the same is not
+  // reported here: the limit still holds, and Settings, which reports its own read, tells this
+  // page what it learns.
   const reached = live.connection === Connection.Live;
   useEffect(() => {
     if (!reached) return undefined;

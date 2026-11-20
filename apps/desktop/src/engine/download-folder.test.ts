@@ -8,6 +8,7 @@ const settings = {
   connectionsPerDownload: 8,
   downloadDirectory: 'C:\\Users\\me\\Downloads',
   speedLimitBytesPerSecond: null,
+  theme: 'black-tie',
 };
 
 function engineWith(fetch: EngineAccess['fetch']) {

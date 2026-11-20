@@ -41,6 +41,7 @@ What earlier reviews taught, each with the PR that taught it.
 - An approval names the range it measured. A limit approved on runs from 64 KB/s to 1 MB/s over plain http, for a menu that ends at 50 MB/s, was a third of itself at 25: the review says what it tried, and what of the settings it did not. (#44)
 
 - "Each caught" in a test plan is sampled, on the roads the specs really take: of 35 lines deleted from a PR that claimed 65 caught, 12 survived — a code the test host never answers, a line only an engine that restarts runs, two halves of one condition the host ties together, and rules the PR wrote into a `CLAUDE.md` with no spec. And a number in the body is checked against the code: "two requests in the whole run" could not be, with an engine that asks at every start. (#53)
+- A verdict is given on a head that can be merged: read `gh pr view <n> --json mergeable,mergeStateStatus` in every round. The heads of three rounds were behind `develop`, and the third conflicted with it in eight files; no review looked at the base. (#52)
 
 ## Output
 
