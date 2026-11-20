@@ -141,16 +141,12 @@ export class DownloadTask {
 
   async #openPart(): Promise<FileHandle> {
     return onDisk(async () => {
+      const file = await this.#openOrMake();
       try {
-        return await open(this.#options.partPath, 'r+');
-      } catch (error) {
-        if (!isMissing(error)) throw error;
-      }
-      // The part file is gone, and with it what the segments remember.
-      this.#segments = this.#segments.map((segment) => ({ ...segment, downloaded: 0 }));
-      const file = await open(this.#options.partPath, 'w+');
-      try {
-        // The whole size at once: a full disk says so now, not at the last megabyte.
+        // A ranged part file is the file's length. Made new, the whole size at once: a full disk
+        // says so now, not at the last megabyte. Kept, whatever an earlier attempt left: when the
+        // host's file got smaller and the download started over, the old file's tail would stay
+        // past the new end (#106). The segments hold only bytes inside it.
         if (this.#ranged) await file.truncate(this.#options.totalBytes ?? 0);
       } catch (error) {
         await file.close();
@@ -158,6 +154,17 @@ export class DownloadTask {
       }
       return file;
     });
+  }
+
+  async #openOrMake(): Promise<FileHandle> {
+    try {
+      return await open(this.#options.partPath, 'r+');
+    } catch (error) {
+      if (!isMissing(error)) throw error;
+    }
+    // The part file is gone, and with it what the segments remember.
+    this.#segments = this.#segments.map((segment) => ({ ...segment, downloaded: 0 }));
+    return open(this.#options.partPath, 'w+');
   }
 
   async #runConnections(file: FileHandle, signal: AbortSignal): Promise<void> {

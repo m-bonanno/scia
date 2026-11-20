@@ -306,6 +306,25 @@ describe('the engine API', () => {
     ).toMatchObject({ connectionsPerDownload: 4 });
   });
 
+  it('keeps the betas switch off until the person turns it on, and takes only a yes or a no', async () => {
+    const betasOf = async (response: Response) =>
+      ((await response.json()) as { data: { betaUpdates: unknown } }).data.betaUpdates;
+    const turn = (betaUpdates: unknown) =>
+      call('/settings', {
+        method: 'PATCH',
+        token: APP_TOKEN,
+        body: JSON.stringify({ betaUpdates }),
+      });
+
+    expect(await betasOf(await call('/settings', { token: APP_TOKEN }))).toBe(false);
+    for (const refused of ['true', 1, null]) {
+      expect((await turn(refused)).status, String(refused)).toBe(400);
+    }
+    expect(await betasOf(await turn(true))).toBe(true);
+    expect(await betasOf(await call('/settings', { token: APP_TOKEN }))).toBe(true);
+    expect(await betasOf(await turn(false))).toBe(false);
+  });
+
   describe('the theme of the interface', () => {
     const themeOf = async (response: Response) =>
       ((await response.json()) as { data: { theme: string } }).data.theme;

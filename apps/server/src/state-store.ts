@@ -48,6 +48,7 @@ export type DownloadRecord = z.infer<typeof recordSchema>;
 const storedSettingsSchema = settingsSchema.extend({
   speedLimitBytesPerSecond: settingsSchema.shape.speedLimitBytesPerSecond.catch(null),
   theme: settingsSchema.shape.theme.catch(DEFAULT_THEME),
+  betaUpdates: settingsSchema.shape.betaUpdates.catch(false),
 });
 
 export const stateSchema = z.object({

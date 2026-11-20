@@ -17,6 +17,7 @@ import type { EngineAccess } from './engine/engine-access.ts';
 import { Kept } from './engine/kept.ts';
 import { followDownloads } from './engine/engine-events.ts';
 import { EngineFailure, engineFailureNotice } from './engine/engine-failure.ts';
+import { betasOfEngine } from './engine/engine-settings.ts';
 import { KeyVault } from './engine/key-vault.ts';
 import { parseLaunchOptions } from './engine/launch-options.ts';
 import { RestartPolicy } from './engine/restart-policy.ts';
@@ -25,11 +26,13 @@ import { buildServerEnv } from './engine/server-env.ts';
 import { ServerSupervisor } from './engine/server-supervisor.ts';
 import { ShownNotices } from './engine/shown-notices.ts';
 import { HIDDEN_TO_TRAY_NOTICE, trayTooltip } from './engine/tray-presentation.ts';
+import { Updates, updatesApply } from './engine/updates.ts';
 import { themeOfEngine } from './engine/window-theme.ts';
 import { KeyFolder, systemCipher } from './key-store.ts';
 import { NoticeFile } from './notice-file.ts';
 import { startServer } from './server-process.ts';
 import { createSystemTray } from './tray.ts';
+import { createUpdater } from './updater.ts';
 import { appOrigin, MainWindow } from './window.ts';
 
 // How long main waits for the engine to answer a question of its own. The engine is on this
@@ -96,6 +99,13 @@ async function boot(): Promise<void> {
 
   let port = 0;
   let quitting = false;
+  // A quit the person asked for — the tray's Quit, or a close with nothing left to download —
+  // is the only one that installs an update (docs/adr/0007-automatic-updates.md).
+  let quitAskedByPerson = false;
+  const quitAsAsked = () => {
+    quitAskedByPerson = true;
+    app.quit();
+  };
   // Read anew after every wait: a quit may have begun meanwhile.
   const isQuitting = () => quitting;
   const engine = (): EngineAccess => ({ origin: appOrigin(port), apiToken, fetch });
@@ -118,9 +128,7 @@ async function boot(): Promise<void> {
     onOpen: () => {
       window.focus();
     },
-    onQuit: () => {
-      app.quit();
-    },
+    onQuit: quitAsAsked,
     tooltip: async () => trayTooltip(await activity().catch(() => undefined)),
     log,
   });
@@ -135,9 +143,7 @@ async function boot(): Promise<void> {
     hide: () => {
       window.hide();
     },
-    quit: () => {
-      app.quit();
-    },
+    quit: quitAsAsked,
     activity: () =>
       activity().catch((error: unknown) => {
         log.warn('activity_unknown', { error: String(error) });
@@ -248,6 +254,39 @@ async function boot(): Promise<void> {
     app.exit(1);
   };
 
+  // Where a release carries an installer for this system, the packaged app looks for new versions
+  // and installs one at a quit the person asks for (engine/updates.ts).
+  const updating = {
+    packaged: app.isPackaged,
+    platform: process.platform,
+    version: app.getVersion(),
+  };
+  // An updater that cannot be made leaves Scia as it is, and a line in the log: nothing in the
+  // start depends on it.
+  const makeUpdates = (): Updates | undefined => {
+    if (!updatesApply(updating)) {
+      log.info('updates_off', updating);
+      return undefined;
+    }
+    try {
+      return new Updates({
+        betas: () => betasOfEngine(engine(), ENGINE_ANSWER_LIMIT_MS),
+        ...createUpdater(log.scope('updater')),
+        wait: (ms, run) => {
+          const timer = setTimeout(run, ms);
+          return () => {
+            clearTimeout(timer);
+          };
+        },
+        log,
+      });
+    } catch (error) {
+      log.warn('updates_off', { ...updating, error: String(error) });
+      return undefined;
+    }
+  };
+  const updates = makeUpdates();
+
   const supervisor = new ServerSupervisor({
     start: () =>
       startServer({
@@ -285,10 +324,21 @@ async function boot(): Promise<void> {
     endedBatch.stop();
     window.hide();
     tray?.destroy();
-    void supervisor.stop().finally(() => {
-      log.info('quit');
-      app.exit(0);
-    });
+    // Whether to install is decided while the engine still runs (it keeps the betas switch), and
+    // the installer starts once the engine has stopped and written its state: the installer ends
+    // whatever still runs of Scia. Each step has its bound.
+    const installing =
+      updates?.atQuit({ askedByPerson: quitAskedByPerson }) ?? Promise.resolve(false);
+    void installing
+      .catch(() => false)
+      .then(async (install) => {
+        await supervisor.stop();
+        if (install) updates?.install();
+      })
+      .finally(() => {
+        log.info('quit');
+        app.exit(0);
+      });
   });
 
   // Starting Scia again is how a person whose desktop draws no tray gets the window back.
@@ -335,6 +385,7 @@ async function boot(): Promise<void> {
     engine,
     onDownloads: (downloads) => {
       latest = downloads;
+      updates?.engineSays({ idle: unfinished(activityOf(downloads)) === 0 });
       endedBatch.add(ended.seen(downloads));
     },
     signal: listening.signal,
@@ -344,5 +395,6 @@ async function boot(): Promise<void> {
     sleep: (ms, signal) => sleep(ms, undefined, { signal }),
     log,
   });
+  updates?.start();
   await followEngine();
 }
