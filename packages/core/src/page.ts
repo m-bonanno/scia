@@ -13,6 +13,8 @@ export const PageFailure = {
   // The page lists several items — a playlist, a channel, an album — which Scia does not expand
   // yet (#8).
   Playlist: 'PAGE_PLAYLIST',
+  // The video is a live stream, which Scia does not record yet (#121).
+  Live: 'PAGE_LIVE',
   // The site did not answer properly — busy, in maintenance, too many requests — or not in time:
   // what waiting can mend.
   SiteBusy: 'PAGE_SITE_BUSY',
