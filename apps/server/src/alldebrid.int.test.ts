@@ -236,6 +236,20 @@ describe('AllDebrid', () => {
     expect(server.requests.at(-1)?.form).toEqual({ id: '1' });
   });
 
+  it('asks about a link being prepared no more often than it is told to', async () => {
+    const server = await serviceWith({
+      hosts,
+      links: { [LINK]: { direct: 'http://127.0.0.1:9/direct/film.mkv', delayedPolls: 2 } },
+    });
+    const client = new AllDebrid({ api: server.api, userAgent: 'Scia/spec', delayedPollMs: 80 });
+
+    const started = performance.now();
+    await client.unlock(KEY, LINK);
+
+    // Three waits of 80 ms, each before a question: the wait is the case itself.
+    expect(performance.now() - started).toBeGreaterThan(3 * 80 * 0.9);
+  });
+
   it('says the link was refused when the service could not prepare it', async () => {
     const server = await serviceWith({
       hosts,
@@ -274,6 +288,7 @@ describe('AllDebrid', () => {
     ['LINK_HOST_NOT_SUPPORTED', UnlockFailure.LinkRefused],
     ['LINK_NOT_SUPPORTED', UnlockFailure.LinkRefused],
     ['LINK_ERROR', UnlockFailure.LinkRefused],
+    ['DELAYED_INVALID_ID', UnlockFailure.LinkRefused],
     ['NO_SERVER', ServiceFailure.NetworkRefused],
     ['AUTH_BAD_APIKEY', ServiceFailure.KeyRefused],
     ['AUTH_BLOCKED', ServiceFailure.KeyBlocked],

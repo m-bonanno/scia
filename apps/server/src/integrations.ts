@@ -32,7 +32,8 @@ function unlessStopped<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
 }
 
 function hostNameOf(url: string): string | undefined {
-  return URL.parse(url)?.hostname.toLowerCase();
+  // As the platform reads it: in lower case, whatever was pasted.
+  return URL.parse(url)?.hostname;
 }
 // A listing waits this long for the service to say whose account it is, and then answers what
 // it knows: Settings is not kept waiting by a service that is slow. The answer, when it comes,
@@ -131,6 +132,7 @@ export class Integrations implements LinkResolver {
       throw new KeyNotKeptError('The key could not be kept.', { cause: error });
     }
     this.#key = apiKey;
+    // Another key may be another account, with other hosts.
     this.#hosts = undefined;
     this.#account = account;
     this.#failure = null;
@@ -154,7 +156,6 @@ export class Integrations implements LinkResolver {
   async #disconnect(id: IntegrationId): Promise<void> {
     await this.#deps.vault.remove(id);
     this.#key = undefined;
-    this.#hosts = undefined;
     this.#account = null;
     this.#failure = null;
     this.#askedAt = undefined;

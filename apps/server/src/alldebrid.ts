@@ -80,11 +80,11 @@ const unlockSchema = z.object({
 });
 
 const delayedSchema = z.object({
-  // 1: still processing. 2: the link is there. 3: it could not be made.
+  // 1: still processing. 2: the link is there. Anything else: it could not be made (3).
   status: z.coerce.number(),
   link: z.string().nullish(),
 });
-const DelayedStatus = { Processing: 1, Ready: 2, Failed: 3 } as const;
+const DelayedStatus = { Processing: 1, Ready: 2 } as const;
 
 export interface AllDebridOptions {
   // Where the service answers: its own address, or the simulated service's (config.ts).
@@ -168,11 +168,9 @@ export class AllDebrid {
         signal,
       );
       if (status === DelayedStatus.Ready) return link;
-      if (status === DelayedStatus.Failed) {
-        throw refused(UnlockFailure.LinkRefused, 'AllDebrid could not prepare the link.');
-      }
+      // It says it failed, or something that is neither "ready" nor "still preparing".
       if (status !== DelayedStatus.Processing) {
-        throw refused(ServiceFailure.Unavailable, 'AllDebrid answered something else.');
+        throw refused(UnlockFailure.LinkRefused, 'AllDebrid could not prepare the link.');
       }
     }
   }

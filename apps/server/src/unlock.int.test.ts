@@ -216,6 +216,49 @@ describe('a link that goes through a service', () => {
     expect(await ask()).toBe('alldebrid');
   });
 
+  it('reads the hosts again for the account that is connected next', async () => {
+    const alldebrid = await serviceWith({ links: {} });
+    const integrations = await connected(alldebrid);
+    const never = new AbortController().signal;
+    const hostsRead = () => alldebrid.requests.filter((r) => r.url === '/v4.1/user/hosts').length;
+    await integrations.serviceFor(LINK, never);
+    expect(hostsRead()).toBe(1);
+
+    await integrations.connect(IntegrationId.AllDebrid, KEY);
+    await integrations.serviceFor(LINK, never);
+    expect(hostsRead()).toBe(2);
+
+    await integrations.disconnect(IntegrationId.AllDebrid);
+    await integrations.connect(IntegrationId.AllDebrid, KEY);
+    await integrations.serviceFor(LINK, never);
+    expect(hostsRead()).toBe(3);
+  });
+
+  it('is paused at once while the service is slow to say which links are its own', async () => {
+    const host = await fileHost();
+    const alldebrid = await serviceWith({ links: {} });
+    alldebrid.misbehave({ silent: true });
+    const vault = new MemoryVault();
+    await vault.write(IntegrationId.AllDebrid, KEY);
+    const downloads = await open(
+      await Integrations.open({
+        vault,
+        // Ten seconds for an answer, three times: a pause that waited for it would wait as long.
+        alldebrid: new AllDebrid({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+        logger,
+      }),
+    );
+    const [added] = downloads.add({ urls: [host.url] });
+    await until(() => alldebrid.requests.length > 0);
+
+    const started = performance.now();
+    const paused = await downloads.pause(added!.id);
+
+    expect(performance.now() - started).toBeLessThan(2000);
+    expect(paused.status).toBe(DownloadStatus.Paused);
+    expect(paused.failure).toBeNull();
+  });
+
   it('does not start a link on a guess: while the service cannot say which links are its own, it fails and says so', async () => {
     const host = await fileHost();
     const alldebrid = await serviceWith({ links: {} });
