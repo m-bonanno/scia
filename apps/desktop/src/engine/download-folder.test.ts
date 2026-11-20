@@ -9,6 +9,7 @@ const settings = {
   downloadDirectory: 'C:\\Users\\me\\Downloads',
   speedLimitBytesPerSecond: null,
   theme: 'black-tie',
+  betaUpdates: false,
 };
 
 function engineWith(fetch: EngineAccess['fetch']) {
