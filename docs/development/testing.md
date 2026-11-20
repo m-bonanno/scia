@@ -17,6 +17,7 @@ The pipeline is [ADR 0008](../adr/0008-the-delivery-pipeline.md). The gates are 
 | `Format, lint, types, tests, build` | `ubuntu-latest`  | format, lint, types, the three layers above, the build |
 | `Windows tests, build`              | `windows-latest` | the three layers above, the build                      |
 | `E2E (Windows)`                     | `windows-latest` | the build, then the E2E suite                          |
+| `Installer smoke (Windows)`         | `windows-latest` | the installer of the PR's head, then the smoke test    |
 
 A spec that holds on one system and not on the other is a bug of the spec or of the app on that system: Windows rounds a timer under 16 ms up to 16, and forgives a path written with the wrong separator, which Linux does not.
 
@@ -35,7 +36,7 @@ A spec that holds on one system and not on the other is a bug of the spec or of 
 
 ## E2E
 
-`apps/desktop/e2e/`, run by Vitest as the project `e2e` with `playwright-core`'s Electron driver ([ADR 0008](../adr/0008-the-delivery-pipeline.md)). It starts the app `npm run build` made, as `npm start` does — not the packaged exe, whose installer is the smoke test's (#92).
+`apps/desktop/e2e/`, run by Vitest as the project `e2e` with `playwright-core`'s Electron driver ([ADR 0008](../adr/0008-the-delivery-pipeline.md)). It starts the app `npm run build` made, as `npm start` does — not the packaged exe, whose installer is the smoke test's (below).
 
 - **One app at a time** (`fileParallelism: false`), each started by `launchScia` (`e2e/scia.ts`) with a profile of its own (`scratchProfile`: its log, its engine's state, its downloads) and `--port=0`, the engine taking a free port: a spec never meets another, another session's run, or the installed Scia. `launchScia` sets the port and the profile itself, and refuses a spec's own.
 - **What a spec starts ends after it, whatever happened** (`useRun`): its apps — closed, and killed when they do not end, also when their start failed — its hosts and services, its profiles; and the log of main is printed for a spec that failed, as a CI runner keeps nothing else.
@@ -45,7 +46,16 @@ A spec that holds on one system and not on the other is a bug of the spec or of 
 - **Every wait is for a state** (`until`, on `performance.now()`), with bounds set for a cold start on a CI runner. A bound on a time is set against what the app does without the thing held, and counted from where the thing begins — the speed limit's spec is owed eight seconds from the host's first range, waits for more than six, and the file arrives in milliseconds without the limit, also when AllDebrid's public list never answers; at twice the limit it would take four.
 - Each spec was seen failing with the line it holds taken away; a new one is too (`.claude/gotchas.md`, "Specs").
 
-Run locally, its windows open on the screen, and a first close into the tray shows the system's notification, every profile being new. What it does not reach, and stays with a person or with a harness: the system's notifications and the tray as they are drawn, a hand on the mouse or the keys, the packaged app (the smoke test, #92), Linux.
+Run locally, its windows open on the screen, and a first close into the tray shows the system's notification, every profile being new. What it does not reach, and stays with a person or with a harness: the system's notifications and the tray as they are drawn, a hand on the mouse or the keys, the packaged app (the installer's smoke test, below), Linux.
+
+## The installer's smoke test
+
+`apps/desktop/e2e/installer.smoke.test.ts`, the Vitest project `smoke` (`npm run test:smoke`). One road, in order: it installs the NSIS installer named by `SCIA_INSTALLER` silently (`/S`); checks `Scia.exe` and its uninstaller are in `%LOCALAPPDATA%\Programs\scia`, and that the yt-dlp the packing fetched, in its `resources\tools`, answers `--version` with the version `apps/desktop/scripts/fetch-tools.ts` fixes; starts the installed exe with the E2E harness (`launchScia(profile, { executable })`) on a scratch profile and a free port, against a simulated AllDebrid; reads in its log that it is the packaged app of `SCIA_VERSION`, that its engine is ready and that nothing is an error, main's or the engine's; downloads a pasted link from a local host, byte for byte; quits by closing its window; and uninstalls silently until its folder is gone.
+
+- **It runs on a Windows CI runner only.** An install replaces the Scia installed on the machine: the spec refuses to start without `CI=true`, Windows, `SCIA_INSTALLER` and `SCIA_VERSION`. On a person's computer the packaged app is tried unpacked, which installs nothing: `npx electron-builder --config electron-builder.yml --dir --publish never` in `apps/desktop`, then `launchScia(profile, { executable: 'release/win-unpacked/Scia.exe' })`.
+- **Where it runs** ([ADR 0008](../adr/0008-the-delivery-pipeline.md)): on every PR, on an installer packaged from its head at version `0.0.0` (`gates.yml`, `Installer smoke (Windows)`); in every release, on the installer with the release's version, **before its files are attached** (`release.yml`): a failure attaches nothing.
+- **A release's smoke test reaches GitHub.** At a release's version the updater is on (ADR 0007) and reads this repository's releases; at `0.0.0`, on a PR, it is off and nothing leaves the runner. The spec refuses a run in which an update was installed at the quit: what was tried is what is uninstalled.
+- **What it does not reach**: an install over an earlier Scia, and the update from one release to the next; SmartScreen on a downloaded installer; a person's hand. Those stay with a person ([`release-flow.md`](./release-flow.md), "Releasing").
 
 ## Proving the real app
 
