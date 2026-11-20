@@ -109,7 +109,7 @@ describe('the installer, installed and started', () => {
   it('uninstalls silently, leaving no program behind', async () => {
     await run(UNINSTALLER, ['/S'], { timeout: INSTALL_LIMIT_MS });
 
-    await until(async () => !(await exists(EXE)), INSTALL_LIMIT_MS);
-    expect(await exists(UNINSTALLER)).toBe(false);
+    // The uninstaller removes the program, then itself, then its folder: the folder is the end.
+    await until(async () => !(await exists(INSTALL_DIR)), INSTALL_LIMIT_MS);
   });
 });
