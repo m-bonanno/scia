@@ -279,6 +279,8 @@ describe('the engine API', () => {
       expect(await page('/')).toContain('<html lang="en" data-theme="wood-floor">');
       // Every address that is not a file is the page.
       expect(await page('/anything')).toContain('data-theme="wood-floor"');
+      // And so is the page asked for by its file's name.
+      expect(await page('/index.html')).toContain('data-theme="wood-floor"');
     });
   });
 });

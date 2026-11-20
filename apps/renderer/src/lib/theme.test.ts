@@ -44,7 +44,7 @@ describe('wearTheme', () => {
     expect(themeChanged).not.toHaveBeenCalled();
   });
 
-  it('wears the theme also when the shell fails to follow', async () => {
+  it('names the theme on the page whatever the shell answers', async () => {
     aShell().mockRejectedValue(new Error('the engine is silent'));
 
     wearTheme('space');

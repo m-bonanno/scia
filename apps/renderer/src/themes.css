@@ -68,12 +68,12 @@
   --tonal: #322c20;
   --foreground: #e9ead7;
   --muted-foreground: #aca48e;
-  --accent: #97c87e;
-  --accent-foreground: #041c02;
+  --accent: #828345;
+  --accent-foreground: #120e05;
   --destructive: #ff8585;
   --destructive-foreground: #2b0707;
   --border: #463f30;
-  --ring: #97c87e;
+  --ring: #828345;
   --overlay: rgb(0 0 0 / 60%);
 }
 

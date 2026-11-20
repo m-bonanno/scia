@@ -83,6 +83,9 @@ const PAIRS: readonly (readonly [string, string, number])[] = [
   ['destructive', 'tonal', NOT_TEXT],
   ['ring', 'background', NOT_TEXT],
   ['ring', 'surface', NOT_TEXT],
+  // A focused button of a row under the pointer; the one inside the pairing code's box.
+  ['ring', 'surface-hover', NOT_TEXT],
+  ['ring', 'tonal', NOT_TEXT],
 ];
 
 describe('the themes of the page', () => {
@@ -112,6 +115,22 @@ describe('the themes of the page', () => {
       expect(short).toEqual([]);
     },
   );
+});
+
+// A state of the page is a pair too: selected text is written on the selection's own ground,
+// whatever was under it.
+describe('selected text', () => {
+  const rule =
+    /::selection\s*\{([^}]*)\}/.exec(
+      readFileSync(join(import.meta.dirname, '..', '..', 'renderer', 'src', 'styles.css'), 'utf8'),
+    )?.[1] ?? '';
+
+  it('is two tokens that every theme holds to the contrast of text', () => {
+    const ground = /background:\s*var\(--([\w-]+)\);/.exec(rule)?.[1];
+    const text = /(?:^|\s)color:\s*var\(--([\w-]+)\);/.exec(rule)?.[1];
+
+    expect(PAIRS).toContainEqual([text, ground, TEXT]);
+  });
 });
 
 describe('the extension’s pages', () => {

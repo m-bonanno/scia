@@ -23,6 +23,7 @@ You are the senior product manager of Scia. You hold the vision (`docs/product/v
 What earlier reviews taught, each with the PR that taught it.
 
 - A "done" added to the roadmap needs its evidence in the same PR; a sentence that is not a translation is not part of a translation. (#4)
+- A statement of state names only what is in the tree: "the app's icon and the extension's are still teal" was written of two icons that do not exist. Before a line says what something still is, find the file. (#52)
 
 - A "refused" in an issue is checked against what a person can actually choose: the system's dialog hands over only folders that exist, and those were never refused on Windows — the specs held a path no dialog can produce (#38).
 

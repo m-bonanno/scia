@@ -20,6 +20,8 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 - → A change of wording or of language is finished when a search of the whole tree for the old words finds nothing (`git grep -nE "[àèéìòù]"` caught what reading the diff did not), and every dialog was opened in the real app: a screen nobody opened is a screen nobody read.
 
+- → A word given a new meaning is searched for in its old one, in the whole tree and not in the files the change touched: "theme" went to the palette and "variant" to light or dark, and "both themes" stayed in the PR template, in a role file and in the roadmap line beside the new one — `git grep -nIiE "(dark|light|either|both) themes?"` found the four (#52, the rule above a second time).
+
 - → A sentence that names a cause is shown for that cause alone. One `catch` around a call that rejects in five ways said "choose a folder Scia can write to" to someone whose engine was restarting and who had chosen nothing: try a `catch` against every way the call rejects, and have the callee say which it was, as data (#38).
 
 ## Specs
@@ -46,7 +48,7 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → Where a document of state — the roadmap, the README, a runbook's "Not there yet" — names what vouches for something (an ADR, a spec, a run, a record), the present is for what exists: "the ADR records it", "a spec holds that" for one still to write is a "done" nobody did. Write "has to" (#29, twice in one PR, the second time in the commit that fixed the first). A bare participle does the same: "Built and proven against a simulated service" reads as done beside lines where "Written, covered by specs" means it (#31). A planned item written in the present ("Choosing the folder") is not this.
 - → A rule added to a process is checked against every other rule that decides the same thing: size was added to how the roles of a review are chosen, and the rule on a commit pushed after the approval still chose them by area alone (#27 — the slip of #17, a second time). Search the runbook for the thing decided ("role", "reviews again"), not for the words of the new rule. The roadmap is no different: "Linux comes after the first stable release" was added above a line that still listed Linux among what that release waits for (#31). And the "so that" of a decision is a statement of its own: "public shortly before the release, so that automatic updates are proven on a beta with installers" stood above a line that still called the stable release the first run of the installers job (#36). Search for when and where the thing happens, not for the words of the decision.
 - → "No code changed" is not a reason to skip a gate: the five are run on every head, and the PR body carries their numbers (#27).
-- → What a PR body gives to a follow-up issue is in that issue before the body is posted: "not verified (#43)" named, twice in one review, something #43 did not carry — the open list of a menu, then HTTPS — and a body stops being read the day its PR merges (#44).
+- → What a PR body gives to a follow-up issue is in that issue before the body is posted: "not verified (#43)" named, twice in one review, something #43 did not carry — the open list of a menu, then HTTPS — and a body stops being read the day its PR merges (#44). The roadmap's "Not seen" is the same list: written from memory it had two items where the body had nine (#52).
 
 ## Engine
 
@@ -66,6 +68,7 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 ## Electron
 
 - → A pixel read from the screen is the pixel of whatever is on top. A harness that proved the window's own colours with `CopyFromScreen` was right nine times and then read another window's purple nine times, when something else came to the front. `PrintWindow` with `PW_RENDERFULLCONTENT` reads the window as the system composes it, covered or not (#52).
+- → A window that another window covers stops drawing: a transition stays where it was, and a capture taken then shows half of two variants — rows in the light variant on a dark page, which no person ever sees. A harness that captures starts Electron with `--disable-features=CalculateNativeWinOcclusion --disable-backgrounding-occluded-windows --disable-renderer-backgrounding`, and takes no capture before what it shows has settled: a row is the colour of its token (#52).
 - → Two harnesses on one debugging port drive the same page: one that hung on a dialog nobody answered was still alive when the next started, attached to the new app and added every download a second time. End the old one — and bound every `fetch` to the port with a timeout — before starting another (#52).
 
 - → A page's `window.close()` destroys the window at once: Electron does not emit a preventable `close` for it. A harness that wants what the X does follows `docs/development/testing.md`, "Proving the real app".

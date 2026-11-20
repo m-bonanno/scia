@@ -24,16 +24,20 @@ export function SettingSelect({
   onChange,
 }: SettingSelectProps): ReactNode {
   const id = useId();
+  const hintId = useId();
   return (
     <div className="flex items-center justify-between gap-4">
       <div className="min-w-0">
         <label htmlFor={id} className="block text-sm font-medium">
           {label}
         </label>
-        <p className="text-sm text-muted-foreground">{hint}</p>
+        <p id={hintId} className="text-sm text-muted-foreground">
+          {hint}
+        </p>
       </div>
       <select
         id={id}
+        aria-describedby={hintId}
         value={value}
         onChange={(event) => {
           onChange(event.target.value);

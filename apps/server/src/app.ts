@@ -186,11 +186,14 @@ export function createApp(deps: AppDeps): Hono {
     if (staticDir === undefined) return c.notFound();
     const requested = join(staticDir, normalize(decodeURIComponent(c.req.path)));
     const isAsset = requested.startsWith(`${staticDir}${sep}`) && extname(requested) !== '';
-    const file = isAsset ? requested : join(staticDir, 'index.html');
+    const page = join(staticDir, 'index.html');
+    const file = isAsset ? requested : page;
     try {
-      const body = isAsset
-        ? new Uint8Array(await readFile(file))
-        : wearing(await readFile(file, 'utf8'), manager.settings().theme);
+      // The page is the one file served wearing something, also when it is asked for by name.
+      const body =
+        file === page
+          ? wearing(await readFile(file, 'utf8'), manager.settings().theme)
+          : new Uint8Array(await readFile(file));
       return c.body(body, 200, {
         'content-type': MIME[extname(file)] ?? 'application/octet-stream',
         'cache-control': 'no-cache',

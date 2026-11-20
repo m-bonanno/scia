@@ -72,8 +72,11 @@
   button:not(:disabled) {
     cursor: pointer;
   }
+  /* Selected text is the accent's own pair, whatever it was written on: a tint of the accent
+     under the text's colour is no contrast at all in a theme whose accent is that colour. */
   ::selection {
-    background: color-mix(in oklab, var(--accent) 35%, transparent);
+    background: var(--accent);
+    color: var(--accent-foreground);
   }
   /* !important: utilities sit in a later layer and would keep their own durations. */
   @media (prefers-reduced-motion: reduce) {

@@ -25,13 +25,16 @@ describe('themeOfEngine', () => {
     expect(init.headers).toEqual({ authorization: 'Bearer token' });
   });
 
-  it('rejects when the engine fails, or names a theme nobody knows', async () => {
+  it('rejects when the engine fails, whatever it sends with the failure', async () => {
     await expect(
       themeOfEngine(
-        engineWith(async () => new Response(null, { status: 500 })),
+        engineWith(async () => Response.json({ data: settings }, { status: 500 })),
         1000,
       ),
-    ).rejects.toThrow();
+    ).rejects.toThrow('The engine did not say its settings.');
+  });
+
+  it('rejects when the engine names a theme nobody knows', async () => {
     await expect(
       themeOfEngine(
         engineWith(async () => Response.json({ data: { ...settings, theme: 'neon' } })),

@@ -13,6 +13,8 @@ The app wears one of nine themes, each in a light and a dark variant that follow
 | [`speed-limit.png`](./speed-limit.png)                                 | A download held under a speed limit: the limit said beside the total speed                                                     |
 | [`run-a-program.png`](./run-a-program.png)                             | A finished program whose "Open" was pressed once: the button asks, as "Run"                                                    |
 | [`run-a-program-light.png`](./run-a-program-light.png)                 | The same, light variant                                                                                                        |
+| [`downloads-paused.png`](./downloads-paused.png)                       | A paused download beside the running ones, dark variant: in the default theme the two bars differ by tone alone                |
+| [`downloads-paused-light.png`](./downloads-paused-light.png)           | The same, light variant                                                                                                        |
 | [`themes/<theme>-dark.png`](./themes/)                                 | The list of `downloads-in-progress.png` in each of the other eight themes, dark variant                                        |
 | [`themes/<theme>-light.png`](./themes/)                                | The same, light variant                                                                                                        |
 
@@ -22,4 +24,4 @@ The light variant of a capture is the page told that the system asks for light (
 
 A capture is retaken in the PR that changes what it shows (`apps/renderer/CLAUDE.md`, "Behaviour"; the product designer checks it).
 
-Not captured yet: Settings with a folder refused, the open list of a menu of Settings — the speed limit's, the theme's — (the system draws it outside the page: no capture of the page shows it, and nobody has looked at it in any theme), the title bar with a limit in the light variant, Settings and "Run" in a theme that is not the default one, the empty list, the engine unreachable, the extension's popup and options.
+Not captured yet: Settings with a folder refused, the open list of a menu of Settings — the speed limit's, the theme's — (the system draws it outside the page, so no capture of the page shows it; it was read from the system in the review of #52, in every theme and both variants: its rows are the theme's `tonal` and `foreground`, its chosen row Chromium's own blue — #58), the title bar with a limit in the light variant, Settings and "Run" in a theme that is not the default one, the empty list, the engine unreachable, the extension's popup and options.

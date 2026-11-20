@@ -195,7 +195,11 @@ describe('SettingsDialog', () => {
       'Space',
     ]);
     expect(theme).toHaveValue('black-tie');
-    expect(screen.getByText('Light or dark, as your system is.')).toBeInTheDocument();
+    // Who chooses the variant is said nowhere else: the menu carries it as its description.
+    expect(theme).toHaveAccessibleDescription('Light or dark, as your system is.');
+    expect(screen.getByRole('combobox', { name: 'Speed limit' })).toHaveAccessibleDescription(
+      'For all downloads together.',
+    );
 
     await userEvent.selectOptions(theme, 'Ice');
 
@@ -228,6 +232,38 @@ describe('SettingsDialog', () => {
     );
     rerender(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
 
+    await userEvent.selectOptions(theme, 'Ice');
+    await vi.waitFor(() => {
+      expect(theme).toHaveValue('ice');
+    });
+    answerLate(settings);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(theme).toHaveValue('ice');
+    expect(onSettings).toHaveBeenLastCalledWith({ ...settings, theme: 'ice' });
+  });
+
+  it('keeps a change over the read made after a folder was chosen, when that read answers after it', async () => {
+    aShell(async () => 'changed');
+    let answerLate: (read: typeof settings) => void = ignore;
+    const read = vi
+      .spyOn(api, 'settings')
+      .mockResolvedValueOnce(settings)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          answerLate = resolve;
+        }),
+      );
+    vi.spyOn(api, 'updateSettings').mockResolvedValue({ ...settings, theme: 'ice' });
+    const onSettings = vi.fn();
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
+    const theme = await screen.findByRole('combobox', { name: 'Theme' });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Change folder' }));
+    await vi.waitFor(() => {
+      expect(read).toHaveBeenCalledTimes(2);
+    });
     await userEvent.selectOptions(theme, 'Ice');
     await vi.waitFor(() => {
       expect(theme).toHaveValue('ice');
