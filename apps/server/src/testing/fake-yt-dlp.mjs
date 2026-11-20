@@ -89,16 +89,38 @@ else if (url.includes('/one-url')) {
     }),
   );
 } else if (url.includes('/audio')) {
+  // What the shipped build gives for an archive.org audio item: one mp3, its codecs not named.
   process.stdout.write(
     JSON.stringify({
       _type: 'video',
       title: 'A track',
       formats: [
-        format({ url: 'https://cdn.example/a.flac', ext: 'flac', vcodec: 'none', height: null }),
-        format({ url: 'https://cdn.example/a.mp4', vcodec: 'none', height: null }),
+        { format_id: 'mp3', url: 'https://cdn.example/a.mp3', ext: 'mp3', protocol: 'https' },
       ],
     }),
   );
+} else if (url.includes('/sound-only')) {
+  process.stdout.write(
+    JSON.stringify({
+      _type: 'video',
+      title: 'A track',
+      formats: [format({ url: 'https://cdn.example/a.mp4', vcodec: 'none', height: null })],
+    }),
+  );
+} else if (url.includes('/other-container')) {
+  // Picture, in containers Scia does not list.
+  process.stdout.write(
+    JSON.stringify({
+      _type: 'video',
+      title: 'Elsewhere',
+      formats: [
+        format({ url: 'https://cdn.example/v.bin', ext: 'unknown_video' }),
+        format({ url: 'https://cdn.example/v.ts', ext: 'ts' }),
+      ],
+    }),
+  );
+} else if (url.includes('/no-format-at-all')) {
+  process.stdout.write(JSON.stringify({ _type: 'video', title: 'Empty', formats: [] }));
 } else if (url.includes('/playlist'))
   process.stdout.write(JSON.stringify({ _type: 'playlist', title: 'Many', entries: [] }));
 else if (url.includes('/unknown')) fail(`No suitable extractor found for URL ${url}`);

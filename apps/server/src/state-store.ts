@@ -37,6 +37,10 @@ export const recordSchema = z.object({
     })
     .nullable()
     .catch(null),
+  // The download is the video of a page: a mark of its own, kept when its `video` is refused at
+  // load — a container a later version no longer takes — so that the page is read again for it,
+  // never fetched into its file as a page.
+  fromPage: z.boolean().catch(false),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });

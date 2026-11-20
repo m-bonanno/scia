@@ -347,6 +347,36 @@ describe('DownloadManager and a link that is a page', () => {
     expect(loaded?.downloads[0]?.video).toBeNull();
   });
 
+  it('reads the page again for a video whose stored description is refused, and never fetches the page into its file', async () => {
+    const stateFile = join(folder.path, 'data', 'state.json');
+    const site = await host({ body: page, contentType: 'text/html' });
+    const files = await host({ body: video, chunkDelayMs: 5 });
+    const { reader, asked } = aReader(async () => ({
+      title: 'Clip',
+      formats: [formatAt(files.url)],
+    }));
+    const first = await open({ pageReader: reader });
+    const [added] = first.add({ urls: [site.url] });
+    await until(() => first.find(added!.id).downloadedBytes > 0);
+    await first.pause(added!.id);
+    await first.close();
+    manager = undefined;
+    // What a later version that no longer takes this container would read.
+    const state = JSON.parse(await readFile(stateFile, 'utf8')) as {
+      downloads: { video: { media: { ext: string } } }[];
+    };
+    state.downloads[0]!.video.media.ext = 'exe';
+    await writeFile(stateFile, JSON.stringify(state));
+
+    const again = await open({ pageReader: reader });
+    again.resume(added!.id);
+    await until(() => statusOf(again, added!.id) === DownloadStatus.Completed);
+
+    expect(asked).toEqual([site.url, site.url]);
+    expect(again.find(added!.id).media).toEqual({ ext: 'mp4', height: 1080 });
+    expect(Buffer.compare(await readFile(inDownloads('Clip.mp4')), video)).toBe(0);
+  });
+
   it('fetches every page as it stands when there is no reader of sites', async () => {
     const site = await host({ body: page, contentType: 'text/html' });
     const downloads = await open();

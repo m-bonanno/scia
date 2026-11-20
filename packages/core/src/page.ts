@@ -38,6 +38,21 @@ export const VIDEO_CONTAINERS = [
 ] as const;
 export type VideoContainer = (typeof VIDEO_CONTAINERS)[number];
 
+// The containers of sound alone. A format in one of them whose site names no codec of picture is
+// sound, not a video whose container Scia does not know.
+export const AUDIO_CONTAINERS = [
+  'mp3',
+  'm4a',
+  'aac',
+  'flac',
+  'ogg',
+  'oga',
+  'opus',
+  'wav',
+  'wma',
+  'weba',
+] as const;
+
 // What was taken from a page: the kind of file, and how many lines of picture it has when the
 // site says. The row names it ("MP4 1080p").
 export interface MediaInfo {

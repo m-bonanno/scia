@@ -115,6 +115,12 @@ function headersOf(record: DownloadRecord): RequestHeaders {
   return record.referrer === null || record.via !== null ? {} : { referer: record.referrer };
 }
 
+// The container a named page's video already holds bytes of: what its stored video says, or —
+// that refused at load — what its name ends with.
+function containerOf(record: DownloadRecord): string {
+  return record.video?.media.ext ?? record.fileName.slice(record.fileName.lastIndexOf('.') + 1);
+}
+
 function partPathOf(record: DownloadRecord): string {
   return join(record.directory, `${record.fileName}${PART_SUFFIX}`);
 }
@@ -212,6 +218,7 @@ export class DownloadManager {
         via: null,
         unlockedUrl: null,
         video: null,
+        fromPage: false,
         createdAt: new Date(this.#now()).toISOString(),
         completedAt: null,
       };
@@ -533,7 +540,7 @@ export class DownloadManager {
   // restart, and the page is read again after a failure, as a service's link is asked for
   // again. A link that went through a service is not read: the service said what it is.
   async #locate(record: DownloadRecord, signal: AbortSignal): Promise<Located> {
-    if (record.video !== null) return this.#locateVideo(record, signal);
+    if (record.video !== null || record.fromPage) return this.#locateVideo(record, signal);
     const url = await this.#address(record, signal);
     const headers = headersOf(record);
     const remote = await this.#deps.source.probe(url, headers, signal);
@@ -564,9 +571,10 @@ export class DownloadManager {
     if (reader === undefined) return undefined;
     const found = await reader.read(record.url, signal);
     if (found === undefined) return undefined;
-    const chosen = chooseMedia(found.formats, record.named ? record.video?.media.ext : undefined);
+    const chosen = chooseMedia(found.formats, record.named ? containerOf(record) : undefined);
     const source = { url: chosen.url, headers: { ...chosen.headers } };
     record.video = { media: chosen.info, source };
+    record.fromPage = true;
     // What the site calls the video is a title, not a path: a slash in it is a character.
     if (!record.named) {
       const title = found.title?.trim();

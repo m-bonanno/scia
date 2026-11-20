@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { PageFailure } from '@scia/core';
+import { AUDIO_CONTAINERS, PageFailure } from '@scia/core';
 import { mediaSchema } from '@scia/contracts';
 import { z } from 'zod';
 import { PageError, type PageFormat } from './media-choice.ts';
@@ -79,6 +79,15 @@ function headersOf(given: Readonly<Record<string, string>> | undefined): Record<
   return Object.fromEntries(
     Object.entries(given ?? {}).filter(([name]) => !NOT_THE_SITES.has(name.toLowerCase())),
   );
+}
+
+const SOUND_CONTAINERS: ReadonlySet<string> = new Set(AUDIO_CONTAINERS);
+
+// No picture: the site says so (`vcodec: none`), or names no codec of picture for a container
+// of sound — yt-dlp gives archive.org's audio items as one mp3 with no codec named.
+function isSoundAlone(format: Format): boolean {
+  if (format.vcodec === 'none') return true;
+  return (format.vcodec ?? undefined) === undefined && SOUND_CONTAINERS.has(format.ext ?? '');
 }
 
 function toFormat(format: Format): PageFormat | undefined {
@@ -192,10 +201,17 @@ export class YtDlp implements PageReader {
       );
     }
     const given = info.formats ?? (info.url === undefined ? [] : [{ ...info, url: info.url }]);
+    if (given.length === 0) {
+      throw new PageError(PageFailure.Unreadable, 'The reader found the page and no format.');
+    }
+    // Sound alone in every format — an album, an audio book: a page that plays no video, fetched
+    // as it stands. Read from what yt-dlp gave, before the containers Scia lists are kept: a video
+    // in a container it does not list is not a page with no video.
+    if (given.every(isSoundAlone)) return undefined;
     const formats = given.map(toFormat).filter((format) => format !== undefined);
-    // No format in a container of a video, or none with picture — the sound of an album, an
-    // audio book: a page that plays no video, fetched as it stands.
-    if (formats.every((format) => format.vcodec === 'none')) return undefined;
+    if (formats.length === 0) {
+      throw new PageError(PageFailure.FormatUnsupported, 'No format is in a container Scia knows.');
+    }
     return { title: info.title, formats };
   }
 

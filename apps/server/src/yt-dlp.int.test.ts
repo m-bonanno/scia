@@ -159,6 +159,16 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     expect(await reader().read('https://archive.example/book', never)).toBeUndefined();
     expect(await reader().read('https://site.example/no-formats', never)).toBeUndefined();
     expect(await reader().read('https://site.example/audio', never)).toBeUndefined();
+    expect(await reader().read('https://site.example/sound-only', never)).toBeUndefined();
+  });
+
+  it('never takes a video it cannot name the container of for a page with no video', async () => {
+    expect(await failureOf(reader().read('https://site.example/other-container', never))).toBe(
+      PageFailure.FormatUnsupported,
+    );
+    expect(await failureOf(reader().read('https://site.example/no-format-at-all', never))).toBe(
+      PageFailure.Unreadable,
+    );
   });
 
   it('says why a video of a site it knows is not downloaded', async () => {
