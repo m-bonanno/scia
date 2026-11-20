@@ -34,9 +34,13 @@ export async function refusingFiles(folder: string): Promise<() => Promise<void>
 }
 
 // Waits for something a download does in its own time, without a fixed sleep.
-export async function until(condition: () => boolean, limitMs = 10_000): Promise<void> {
+// The condition may have to ask something to know.
+export async function until(
+  condition: () => boolean | Promise<boolean>,
+  limitMs = 10_000,
+): Promise<void> {
   const deadline = Date.now() + limitMs;
-  while (!condition()) {
+  while (!(await condition())) {
     if (Date.now() > deadline) throw new Error('The condition never held.');
     await sleep(10);
   }

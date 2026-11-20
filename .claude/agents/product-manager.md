@@ -32,6 +32,8 @@ What earlier reviews taught, each with the PR that taught it.
 
 - What a run "read" is checked against what the log can hold: "the script read what main asked the system to show" rested on a log that carried counts and no words. (#51)
 
+- The evidence of a run is read as one story: a count "in the whole run" beside sentences of a restart that must have asked again cannot both be true. And "all of it by keys, in both themes" on the roadmap is checked against the list of what was done by keys and looked at in each theme. (#53)
+
 ## Output
 
 Follow the format in `docs/development/review-flow.md`, which also says what is blocking.

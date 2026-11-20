@@ -6,6 +6,9 @@ export interface ServerEnvInput {
   readonly port: number;
   readonly version: string;
   readonly systemRoot: string | undefined;
+  // A simulated AllDebrid for this run (engine/launch-options.ts); the engine refuses one that
+  // is not on this computer.
+  readonly alldebridApi?: string | undefined;
 }
 
 // Built from scratch, never from `process.env`: inherited variables silently override
@@ -18,6 +21,7 @@ export function buildServerEnv(input: ServerEnvInput): Record<string, string> {
     SCIA_DOWNLOAD_DIR: input.layout.downloadDir,
     SCIA_STATIC_DIR: input.layout.rendererDir,
     SCIA_VERSION: input.version,
+    ...(input.alldebridApi === undefined ? {} : { SCIA_ALLDEBRID_API: input.alldebridApi }),
     ...(input.systemRoot === undefined ? {} : { SystemRoot: input.systemRoot }),
   };
 }

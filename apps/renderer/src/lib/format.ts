@@ -42,6 +42,13 @@ export function formatDuration(seconds: number): string {
   return `${String(Math.floor(hours / 24))}${NBSP}d ${String(hours % 24)}${NBSP}h`;
 }
 
+const day = new Intl.DateTimeFormat(LOCALE, { dateStyle: 'medium' });
+
+// A day, from an ISO instant, as it falls where the person is.
+export function formatDate(instant: string): string {
+  return day.format(new Date(instant));
+}
+
 export function formatPercent(done: number, total: number): string {
   if (total <= 0) return '0%';
   // Never "100%" while a byte is missing.

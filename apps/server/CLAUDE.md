@@ -5,7 +5,7 @@ Loaded when working under `apps/server/`. **Extends** the root `CLAUDE.md`; wins
 The engine downloads. It is a plain Node process: Electron forks it as a `utilityProcess`, the tests and `npm run dev` run it under Node. **It never imports `electron`** (ESLint enforces it).
 
 ```
-main.ts            wiring: config → store → manager → Hono on 127.0.0.1
+main.ts            wiring: config → integrations → store → manager → Hono on 127.0.0.1
 app.ts             the HTTP API (/api/v1), its two tokens, the renderer's static files
 download-manager   the queue, the names, the state on disk, what a pause/remove/shutdown means
 download-task      one download: connections, ranges, retries, writes
@@ -14,6 +14,9 @@ remote-source      the PORT a download reaches its bytes through
 http-source        its one adapter today (node:http/https)
 state-store        state.json, written whole and renamed into place
 origin-mark        the mark a finished file carries of having come from the network
+integrations       the services Scia is connected to: the key of each, what each says of its account
+alldebrid          AllDebrid's API, as far as Scia uses it
+key-vault          the PORT the key of a service is kept through; main keeps it
 ```
 
 ## Rules
@@ -39,6 +42,9 @@ origin-mark        the mark a finished file carries of having come from the netw
 - **`GET /events` is never silent for long** (`EVENTS_KEEP_ALIVE_MS` in `@scia/contracts`): with nothing to send, and between two lists, the stream writes a comment, which a reader of events passes over. Whoever listens can tell an engine with nothing to say from one that stopped talking, and a client that ends an answer after minutes without a byte — Node's `fetch`, after five — never meets one. The wait for a change is called off when the listener goes (`nextChange(since, gone)`): a stream that closed leaves nothing waiting in the manager.
 - **`state.json` takes a new setting with a default** (`state-store.ts`): a file written before the setting existed loads, with the default — and so does one whose stored value the bounds of today refuse. A state that does not parse is set aside as `.unreadable` and the engine starts empty — so a setting added without a default, or a bound tightened later, would lose every download in the list.
 - **The download folder has a route of its own** (`PUT /settings/download-directory`, the app's token only): main names it after the person chose it in the system's dialog. It is not among the settings the page patches, so no type lets the page send a path. The engine takes an absolute path, keeps it as the system names it (`resolve`), makes the folder, and refuses one it cannot make or write to, leaving the settings as they were. **Writing is proven by writing** — a file of Scia's own made in the folder and removed — never by asking the system: on Windows `access(folder, W_OK)` says yes for every folder that exists. A download keeps the folder it was added with.
+- **The key of a service is in the engine's memory and in the vault, and nowhere else** ([ADR 0004](../../docs/adr/0004-the-key-of-a-service.md)): never in `state.json`, in a log, in an error, in an address, or in an answer of the API — no route says a key back. `KeyVault` is the port: `ParentVault` asks main, which keeps the key sealed by the system; `MemoryVault` is what plain Node has, and keeps it as long as the process. A key is kept only after its service accepted it, and leaves the vault before it is forgotten: one that stayed would connect Scia again at its next start. A spec that says "never in the log" reads every line that was logged.
+- **The routes of a service are three, for the app's token alone**: `GET /integrations`, `PUT /integrations/:id` with `{ apiKey }`, `DELETE /integrations/:id`. `400 INVALID_REQUEST` for what cannot be a key, before the service is asked; `422` with the service's refusal (`KEY_REFUSED`, `KEY_BLOCKED`, `ACCOUNT_BANNED`); `502 SERVICE_UNAVAILABLE` when it could not be asked; `500 KEY_NOT_KEPT` when the system will not keep the key; `404` for a service Scia does not know; `204` for a disconnection. Connecting and disconnecting happen one at a time, and a write that was given up on is undone: the vault is put back as it was. A listing waits two seconds at most for the service to say whose account it is, then answers what it knows.
+- **A service is spoken to at one address, and its body is what it said.** `config.alldebridApi` is AllDebrid's own, replaced only by an address on this computer (`SCIA_ALLDEBRID_API`): the engine does not start with any other. A redirect is not followed. Whether a request succeeded is read in the body — AllDebrid's documentation says both that a refused key comes with a 401 and that it no longer does — and a code Scia does not know (looked up in a `Map`: a code is a word from outside), an answer that is not the service's envelope, a date no calendar holds and no answer in time are all `SERVICE_UNAVAILABLE`: nothing is said of the key that the service did not say. Read the service's documentation again before changing its client: do not rely on memory for its endpoints or its codes.
 - **Two tokens, two scopes** ([ADR 0002](../../docs/adr/0002-browser-extension-pairing.md)): the app's token (new at every launch) opens every route; the extension's token (persisted, shown in settings) opens `EXTENSION_ROUTES` and nothing else. A new route is app-only unless the ADR is amended.
 - **Only the engine's own host is answered** (`127.0.0.1:<port>` or `localhost:<port>`), and no CORS header is ever sent: a web page can neither read the API nor reach it under another name.
 - **The environment is the configuration** (`config.ts`): `SCIA_*` variables given by main, never a file beside the executable.
@@ -49,4 +55,5 @@ origin-mark        the mark a finished file carries of having come from the netw
 - `*.test.ts` — pure pieces (config), and the throttle on a clock and timers the spec moves.
 - `*.int.test.ts` — `DownloadTask`, `HttpSource` and `DownloadManager` against `testing/range-server.ts`, a real HTTP host on a free port, and a temp folder. Compare bytes, not counters.
 - `*.feature.test.ts` — the API through `app.request()`: every route's token, scope and status code.
+- A service is a local host too: `testing/alldebrid-server.ts` answers as AllDebrid's documentation says its API does, refusals included, and misbehaves when told to (`misbehave`). The client, `Integrations` and the routes are proven against it. Every key in a spec is made up: nobody's real key comes near a spec or a run.
 - Timing in tests comes from `until(condition)`, never from a fixed sleep; retry delays and the idle timeout are injected (`retryDelayMs`, `idleTimeoutMs`). A rate is proven against a host that does not pause (`chunkDelayMs` unset) and counted in bytes.

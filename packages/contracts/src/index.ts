@@ -1,7 +1,8 @@
-import { DownloadFailure, DownloadStatus, FileKind } from '@scia/core';
+import { DownloadFailure, DownloadStatus, FileKind, ServiceFailure } from '@scia/core';
 import { z } from 'zod';
 
 export { API_PREFIX, DEFAULT_API_PORT } from './endpoint.ts';
+export * from './integrations.ts';
 
 export const ApiErrorCode = {
   Unauthorized: 'UNAUTHORIZED',
@@ -10,6 +11,10 @@ export const ApiErrorCode = {
   InvalidRequest: 'INVALID_REQUEST',
   Conflict: 'CONFLICT',
   InternalError: 'INTERNAL_ERROR',
+  // A service refused the key it was given, or did not answer.
+  ...ServiceFailure,
+  // The system would not keep the key of a service: nothing was connected.
+  KeyNotKept: 'KEY_NOT_KEPT',
 } as const;
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
 
