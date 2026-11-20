@@ -4,13 +4,14 @@ A download manager for Windows, with Linux to follow: paste a link, Scia fetches
 
 ![Scia with a few downloads in progress](docs/design/downloads-in-progress.png)
 
-**There is no stable release yet.** The pre-releases (`v1.0.0-beta.N`) on the Releases page carry their notes and, from `v1.0.0-beta.10` on, a Windows installer (`Scia-Setup-<version>.exe`); every pre-release after #83 carries one. The installer is not signed, so Windows warns before running it. To try Scia, install a pre-release, or build it from the source (below).
+**There is no stable release yet.** The pre-releases (`v1.0.0-beta.N`) on the Releases page carry their notes and, from `v1.0.0-beta.10` on, a Windows installer (`Scia-Setup-<version>.exe`); from `v1.0.0-beta.13` on, every pre-release also carries the files the updater reads (`latest.yml`, the blockmap). The installer is not signed, so Windows warns before running it. To try Scia, install a pre-release, or build it from the source (below).
 
 ## What it does today
 
 - Downloads any http/https link over several connections in parallel, handing work over when one finishes before the others.
 - Pauses and resumes from the bytes it already has, even after the app was closed and opened again.
-- Keeps downloading from the system tray when the window is closed with downloads running or waiting (Windows; Linux not yet tried); closing it with nothing left quits.
+- Keeps downloading from the system tray when the window is closed with downloads running or waiting; closing it with nothing left quits (Windows, verified by script: the icon, its menu, its tooltip and its click not yet seen or pressed by a person, #13; Linux not yet tried).
+- Wears its own icon, drawn from its mark: the installer, the installed program, its uninstaller and its shortcuts carry it, as read from the system (Windows, #81). How Windows draws it on screen — the taskbar, the tray, the Start menu — has not been seen, and on the owner's machine the taskbar names Scia "Electron" (#85).
 - Says when a download ends — completed or failed — with a notification of the system, while its window is not the one in use (Windows; asked of the system under a script, not yet seen or clicked; a Scia that opened behind the window in use can be silent until it has been used once, minimised, or closed into the tray; Linux not yet tried).
 - Marks what it downloads as coming from the network, as a browser does, so that Windows can ask before running it (Windows; seen with a script, not yet with an `.exe`, an installer or a document); and asks for a second press itself before running a downloaded program.
 - Keeps a queue: how many downloads at once and how many connections per download are settings, and so are the folder they go to and a speed limit for all of them together.
