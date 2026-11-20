@@ -1,10 +1,11 @@
 import { IntegrationId } from '@scia/contracts';
 import { ServiceFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { AllDebrid, ServiceError } from './alldebrid.ts';
+import { AllDebrid } from './alldebrid.ts';
 import { Integrations, KeyNotKeptError } from './integrations.ts';
 import { type KeyVault, MemoryVault } from './key-vault.ts';
 import type { Logger } from './logger.ts';
+import { ServiceError } from './service-error.ts';
 import { type AllDebridServer, startAllDebridServer } from './testing/alldebrid-server.ts';
 import { until } from './testing/scratch.ts';
 
@@ -269,6 +270,19 @@ describe('Integrations', () => {
     ).rejects.toBeInstanceOf(KeyNotKeptError);
     // Still connected with the key it had: that is the one the next start must find.
     expect(await kept.read(IntegrationId.AllDebrid)).toBe(KEY);
+  });
+
+  it("says the service is unavailable, not a link's refusal, when it answers one about the account", async () => {
+    const vault = new MemoryVault();
+    await vault.write(IntegrationId.AllDebrid, KEY);
+    service.misbehave({ error: 'LINK_DOWN' });
+
+    const integrations = await open(vault);
+
+    expect((await integrations.list())[0]).toMatchObject({
+      connected: true,
+      failure: ServiceFailure.Unavailable,
+    });
   });
 
   it('keeps what it knew of the account while the service does not answer, and says that it does not', async () => {

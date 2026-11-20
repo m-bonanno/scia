@@ -156,6 +156,24 @@ describe('the engine API, for the services Scia connects to', () => {
     expect(await vault.read(IntegrationId.AllDebrid)).toBeUndefined();
   });
 
+  it('answers 422 NETWORK_REFUSED when the service does not serve this network', async () => {
+    service.misbehave({ error: 'NO_SERVER' });
+
+    const response = await connect(KEY);
+
+    expect(response.status).toBe(422);
+    expect(await codeOf(response)).toBe(ApiErrorCode.NetworkRefused);
+  });
+
+  it("answers 502, and no code of a link, when the service answers a link's refusal to a question about the account", async () => {
+    service.misbehave({ error: 'MUST_BE_PREMIUM' });
+
+    const response = await connect(KEY);
+
+    expect(response.status).toBe(502);
+    expect(await codeOf(response)).toBe(ApiErrorCode.Unavailable);
+  });
+
   it('answers 502 when the service could not be asked', async () => {
     service.misbehave({ status: 503 });
 

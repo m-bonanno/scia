@@ -49,6 +49,7 @@ export async function main(
     vault: keeper === undefined ? new MemoryVault() : new ParentVault(keeper),
     alldebrid: new AllDebrid({ api: config.alldebridApi, userAgent: `Scia/${config.version}` }),
     logger,
+    hostsFile: join(config.dataDir, 'alldebrid-hosts.json'),
   });
 
   const source = new HttpSource(`Mozilla/5.0 (compatible; Scia/${config.version})`);
@@ -57,6 +58,7 @@ export async function main(
     store: new JsonStateStore(join(config.dataDir, 'state.json')),
     defaultDirectory: config.downloadDir,
     logger,
+    resolver: integrations,
   });
 
   let port = config.port;

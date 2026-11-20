@@ -34,7 +34,7 @@ Runbooks in [`docs/development/`](./docs/development/): [`git-flow.md`](./docs/d
 
 ## Principles
 
-- **SOLID, DRY, KISS / YAGNI.** One source of truth for every rule (a Zod schema, a domain constant). The simplest thing that satisfies a real requirement: a pattern is justified by a second real implementation or a real seam for tests — never by anticipation. `RemoteSource` exists because the tests need the seam and AllDebrid and HLS are on the roadmap; a `LinkResolver` does not exist yet because nothing resolves links yet.
+- **SOLID, DRY, KISS / YAGNI.** One source of truth for every rule (a Zod schema, a domain constant). The simplest thing that satisfies a real requirement: a pattern is justified by a second real implementation or a real seam for tests — never by anticipation. `RemoteSource` exists because the tests need the seam and HLS is on the roadmap; `LinkResolver` because the downloader is proven without a service and AllDebrid resolves links; a registry of services does not exist yet because there is one service.
 - **Boy Scout Rule** — leave touched code cleaner, in the same PR, tightly scoped.
 - **No patches ("toppe").** A fix that special-cases a platform, hardcodes a value or copies a block is not done. Model the difference as data.
 - **Nothing personal in code.** Folders, limits, tokens, ports — all settings or launch options.

@@ -20,7 +20,10 @@ const MAX_REDIRECTS = 10;
 // read has waited this long for more of a body: the segment tries again.
 const IDLE_TIMEOUT_MS = 30_000;
 const SILENT = 'The host stopped answering.';
-const BUSY = new Set([408, 425, 429]);
+// Answers that say "not now" rather than "no". A 204 to a range is one of them: a direct link
+// of AllDebrid answered it for parts of a file the service had, most likely, not fetched from
+// its hoster yet, and answered the same ranges a moment later (#65).
+const BUSY = new Set([204, 408, 425, 429]);
 
 interface Answer {
   readonly response: IncomingMessage;
@@ -112,6 +115,15 @@ export class HttpSource implements RemoteSource {
     let answer = await this.#get(url, { ...headers, range: 'bytes=0-0' }, signal);
     if (answer.response.statusCode === 416) {
       // An empty file has no first byte to give.
+      answer.response.destroy();
+      answer = await this.#get(url, headers, signal);
+    } else if (
+      answer.response.statusCode === 200 &&
+      byteCount(headerOf(answer.response, 'content-length')) === 1
+    ) {
+      // A 200 is the whole file; one that carries only the byte asked is a range answered with
+      // the wrong status, and its length is not the file's: the length is asked without a range
+      // (#65). A file of one byte answers the same twice.
       answer.response.destroy();
       answer = await this.#get(url, headers, signal);
     }

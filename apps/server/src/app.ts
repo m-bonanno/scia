@@ -15,13 +15,13 @@ import {
   SNAPSHOT_EVENT,
 } from '@scia/contracts';
 import type { Theme } from '@scia/contracts/theme';
-import { ServiceFailure } from '@scia/core';
+import { isServiceFailure, ServiceFailure } from '@scia/core';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
-import { ServiceError } from './alldebrid.ts';
 import { type DownloadManager, ManagerError, ManagerRefusal } from './download-manager.ts';
 import { type Integrations, KeyNotKeptError } from './integrations.ts';
 import { describeFailure, type Logger } from './logger.ts';
+import { ServiceError } from './service-error.ts';
 
 // How often a page hears of a running download: four times a second reads as continuous.
 const SNAPSHOT_INTERVAL_MS = 250;
@@ -264,8 +264,10 @@ export function createApp(deps: AppDeps): Hono {
     }
     if (error instanceof ServiceError) {
       // The service was asked and said no (422), or could not be asked (502).
-      const status = error.failure === ServiceFailure.Unavailable ? 502 : 422;
-      return fail(status, error.failure, error.message);
+      // A refusal that is about a link has no place here: only a key is given on this API.
+      const failure = isServiceFailure(error.failure) ? error.failure : ServiceFailure.Unavailable;
+      const status = failure === ServiceFailure.Unavailable ? 502 : 422;
+      return fail(status, failure, error.message);
     }
     if (error instanceof KeyNotKeptError) {
       return fail(500, ApiErrorCode.KeyNotKept, error.message);

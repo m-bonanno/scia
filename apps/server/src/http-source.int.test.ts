@@ -11,6 +11,29 @@ import { until } from './testing/scratch.ts';
 const MIB = 1024 * 1024;
 const IDLE_MS = 150;
 
+describe('HttpSource.open and a host that has no content for a range', () => {
+  const source = new HttpSource('scia-test');
+  afterAll(() => {
+    source.close();
+  });
+
+  it('answers a 204 to a range with a refusal worth another attempt', async () => {
+    const server = await startRangeServer({ body: randomBytes(MIB), noContent: 1 });
+
+    const failure = await source
+      .open(server.url, {}, { start: 1024, end: 2048 }, new AbortController().signal)
+      .catch((error: unknown) => error);
+    await server.close();
+
+    expect(failure).toBeInstanceOf(RemoteError);
+    expect(failure).toMatchObject({
+      status: 204,
+      retryable: true,
+      failure: DownloadFailure.HttpStatus,
+    });
+  });
+});
+
 describe('HttpSource.open and a host that goes silent', () => {
   const source = new HttpSource('scia-test', { idleTimeoutMs: IDLE_MS });
   const signal = new AbortController().signal;

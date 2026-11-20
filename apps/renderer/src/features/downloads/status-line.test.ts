@@ -1,5 +1,5 @@
 import type { Download } from '@scia/contracts';
-import { DownloadFailure, DownloadStatus } from '@scia/core';
+import { DownloadFailure, DownloadStatus, ServiceFailure, UnlockFailure } from '@scia/core';
 import { describe, expect, it } from 'vitest';
 import { aDownload } from '@/test/a-download.ts';
 import { statusLine } from './status-line.ts';
@@ -50,5 +50,99 @@ describe('statusLine', () => {
     );
     expect(failed({ failure: DownloadFailure.Network })).toBe('Connection interrupted. Try again.');
     expect(failed({ failure: DownloadFailure.Disk })).toContain('free space');
+  });
+
+  it('says last that a download goes through a service, while it runs, when paused and when it is there', () => {
+    const through = (overrides: Partial<Download>) =>
+      statusLine(aDownload({ via: 'alldebrid', ...overrides }));
+
+    expect(through({})).toBe(
+      '42% · 420\u00a0MB of 1,000\u00a0MB · 10.0\u00a0MB/s · 58\u00a0s left · via AllDebrid',
+    );
+    expect(through({ status: DownloadStatus.Paused })).toBe(
+      'Paused · 420\u00a0MB of 1,000\u00a0MB · via AllDebrid',
+    );
+    expect(through({ status: DownloadStatus.Completed, downloadedBytes: 1000 * MIB })).toBe(
+      '1,000\u00a0MB · Completed · via AllDebrid',
+    );
+  });
+
+  it('says a link is being unlocked while its service has not given a byte yet', () => {
+    expect(statusLine(aDownload({ via: 'alldebrid', totalBytes: null, downloadedBytes: 0 }))).toBe(
+      'Unlocking through AllDebrid…',
+    );
+  });
+
+  it.each([
+    [
+      ServiceFailure.KeyRefused,
+      'AllDebrid no longer accepts the key. In Settings, disconnect it and connect a new key, then try again.',
+    ],
+    [
+      ServiceFailure.KeyBlocked,
+      'AllDebrid is blocking the key from here. If AllDebrid emailed you about a new sign-in, confirm it; otherwise check your network, then try again.',
+    ],
+    [ServiceFailure.AccountBanned, 'AllDebrid says the account is banned.'],
+    [
+      ServiceFailure.NetworkRefused,
+      'AllDebrid does not serve this network: it refuses servers and some VPNs. Try again from another network.',
+    ],
+    [
+      ServiceFailure.Unavailable,
+      'AllDebrid could not be asked about this link. Try again in a moment.',
+    ],
+    [UnlockFailure.NotPremium, 'AllDebrid unlocks this link for premium accounts only.'],
+    [UnlockFailure.LinkDown, 'AllDebrid says the file is no longer on its host.'],
+    [
+      UnlockFailure.LinkPassword,
+      'AllDebrid says the link asks for a password, which Scia cannot give yet.',
+    ],
+    [
+      UnlockFailure.HostUnavailable,
+      'AllDebrid cannot get this file from its host right now. Try again later.',
+    ],
+    [
+      UnlockFailure.HostLimit,
+      'AllDebrid says the account has reached its limit for this host. Try again later.',
+    ],
+    [UnlockFailure.LinkRefused, 'AllDebrid could not unlock this link.'],
+    [
+      UnlockFailure.NotReady,
+      'AllDebrid was still preparing this link after 30\u00a0min. Try again later.',
+    ],
+    [
+      UnlockFailure.NotConnected,
+      'AllDebrid is no longer connected. Connect it in Settings, then try again.',
+    ],
+  ] as const)('says in words what the service said when it answered %s', (failure, text) => {
+    expect(
+      statusLine(aDownload({ status: DownloadStatus.Failed, failure, via: 'alldebrid' })),
+    ).toBe(text);
+  });
+
+  it('says the link a service gave stopped working, and that trying again asks for another', () => {
+    const failed = (overrides: Partial<Download>) =>
+      statusLine(aDownload({ status: DownloadStatus.Failed, via: 'alldebrid', ...overrides }));
+
+    expect(failed({ failure: DownloadFailure.HttpStatus, failureStatus: 404 })).toBe(
+      'The link AllDebrid gave no longer works (404). Try again: AllDebrid gives a new one.',
+    );
+    expect(failed({ failure: DownloadFailure.HttpStatus, failureStatus: 204 })).toBe(
+      'The link AllDebrid gave no longer works (204). Try again: AllDebrid gives a new one.',
+    );
+    expect(failed({ failure: DownloadFailure.Network })).toBe(
+      'The link AllDebrid gave no longer works. Try again: AllDebrid gives a new one.',
+    );
+    expect(failed({ failure: DownloadFailure.Incomplete })).toBe(
+      'The link AllDebrid gave no longer works. Try again: AllDebrid gives a new one.',
+    );
+    // The disk is the disk, whoever gave the link.
+    expect(failed({ failure: DownloadFailure.Disk })).toContain('free space');
+  });
+
+  it('names no service for a link that was never known to be one', () => {
+    expect(
+      statusLine(aDownload({ status: DownloadStatus.Failed, failure: ServiceFailure.Unavailable })),
+    ).toBe('The connected service could not be asked about this link. Try again in a moment.');
   });
 });

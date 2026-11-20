@@ -20,6 +20,7 @@ function aDownload(id: string, status: string) {
     segments: [],
     failure: null,
     failureStatus: null,
+    via: null,
     createdAt: '2026-11-19T10:00:00.000Z',
     completedAt: null,
   };

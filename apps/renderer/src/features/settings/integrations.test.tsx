@@ -115,9 +115,14 @@ describe('IntegrationsSection', () => {
     [
       ApiErrorCode.KeyBlocked,
       422,
-      'AllDebrid refuses this key from this network. Check your AllDebrid account, then try again.',
+      'AllDebrid is blocking this key from here. If AllDebrid emailed you about a new sign-in, confirm it; otherwise check your network, then try again.',
     ],
     [ApiErrorCode.AccountBanned, 422, 'AllDebrid says this account is banned.'],
+    [
+      ApiErrorCode.NetworkRefused,
+      422,
+      'AllDebrid does not serve this network: it refuses servers and some VPNs. Connect from another network, then try again.',
+    ],
     [
       ApiErrorCode.Unavailable,
       502,
@@ -406,9 +411,13 @@ describe('IntegrationsSection', () => {
     ],
     [
       ApiErrorCode.KeyBlocked,
-      'AllDebrid refuses the key from this network. Check your AllDebrid account.',
+      'AllDebrid is blocking the key from here. If AllDebrid emailed you about a new sign-in, confirm it; otherwise check your network.',
     ],
     [ApiErrorCode.AccountBanned, 'AllDebrid says this account is banned.'],
+    [
+      ApiErrorCode.NetworkRefused,
+      'AllDebrid does not serve this network: it refuses servers and some VPNs. Use it from another network.',
+    ],
     [ApiErrorCode.Unavailable, 'Scia could not ask AllDebrid about this account just now.'],
   ] as const)(
     'says what is wrong with a connected service that answered %s',

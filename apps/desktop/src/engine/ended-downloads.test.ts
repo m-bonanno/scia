@@ -19,6 +19,7 @@ function aDownload(id: string, status: DownloadStatus, fileName = `${id}.bin`): 
     segments: [],
     failure: null,
     failureStatus: null,
+    via: null,
     createdAt: '2026-11-20T10:00:00.000Z',
     completedAt: null,
   };

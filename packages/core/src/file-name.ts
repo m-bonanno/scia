@@ -41,6 +41,14 @@ export function sanitizeFileName(raw: string): string {
   return `${safeStem.slice(0, MAX_LENGTH - extension.length)}${extension}`;
 }
 
+// What a host or a service calls a file, without any path it came with, made safe for the
+// disk. Undefined when it gives no name.
+export function fileNameFromHost(raw: string): string | undefined {
+  const name = lastPathSegment(raw.trim());
+  // A path's own steps are no name.
+  return name === '' || name === '.' || name === '..' ? undefined : sanitizeFileName(name);
+}
+
 // The path of an address, without its query and fragment. Read by hand: the domain has no URL
 // class, which belongs to the runtimes around it.
 function pathOf(url: string): string {

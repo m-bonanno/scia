@@ -16,6 +16,13 @@ export interface RangeServerOptions {
   readonly dropAfterBytes?: number;
   // Answers every request with this status and no body.
   readonly status?: number;
+  // Answers this many requests for a range other than the first byte with 204 No Content,
+  // as a direct link of AllDebrid did while the service was, most likely, still fetching the
+  // file from its hoster (#65).
+  readonly noContent?: number;
+  // Answers this many requests for the first byte with a 200 that carries that one byte, as
+  // the same link did once: read as it stands, the file is one byte long (#65).
+  readonly firstByteAs200?: number;
 }
 
 export interface RangeServer {
@@ -56,10 +63,24 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
     return true;
   };
 
+  let noContent = options.noContent ?? 0;
+  let firstByteAs200 = options.firstByteAs200 ?? 0;
+
   const server = createServer((request, response) => {
     ranges.push(request.headers.range);
     if (options.status !== undefined) {
       response.writeHead(options.status).end();
+      return;
+    }
+    const firstByte = request.headers.range === 'bytes=0-0';
+    if (request.headers.range !== undefined && !firstByte && noContent > 0) {
+      noContent -= 1;
+      response.writeHead(204).end();
+      return;
+    }
+    if (firstByte && firstByteAs200 > 0) {
+      firstByteAs200 -= 1;
+      response.writeHead(200, { 'content-length': '1' }).end(options.body.subarray(0, 1));
       return;
     }
     const headers: Record<string, string> = { etag: '"v1"' };

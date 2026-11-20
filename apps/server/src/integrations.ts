@@ -1,17 +1,61 @@
-import { type Integration, type IntegrationAccount, IntegrationId } from '@scia/contracts';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { ServiceFailure } from '@scia/core';
-import { type AllDebrid, ServiceError } from './alldebrid.ts';
+import { type Integration, type IntegrationAccount, IntegrationId } from '@scia/contracts';
+import { isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
+import type { AllDebrid } from './alldebrid.ts';
 import type { KeyVault } from './key-vault.ts';
+import type { LinkResolver, UnlockedLink } from './link-resolver.ts';
 import { describeFailure, type Logger } from './logger.ts';
+import { ServiceError } from './service-error.ts';
 
 // What the service said of the account is believed for this long: Settings may be opened many
 // times, the service is asked once.
 const ACCOUNT_FRESH_MS = 60_000;
+// The hosts a service unlocks change rarely: its list is read again this often.
+const HOSTS_FRESH_MS = 6 * 60 * 60_000;
+// After a reading that failed, the list it had is used this long before the service is asked
+// again: a service that does not answer is not asked once for every link.
+const HOSTS_RETRY_MS = 60_000;
+
+// `work`, or the reason of `signal` as soon as it stops: what many wait for together is not
+// stopped by one of them leaving.
+function unlessStopped<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const stop = () => {
+      reject(signal.reason as Error);
+    };
+    if (signal.aborted) {
+      stop();
+      return;
+    }
+    signal.addEventListener('abort', stop, { once: true });
+    void work.then(resolve, reject).finally(() => {
+      signal.removeEventListener('abort', stop);
+    });
+  });
+}
+
+function hostNameOf(url: string): string | undefined {
+  // As the platform reads it: in lower case, whatever was pasted.
+  return URL.parse(url)?.hostname;
+}
 // A listing waits this long for the service to say whose account it is, and then answers what
 // it knows: Settings is not kept waiting by a service that is slow. The answer, when it comes,
 // is there for the next listing.
 const LIST_WAIT_MS = 2000;
+
+// The list kept by an earlier run, read as old: the first link of a run waits for the service
+// to be asked again, and goes by the kept list when it does not answer.
+async function keptHosts(deps: IntegrationsDeps): Promise<HostList | undefined> {
+  if (deps.hostsFile === undefined) return undefined;
+  try {
+    const kept: unknown = JSON.parse(await readFile(deps.hostsFile, 'utf8'));
+    return isDomainList(kept) ? { domains: kept.domains, readAt: -Infinity } : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export class KeyNotKeptError extends Error {
   override readonly name = 'KeyNotKeptError';
@@ -24,25 +68,46 @@ export interface IntegrationsDeps {
   // A clock that never steps, in milliseconds.
   readonly now?: () => number;
   readonly listWaitMs?: number;
+  // Where the last list of hosts the service gave is kept between runs, so that a run in which
+  // the service does not answer still knows which links are its own (the owner's decision, #7).
+  // Nothing is kept without it.
+  readonly hostsFile?: string;
+}
+
+interface HostList {
+  readonly domains: readonly string[];
+  // On this run's clock; a list kept from another run is read as old.
+  readonly readAt: number;
+}
+
+function isDomainList(value: unknown): value is { readonly domains: string[] } {
+  const domains = (value as { domains?: unknown } | null)?.domains;
+  return Array.isArray(domains) && domains.every((domain) => typeof domain === 'string');
 }
 
 // The services Scia is connected to: the key of each, held in memory and kept by the vault,
 // and what the service last said of the account behind it. A key is never logged and never
-// given back to whoever calls.
-export class Integrations {
+// given back to whoever calls. It is also what a download asks whether a link is a service's,
+// and for the direct link behind it (link-resolver.ts).
+export class Integrations implements LinkResolver {
   readonly #deps: IntegrationsDeps;
   #key: string | undefined;
   #account: IntegrationAccount | null = null;
   #failure: ServiceFailure | null = null;
   #askedAt: number | undefined;
   #asking: Promise<void> | undefined;
+  // The domains the service unlocks links of, when they were read, and the reading under way.
+  #hosts: HostList | undefined;
+  // Forgotten with the list when another key, or none, is connected: that key asks again.
+  #readingHosts: Promise<readonly string[]> | undefined;
   // Connecting and disconnecting, one after the other: two at once would write one key over
   // another, in an order nobody chose.
   #changing: Promise<unknown> = Promise.resolve();
 
-  constructor(deps: IntegrationsDeps, key: string | undefined) {
+  constructor(deps: IntegrationsDeps, key: string | undefined, hosts?: HostList) {
     this.#deps = deps;
     this.#key = key;
+    this.#hosts = hosts;
   }
 
   static async open(deps: IntegrationsDeps): Promise<Integrations> {
@@ -56,7 +121,7 @@ export class Integrations {
         error: describeFailure(error),
       });
     }
-    return new Integrations(deps, key);
+    return new Integrations(deps, key, await keptHosts(deps));
   }
 
   async list(): Promise<Integration[]> {
@@ -102,6 +167,8 @@ export class Integrations {
       throw new KeyNotKeptError('The key could not be kept.', { cause: error });
     }
     this.#key = apiKey;
+    // Another key may be another account, with other hosts.
+    await this.#forgetHosts();
     this.#account = account;
     this.#failure = null;
     this.#askedAt = this.#now();
@@ -124,10 +191,96 @@ export class Integrations {
   async #disconnect(id: IntegrationId): Promise<void> {
     await this.#deps.vault.remove(id);
     this.#key = undefined;
+    await this.#forgetHosts();
     this.#account = null;
     this.#failure = null;
     this.#askedAt = undefined;
     this.#deps.logger.info('service_disconnected', { service: id });
+  }
+
+  async serviceFor(url: string, signal: AbortSignal): Promise<IntegrationId | undefined> {
+    const key = this.#key;
+    const host = hostNameOf(url);
+    if (key === undefined || host === undefined) return undefined;
+    const domains = await unlessStopped(this.#domains(key), signal);
+    return domains.some((domain) => host === domain || host.endsWith(`.${domain}`))
+      ? IntegrationId.AllDebrid
+      : undefined;
+  }
+
+  async unlock(service: IntegrationId, url: string, signal: AbortSignal): Promise<UnlockedLink> {
+    const key = this.#key;
+    if (key === undefined) {
+      throw new ServiceError(service, UnlockFailure.NotConnected, 'The service is not connected.');
+    }
+    return this.#deps.alldebrid.unlock(key, url, signal);
+  }
+
+  // One reading at a time, for every download that waits for it. A list that cannot be read
+  // again is still the list: the one before it is used. With none at all the reading fails:
+  // a link is not started on a guess.
+  #domains(key: string): Promise<readonly string[]> {
+    const known = this.#hosts;
+    if (known !== undefined && this.#now() - known.readAt < HOSTS_FRESH_MS) {
+      return Promise.resolve(known.domains);
+    }
+    if (this.#readingHosts !== undefined) return this.#readingHosts;
+    const reading = this.#deps.alldebrid
+      .domains(key)
+      .then(
+        async (domains) => {
+          // In turn with connecting and disconnecting, which forget the list: a list written
+          // while a key was being forgotten would outlive it.
+          await this.#oneAtATime(async () => {
+            // An answer about a key that is no longer the one: it is nobody's list now.
+            if (this.#key !== key) return;
+            this.#hosts = { domains, readAt: this.#now() };
+            await this.#keepHosts(domains);
+          });
+          return domains;
+        },
+        (error: unknown) => {
+          this.#deps.logger.warn('service_hosts_not_read', {
+            service: IntegrationId.AllDebrid,
+            error: describeFailure(error),
+          });
+          if (known === undefined) throw error;
+          if (this.#key === key) {
+            this.#hosts = {
+              domains: known.domains,
+              readAt: this.#now() - HOSTS_FRESH_MS + HOSTS_RETRY_MS,
+            };
+          }
+          return known.domains;
+        },
+      )
+      .finally(() => {
+        if (this.#readingHosts === reading) this.#readingHosts = undefined;
+      });
+    this.#readingHosts = reading;
+    return reading;
+  }
+
+  async #keepHosts(domains: readonly string[]): Promise<void> {
+    const file = this.#deps.hostsFile;
+    if (file === undefined) return;
+    try {
+      await mkdir(dirname(file), { recursive: true });
+      await writeFile(`${file}.tmp`, JSON.stringify({ domains }));
+      await rename(`${file}.tmp`, file);
+    } catch (error) {
+      this.#deps.logger.warn('service_hosts_not_kept', { error: describeFailure(error) });
+    }
+  }
+
+  async #forgetHosts(): Promise<void> {
+    this.#hosts = undefined;
+    this.#readingHosts = undefined;
+    const file = this.#deps.hostsFile;
+    if (file === undefined) return;
+    await rm(file, { force: true }).catch((error: unknown) => {
+      this.#deps.logger.warn('service_hosts_not_forgotten', { error: describeFailure(error) });
+    });
   }
 
   #now(): number {
@@ -160,7 +313,10 @@ export class Integrations {
     try {
       account = await this.#deps.alldebrid.account(key);
     } catch (error) {
-      failure = error instanceof ServiceError ? error.failure : ServiceFailure.Unavailable;
+      failure =
+        error instanceof ServiceError && isServiceFailure(error.failure)
+          ? error.failure
+          : ServiceFailure.Unavailable;
       this.#deps.logger.warn('service_account_not_read', {
         service: IntegrationId.AllDebrid,
         failure,
