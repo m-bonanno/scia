@@ -162,6 +162,18 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     expect(await reader().read('https://site.example/sound-only', never)).toBeUndefined();
   });
 
+  it('takes a container of sound whose codec of picture the site names for a video, not for sound alone', async () => {
+    expect(await failureOf(reader().read('https://site.example/picture-in-sound', never))).toBe(
+      PageFailure.FormatUnsupported,
+    );
+  });
+
+  it('reads a container however the site spells it', async () => {
+    const media = await reader().read('https://site.example/capitals', never);
+    expect(media?.formats.map((format) => format.ext)).toEqual(['mp4']);
+    expect(await reader().read('https://site.example/audio-capitals', never)).toBeUndefined();
+  });
+
   it('never takes a video it cannot name the container of for a page with no video', async () => {
     expect(await failureOf(reader().read('https://site.example/other-container', never))).toBe(
       PageFailure.FormatUnsupported,

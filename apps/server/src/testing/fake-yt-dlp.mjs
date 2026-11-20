@@ -119,6 +119,34 @@ else if (url.includes('/one-url')) {
       ],
     }),
   );
+} else if (url.includes('/picture-in-sound')) {
+  // A container of sound whose codec of picture the site names: a video, not sound alone.
+  process.stdout.write(
+    JSON.stringify({
+      _type: 'video',
+      title: 'Theora',
+      formats: [format({ url: 'https://cdn.example/v.ogg', ext: 'ogg', vcodec: 'theora' })],
+    }),
+  );
+} else if (url.includes('/capitals')) {
+  // Containers as a site may spell them.
+  process.stdout.write(
+    JSON.stringify({
+      _type: 'video',
+      title: 'Capitals',
+      formats: [format({ url: 'https://cdn.example/v.MP4', ext: 'MP4' })],
+    }),
+  );
+} else if (url.includes('/audio-capitals')) {
+  process.stdout.write(
+    JSON.stringify({
+      _type: 'video',
+      title: 'A track',
+      formats: [
+        { format_id: 'mp3', url: 'https://cdn.example/a.MP3', ext: 'MP3', protocol: 'https' },
+      ],
+    }),
+  );
 } else if (url.includes('/no-format-at-all')) {
   process.stdout.write(JSON.stringify({ _type: 'video', title: 'Empty', formats: [] }));
 } else if (url.includes('/playlist'))

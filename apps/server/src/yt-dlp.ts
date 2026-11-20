@@ -43,7 +43,8 @@ const height = z
 const formatSchema = z.object({
   url: z.string(),
   protocol: z.string().optional(),
-  ext: z.string().optional(),
+  // However the site spells it: `MP4` is an mp4.
+  ext: z.string().toLowerCase().optional(),
   vcodec: z.string().nullable().optional(),
   acodec: z.string().nullable().optional(),
   height: height.optional(),
