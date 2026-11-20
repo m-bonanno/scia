@@ -27,8 +27,9 @@ concurrency:
   group: gates-${{ github.event.pull_request.number || github.run_id }}-${{ inputs.run }}
   cancel-in-progress: true
 
+# Every job's name below is a required check of develop and main (docs/development/git-flow.md,
+# "Repository settings"): renaming one blocks every PR until the branch protection changes with it.
 jobs:
-  # Its name is a required check of develop and main: renaming it blocks every PR.
   checks:
     name: Format, lint, types, tests, build
     runs-on: ubuntu-latest
