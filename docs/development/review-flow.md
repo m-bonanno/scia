@@ -99,6 +99,8 @@ The last line is `Follow-ups: none` when an approving verdict leaves nothing to 
 
 The two merge commits are what lets semantic-release count the next version from the last one ([`release-flow.md`](./release-flow.md)): squashing either breaks the count.
 
+**After every merge into `develop` or `main`**, whoever merged reads that a Release run started for the merge commit, and starts one by hand when none has. GitHub once recorded no push for a merge, and nothing was released (#95). The steps are in [`release-flow.md`](./release-flow.md), "A merge nothing released".
+
 ## A pull request from outside
 
 A PR from a fork, by someone without write access. The flow for its author is [`CONTRIBUTING.md`](../../CONTRIBUTING.md); this is the team's side of it.

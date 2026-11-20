@@ -1,0 +1,43 @@
+name: Release watch
+
+# A merge into develop is released by the Release workflow its push starts. GitHub once recorded
+# no push for a merge (#95), and nothing was released until a person noticed. Every few hours this
+# looks for a Release run on develop's head and, when there is none, starts one: the gates, then
+# semantic-release, as a push would have. main is watched by whoever merges into it
+# (docs/development/release-flow.md): a stable release is never started by a timer.
+on:
+  schedule:
+    - cron: '41 */3 * * *'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: release-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: A Release run on develop's head
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      # A push's own run is created within seconds of it; a merge younger than this is left to it.
+      SETTLE_SECONDS: 600
+    steps:
+      - name: Start one when there is none
+        run: |
+          head=$(gh api "repos/$REPO/branches/develop" --jq .commit.sha)
+          committed=$(gh api "repos/$REPO/commits/$head" --jq .commit.committer.date)
+          age=$(( $(date -u +%s) - $(date -u -d "$committed" +%s) ))
+          runs=$(gh api "repos/$REPO/actions/workflows/release.yml/runs?head_sha=$head&per_page=1" --jq .total_count)
+          echo "develop is at $head, committed ${age}s ago; Release runs on it: $runs"
+          if [ "$runs" = 0 ] && [ "$age" -ge "$SETTLE_SECONDS" ]; then
+            echo "::warning::No Release run on develop's head $head: starting one."
+            gh workflow run release.yml --repo "$REPO" --ref develop
+          fi
