@@ -10,7 +10,8 @@ const settings = {
   connectionsPerDownload: 8,
   downloadDirectory: '/home/me/Downloads',
   speedLimitBytesPerSecond: null,
-};
+  theme: 'black-tie',
+} as const;
 const MIB = 1024 * 1024;
 
 const ignore = () => undefined;
@@ -43,6 +44,7 @@ describe('SettingsDialog', () => {
       revealDownload: vi.fn(async () => undefined),
       openDownload: vi.fn(async () => undefined),
       chooseDownloadFolder,
+      themeChanged: vi.fn(async () => undefined),
     };
   }
 
@@ -169,6 +171,73 @@ describe('SettingsDialog', () => {
 
     expect(await screen.findByText('/home/me/Downloads')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Change folder' })).not.toBeInTheDocument();
+  });
+
+  it('offers the nine themes by name, the default one first, and keeps the one chosen', async () => {
+    const update = vi.spyOn(api, 'updateSettings').mockResolvedValue({ ...settings, theme: 'ice' });
+    const onSettings = vi.fn();
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
+    const theme = await screen.findByRole('combobox', { name: 'Theme' });
+
+    expect(
+      within(theme)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual([
+      'Black Tie',
+      'Brick',
+      'Road Trip',
+      'Earth',
+      'Bookstore',
+      'New Car',
+      'Wood Floor',
+      'Ice',
+      'Space',
+    ]);
+    expect(theme).toHaveValue('black-tie');
+    expect(screen.getByText('Light or dark, as your system is.')).toBeInTheDocument();
+
+    await userEvent.selectOptions(theme, 'Ice');
+
+    expect(update).toHaveBeenCalledExactlyOnceWith({ theme: 'ice' });
+    expect(settingsPatchSchema.safeParse(update.mock.calls[0]![0]).success).toBe(true);
+    await vi.waitFor(() => {
+      expect(theme).toHaveValue('ice');
+    });
+    expect(onSettings).toHaveBeenLastCalledWith({ ...settings, theme: 'ice' });
+  });
+
+  it('keeps a change over a read that was asked before it and answers after it', async () => {
+    let answerLate: (read: typeof settings) => void = ignore;
+    vi.spyOn(api, 'settings')
+      .mockResolvedValueOnce(settings)
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          answerLate = resolve;
+        }),
+      );
+    vi.spyOn(api, 'updateSettings').mockResolvedValue({ ...settings, theme: 'ice' });
+    const onSettings = vi.fn();
+    const { rerender } = render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />,
+    );
+    const theme = await screen.findByRole('combobox', { name: 'Theme' });
+    // Settings stays mounted: opened again, it shows what it knew while it reads anew.
+    rerender(
+      <SettingsDialog open={false} onClose={ignore} onError={ignore} onSettings={onSettings} />,
+    );
+    rerender(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
+
+    await userEvent.selectOptions(theme, 'Ice');
+    await vi.waitFor(() => {
+      expect(theme).toHaveValue('ice');
+    });
+    answerLate(settings);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(theme).toHaveValue('ice');
+    expect(onSettings).toHaveBeenLastCalledWith({ ...settings, theme: 'ice' });
   });
 
   it('sets a speed limit from ready values, and takes it away', async () => {

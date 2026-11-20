@@ -17,7 +17,8 @@ Anyone who downloads files: they paste a link and want to forget about it. The w
 
 ### Hard visual rules
 
-- **Tokens, never raw colours.** Colours come from the CSS variables in `src/styles.css` (`bg-surface`, `text-muted-foreground`, …). No hex in components, no `dark:` variant: a colour that changes with the theme is a token, defined in both themes. `--background`, `--foreground` and `--muted-foreground` are mirrored by `WINDOW_COLOURS` in `@scia/contracts/theme` — a test fails when they drift.
+- **Tokens, never raw colours.** Colours come from the CSS variables of `src/themes.css`, named for Tailwind in `src/styles.css` (`bg-surface`, `text-muted-foreground`, …). No hex in components, no `dark:` variant, no class that names a theme: a colour that changes is a token, defined by every theme in its dark and in its light variant.
+- **A theme is a whole set of tokens, twice** ([`docs/design/themes.md`](../../docs/design/themes.md)). A person chooses the theme in Settings (`Theme` in `@scia/contracts/theme`; the engine keeps it); the system chooses the variant. The page wears the theme named on `<html>` — the engine writes it into the page it serves, `lib/theme.ts` changes it — and the default one when none is named. A spec (`apps/desktop/src/theme-colours.test.ts`) holds every theme and variant to the same tokens, every pair of text and ground the page uses to WCAG 2.2 AA (4.5:1 for text, 3:1 for a bar, an icon, the focus outline), `--background`, `--foreground` and `--muted-foreground` to `WINDOW_COLOURS`, which main paints the window with, and the extension's stylesheet to the default theme. A new token, or a new pairing of two tokens in a component, is added to that spec's list of pairs.
 - **One accent**, for progress and the primary action. Failure is `destructive`; a paused download is muted, not coloured.
 - **Two levels told apart by tone**: the background and the surface on it. No shadows, no decorative borders. A line survives only where it carries meaning: the focus outline, a field's boundary.
 - **The segment bar is the signature**: each connection fills its own stretch of the file where that stretch is. Do not replace it with a plain bar.
@@ -33,6 +34,7 @@ Anyone who downloads files: they paste a link and want to forget about it. The w
 - **Keyboard-complete.** Paste anywhere adds the links; everything pressable is a `button`. A shortcut of the pointer (a double click on a finished row is one press of its "Open": it opens a file, and makes a program's button ask — it moves the focus there, and never answers the question) only repeats a button that is there.
 - **A capture in `docs/design/` shows the app as it is**: the PR that changes what one shows retakes it, from the real app (`docs/design/README.md`).
 - **The page never names a path.** It names a download by id; main asks the engine where the file is (`lib/bridge.ts`). It names no folder either: to change where downloads go it asks main, which shows the system's dialog and tells the engine, and then it reads the settings again — whatever main answered, and also when main failed. An answer from main is checked like any answer from outside (`isFolderChange`).
+- **What the engine keeps is learned from the last ask.** Settings reads at every opening, at every change, and after a folder was chosen; an answer is kept only when nothing was asked after it (`learn` in `features/settings/settings-dialog.tsx`), so a read asked before a change never undoes it on screen.
 
 ## Copy
 

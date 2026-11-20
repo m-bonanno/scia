@@ -1,4 +1,4 @@
-import { type ResolvedTheme, WINDOW_COLOURS } from '@scia/contracts/theme';
+import { type ColourScheme, type Theme, WINDOW_COLOURS } from '@scia/contracts/theme';
 
 // The window's own buttons are 46 × 40 on Windows: the bar the page draws is as high.
 export const TITLE_BAR_HEIGHT = 40;
@@ -15,8 +15,12 @@ export function hasIntegratedTitleBar(platform: string): boolean {
   return platform === 'win32' || platform === 'linux';
 }
 
-export function titleBarOverlay(theme: ResolvedTheme, focused: boolean): TitleBarOverlay {
-  const colours = WINDOW_COLOURS[theme];
+export function titleBarOverlay(
+  theme: Theme,
+  scheme: ColourScheme,
+  focused: boolean,
+): TitleBarOverlay {
+  const colours = WINDOW_COLOURS[theme][scheme];
   return {
     color: colours.background,
     // The buttons dim with the window, as the system's own do.

@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { type Download, type Settings, type SettingsPatch, type Snapshot } from '@scia/contracts';
+import { DEFAULT_THEME } from '@scia/contracts/theme';
 import {
   canPause,
   canResume,
@@ -35,6 +36,7 @@ const DEFAULT_SETTINGS = {
   maxConcurrentDownloads: 3,
   connectionsPerDownload: 8,
   speedLimitBytesPerSecond: null,
+  theme: DEFAULT_THEME,
 } as const;
 // A connection is not opened for less than this.
 const MIN_SEGMENT_BYTES = 1024 * 1024;
@@ -245,6 +247,7 @@ export class DownloadManager {
       ...(patch.speedLimitBytesPerSecond === undefined
         ? {}
         : { speedLimitBytesPerSecond: patch.speedLimitBytesPerSecond }),
+      ...(patch.theme === undefined ? {} : { theme: patch.theme }),
     };
     // At once, also for what is already running.
     if (patch.speedLimitBytesPerSecond !== undefined) {

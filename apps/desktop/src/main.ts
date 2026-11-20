@@ -18,6 +18,7 @@ import { buildServerEnv } from './engine/server-env.ts';
 import { ServerSupervisor } from './engine/server-supervisor.ts';
 import { ShownNotices } from './engine/shown-notices.ts';
 import { HIDDEN_TO_TRAY_NOTICE, trayTooltip } from './engine/tray-presentation.ts';
+import { themeOfEngine } from './engine/window-theme.ts';
 import { NoticeFile } from './notice-file.ts';
 import { startServer } from './server-process.ts';
 import { createSystemTray } from './tray.ts';
@@ -141,6 +142,21 @@ async function boot(): Promise<void> {
     }
   }
 
+  // The window's own colours are the theme's, which the engine keeps: asked before the page
+  // loads, and whenever the page says the theme changed. An engine that does not say leaves
+  // the window as it is.
+  const wearTheme = async () => {
+    try {
+      window.wear(await themeOfEngine(engine(), ENGINE_ANSWER_LIMIT_MS));
+    } catch (error) {
+      log.warn('theme_unknown', { error: String(error) });
+    }
+  };
+  const followEngine = async () => {
+    await wearTheme();
+    window.followServer(port);
+  };
+
   const giveUp = (failure: EngineFailure, reason: string) => {
     log.error('engine_gave_up', { failure, reason });
     tray?.destroy();
@@ -157,7 +173,7 @@ async function boot(): Promise<void> {
     onRestarted: (restartedOn) => {
       port = restartedOn;
       log.info('engine_restarted', { port });
-      window.followServer(port);
+      void followEngine();
     },
     onGaveUp: () => {
       giveUp(EngineFailure.KeepsStopping, 'too many restarts');
@@ -212,6 +228,8 @@ async function boot(): Promise<void> {
     ),
   );
 
+  window.answer(BridgeChannel.ThemeChanged, wearTheme);
+
   try {
     port = await supervisor.start();
   } catch (error) {
@@ -220,5 +238,5 @@ async function boot(): Promise<void> {
     return;
   }
   log.info('engine_ready', { port });
-  window.followServer(port);
+  await followEngine();
 }

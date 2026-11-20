@@ -1,5 +1,7 @@
+import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { API_PREFIX, ApiErrorCode, DEFAULT_API_PORT, SETTINGS_LIMITS } from '@scia/contracts';
+import { DEFAULT_THEME } from '@scia/contracts/theme';
 import { DownloadFailure } from '@scia/core';
 import type { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -234,5 +236,49 @@ describe('the engine API', () => {
     expect(
       ((await changed.json()) as { data: { connectionsPerDownload: number } }).data,
     ).toMatchObject({ connectionsPerDownload: 4 });
+  });
+
+  describe('the theme of the interface', () => {
+    const themeOf = async (response: Response) =>
+      ((await response.json()) as { data: { theme: string } }).data.theme;
+    const choose = (theme: unknown) =>
+      call('/settings', { method: 'PATCH', token: APP_TOKEN, body: JSON.stringify({ theme }) });
+
+    it('is the default one until a person chooses another, and only one that exists', async () => {
+      expect(await themeOf(await call('/settings', { token: APP_TOKEN }))).toBe(DEFAULT_THEME);
+
+      for (const refused of ['neon', '', 3, null]) {
+        expect((await choose(refused)).status, String(refused)).toBe(400);
+      }
+      expect(await themeOf(await choose('ice'))).toBe('ice');
+      expect(await themeOf(await call('/settings', { token: APP_TOKEN }))).toBe('ice');
+    });
+
+    it('is on the page the engine serves, before any script runs', async () => {
+      const staticDir = join(folder.path, 'renderer');
+      await mkdir(staticDir);
+      await writeFile(
+        join(staticDir, 'index.html'),
+        '<!doctype html>\n<html lang="en">\n  <head></head>\n</html>\n',
+      );
+      const serving = createApp({
+        manager,
+        apiToken: APP_TOKEN,
+        extensionToken: EXTENSION_TOKEN,
+        version: '1.2.3',
+        port: () => DEFAULT_API_PORT,
+        staticDir,
+        logger: silentLogger,
+      });
+      const page = async (path: string) => (await serving.request(`${ORIGIN}${path}`)).text();
+
+      expect(await page('/')).toContain(`<html lang="en" data-theme="${DEFAULT_THEME}">`);
+
+      await choose('wood-floor');
+
+      expect(await page('/')).toContain('<html lang="en" data-theme="wood-floor">');
+      // Every address that is not a file is the page.
+      expect(await page('/anything')).toContain('data-theme="wood-floor"');
+    });
   });
 });

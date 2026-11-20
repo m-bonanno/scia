@@ -39,6 +39,8 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → A spec written after its code is seen failing by taking the code's line away, one at a time — also the ones that "obviously" hold: a read made "when the engine is reached, and again when it comes back" stayed green with the read made at mount only, because the spec's connection never changed (#44).
 - → A number in a spec's comment, and in the PR body that quotes it, is counted from the run, not from the setting: eight connections were configured, and a file of four megabytes made four (#44).
 
+- → Two asks of the same thing answer in the order they like. Settings read the engine at every opening and kept whatever came back: a change made while that read was on its way was undone on screen when the read answered after it — the page went back to the theme of before, with the engine keeping the new one. No person is that fast; a harness on a window the system had put in the background was. An answer is kept only when nothing was asked after it, and the spec holds the late answer back by hand (#52).
+
 ## Docs and runbooks
 
 - → Where a document of state — the roadmap, the README, a runbook's "Not there yet" — names what vouches for something (an ADR, a spec, a run, a record), the present is for what exists: "the ADR records it", "a spec holds that" for one still to write is a "done" nobody did. Write "has to" (#29, twice in one PR, the second time in the commit that fixed the first). A bare participle does the same: "Built and proven against a simulated service" reads as done beside lines where "Written, covered by specs" means it (#31). A planned item written in the present ("Choosing the folder") is not this.
@@ -62,6 +64,9 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 - → Nothing that paces or times out runs on `Date.now()`: the system's clock steps. `performance.now()` does not (#44).
 
 ## Electron
+
+- → A pixel read from the screen is the pixel of whatever is on top. A harness that proved the window's own colours with `CopyFromScreen` was right nine times and then read another window's purple nine times, when something else came to the front. `PrintWindow` with `PW_RENDERFULLCONTENT` reads the window as the system composes it, covered or not (#52).
+- → Two harnesses on one debugging port drive the same page: one that hung on a dialog nobody answered was still alive when the next started, attached to the new app and added every download a second time. End the old one — and bound every `fetch` to the port with a timeout — before starting another (#52).
 
 - → A page's `window.close()` destroys the window at once: Electron does not emit a preventable `close` for it. A harness that wants what the X does follows `docs/development/testing.md`, "Proving the real app".
 - → A debugging port answers before the window has a page: a harness waits for a `page` target, not just for the port.

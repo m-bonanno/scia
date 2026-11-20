@@ -1,5 +1,5 @@
 import { join } from 'node:path';
-import { ResolvedTheme, WINDOW_COLOURS } from '@scia/contracts/theme';
+import { ColourScheme, DEFAULT_THEME, type Theme, WINDOW_COLOURS } from '@scia/contracts/theme';
 import { BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, nativeTheme } from 'electron';
 import { guardPermissions } from './engine/page-permissions.ts';
 import { hasIntegratedTitleBar, titleBarOverlay, windowFrameOptions } from './engine/title-bar.ts';
@@ -23,8 +23,8 @@ export function appOrigin(port: number): string {
   return `http://127.0.0.1:${String(port)}`;
 }
 
-function currentTheme(): ResolvedTheme {
-  return nativeTheme.shouldUseDarkColors ? ResolvedTheme.Dark : ResolvedTheme.Light;
+function currentScheme(): ColourScheme {
+  return nativeTheme.shouldUseDarkColors ? ColourScheme.Dark : ColourScheme.Light;
 }
 
 // The app's one window. It is made hidden and without a page: it shows once it has loaded the
@@ -33,6 +33,7 @@ export class MainWindow {
   readonly #window: BrowserWindow;
   readonly #platform: string;
   #port = 0;
+  #theme: Theme = DEFAULT_THEME;
 
   constructor(options: MainWindowOptions) {
     this.#platform = options.platform;
@@ -44,8 +45,8 @@ export class MainWindow {
       show: false,
       title: 'Scia',
       // The page's own background, so the window never flashes another colour while it loads.
-      backgroundColor: WINDOW_COLOURS[currentTheme()].background,
-      ...windowFrameOptions(options.platform, titleBarOverlay(currentTheme(), true)),
+      backgroundColor: WINDOW_COLOURS[this.#theme][currentScheme()].background,
+      ...windowFrameOptions(options.platform, titleBarOverlay(this.#theme, currentScheme(), true)),
       webPreferences: {
         preload: join(__dirname, 'preload.cjs'),
         contextIsolation: true,
@@ -63,7 +64,7 @@ export class MainWindow {
     // Hidden, not removed: removing the menu also drops its zoom and clipboard shortcuts.
     this.#window.setMenuBarVisibility(false);
     this.#confineToApp();
-    this.#keepTheme();
+    this.#followSystem();
     this.#window.webContents.on(
       'did-fail-load',
       (_event, errorCode, errorDescription, url, isMainFrame) => {
@@ -100,6 +101,12 @@ export class MainWindow {
     if (!this.#window.isDestroyed()) this.#load();
   }
 
+  // The theme the person chose: the window's background and its own buttons are that theme's.
+  wear(theme: Theme): void {
+    this.#theme = theme;
+    this.#paint();
+  }
+
   hide(): void {
     if (!this.#window.isDestroyed()) this.#window.hide();
   }
@@ -133,14 +140,20 @@ export class MainWindow {
     this.#window.loadURL(`${appOrigin(this.#port)}/`).catch(() => undefined);
   }
 
-  // The window's background and its own buttons follow the system's theme and the focus.
-  #keepTheme(): void {
+  #paint(): void {
+    if (this.#window.isDestroyed()) return;
+    this.#window.setBackgroundColor(WINDOW_COLOURS[this.#theme][currentScheme()].background);
+    if (hasIntegratedTitleBar(this.#platform)) {
+      this.#window.setTitleBarOverlay(
+        titleBarOverlay(this.#theme, currentScheme(), this.#window.isFocused()),
+      );
+    }
+  }
+
+  // The window's background and its own buttons follow the system's light or dark, and the focus.
+  #followSystem(): void {
     const paint = () => {
-      if (this.#window.isDestroyed()) return;
-      this.#window.setBackgroundColor(WINDOW_COLOURS[currentTheme()].background);
-      if (hasIntegratedTitleBar(this.#platform)) {
-        this.#window.setTitleBarOverlay(titleBarOverlay(currentTheme(), this.#window.isFocused()));
-      }
+      this.#paint();
     };
     this.#window.on('focus', paint);
     this.#window.on('blur', paint);

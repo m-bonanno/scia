@@ -1,5 +1,6 @@
 import { DownloadFailure, DownloadStatus, FileKind } from '@scia/core';
 import { z } from 'zod';
+import { Theme } from './theme.ts';
 
 export { API_PREFIX, DEFAULT_API_PORT } from './endpoint.ts';
 
@@ -87,6 +88,8 @@ export const settingsSchema = z.object({
     .int()
     .min(SETTINGS_LIMITS.speedLimitBytesPerSecond.min)
     .nullable(),
+  // Of the interface: the engine keeps it, and writes it into the page it serves.
+  theme: z.enum(Theme),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -95,6 +98,7 @@ export const settingsPatchSchema = settingsSchema
     maxConcurrentDownloads: true,
     connectionsPerDownload: true,
     speedLimitBytesPerSecond: true,
+    theme: true,
   })
   .partial();
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;
