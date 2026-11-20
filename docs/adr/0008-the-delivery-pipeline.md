@@ -87,5 +87,5 @@ Four PRs, each closing its issue: the Windows job and the gates before a tag (#9
 - A PR to `develop` or `main` waits for jobs on two systems — four, with #91 and #92 — and a beta for its gates before its tag ("What it costs").
 - A red new job blocks the team's merge and every beta from its first run, before it is required: one unstable Windows spec holds them all. The way out is to mend it, or skip it with the number of an issue that carries its log — never a retry.
 - A merge whose commit is red publishes nothing; whoever merged it mends it in the next PR.
-- The required checks change in #93, on the owner's word: `git-flow.md`, "Repository settings", lists them.
+- The required checks changed in #93, on the owner's word, after the burn-in of run 44800307641 (ten runs green): `git-flow.md`, "Repository settings", lists them.
 - A job's name is a required check's name: renaming one blocks every PR until the protection is changed with it.
