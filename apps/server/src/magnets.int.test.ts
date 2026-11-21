@@ -809,13 +809,12 @@ describe('a magnet that goes through a service', () => {
       });
       const [listed] = await first.accountMagnets();
 
-      const taken = first.addAccountMagnet(listed?.id ?? 0);
-      const before = saved.length;
-      await taken;
-      // Kept by the take itself, before the watch's turn says anything.
-      expect(saved.slice(before)[0]?.magnets).toMatchObject([
-        { serviceId: listed?.id, magnet: null },
-      ]);
+      await first.addAccountMagnet(listed?.id ?? 0);
+      // Kept by the take itself: the take saves before it answers, and the watch's turn it wakes
+      // starts on a timer, after this line. A turn of the watch begun earlier may save meanwhile
+      // — with no magnet, while the take waits on the service — so the order is read, not the
+      // first save after the call.
+      expect(saved.at(-1)?.magnets).toMatchObject([{ serviceId: listed?.id, magnet: null }]);
       await first.close();
 
       // It answers about files again.
