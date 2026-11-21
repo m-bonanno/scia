@@ -129,7 +129,6 @@ export function AccountMagnets({ id, again, onClose, tell }: AccountMagnetsProps
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       stopped = true;
-      clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [again]);

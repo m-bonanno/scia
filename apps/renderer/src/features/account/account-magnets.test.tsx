@@ -404,6 +404,9 @@ describe('AccountMagnets', () => {
         await vi.waitFor(() => {
           expect(asked).toHaveBeenCalledTimes(2);
         });
+        // The older answer is not drawn: neither its list nor its refusal.
+        expect(screen.getByRole('status')).toHaveTextContent(/^$/);
+        expect(screen.queryAllByRole('listitem')).toEqual([]);
         await act(async () => {
           second.answer(newer instanceof Error ? newer : [...newer]);
           await Promise.resolve();

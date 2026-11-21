@@ -105,6 +105,10 @@ describe('the real app, with a magnet', () => {
     await toggle.click();
     const panel = page.getByRole('complementary', { name: 'AllDebrid magnets' });
     await panel.getByText('Concert').waitFor();
+    // Its status region says nothing now, and stays in the accessibility tree for what it says next.
+    const status = panel.getByRole('status');
+    expect(await status.textContent()).toBe('');
+    expect(await status.evaluate((region) => getComputedStyle(region).display)).not.toBe('none');
     await panel.getByRole('button', { name: 'Download Concert' }).click();
 
     await until(() => allCompleted(page), 60_000);
