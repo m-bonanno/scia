@@ -61,11 +61,12 @@ const displayVersion = async (key: string) =>
 const setDisplayVersion = (key: string, version: string) =>
   reg('add', key, '/v', 'DisplayVersion', '/t', 'REG_SZ', '/d', version, '/f');
 
-// What an install writes: the program's files and both keys.
+// What an install writes: the program's files and both keys. NSIS keeps the time a file was
+// packed as its time of writing; a file it puts there again is created anew.
 const footprint = async (key: string) => {
   const stamp = async (path: string) => {
-    const { mtimeMs, size } = await stat(path);
-    return { mtimeMs, size };
+    const { birthtimeMs, mtimeMs, size } = await stat(path);
+    return { birthtimeMs, mtimeMs, size };
   };
   return {
     folder: await readdir(INSTALL_DIR),

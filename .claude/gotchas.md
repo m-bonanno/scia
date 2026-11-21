@@ -15,7 +15,7 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 ## Formatting numbers
 
-- → The editing tools of a session turn ` ` written in their text into the character itself, and so do PowerShell strings passed through them: three rounds of #101 put an invisible no-break space in a spec and in a component, which `no-irregular-whitespace` caught only in the component. In code, use `NBSP` from `lib/format.ts`; in a spec, write the escape with a script that builds its backslash, and check with `git grep -nP '\xa0'`.
+- → The editing tools of a session turn ` ` written in their text into the character itself, and so do PowerShell strings passed through them: three rounds of #101 put an invisible no-break space in a spec and in a component, which `no-irregular-whitespace` caught only in the component. In code, use `NBSP` from `lib/format.ts`; in a spec, write the escape with a script that builds its backslash, and check with `git grep -nP '\xa0'`. #172 again, with another invisible character: a soft hyphen (U+00AD) landed inside a name in `apps/desktop/CLAUDE.md`, where no linter reads. Search the whole diff for both before a commit: `git diff | grep -nP '\x{00A0}|\x{00AD}'`.
 
 - → Grouping depends on the locale's CLDR data, not on intuition: `en-US` writes `1,000`, while `it-IT` leaves a four-digit number ungrouped (`1000`). A spec expects what `Intl` says for the `LOCALE` of `@scia/contracts/locale`.
 - → The unit is tied to its number with a non-breaking space, written as the escape `\u00a0`, never as the invisible character itself.

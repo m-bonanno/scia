@@ -61,14 +61,14 @@ Function SciaSplit
   ${Loop}
 FunctionEnd
 
-; $SciaNumber 1 when $SciaHead is a number as semver writes one: digits, no leading zero.
-; IntOp reads 32 bits, so a larger number is not one here, and a version that holds it is unreadable.
+; $SciaNumber 1 when $SciaHead is a number as semver writes one: digits, no leading zero. A
+; prerelease can hold "-1", which is a word. IntOp reads 32 bits, so a larger number is not one
+; here, and a version that holds it is unreadable.
 Function SciaIsNumber
   StrCpy $SciaNumber 0
   StrCpy $SciaChar $SciaHead 1
   ${If} $SciaHead == ""
   ${OrIf} $SciaChar == "-"
-  ${OrIf} $SciaChar == "+"
     Return
   ${EndIf}
   IntOp $SciaIndex $SciaHead + 0
@@ -122,9 +122,8 @@ FunctionEnd
 
 ; $SciaListA against $SciaListB, two lists of identifiers read by SciaRead, as semver orders them:
 ; numbers by value and below words, words in ASCII order, a list that ends first is lower.
-; $SciaOrder -1, 0 or 1.
+; $SciaOrder -1, 0 or 1. They are split at ".", the separator SciaRead leaves.
 Function SciaCompareLists
-  StrCpy $SciaSeparator "."
   StrCpy $SciaMoreA 1
   StrCpy $SciaMoreB 1
   ${Do}
@@ -157,20 +156,18 @@ Function SciaCompareLists
     StrCpy $SciaNumberB $SciaNumber
 
     ${If} $SciaNumberA == 1
-      ${If} $SciaNumberB == 1
-        IntCmp $SciaHeadA $SciaHeadB same lower higher
-      ${Else}
-        Goto lower
-      ${EndIf}
+    ${AndIf} $SciaNumberB == 1
+      IntCmp $SciaHeadA $SciaHeadB same lower higher
+    ${ElseIf} $SciaNumberA == 1
+      Goto lower
     ${ElseIf} $SciaNumberB == 1
       Goto higher
-    ${Else}
-      ; Ordinal: by code unit, which for the ASCII that semver allows is ASCII order.
-      ; CSTR_LESS_THAN 1, CSTR_EQUAL 2, CSTR_GREATER_THAN 3.
-      System::Call 'kernel32::CompareStringOrdinal(w "$SciaHeadA", i -1, w "$SciaHeadB", i -1, i 0) i .s'
-      Pop $SciaIndex
-      IntCmp $SciaIndex 2 same lower higher
     ${EndIf}
+    ; Two words. Ordinal: by code unit, which for the ASCII that semver allows is ASCII order.
+    ; CSTR_LESS_THAN 1, CSTR_EQUAL 2, CSTR_GREATER_THAN 3.
+    System::Call 'kernel32::CompareStringOrdinal(w "$SciaHeadA", i -1, w "$SciaHeadB", i -1, i 0) i .s'
+    Pop $SciaIndex
+    IntCmp $SciaIndex 2 same lower higher
     lower:
       StrCpy $SciaOrder -1
       Return
@@ -228,15 +225,15 @@ FunctionEnd
 Function SciaRefusal
   Pop $SciaThis
   Pop $SciaInstalled
-  StrCpy $SciaRefusalText ""
   Push $SciaInstalled
   Push $SciaThis
   Call SciaVersionOrder
   Pop $SciaOrder
   ${If} $SciaOrder == 1
-    StrCpy $SciaRefusalText "${PRODUCT_NAME} $SciaInstalled is already installed, and it is newer than this installer's $SciaThis. To install $SciaThis, uninstall ${PRODUCT_NAME} first: your downloads and settings are kept."
+    Push "${PRODUCT_NAME} $SciaInstalled is already installed, and it is newer than this installer's $SciaThis. To install $SciaThis, uninstall ${PRODUCT_NAME} first: your downloads and settings are kept."
+  ${Else}
+    Push ""
   ${EndIf}
-  Push $SciaRefusalText
 FunctionEnd
 
 ; Run by the installer's .onInit once it knows where Scia is installed, and before it writes,

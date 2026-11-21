@@ -1,15 +1,18 @@
 import { execFile } from 'node:child_process';
-import { readFile, writeFile } from 'node:fs/promises';
+import { randomBytes } from 'node:crypto';
+import { access, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { scratchFolder } from '@scia/server/testing/scratch.ts';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const run = promisify(execFile);
 
 const INCLUDE = join(import.meta.dirname, 'installer.nsh');
 const BUILDER_CONFIG = join(import.meta.dirname, '..', 'electron-builder.yml');
+// Windows' ERROR_PRODUCT_VERSION, which a refused install ends with.
+const REFUSED = 1638;
 
 interface MakeNsis {
   readonly path: string;
@@ -27,11 +30,12 @@ const makensis = async (): Promise<MakeNsis> => {
 };
 
 // A program made of the installer's own include, which answers for one pair of versions what the
-// installer decides: their order, and the words of a refusal.
-const harness = (include: string) => `
+// installer decides: their order, the words of a refusal, and what is left on NSIS's stack, which
+// the installer shares with electron-builder's own script.
+const deciding = (include: string) => `
 Unicode true
-Name "harness"
-OutFile "harness.exe"
+Name "deciding"
+OutFile "deciding.exe"
 RequestExecutionLevel user
 SilentInstall silent
 !define PRODUCT_NAME "Scia"
@@ -42,6 +46,7 @@ Function .onInit
   \${GetParameters} $0
   \${GetOptions} $0 "/installed=" $1
   \${GetOptions} $0 "/this=" $2
+  Push "stack"
   Push $1
   Push $2
   Call SciaVersionOrder
@@ -50,9 +55,10 @@ Function .onInit
   Push $2
   Call SciaRefusal
   Pop $4
-  FileOpen $5 "$EXEDIR\\answer.txt" w
-  FileWrite $5 "$3|$4"
-  FileClose $5
+  Pop $5
+  FileOpen $6 "$EXEDIR\\answer.txt" w
+  FileWrite $6 "$3|$4|$5"
+  FileClose $6
   SetErrorLevel 0
   Quit
 FunctionEnd
@@ -61,31 +67,78 @@ Section
 SectionEnd
 `;
 
+// An installer of a given version made of the include's own customInit, run where electron-builder
+// runs it, which reads the version installed from a key of the spec's: when it installs, it writes
+// what it finds on top of NSIS's stack, which electron-builder's .onInit shares.
+const installing = (include: string, version: string, key: string) => `
+Unicode true
+Name "Scia"
+OutFile "installing.exe"
+RequestExecutionLevel user
+!define PRODUCT_NAME "Scia"
+!define VERSION "${version}"
+!define UNINSTALL_REGISTRY_KEY "${key}"
+!include "${include}"
+
+Function .onInit
+  Push "stack"
+  !insertmacro customInit
+FunctionEnd
+
+Section
+  Pop $1
+  FileOpen $0 "$EXEDIR\\installed.txt" w
+  FileWrite $0 $1
+  FileClose $0
+SectionEnd
+`;
+
+const exitCodeOf = (attempt: Promise<unknown>) =>
+  attempt.then(
+    () => 0,
+    (error: unknown) => (error as { code?: unknown }).code,
+  );
+
+const exists = (path: string) =>
+  access(path).then(
+    () => true,
+    () => false,
+  );
+
 // The program NSIS makes is a Windows program.
 describe.runIf(process.platform === 'win32')('the installer, before it installs', () => {
+  // A key of this run's own, under the person's Software, removed at the end.
+  const key = `Software\\Scia-installer-spec-${randomBytes(6).toString('hex')}`;
   let folder: Awaited<ReturnType<typeof scratchFolder>>;
 
   beforeAll(async () => {
     folder = await scratchFolder();
     const nsis = await makensis();
-    await writeFile(join(folder.path, 'harness.nsi'), harness(INCLUDE));
-    await run(nsis.path, ['-V2', 'harness.nsi'], {
-      cwd: folder.path,
-      env: { ...process.env, ...nsis.env },
-      timeout: 60_000,
-    });
+    const compile = async (name: string, script: string) => {
+      await writeFile(join(folder.path, name), script);
+      await run(nsis.path, ['-V2', name], {
+        cwd: folder.path,
+        env: { ...process.env, ...nsis.env },
+        timeout: 60_000,
+      });
+    };
+    await compile('deciding.nsi', deciding(INCLUDE));
+    await compile('installing.nsi', installing(INCLUDE, '1.0.0-beta.17', key));
   }, 120_000);
 
   afterAll(async () => {
+    await run('reg', ['delete', `HKCU\\${key}`, '/f']).catch(() => undefined);
     await folder.remove();
   });
 
   const decide = async (installed: string, version: string) => {
-    await run(join(folder.path, 'harness.exe'), [`/installed=${installed}`, `/this=${version}`], {
+    await run(join(folder.path, 'deciding.exe'), [`/installed=${installed}`, `/this=${version}`], {
       timeout: 10_000,
     });
-    const [order, refusal] = (await readFile(join(folder.path, 'answer.txt'), 'utf8')).split('|');
-    return { order, refusal };
+    const [order, refusal, stack] = (await readFile(join(folder.path, 'answer.txt'), 'utf8')).split(
+      '|',
+    );
+    return { order, refusal, stack };
   };
 
   const orderOf = async (a: string, b: string) => (await decide(a, b)).order;
@@ -119,6 +172,11 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
       ['1.0.0-beta.20', '1.0.0', '-1'],
       ['1.0.0-beta.20.local', '1.0.0-beta.20', '1'],
       ['1.0.0-beta.2', '1.0.0-beta.local', '-1'],
+      // A number is below every word, also one that begins with a digit.
+      ['1.0.0-2', '1.0.0-1a', '-1'],
+      ['1.0.0-2a', '1.0.0-3', '1'],
+      // "-1" holds a hyphen: a word, above every number.
+      ['1.0.0-beta.-1', '1.0.0-beta.1', '1'],
       ['1.0.0-Beta', '1.0.0-beta', '-1'],
       ['1.0.0-beta-2', '1.0.0-beta-10', '1'],
       ['0.0.0', '1.0.0-beta.20', '-1'],
@@ -150,6 +208,14 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
       expect(await orderOf(unreadable, '1.0.0')).toBe('');
       expect(await orderOf('1.0.0', unreadable)).toBe('');
     });
+
+    it.each([
+      ['two versions', '1.0.0-beta.20', '1.0.0-beta.17'],
+      ['an installed version it cannot read', 'garbage', '1.0.0'],
+      ['a version of its own it cannot read', '1.0.0', 'garbage'],
+    ])('leaves the stack as it found it, for %s', async (_case, installed, version) => {
+      expect((await decide(installed, version)).stack).toBe('stack');
+    });
   });
 
   describe('refuses only a version older than the one installed', () => {
@@ -175,6 +241,39 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
       ['over a version it cannot read', 'garbage', '1.0.0-beta.20'],
     ])('installs %s', async (_case, installed, version) => {
       expect((await decide(installed, version)).refusal).toBe('');
+    });
+  });
+
+  // The installer is the one of 1.0.0-beta.17; the version installed is written in the spec's key.
+  describe('stops before it installs, as electron-builder runs it', () => {
+    beforeEach(async () => {
+      await rm(join(folder.path, 'installed.txt'), { force: true });
+    });
+
+    const install = () =>
+      exitCodeOf(run(join(folder.path, 'installing.exe'), ['/S'], { timeout: 30_000 }));
+    const setInstalled = (version: string) =>
+      run('reg', ['add', `HKCU\\${key}`, '/v', 'DisplayVersion', '/d', version, '/f']);
+
+    it('ends a silent install over a newer version with 1638, having installed nothing', async () => {
+      await setInstalled('1.0.0-beta.20');
+
+      expect(await install()).toBe(REFUSED);
+      expect(await exists(join(folder.path, 'installed.txt'))).toBe(false);
+    });
+
+    it('installs over the same version', async () => {
+      await setInstalled('1.0.0-beta.17');
+
+      expect(await install()).toBe(0);
+      expect(await readFile(join(folder.path, 'installed.txt'), 'utf8')).toBe('stack');
+    });
+
+    it('installs where no Scia is installed', async () => {
+      await run('reg', ['delete', `HKCU\\${key}`, '/f']).catch(() => undefined);
+
+      expect(await install()).toBe(0);
+      expect(await readFile(join(folder.path, 'installed.txt'), 'utf8')).toBe('stack');
     });
   });
 
