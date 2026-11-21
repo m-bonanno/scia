@@ -30,6 +30,9 @@ jobs:
       # A push's own run is created within seconds of it; a merge younger than this is left to it.
       SETTLE_SECONDS: 600
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - name: Start one when there is none
         run: |
           head=$(gh api "repos/$REPO/branches/develop" --jq .commit.sha)
@@ -41,3 +44,7 @@ jobs:
             echo "::warning::No Release run on develop's head $head: starting one."
             gh workflow run release.yml --repo "$REPO" --ref develop
           fi
+      # A run that failed, or a tag pushed without its release or its notes (#160), fails this job, so
+      # that the Actions tab shows it (#185; docs/development/release-flow.md).
+      - name: Say what failed
+        run: node scripts/release-health.mjs
