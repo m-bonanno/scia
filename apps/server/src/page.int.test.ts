@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { existsSync } from 'node:fs';
 import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DownloadStatus, PageFailure } from '@scia/core';
@@ -15,8 +16,10 @@ import {
 } from './testing/range-server.ts';
 import { type FolderServer, startFolderServer } from './testing/folder-server.ts';
 import { scratchFolder, silentLogger, until } from './testing/scratch.ts';
+import { YtDlp } from './yt-dlp.ts';
 
 const MIB = 1024 * 1024;
+const FAKE_YT_DLP = join(import.meta.dirname, 'testing', 'fake-yt-dlp.mjs');
 const page = Buffer.from('<!doctype html><title>A video</title><video src="/x"></video>');
 const video = randomBytes(3 * MIB + 11);
 
@@ -611,4 +614,40 @@ describe('DownloadManager and a link that is a page', () => {
 
     expect(Buffer.compare(await readFile(inDownloads('sample.bin')), page)).toBe(0);
   });
+
+  it('removes a download whose page yt-dlp is still reading, its second process holding the output (#170)', async () => {
+    const site = await host({ body: page, contentType: 'text/html' });
+    const givenFile = join(folder.path, 'given.json');
+    const reader = new YtDlp({
+      command: process.execPath,
+      prefix: [FAKE_YT_DLP, givenFile],
+      timeoutMs: 60_000,
+      tempDir: join(folder.path, 'temp'),
+    });
+    const downloads = await open({ pageReader: reader });
+
+    const [added] = downloads.add({ urls: [`${site.url}?watch=/two-processes`] });
+    await until(() => existsSync(`${givenFile}.holder`));
+    const startedAt = Date.now();
+    await downloads.remove(added!.id, false);
+
+    expect(Date.now() - startedAt).toBeLessThan(5000);
+    expect(downloads.snapshot().downloads).toEqual([]);
+    // Read once the last save has landed: on Windows a read of the file while it is renamed into
+    // place makes the save fail.
+    await downloads.close();
+    manager = undefined;
+    expect(await readFile(join(folder.path, 'data', 'state.json'), 'utf8')).not.toContain(
+      added!.id,
+    );
+    const holder = Number(await readFile(`${givenFile}.holder`, 'utf8'));
+    await until(() => {
+      try {
+        process.kill(holder, 0);
+        return false;
+      } catch {
+        return true;
+      }
+    });
+  }, 30_000);
 });

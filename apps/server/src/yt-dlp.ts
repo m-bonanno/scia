@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { type ChildProcess, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AUDIO_CONTAINERS, PageFailure } from '@scia/core';
@@ -171,6 +171,42 @@ interface Run {
   readonly stderr: string;
 }
 
+// yt-dlp's builds unpack themselves and read the page in a second process, which inherits the
+// output: ending the first alone leaves the second reading, and the output open (#170). So the
+// whole tree is ended — on Windows by taskkill, elsewhere as the process group it leads.
+const APART = process.platform !== 'win32';
+
+function endTree(child: ChildProcess): void {
+  const { pid } = child;
+  if (pid === undefined) return;
+  if (APART) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      child.kill('SIGKILL');
+    }
+    return;
+  }
+  const systemRoot = process.env.SystemRoot;
+  const taskkill =
+    systemRoot === undefined ? 'taskkill.exe' : join(systemRoot, 'System32', 'taskkill.exe');
+  // Built from nothing, as yt-dlp's own: the engine's environment holds the API's token. A
+  // taskkill that cannot start, or ends nothing, leaves the first process to end alone.
+  spawn(taskkill, ['/PID', String(pid), '/T', '/F'], {
+    env: systemRoot === undefined ? {} : { SystemRoot: systemRoot },
+    stdio: 'ignore',
+    windowsHide: true,
+  })
+    .on('error', () => child.kill())
+    .on('exit', (code) => {
+      if (code !== 0) child.kill();
+    });
+}
+
+// Once Scia has ended the reader, what still holds its output — a process no tree reaches, its
+// parent gone — is not waited for.
+const OUTPUT_GRACE_MS = 1000;
+
 // The adapter of PageReader over yt-dlp, run once per page (docs/adr/0009).
 export class YtDlp implements PageReader {
   readonly #options: YtDlpOptions;
@@ -244,10 +280,21 @@ export class YtDlp implements PageReader {
         env: environmentOf(temp),
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
+        detached: APART,
       });
       const out: Buffer[] = [];
       const err: Buffer[] = [];
       let outBytes = 0;
+      let release: NodeJS.Timeout | undefined;
+      const letOutputGo = () => {
+        release ??= setTimeout(() => {
+          child.stdout.destroy();
+          child.stderr.destroy();
+        }, OUTPUT_GRACE_MS);
+      };
+      child.on('close', () => {
+        clearTimeout(release);
+      });
       // Settled only once the process has closed: its folder is removed after, not under it.
       let outcome: (() => void) | undefined;
       const end = (settle: () => void) => {
@@ -255,8 +302,12 @@ export class YtDlp implements PageReader {
         outcome = settle;
         clearTimeout(timer);
         signal.removeEventListener('abort', stop);
-        if (child.exitCode === null && child.signalCode === null) child.kill();
+        if (child.exitCode === null && child.signalCode === null) endTree(child);
+        else letOutputGo();
       };
+      child.on('exit', () => {
+        if (outcome !== undefined) letOutputGo();
+      });
       const timer = setTimeout(() => {
         end(() => {
           reject(new PageError(PageFailure.SiteBusy, 'The page said nothing in time.'));
