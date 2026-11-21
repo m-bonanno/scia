@@ -1,5 +1,6 @@
 import { ApiErrorCode, IntegrationCodeFailure, type IntegrationId } from '@scia/contracts';
 import { MagnetFailure, PREPARE_LIMIT_SECONDS, ServiceFailure, UnlockFailure } from '@scia/core';
+import { ZodError } from 'zod';
 import { ApiError } from './api.ts';
 import { formatDuration } from './format.ts';
 
@@ -134,8 +135,81 @@ const MAGNET_MOVED: Readonly<Record<string, string>> = {
 };
 
 export function magnetActionMessage(error: unknown): string {
-  const text = error instanceof ApiError ? MAGNET_MOVED[error.code] : undefined;
-  return text ?? errorMessage(error);
+  return (
+    (error instanceof ApiError ? said(MAGNET_MOVED, error.code) : undefined) ?? errorMessage(error)
+  );
+}
+
+// A code is a word from outside: looked up among a table's own keys, never its prototype's.
+function said(table: Readonly<Record<string, string>>, code: string): string | undefined {
+  return Object.hasOwn(table, code) ? table[code] : undefined;
+}
+
+// What the service said of the account itself when it was asked about its magnets (#138), each
+// true of its cause alone, with its remedy: the sentences Settings says of the same refusal, but
+// where Settings names a control of its own. What is mended in Settings — the key connected again,
+// a service connected — is asked again when Settings closes; what is mended elsewhere is seen at
+// the next ask.
+function accountRefused(
+  code: string,
+): { readonly text: string; readonly heals: boolean } | undefined {
+  const service = SERVICE_NAME.alldebrid;
+  switch (code) {
+    case ApiErrorCode.KeyRefused:
+      // Settings' own sentence sits beside its Disconnect: read anywhere else, it says where to
+      // act, and to connect again, by a code or a key (#136), as a link's row says.
+      return {
+        text: `${service} no longer accepts the key. In Settings, disconnect it and connect again.`,
+        heals: false,
+      };
+    case ApiErrorCode.ServiceNeeded:
+      return { text: `${service} is no longer connected. Connect it in Settings.`, heals: false };
+    case ApiErrorCode.KeyBlocked:
+    case ApiErrorCode.AccountBanned:
+    case ApiErrorCode.NetworkRefused:
+      return { text: serviceTroubleMessage(code, 'alldebrid'), heals: true };
+    case ApiErrorCode.NotPremium:
+      return { text: `${service} fetches magnets for premium accounts only.`, heals: true };
+    default:
+      return undefined;
+  }
+}
+
+// Why the panel's last ask of the account gave no list, and whether it goes on asking.
+// An engine that did not answer says nothing here: the notice that it is not responding does.
+export interface AccountTrouble {
+  readonly text: string | null;
+  readonly heals: boolean;
+}
+
+export function accountTrouble(error: unknown): AccountTrouble {
+  // The engine answered, in a shape the page does not read: nothing else will say it.
+  if (error instanceof ZodError) {
+    return { text: 'Scia could not read the magnets of the account just now.', heals: true };
+  }
+  if (!(error instanceof ApiError)) return { text: null, heals: true };
+  const refused = accountRefused(error.code);
+  if (refused !== undefined) return refused;
+  return error.code === ApiErrorCode.Unavailable
+    ? { text: `${SERVICE_NAME.alldebrid} could not be asked just now.`, heals: true }
+    : { text: 'Scia could not read the magnets of the account just now.', heals: true };
+}
+
+// Said when a magnet of the account was not taken into the list (#138): the account moved on
+// since the panel last read it, or what the service said of the account.
+const ACCOUNT_MAGNET_MOVED: Readonly<Record<string, string>> = {
+  [ApiErrorCode.NotFound]: `This magnet is no longer on the ${SERVICE_NAME.alldebrid} account.`,
+  [ApiErrorCode.Conflict]: 'This magnet is already in Scia’s list, or no longer ready.',
+  [ApiErrorCode.Unavailable]: `${SERVICE_NAME.alldebrid} could not be asked just now. Try again in a moment.`,
+};
+
+export function accountMagnetMessage(error: unknown): string {
+  if (!(error instanceof ApiError)) return errorMessage(error);
+  return (
+    said(ACCOUNT_MAGNET_MOVED, error.code) ??
+    accountRefused(error.code)?.text ??
+    errorMessage(error)
+  );
 }
 
 // Said of a service that is connected, when it last answered with a refusal or not at all.
@@ -214,7 +288,7 @@ export function linkNotUnlockedMessage(
 
 export function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
-    return BY_CODE[error.code] ?? 'Scia could not complete the operation. Try again.';
+    return said(BY_CODE, error.code) ?? 'Scia could not complete the operation. Try again.';
   }
   return ENGINE_UNREACHABLE;
 }

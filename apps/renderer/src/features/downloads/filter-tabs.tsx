@@ -33,7 +33,7 @@ export function FilterTabs({ filter, counts, onChange, ref }: FilterTabsProps): 
             onChange(option);
           }}
           className={cn(
-            'flex h-8 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition-colors',
+            'flex h-8 items-center gap-1.5 rounded-lg px-3 text-sm font-medium whitespace-nowrap transition-colors',
             'focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring',
             option === filter
               ? 'bg-tonal text-foreground'

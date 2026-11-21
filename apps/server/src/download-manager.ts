@@ -3,6 +3,7 @@ import { existsSync, statSync } from 'node:fs';
 import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import {
+  type AccountMagnet,
   type Download,
   IntegrationId,
   type Magnet,
@@ -24,6 +25,7 @@ import {
   fileNameFromUrl,
   hashOfMagnet,
   magnetFolders,
+  MagnetStage,
   MagnetStatus,
   nextToStart,
   PageFailure,
@@ -246,6 +248,9 @@ export class DownloadManager {
       ready: (record, files) => {
         this.#magnetReady(record, files);
       },
+      same: (record) => {
+        this.#magnets = this.#magnets.filter((other) => other !== record);
+      },
     });
     this.#settings = settings;
     this.#throttle = new Throttle(settings.speedLimitBytesPerSecond);
@@ -360,7 +365,11 @@ export class DownloadManager {
   // Magnets pasted into the page, for the service to fetch (#137): one already in the list —
   // the same torrent, however it was written — is not added again.
   addMagnets(magnets: readonly string[]): Magnet[] {
-    const known = new Set(this.#magnets.map((record) => hashOfMagnet(record.magnet)));
+    const known = new Set(
+      this.#magnets.flatMap((record) =>
+        record.magnet === null ? [] : [hashOfMagnet(record.magnet)],
+      ),
+    );
     const added: MagnetRecord[] = [];
     for (const magnet of magnets) {
       const hash = hashOfMagnet(magnet);
@@ -397,14 +406,29 @@ export class DownloadManager {
     this.#changed();
   }
 
+  // The magnets main read on the clipboard (#139; docs/adr/0017): sent at once, as pasted ones
+  // are, while a service is connected; with none, left out — a copy is not a request to connect.
+  offerMagnets(magnets: readonly string[]): Magnet[] {
+    if (this.#deps.magnets?.hasService() !== true) {
+      this.#deps.logger.info('clipboard_magnets_left_out', { magnets: magnets.length });
+      return [];
+    }
+    return this.addMagnets(magnets);
+  }
+
   // A magnet that failed is sent again: the service answers for the same torrent what it has.
   retryMagnet(id: string): Magnet {
     const record = this.#magnetRecord(id);
     if (record.status !== MagnetStatus.Failed) {
       throw new ManagerError(ManagerRefusal.Conflict, 'Only a magnet that failed is tried again.');
     }
-    record.status = MagnetStatus.Sending;
-    record.serviceId = null;
+    // One taken from the account has nothing to send: the service is asked about it again.
+    if (record.magnet === null) {
+      record.status = MagnetStatus.Fetching;
+    } else {
+      record.status = MagnetStatus.Sending;
+      record.serviceId = null;
+    }
     record.failure = null;
     this.#changed();
     this.#magnetWatch.wake();
@@ -540,7 +564,72 @@ export class DownloadManager {
     return this.#settings;
   }
 
-  // Stops every transfer and writes the state. What was running goes on at the next start.
+  // The magnets of the connected service's account, as it lists them (#138; docs/adr/0016): also
+  // those added on its site or by other applications. Asked only while the page shows them.
+  async accountMagnets(): Promise<AccountMagnet[]> {
+    const states = await this.#magnetService().states();
+    const inScia = new Set(this.#magnets.map((record) => record.serviceId));
+    return states.flatMap((state) =>
+      state.stage === 'unreadable'
+        ? []
+        : [
+            {
+              id: state.id,
+              name: state.name,
+              stage: state.stage,
+              totalBytes: state.size > 0 ? state.size : null,
+              downloadedBytes: state.downloaded,
+              bytesPerSecond: state.bytesPerSecond,
+              addedAt: state.addedAt === null ? null : new Date(state.addedAt * 1000).toISOString(),
+              inScia: inScia.has(state.id),
+            },
+          ],
+    );
+  }
+
+  // A ready magnet of the account, made a magnet of Scia's list: its files become downloads in
+  // its folder, as a pasted one's do. The service has it: nothing is sent.
+  async addAccountMagnet(serviceId: number): Promise<Magnet> {
+    const state = (await this.#magnetService().states()).find((each) => each.id === serviceId);
+    if (state === undefined || state.stage === 'unreadable') {
+      throw new ManagerError(ManagerRefusal.NotFound, 'The account has no such magnet.');
+    }
+    if (state.stage !== MagnetStage.Ready) {
+      throw new ManagerError(
+        ManagerRefusal.Conflict,
+        'Only a ready magnet of the account is taken.',
+      );
+    }
+    // Checked after the service answered: two asks at once take it once.
+    if (this.#magnets.some((record) => record.serviceId === serviceId)) {
+      throw new ManagerError(ManagerRefusal.Conflict, 'This magnet is already in the list.');
+    }
+    const record: MagnetRecord = {
+      id: (this.#deps.newId ?? randomUUID)(),
+      magnet: null,
+      name: state.name,
+      serviceId,
+      status: MagnetStatus.Fetching,
+      totalBytes: state.size > 0 ? state.size : null,
+      downloadedBytes: state.downloaded,
+      failure: null,
+      directory: this.#settings.downloadDirectory,
+      createdAt: new Date(this.#now()).toISOString(),
+    };
+    this.#magnets.push(record);
+    this.#deps.logger.info('account_magnet_added');
+    this.#changed();
+    this.#magnetWatch.wake();
+    return this.#magnetView(record);
+  }
+
+  #magnetService(): MagnetService {
+    if (this.#deps.magnets === undefined) {
+      throw new ServiceError(IntegrationId.AllDebrid, UnlockFailure.NeedsService, 'No service.');
+    }
+    return this.#deps.magnets;
+  }
+
   #magnetRecord(id: string): MagnetRecord {
     const record = this.#magnets.find((candidate) => candidate.id === id);
     if (record === undefined) throw new ManagerError(ManagerRefusal.NotFound, 'No such magnet.');
@@ -584,6 +673,7 @@ export class DownloadManager {
     this.#schedule();
   }
 
+  // Stops every transfer and writes the state. What was running goes on at the next start.
   async close(): Promise<void> {
     await this.#magnetWatch.close();
     this.#closed = true;

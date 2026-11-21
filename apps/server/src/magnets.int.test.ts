@@ -1,11 +1,17 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { IntegrationId } from '@scia/contracts';
-import { DownloadStatus, MagnetFailure, MagnetStatus } from '@scia/core';
+import {
+  DownloadStatus,
+  MagnetFailure,
+  MagnetStage,
+  MagnetStatus,
+  UnlockFailure,
+} from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
-import { DownloadManager } from './download-manager.ts';
+import { DownloadManager, ManagerRefusal } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
 import { Integrations } from './integrations.ts';
 import { MemoryVault } from './key-vault.ts';
@@ -589,6 +595,325 @@ describe('a magnet that goes through a service', () => {
     );
   });
 
+  describe('of the account (#138)', () => {
+    const CONCERT = 'c'.repeat(40);
+    const uploads = (of: AllDebridServer) =>
+      of.requests.filter((request) => request.url === '/v4/magnet/upload');
+
+    it('lists every magnet of the account, also one added elsewhere, and says which Scia has', async () => {
+      const alldebrid = await serviceWith({
+        magnets: {
+          [HASH]: holiday({ fetchingPolls: 0 }),
+          [CONCERT]: holiday({ name: 'Concert', fetchingPolls: 1000 }),
+        },
+        onTheAccount: [HASH],
+      });
+      const scia = await open(await connected(alldebrid));
+      scia.addMagnets([`magnet:?xt=urn:btih:${CONCERT}`]);
+      await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Fetching);
+
+      const listed = await scia.accountMagnets();
+
+      const size = holiday().size;
+      expect(listed).toEqual([
+        {
+          id: expect.any(Number) as unknown,
+          name: 'Holiday films',
+          stage: MagnetStage.Ready,
+          totalBytes: size,
+          downloadedBytes: size,
+          bytesPerSecond: 0,
+          addedAt: '2023-11-14T22:13:20.000Z',
+          inScia: false,
+        },
+        {
+          id: expect.any(Number) as unknown,
+          name: 'Concert',
+          stage: MagnetStage.Fetching,
+          totalBytes: size,
+          downloadedBytes: Math.floor(size / 2),
+          bytesPerSecond: 1_048_576,
+          addedAt: '2023-11-14T22:13:20.000Z',
+          inScia: true,
+        },
+      ]);
+    });
+
+    it('downloads the files of a ready magnet of the account into its folder, and sends it nowhere', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: holiday({ fetchingPolls: 0 }) },
+        onTheAccount: [HASH],
+      });
+      const scia = await open(await connected(alldebrid));
+      const [listed] = await scia.accountMagnets();
+
+      const added = await scia.addAccountMagnet(listed?.id ?? 0);
+
+      expect(added).toMatchObject({ name: 'Holiday films', status: MagnetStatus.Fetching });
+      await until(() => allDone(scia));
+      const root = join(downloads(), 'Holiday films');
+      expect(Buffer.compare(await readFile(join(root, 'Day 1', 'beach.mkv')), film)).toBe(0);
+      expect(scia.snapshot().magnets).toEqual([]);
+      expect(uploads(alldebrid)).toEqual([]);
+    });
+
+    it('refuses a magnet the account does not have, and one the service is still fetching', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: holiday({ fetchingPolls: 1000 }) },
+        onTheAccount: [HASH],
+      });
+      const scia = await open(await connected(alldebrid));
+      const [fetching] = await scia.accountMagnets();
+
+      await expect(scia.addAccountMagnet(424_242)).rejects.toMatchObject({
+        refusal: ManagerRefusal.NotFound,
+      });
+      await expect(scia.addAccountMagnet(fetching?.id ?? 0)).rejects.toMatchObject({
+        refusal: ManagerRefusal.Conflict,
+      });
+      expect(scia.snapshot().magnets).toEqual([]);
+    });
+
+    it('takes a magnet of the account once, however often it is asked for at once', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: holiday({ fetchingPolls: 0 }) },
+        onTheAccount: [HASH],
+      });
+      const scia = await open(await connected(alldebrid));
+      const [listed] = await scia.accountMagnets();
+
+      const both = await Promise.allSettled([
+        scia.addAccountMagnet(listed?.id ?? 0),
+        scia.addAccountMagnet(listed?.id ?? 0),
+      ]);
+
+      expect(both.map((each) => each.status).sort()).toEqual(['fulfilled', 'rejected']);
+      await until(() => allDone(scia));
+      expect(scia.snapshot().downloads).toHaveLength(3);
+    });
+
+    it('asks again about a magnet of the account that failed, at Retry, and never sends it', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: holiday({ fetchingPolls: 0, leftOutOfFiles: true }) },
+        onTheAccount: [HASH],
+      });
+      const scia = await open(await connected(alldebrid));
+      const [listed] = await scia.accountMagnets();
+      const added = await scia.addAccountMagnet(listed?.id ?? 0);
+      await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+
+      scia.retryMagnet(added.id);
+
+      const filesAsked = () =>
+        alldebrid.requests.filter((request) => request.url === '/v4/magnet/files').length;
+      await until(() => filesAsked() === 2);
+      await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+      expect(uploads(alldebrid)).toEqual([]);
+    });
+
+    // Settled once every magnet left the list: a second row of the same torrent would have made
+    // its files downloads too.
+    const allSettled = (scia: DownloadManager) =>
+      scia.snapshot().magnets.length === 0 &&
+      scia.snapshot().downloads.length >= 3 &&
+      scia.snapshot().downloads.every((each) => each.status === DownloadStatus.Completed);
+
+    it('keeps one row for a magnet taken from the account and then pasted, and downloads its files once', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: holiday({ fetchingPolls: 0 }) },
+        onTheAccount: [HASH],
+      });
+      // Slow files: both are in the list when the service gives the id back.
+      alldebrid.misbehave({ slowMs: 300, times: 1, route: 'POST /v4/magnet/files' });
+      const scia = await open(await connected(alldebrid));
+      const [listed] = await scia.accountMagnets();
+
+      await scia.addAccountMagnet(listed?.id ?? 0);
+      scia.addMagnets([MAGNET]);
+
+      await until(() => allSettled(scia));
+      expect(scia.snapshot().downloads).toHaveLength(3);
+    });
+
+    it('keeps one row for a magnet pasted and then taken before its upload answered, and downloads its files once', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: holiday({ fetchingPolls: 0 }) },
+        onTheAccount: [HASH],
+      });
+      alldebrid.misbehave({ slowMs: 300, times: 1, route: 'POST /v4/magnet/upload' });
+      const scia = await open(await connected(alldebrid));
+      const [listed] = await scia.accountMagnets();
+
+      scia.addMagnets([MAGNET]);
+      await scia.addAccountMagnet(listed?.id ?? 0);
+
+      await until(() => allSettled(scia));
+      expect(scia.snapshot().downloads).toHaveLength(3);
+    });
+
+    it('lists a magnet whose date is past any calendar with no date, and still downloads a pasted one of it', async () => {
+      for (const uploadDate of [300_000_000_000, 10_000_000_000_000]) {
+        const alldebrid = await serviceWith({
+          magnets: { [HASH]: holiday({ fetchingPolls: 0, uploadDate }) },
+          onTheAccount: [HASH],
+        });
+        const scia = await open(await connected(alldebrid));
+
+        expect(await scia.accountMagnets(), String(uploadDate)).toMatchObject([
+          { name: 'Holiday films', addedAt: null },
+        ]);
+        scia.addMagnets([MAGNET]);
+        await until(() => allSettled(scia));
+        await scia.close();
+        manager = undefined;
+        await alldebrid.close();
+        service = undefined;
+        await rm(downloads(), { recursive: true, force: true });
+        await rm(statePath(), { force: true });
+      }
+    });
+
+    it('leaves out of the list a magnet the service writes in a way Scia cannot read, and takes it as unknown', async () => {
+      const alldebrid = await serviceWith({
+        magnets: {
+          [HASH]: holiday({ fetchingPolls: 0, unreadableState: true }),
+          [CONCERT]: holiday({ name: 'Concert', fetchingPolls: 0 }),
+        },
+        onTheAccount: [HASH, CONCERT],
+      });
+      const scia = await open(await connected(alldebrid));
+
+      const listed = await scia.accountMagnets();
+
+      expect(listed.map((each) => each.name)).toEqual(['Concert']);
+      await expect(scia.addAccountMagnet((listed[0]?.id ?? 0) - 1)).rejects.toMatchObject({
+        refusal: ManagerRefusal.NotFound,
+      });
+    });
+
+    it('keeps a magnet taken from the account as soon as it is taken, and across a restart', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: holiday({ fetchingPolls: 0 }) },
+        onTheAccount: [HASH],
+      });
+      alldebrid.misbehave({ silent: true, route: 'POST /v4/magnet/files' });
+      const saved: PersistedState[] = [];
+      const store = new JsonStateStore(statePath());
+      const integrations = await connected(alldebrid);
+      const first = await open(integrations, {
+        load: () => store.load(),
+        save: (state) => {
+          saved.push(structuredClone(state));
+          return store.save(state);
+        },
+      });
+      const [listed] = await first.accountMagnets();
+
+      await first.addAccountMagnet(listed?.id ?? 0);
+      // Kept by the take itself: the take saves before it answers, and the watch's turn it wakes
+      // starts on a timer, after this line. A turn of the watch begun earlier may save meanwhile
+      // — with no magnet, while the take waits on the service — so the order is read, not the
+      // first save after the call.
+      expect(saved.at(-1)?.magnets).toMatchObject([{ serviceId: listed?.id, magnet: null }]);
+      await first.close();
+
+      // It answers about files again.
+      alldebrid.misbehave({ silent: true, times: 0 });
+      const again = await open(integrations);
+
+      expect(again.snapshot().magnets).toMatchObject([
+        { name: 'Holiday films', status: MagnetStatus.Fetching },
+      ]);
+      await until(() => allSettled(again));
+      expect(alldebrid.requests.filter((r) => r.url === '/v4/magnet/upload')).toEqual([]);
+    });
+
+    it('says an account that is not premium is not, when it is asked for its magnets', async () => {
+      const alldebrid = await serviceWith({ onTheAccount: [HASH] });
+      alldebrid.misbehave({ error: 'MAGNET_MUST_BE_PREMIUM', route: 'POST /v4.1/magnet/status' });
+      const scia = await open(await connected(alldebrid));
+
+      await expect(scia.accountMagnets()).rejects.toMatchObject({
+        failure: UnlockFailure.NotPremium,
+      });
+      // Said once: a refusal is not asked again as a service not answering is.
+      expect(alldebrid.requests.filter((r) => r.url === '/v4.1/magnet/status')).toHaveLength(1);
+    });
+
+    it.each([
+      ['MAGNET_MUST_BE_PREMIUM', MagnetFailure.NotPremium],
+      ['MAGNET_NO_SERVER', MagnetFailure.NetworkRefused],
+    ])(
+      'fails a waiting pasted magnet when the service answers %s about the account',
+      async (code, failure) => {
+        const alldebrid = await serviceWith({
+          magnets: { [HASH]: holiday({ fetchingPolls: 1000 }) },
+        });
+        alldebrid.misbehave({ error: code, route: 'POST /v4.1/magnet/status' });
+        const scia = await open(await connected(alldebrid));
+
+        scia.addMagnets([MAGNET]);
+
+        await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+        expect(scia.snapshot().magnets[0]?.failure).toBe(failure);
+      },
+    );
+
+    it('says a service is needed when none is connected', async () => {
+      const alldebrid = await serviceWith({ onTheAccount: [HASH] });
+      const integrations = await Integrations.open({
+        vault: new MemoryVault(),
+        alldebrid: new AllDebrid({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+        logger,
+      });
+      const scia = await open(integrations);
+
+      await expect(scia.accountMagnets()).rejects.toMatchObject({
+        failure: UnlockFailure.NeedsService,
+      });
+      await expect(scia.addAccountMagnet(1001)).rejects.toMatchObject({
+        failure: UnlockFailure.NeedsService,
+      });
+      expect(alldebrid.requests).toEqual([]);
+    });
+  });
+
+  describe('copied to the clipboard (#139)', () => {
+    it('sends a magnet main read on the clipboard to the service at once, once however often it is copied', async () => {
+      const alldebrid = await serviceWith();
+      const scia = await open(await connected(alldebrid));
+
+      const added = scia.offerMagnets([MAGNET]);
+      const again = scia.offerMagnets([`magnet:?xt=urn:btih:${HASH.toUpperCase()}`]);
+
+      expect(added).toMatchObject([{ name: 'Holiday films', status: MagnetStatus.Sending }]);
+      expect(again).toEqual([]);
+      await until(() => allDone(scia));
+      expect(
+        alldebrid.requests.filter((request) => request.url === '/v4/magnet/upload'),
+      ).toHaveLength(1);
+    });
+
+    it('leaves out a copied magnet while no service is connected, and asks nobody', async () => {
+      const alldebrid = await serviceWith();
+      const integrations = await Integrations.open({
+        vault: new MemoryVault(),
+        alldebrid: new AllDebrid({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+        logger,
+      });
+      const scia = await open(integrations);
+
+      expect(scia.offerMagnets([MAGNET])).toEqual([]);
+      expect(scia.snapshot().magnets).toEqual([]);
+      expect(alldebrid.requests).toEqual([]);
+      // Said in the log with a count, never the magnet.
+      expect(logged).toContain(JSON.stringify({ event: 'clipboard_magnets_left_out', magnets: 1 }));
+      expect(logged.join(' ')).not.toContain(HASH);
+      await scia.close();
+      expect((await open(undefined)).offerMagnets([MAGNET])).toEqual([]);
+    });
+  });
+
   it('logs how many magnets, never which', async () => {
     const scia = await open(await connected(await serviceWith()));
 
@@ -596,6 +921,23 @@ describe('a magnet that goes through a service', () => {
     await until(() => allDone(scia));
 
     expect(logged.join('\n')).not.toContain(HASH);
+    expect(logged.join('\n')).not.toContain('Holiday');
+  });
+
+  it('logs a magnet taken from the account, never which', async () => {
+    const alldebrid = await serviceWith({
+      magnets: { [HASH]: holiday({ fetchingPolls: 0 }) },
+      onTheAccount: [HASH],
+    });
+    const scia = await open(await connected(alldebrid));
+    const [listed] = await scia.accountMagnets();
+
+    await scia.addAccountMagnet(listed?.id ?? 0);
+
+    expect(logged.filter((line) => line.includes('account_magnet_added'))).toEqual([
+      JSON.stringify({ event: 'account_magnet_added' }),
+    ]);
+    await until(() => allDone(scia));
     expect(logged.join('\n')).not.toContain('Holiday');
   });
 });

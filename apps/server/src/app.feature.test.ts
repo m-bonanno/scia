@@ -1,6 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { API_PREFIX, ApiErrorCode, DEFAULT_API_PORT, SETTINGS_LIMITS } from '@scia/contracts';
+import {
+  API_PREFIX,
+  ApiErrorCode,
+  DEFAULT_API_PORT,
+  IntegrationId,
+  SETTINGS_LIMITS,
+} from '@scia/contracts';
+import { UnlockFailure } from '@scia/core';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
 import type { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -9,6 +16,8 @@ import { createApp } from './app.ts';
 import { DownloadManager } from './download-manager.ts';
 import { Integrations } from './integrations.ts';
 import { MemoryVault } from './key-vault.ts';
+import type { MagnetState } from './magnet-service.ts';
+import { ServiceError } from './service-error.ts';
 import { JsonStateStore } from './state-store.ts';
 import { scratchFolder, silentLogger, until } from './testing/scratch.ts';
 import { silentSource } from './testing/silent-source.ts';
@@ -412,6 +421,22 @@ describe('the engine API', () => {
       call('/magnets', { method: 'POST', token, body: JSON.stringify({ magnets }) });
     const dataOf = async <T>(response: Response) => ((await response.json()) as { data: T }).data;
 
+    it('takes the magnets main read on the clipboard from the app alone, and none with no service connected', async () => {
+      const offer = (magnets: unknown, token = APP_TOKEN) =>
+        call('/magnets/offered', { method: 'POST', token, body: JSON.stringify({ magnets }) });
+
+      expect((await offer([MAGNET], EXTENSION_TOKEN)).status).toBe(403);
+      const refused = await offer(['https://example.com/a.zip']);
+      expect(refused.status).toBe(400);
+      expect(await codeOf(refused)).toBe(ApiErrorCode.InvalidRequest);
+      // No service is connected here: a copied magnet is left out, as a page that is no file is.
+      const response = await offer([MAGNET]);
+
+      expect(response.status).toBe(200);
+      expect(await dataOf(response)).toEqual([]);
+      expect(manager.snapshot().magnets).toEqual([]);
+    });
+
     it('takes magnets from the app alone, and says what it has of each, never the magnet', async () => {
       expect((await add([MAGNET], EXTENSION_TOKEN)).status).toBe(403);
 
@@ -460,6 +485,147 @@ describe('the engine API', () => {
       expect((await call(`/magnets/${id}`, { method: 'DELETE', token: APP_TOKEN })).status).toBe(
         404,
       );
+    });
+
+    describe('of the account (#138)', () => {
+      // What a service connected with a key says of its account: the port, in place of AllDebrid.
+      const states: MagnetState[] = [
+        {
+          id: 7,
+          name: 'Holiday films',
+          size: 100,
+          downloaded: 100,
+          bytesPerSecond: 0,
+          addedAt: 1_700_000_000,
+          stage: 'ready',
+        },
+        {
+          id: 8,
+          name: 'Concert',
+          size: 0,
+          downloaded: 0,
+          bytesPerSecond: 0,
+          addedAt: null,
+          stage: 'fetching',
+        },
+      ];
+      let served: DownloadManager | undefined;
+      afterEach(async () => {
+        await served?.close();
+        served = undefined;
+      });
+      async function withService(
+        read: () => Promise<MagnetState[]> = () => Promise.resolve(states),
+      ): Promise<Hono> {
+        served = await DownloadManager.open({
+          source: silentSource,
+          store: new JsonStateStore(join(folder.path, 'served.json')),
+          defaultDirectory: join(folder.path, 'downloads'),
+          logger: silentLogger,
+          magnetPollMs: 60_000,
+          magnets: {
+            hasService: () => true,
+            send: () => Promise.resolve([]),
+            states: read,
+            files: () => Promise.resolve(new Map()),
+          },
+        });
+        return createApp({
+          manager: served,
+          integrations,
+          apiToken: APP_TOKEN,
+          extensionToken: EXTENSION_TOKEN,
+          version: '1.2.3',
+          port: () => DEFAULT_API_PORT,
+          staticDir: undefined,
+          logger: silentLogger,
+        });
+      }
+      const ask = (on: Hono, path: string, init: { method?: string; token: string }) =>
+        on.request(`${ORIGIN}${API_PREFIX}${path}`, {
+          method: init.method ?? 'GET',
+          headers: { authorization: `Bearer ${init.token}` },
+        });
+
+      it("lists the account's magnets for the app alone, and says a service is needed when none is connected", async () => {
+        const none = await call('/magnets/account', { token: APP_TOKEN });
+        expect(none.status).toBe(409);
+        expect(await codeOf(none)).toBe(ApiErrorCode.ServiceNeeded);
+        const on = await withService();
+
+        expect((await ask(on, '/magnets/account', { token: EXTENSION_TOKEN })).status).toBe(403);
+        const listed = await ask(on, '/magnets/account', { token: APP_TOKEN });
+
+        expect(listed.status).toBe(200);
+        expect(await dataOf(listed)).toEqual([
+          {
+            id: 7,
+            name: 'Holiday films',
+            stage: 'ready',
+            totalBytes: 100,
+            downloadedBytes: 100,
+            bytesPerSecond: 0,
+            addedAt: '2023-11-14T22:13:20.000Z',
+            inScia: false,
+          },
+          {
+            id: 8,
+            name: 'Concert',
+            stage: 'fetching',
+            totalBytes: null,
+            downloadedBytes: 0,
+            bytesPerSecond: 0,
+            addedAt: null,
+            inScia: false,
+          },
+        ]);
+      });
+
+      it('says an account that is not premium is not', async () => {
+        const on = await withService(() =>
+          Promise.reject(
+            new ServiceError(IntegrationId.AllDebrid, UnlockFailure.NotPremium, 'not premium'),
+          ),
+        );
+
+        const refused = await ask(on, '/magnets/account', { token: APP_TOKEN });
+        const taken = await ask(on, '/magnets/account/7', { method: 'POST', token: APP_TOKEN });
+
+        for (const response of [refused, taken]) {
+          expect(response.status).toBe(422);
+          expect(await codeOf(response)).toBe(ApiErrorCode.NotPremium);
+        }
+      });
+
+      it('takes a ready magnet of the account into the list, for the app alone, once', async () => {
+        const none = await call('/magnets/account/7', { method: 'POST', token: APP_TOKEN });
+        expect(none.status).toBe(409);
+        expect(await codeOf(none)).toBe(ApiErrorCode.ServiceNeeded);
+        const on = await withService();
+        const take = (id: string, token = APP_TOKEN) =>
+          ask(on, `/magnets/account/${id}`, { method: 'POST', token });
+
+        expect((await take('7', EXTENSION_TOKEN)).status).toBe(403);
+        const taken = await take('7');
+
+        expect(taken.status).toBe(201);
+        expect(await dataOf(taken)).toMatchObject({ name: 'Holiday films', status: 'fetching' });
+        expect((await take('7')).status).toBe(409);
+        expect((await take('8')).status).toBe(409);
+        expect((await take('9')).status).toBe(404);
+        for (const id of ['abc', '0', '-1', '1.5', '7e0', '0x7', '+7']) {
+          const refused = await take(id);
+          expect(refused.status, id).toBe(400);
+          expect(await codeOf(refused)).toBe(ApiErrorCode.InvalidRequest);
+        }
+        const listed = await dataOf<{ id: number; inScia: boolean }[]>(
+          await ask(on, '/magnets/account', { token: APP_TOKEN }),
+        );
+        expect(listed.map((each) => [each.id, each.inScia])).toEqual([
+          [7, true],
+          [8, false],
+        ]);
+      });
     });
   });
 

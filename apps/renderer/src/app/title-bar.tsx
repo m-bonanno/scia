@@ -1,7 +1,9 @@
-import { ArrowDown, Settings } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ArrowDown, Magnet, Settings } from 'lucide-react';
+import type { ReactNode, Ref } from 'react';
+import { swallowHeldEnter } from '@/components/held-enter.ts';
 import { IconButton } from '@/components/icon-button.tsx';
 import { formatSpeed, SEPARATOR } from '@/lib/format.ts';
+import { SERVICE_NAME } from '@/lib/messages.ts';
 import { Logo } from './logo.tsx';
 
 interface TitleBarProps {
@@ -10,6 +12,13 @@ interface TitleBarProps {
   // Shown beside the speed while it is on: why the downloads go no faster.
   readonly speedLimitBytesPerSecond: number | null;
   readonly onOpenSettings: () => void;
+  // The panel of the account's magnets: offered only while AllDebrid is connected (#138).
+  readonly magnets?: {
+    readonly open: boolean;
+    readonly panelId: string;
+    readonly onToggle: () => void;
+  };
+  readonly magnetsToggleRef?: Ref<HTMLButtonElement> | undefined;
   // Beside the name: the version, and an update to restart for (`UpdateOffer`).
   readonly beside?: ReactNode;
 }
@@ -20,6 +29,8 @@ export function TitleBar({
   bytesPerSecond,
   speedLimitBytesPerSecond,
   onOpenSettings,
+  magnets,
+  magnetsToggleRef,
   beside,
 }: TitleBarProps): ReactNode {
   return (
@@ -39,6 +50,22 @@ export function TitleBar({
                 `${SEPARATOR}limit ${formatSpeed(speedLimitBytesPerSecond)}`}
             </span>
           </span>
+        )}
+        {magnets !== undefined && (
+          <IconButton
+            {...(magnetsToggleRef === undefined ? {} : { ref: magnetsToggleRef })}
+            label={`${SERVICE_NAME.alldebrid} magnets`}
+            className="no-drag aria-expanded:bg-tonal"
+            aria-expanded={magnets.open}
+            aria-controls={magnets.open ? magnets.panelId : undefined}
+            onKeyDown={(event) => {
+              // Pressed, it moves the focus into the panel or back: a held Enter would press on.
+              if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
+            }}
+            onClick={magnets.onToggle}
+          >
+            <Magnet size={16} aria-hidden="true" />
+          </IconButton>
         )}
         <IconButton label="Settings" className="no-drag" onClick={onOpenSettings}>
           <Settings size={16} aria-hidden="true" />

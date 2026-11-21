@@ -1,11 +1,27 @@
+import type * as ChildProcesses from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { PageFailure } from '@scia/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PageError } from './media-choice.ts';
 import { scratchFolder, until } from './testing/scratch.ts';
 import { YtDlp, type YtDlpOptions } from './yt-dlp.ts';
+
+// Every program the adapter starts runs as it would; a spec reads what it was given.
+const spawned = vi.hoisted(() => [] as { command: string; env: NodeJS.ProcessEnv | undefined }[]);
+vi.mock('node:child_process', async (original) => {
+  const real = await original<typeof ChildProcesses>();
+  const spawn = ((
+    command: string,
+    args: readonly string[],
+    options: ChildProcesses.SpawnOptions,
+  ) => {
+    spawned.push({ command, env: options.env });
+    return real.spawn(command, args, options);
+  }) as typeof real.spawn;
+  return { ...real, spawn };
+});
 
 const FAKE = join(import.meta.dirname, 'testing', 'fake-yt-dlp.mjs');
 
@@ -276,5 +292,100 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     await expect(reading).rejects.toThrow('paused');
     expect(Date.now() - startedAt).toBeLessThan(5000);
     expect(isRunning(given().pid)).toBe(false);
+  });
+
+  describe('a reader whose second process holds its output, as yt-dlp’s Windows build runs (#170)', () => {
+    const holderPid = () => Number(readFileSync(`${givenFile}.holder`, 'utf8'));
+    let holders: number[] = [];
+    afterEach(() => {
+      vi.unstubAllEnvs();
+      for (const pid of holders) {
+        if (isRunning(pid)) process.kill(pid);
+      }
+      holders = [];
+    });
+    const started = async () => {
+      await until(() => existsSync(`${givenFile}.holder`));
+      holders.push(holderPid());
+    };
+
+    it('stops when told to, and ends the second process with the first', async () => {
+      const stopped = new AbortController();
+      const reading = reader().read('https://site.example/two-processes', stopped.signal);
+      await started();
+      stopped.abort(new Error('paused'));
+
+      const startedAt = Date.now();
+      await expect(reading).rejects.toThrow('paused');
+      expect(Date.now() - startedAt).toBeLessThan(5000);
+      expect(isRunning(given().pid)).toBe(false);
+      await until(() => !isRunning(holderPid()));
+      expect(await readdir(tempDir)).toEqual([]);
+    });
+
+    it('gives up in time, and ends the second process with the first', async () => {
+      const reading = reader({ timeoutMs: 1000 }).read('https://site.example/two-processes', never);
+      await started();
+
+      const startedAt = Date.now();
+      expect(await failureOf(reading)).toBe(PageFailure.SiteBusy);
+      expect(Date.now() - startedAt).toBeLessThan(5000);
+      await until(() => !isRunning(holderPid()));
+    });
+
+    it('stops when told to also while a process it cannot reach still holds its output', async () => {
+      const stopped = new AbortController();
+      const reading = reader().read('https://site.example/orphaned-holder', stopped.signal);
+      await started();
+      stopped.abort(new Error('paused'));
+
+      const startedAt = Date.now();
+      await expect(reading).rejects.toThrow('paused');
+      expect(Date.now() - startedAt).toBeLessThan(5000);
+      expect(await readdir(tempDir)).toEqual([]);
+    });
+
+    it.runIf(process.platform === 'win32')(
+      'hands taskkill nothing of the engine’s environment — not its token',
+      async () => {
+        const stopped = new AbortController();
+        spawned.length = 0;
+        vi.stubEnv('SCIA_API_TOKEN', 'the-engine-token-0000');
+        const reading = reader().read('https://site.example/two-processes', stopped.signal);
+        await started();
+        stopped.abort(new Error('paused'));
+        await expect(reading).rejects.toThrow('paused');
+
+        const taskkill = spawned.filter(({ command }) => /taskkill\.exe$/i.test(command));
+        expect(taskkill).toHaveLength(1);
+        expect(JSON.stringify(taskkill[0]?.env)).not.toContain('the-engine-token-0000');
+        expect(Object.keys(taskkill[0]?.env ?? {})).toEqual(['SystemRoot']);
+      },
+    );
+
+    it.runIf(process.platform === 'win32')(
+      'stops the reader as it can when taskkill cannot be started',
+      async () => {
+        const stopped = new AbortController();
+        const reading = reader().read('https://site.example/two-processes', stopped.signal);
+        await started();
+        // Only now, after yt-dlp started with its own: taskkill is looked for at the stop.
+        vi.stubEnv('SystemRoot', join(folder.path, 'no-windows-here'));
+        stopped.abort(new Error('paused'));
+
+        const startedAt = Date.now();
+        await expect(reading).rejects.toThrow('paused');
+        expect(Date.now() - startedAt).toBeLessThan(5000);
+        expect(isRunning(given().pid)).toBe(false);
+      },
+    );
+
+    it('gives up in time a reader whose first process ended by itself and left the second holding its output', async () => {
+      const reading = reader({ timeoutMs: 1000 }).read('https://site.example/first-gone', never);
+      await started();
+      await until(() => !isRunning(given().pid));
+
+      expect(await failureOf(reading)).toBe(PageFailure.SiteBusy);
+    });
   });
 });

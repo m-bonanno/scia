@@ -101,6 +101,15 @@ const MAGNET_FAILURE_OF: ReadonlyMap<string, MagnetFailure> = new Map<string, Ma
   ['MAGNET_INTERNAL_ERROR', MagnetFailure.Failed],
 ]);
 
+// What refuses every magnet of a request — an upload, or the account's list — said as itself;
+// any other failure as it was.
+function asMagnetsRefusal(error: unknown): never {
+  const code = error instanceof ServiceError ? (error.code ?? '') : '';
+  const failure = MAGNETS_REFUSED.get(code);
+  if (failure === undefined) throw error;
+  throw refused(failure, `AllDebrid answered ${code}.`);
+}
+
 // A torrent's folders are not this deep, nor its files this many: an answer that is, is not one.
 const MAGNET_TREE_DEPTH = 32;
 const MAGNET_FILES_AT_MOST = 100_000;
@@ -181,6 +190,9 @@ const magnetStateSchema = z.object({
   statusCode: z.coerce.number().int().nonnegative(),
   downloaded: z.coerce.number().int().nonnegative().nullish(),
   downloadSpeed: z.coerce.number().int().nonnegative().nullish(),
+  // Seconds since 1970; 0 or absent when the service does not say. One no calendar holds is no
+  // date: it never makes the magnet unreadable.
+  uploadDate: z.coerce.number().int().positive().max(LAST_SECOND).nullish().catch(null),
 });
 const magnetIdSchema = z.object({ id: z.number().int().positive() });
 // A list, or — as some of its answers write it — an object by id. Each entry is read on its own:
@@ -239,6 +251,8 @@ export type MagnetState =
       readonly size: number;
       readonly downloaded: number;
       readonly bytesPerSecond: number;
+      // When it was added to the account, in seconds since 1970, when the service says.
+      readonly addedAt: number | null;
       readonly stage: 'fetching' | 'ready' | 'failed';
     }
   // Listed by its id, the rest of it written in a way Scia cannot read.
@@ -437,15 +451,7 @@ export class AllDebrid {
       uploadSchema,
       { 'magnets[]': magnets },
       signal,
-    ).catch((error: unknown) => {
-      const failure =
-        error instanceof ServiceError ? MAGNETS_REFUSED.get(error.code ?? '') : undefined;
-      if (failure === undefined) throw error;
-      throw refused(
-        failure,
-        `AllDebrid answered ${error instanceof ServiceError ? (error.code ?? '') : ''}.`,
-      );
-    });
+    ).catch(asMagnetsRefusal);
     return magnets.map((magnet, index) => {
       // By the magnet it names; else by its torrent, as the service may write the magnet its way;
       // else by its place.
@@ -471,7 +477,11 @@ export class AllDebrid {
   // question, whatever the number Scia waits for.
   async magnetStates(apiKey: string, signal?: AbortSignal): Promise<MagnetState[]> {
     const { magnets } = await this.#insist(
-      () => this.#ask('/v4.1/magnet/status', apiKey, magnetStatesSchema, {}, signal),
+      // Said as itself inside the attempt: a refusal of every magnet is not asked again.
+      () =>
+        this.#ask('/v4.1/magnet/status', apiKey, magnetStatesSchema, {}, signal).catch(
+          asMagnetsRefusal,
+        ),
       signal,
     );
     return Object.values(magnets).flatMap((entry): MagnetState[] => {
@@ -489,6 +499,7 @@ export class AllDebrid {
           size: each.size,
           downloaded: each.downloaded ?? 0,
           bytesPerSecond: each.downloadSpeed ?? 0,
+          addedAt: each.uploadDate ?? null,
           stage:
             each.statusCode < MAGNET_READY
               ? 'fetching'

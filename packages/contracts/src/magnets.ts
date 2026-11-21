@@ -1,4 +1,4 @@
-import { MagnetFailure, MagnetStatus } from '@scia/core';
+import { MagnetFailure, MagnetStage, MagnetStatus } from '@scia/core';
 import { z } from 'zod';
 
 const byteCount = z.number().int().nonnegative();
@@ -19,3 +19,20 @@ export const magnetSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 export type Magnet = z.infer<typeof magnetSchema>;
+
+// A magnet of the connected service's account, as the service lists it (#138): also one added on
+// its site or by another application. Its id is the service's.
+export const accountMagnetSchema = z.object({
+  id: z.number().int().positive(),
+  name: z.string(),
+  stage: z.enum(MagnetStage),
+  // What the service has of it, and how fast it fetches it; no size before it has read it.
+  totalBytes: byteCount.nullable(),
+  downloadedBytes: byteCount,
+  bytesPerSecond: byteCount,
+  // When it was added to the account, when the service says.
+  addedAt: z.iso.datetime().nullable(),
+  // It is in Scia's list: on its way to being downloads.
+  inScia: z.boolean(),
+});
+export type AccountMagnet = z.infer<typeof accountMagnetSchema>;

@@ -2,6 +2,7 @@
 // first argument is a file it writes what it was given into — its arguments, its environment and
 // its process id — since the adapter hands it no environment of the spec's. Like yt-dlp's builds,
 // it unpacks itself into its TEMP first, and leaves that there when it is stopped.
+import { spawn } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -182,4 +183,31 @@ else if (url.includes('/flood')) {
   process.stdout.write('x'.repeat(5000));
   hang();
 } else if (url.includes('/slow')) hang();
-else fail('[Example] v1: something no rule knows');
+else if (
+  url.includes('/two-processes') ||
+  url.includes('/orphaned-holder') ||
+  url.includes('/first-gone')
+) {
+  // As yt-dlp's builds run: a second process, which holds the output, does the reading (#170).
+  // For `/orphaned-holder` it is started by a process that ends at once, and on Windows no tree of
+  // the first process reaches it then. On Windows Node puts the children it starts in a job that
+  // ends them when it ends; yt-dlp's build does not, and `detached` keeps them out of it. Elsewhere
+  // they stay in the first process's group, as a forked child does.
+  const holder = 'setTimeout(() => undefined, 20_000)';
+  const apart = process.platform === 'win32';
+  const code = url.includes('/orphaned-holder')
+    ? `const { spawn } = require('node:child_process');
+       const held = spawn(process.execPath, ['-e', ${JSON.stringify(holder)}], { stdio: ['ignore', 'inherit', 'inherit'], detached: ${String(apart)} });
+       held.unref();
+       require('node:fs').writeFileSync(process.argv[1], String(held.pid));`
+    : holder;
+  const holderPidFile = `${given}.holder`;
+  const second = spawn(process.execPath, ['-e', code, holderPidFile], {
+    stdio: ['ignore', 'inherit', 'inherit'],
+    detached: apart,
+  });
+  if (!url.includes('/orphaned-holder')) writeFileSync(holderPidFile, String(second.pid));
+  // `/first-gone`: the first process ends by itself and leaves the second reading.
+  if (url.includes('/first-gone')) second.unref();
+  else hang();
+} else fail('[Example] v1: something no rule knows');

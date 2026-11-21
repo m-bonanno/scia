@@ -380,6 +380,10 @@ export class Integrations implements LinkResolver, MagnetService {
       : undefined;
   }
 
+  hasService(): boolean {
+    return this.#key !== undefined;
+  }
+
   async send(magnets: readonly string[], signal?: AbortSignal): Promise<SentMagnet[]> {
     return this.#deps.alldebrid.uploadMagnets(this.#keyForMagnets(), magnets, signal);
   }

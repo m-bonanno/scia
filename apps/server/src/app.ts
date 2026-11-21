@@ -17,7 +17,7 @@ import {
   SNAPSHOT_EVENT,
 } from '@scia/contracts';
 import type { Theme } from '@scia/contracts/theme';
-import { isServiceFailure, ServiceFailure } from '@scia/core';
+import { isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { type DownloadManager, ManagerError, ManagerRefusal } from './download-manager.ts';
@@ -83,6 +83,19 @@ function sameToken(given: string, expected: string): boolean {
 
 function fail(status: number, code: ApiErrorCode, message: string): Response {
   return Response.json({ error: { code, message } }, { status });
+}
+
+// An account that is not premium, said of the account's magnets alone: about a key, the same word
+// of the service is no answer, and stays SERVICE_UNAVAILABLE.
+class NotPremiumError extends Error {}
+
+async function ofTheAccount<T>(ask: () => Promise<T>): Promise<T> {
+  return ask().catch((error: unknown) => {
+    if (error instanceof ServiceError && error.failure === UnlockFailure.NotPremium) {
+      throw new NotPremiumError(error.message, { cause: error });
+    }
+    throw error;
+  });
 }
 
 export function createApp(deps: AppDeps): Hono {
@@ -154,6 +167,31 @@ export function createApp(deps: AppDeps): Hono {
     const parsed = addMagnetsSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return fail(400, ApiErrorCode.InvalidRequest, 'Give one or more magnets.');
     return c.json({ data: manager.addMagnets(parsed.data.magnets) }, 201);
+  });
+
+  // The magnets of the connected service's account, for the panel that shows them (#138).
+  app.get(`${API_PREFIX}/magnets/account`, async (c) =>
+    c.json({ data: await ofTheAccount(() => manager.accountMagnets()) }),
+  );
+
+  app.post(`${API_PREFIX}/magnets/account/:id`, async (c) => {
+    const given = c.req.param('id');
+    const id = Number(given);
+    if (!/^\d+$/.test(given) || !Number.isSafeInteger(id) || id <= 0) {
+      return fail(
+        400,
+        ApiErrorCode.InvalidRequest,
+        'A magnet of the account is named by its number.',
+      );
+    }
+    return c.json({ data: await ofTheAccount(() => manager.addAccountMagnet(id)) }, 201);
+  });
+
+  // The magnets main read on the clipboard (#139; docs/adr/0017): the app's token only.
+  app.post(`${API_PREFIX}/magnets/offered`, async (c) => {
+    const parsed = addMagnetsSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return fail(400, ApiErrorCode.InvalidRequest, 'Give one or more magnets.');
+    return c.json({ data: manager.offerMagnets(parsed.data.magnets) });
   });
 
   app.post(`${API_PREFIX}/magnets/:id/retry`, (c) =>
@@ -321,11 +359,17 @@ export function createApp(deps: AppDeps): Hono {
         : fail(409, ApiErrorCode.Conflict, error.message);
     }
     if (error instanceof ServiceError) {
+      if (error.failure === UnlockFailure.NeedsService) {
+        return fail(409, ApiErrorCode.ServiceNeeded, error.message);
+      }
       // The service was asked and said no (422), or could not be asked (502).
       // A refusal that is about a link has no place here: only a key is given on this API.
       const failure = isServiceFailure(error.failure) ? error.failure : ServiceFailure.Unavailable;
       const status = failure === ServiceFailure.Unavailable ? 502 : 422;
       return fail(status, failure, error.message);
+    }
+    if (error instanceof NotPremiumError) {
+      return fail(422, ApiErrorCode.NotPremium, error.message);
     }
     if (error instanceof CodeConflictError) {
       return fail(409, ApiErrorCode.Conflict, error.message);

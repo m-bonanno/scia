@@ -67,4 +67,63 @@ describe('the real app, with a magnet', () => {
     expect(service.requests.some((request) => request.url === '/v4/magnet/upload')).toBe(true);
     expect(await profile.log()).not.toContain(HASH);
   });
+
+  it("lists the account's magnets in a panel only while it is open, and downloads one added elsewhere (#138)", async () => {
+    const profile = await run.profile();
+    const film = randomBytes(256 * KIB);
+    const filmHost = run.keep(await startRangeServer({ body: film }));
+    const service = run.keep(
+      await startAllDebridServer({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+        hosts: { alldebrid: ['alldebrid.com'] },
+        links: { 'https://alldebrid.com/f/film': { direct: filmHost.url, filename: 'film.mkv' } },
+        magnets: {
+          [HASH]: {
+            name: 'Concert',
+            size: film.length,
+            files: [{ n: 'film.mkv', s: film.length, l: 'https://alldebrid.com/f/film' }],
+          },
+        },
+        onTheAccount: [HASH],
+      }),
+    );
+    const statusAsked = () =>
+      service.requests.filter((request) => request.url === '/v4.1/magnet/status').length;
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const { page } = scia;
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Use an API key' }).click();
+    await page.getByLabel('AllDebrid API key').fill(KEY);
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.getByRole('button', { name: 'Disconnect' }).waitFor();
+    await page.getByRole('button', { name: 'Close' }).click();
+    const toggle = page.getByRole('button', { name: 'AllDebrid magnets' });
+    // Offered once connected, closed: nothing of the account is asked.
+    await toggle.waitFor();
+    expect(statusAsked()).toBe(0);
+
+    await toggle.click();
+    const panel = page.getByRole('complementary', { name: 'AllDebrid magnets' });
+    await panel.getByText('Concert').waitFor();
+    // Its status region says nothing now, and stays in the accessibility tree for what it says next.
+    const status = panel.getByRole('status');
+    expect(await status.textContent()).toBe('');
+    expect(await status.evaluate((region) => getComputedStyle(region).display)).not.toBe('none');
+    await panel.getByRole('button', { name: 'Download Concert' }).click();
+
+    await until(() => allCompleted(page), 60_000);
+    expect(
+      Buffer.compare(await readFile(join(profile.downloads, 'Concert', 'film.mkv')), film),
+    ).toBe(0);
+    expect(service.requests.some((request) => request.url === '/v4/magnet/upload')).toBe(false);
+    await page.keyboard.press('Escape');
+    await panel.waitFor({ state: 'detached' });
+    expect(await page.evaluate(() => document.activeElement?.getAttribute('aria-label'))).toBe(
+      'AllDebrid magnets',
+    );
+    // Closed, and no magnet of Scia's waiting: the account is asked no more — open, it was asked
+    // every five seconds.
+    const asked = statusAsked();
+    await expect(until(() => statusAsked() > asked, 7000)).rejects.toThrow();
+  });
 });
