@@ -41,14 +41,16 @@ semantic-release pushes the new tag, then its notes, `refs/notes/semantic-releas
 
 How to tell this case:
 
-- a Release run failed at its "Semantic release" step, on the push of the notes, or on a `git tag` of a tag that exists;
+- a Release run failed in its "Semantic release" job, at the `semantic-release` step, on the push of the notes, or on a `git tag` of a tag that exists;
 - `gh release list` has no release for that tag;
 - `git ls-remote origin 'refs/notes/semantic-release-<tag>'` answers nothing.
 
 Mending it moves a tag, so it is done **only on the owner's word**:
 
 1. Delete the unreleased tag on GitHub: `git push origin --delete <tag>`. This is allowed only because nothing was ever released under it: no GitHub release, so no installer and no `latest.yml` that an installed Scia could have read. A tag with a release is never touched (Rules).
-2. Start the Release workflow on the branch with no `installer_tag`: `gh workflow run release.yml --ref develop`. semantic-release makes the tag again, on the branch's head, with everything merged since, then its notes and its release. Read that the release carries its installer and `latest.yml`, and that the notes ref is there.
+2. Start the Release workflow on the branch whose run pushed the tag, with no `installer_tag`: `gh workflow run release.yml --ref <develop|main>`. semantic-release makes the tag again, on the branch's head, with everything merged since, then its notes and its release. Read that the release carries its installer and `latest.yml`, and that the notes ref is there.
+
+On `main` the case does not show itself. semantic-release keeps a stable tag whatever its notes say (`get-last-release.js` in version 25), so the next run takes the unreleased stable as released and goes on, green: the third sign never appears. A stable tag with no release is mended before the next merge into `main`.
 
 ## Releasing
 
@@ -61,8 +63,8 @@ Mending it moves a tag, so it is done **only on the owner's word**:
 ## Rules
 
 - **`apps/desktop/package.json` stays at `0.0.0`.** The workflow injects the version. Never derive it from git inside the build: CI checkouts are tag checkouts.
-- **Never edit or delete a published tag.** A bad release is followed by a fixed one.
-- **Never push a tag by hand.** A tag semantic-release did not make confuses its next computation. The one tag ever deleted by hand is a tag semantic-release pushed and never released, on the owner's word ("A tag pushed without its notes", above).
+- **Never edit or delete a published tag** — one with a GitHub release. A bad release is followed by a fixed one.
+- **Never push a tag by hand.** A tag semantic-release did not make confuses its next computation. The only tag that may be deleted by hand is one semantic-release pushed and never released, on the owner's word ("A tag pushed without its notes", above).
 - **Closed is not released.** An issue closes when its PR merges into `develop`; it has reached people when a stable release's notes list it.
 - **Every release carries its installer and the updater's files**, beta or stable (the owner, 20 November 2026, #82): an installed Scia follows the stables, and the betas when its switch in Settings is on, and reads them from the releases. The repository is public, so GitHub's runners cost nothing.
 
