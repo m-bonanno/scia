@@ -74,6 +74,9 @@ describe('App', () => {
       openDownload,
       chooseDownloadFolder: vi.fn(async () => 'kept'),
       themeChanged: vi.fn(async () => undefined),
+      updateOffered: vi.fn(async () => null),
+      onUpdateChanged: vi.fn(() => () => undefined),
+      restartToUpdate: vi.fn(async () => 'nothing'),
       openCodePage: vi.fn(async () => undefined),
     };
     render(<App />);
@@ -190,6 +193,9 @@ describe('App', () => {
       }),
       chooseDownloadFolder: vi.fn(async () => 'kept'),
       themeChanged: vi.fn(async () => undefined),
+      updateOffered: vi.fn(async () => null),
+      onUpdateChanged: vi.fn(() => () => undefined),
+      restartToUpdate: vi.fn(async () => 'nothing'),
       openCodePage: vi.fn(async () => undefined),
     };
     const add = vi.spyOn(api, 'addDownloads').mockResolvedValue([]);
@@ -708,5 +714,137 @@ describe('App', () => {
       });
       expect(notices).toHaveTextContent('This magnet is already being sent again.');
     });
+  });
+});
+
+describe('App, its version and an update', () => {
+  beforeEach(() => {
+    live.downloads = [];
+  });
+
+  function aShell(overrides: Partial<NonNullable<typeof window.scia>> = {}) {
+    let changed: () => void = () => undefined;
+    const shell = {
+      apiToken: 'token',
+      version: '1.0.0-beta.17',
+      platform: 'win32',
+      revealDownload: vi.fn(async () => undefined),
+      openDownload: vi.fn(async () => undefined),
+      chooseDownloadFolder: vi.fn(async () => 'kept'),
+      themeChanged: vi.fn(async () => undefined),
+      updateOffered: vi.fn(async (): Promise<unknown> => null),
+      onUpdateChanged: vi.fn((listener: () => void) => {
+        changed = listener;
+        return () => undefined;
+      }),
+      restartToUpdate: vi.fn(async (): Promise<unknown> => 'restarting'),
+      openCodePage: vi.fn(async () => undefined),
+      ...overrides,
+    };
+    window.scia = shell;
+    return {
+      shell,
+      change: () => {
+        changed();
+      },
+    };
+  }
+
+  it('says beside the name the version Scia is', () => {
+    aShell();
+    render(<App />);
+
+    expect(within(screen.getByRole('banner')).getByText('1.0.0-beta.17')).toBeInTheDocument();
+  });
+
+  it('offers the update main says a quit would install, and asks again when main says it changed', async () => {
+    const offered = vi.fn(async (): Promise<unknown> => null);
+    const { change } = aShell({ updateOffered: offered });
+    render(<App />);
+    await vi.waitFor(() => {
+      expect(offered).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
+
+    offered.mockResolvedValue('1.0.0-beta.18');
+    change();
+
+    expect(await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' })).toBeVisible();
+  });
+
+  it('asks again what is offered once it learns the settings: a beta goes with its switch', async () => {
+    const offered = vi.fn(async (): Promise<unknown> => '1.0.0-beta.18');
+    aShell({ updateOffered: offered });
+    render(<App />);
+    expect(await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' })).toBeVisible();
+
+    offered.mockResolvedValue(null);
+    vi.spyOn(api, 'updateSettings').mockResolvedValue({ ...settings, betaUpdates: false });
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+
+    await vi.waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: 'Update to 1.0.0-beta.18' }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps what main answered last, whichever answer comes back first', async () => {
+    const answers: ((answer: unknown) => void)[] = [];
+    const offered = vi.fn(
+      () =>
+        new Promise<unknown>((resolve) => {
+          answers.push(resolve);
+        }),
+    );
+    const { change } = aShell({ updateOffered: offered });
+    render(<App />);
+    await vi.waitFor(() => {
+      expect(answers).toHaveLength(1);
+    });
+    const before = answers.length;
+    change();
+    await vi.waitFor(() => {
+      expect(answers.length).toBeGreaterThan(before);
+    });
+
+    // The last ask is answered first; every earlier one after it, with a version.
+    answers.at(-1)?.(null);
+    for (const answer of answers.slice(0, -1)) answer('1.0.0-beta.18');
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
+  });
+
+  it('asks main to restart when the person says so', async () => {
+    const { shell } = aShell({ updateOffered: vi.fn(async () => '1.0.0-beta.18') });
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Restart now' }));
+
+    expect(shell.restartToUpdate).toHaveBeenCalledOnce();
+  });
+
+  it('says the update waits for the quit while a download runs', async () => {
+    live.downloads = [aDownload({ status: DownloadStatus.Downloading })];
+    const { shell } = aShell({ updateOffered: vi.fn(async () => '1.0.0-beta.18') });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('Scia is downloading.');
+    expect(shell.restartToUpdate).not.toHaveBeenCalled();
+  });
+
+  it('offers nothing from an answer of main that is not a version', async () => {
+    const offered = vi.fn(async (): Promise<unknown> => ({ version: '9' }));
+    aShell({ updateOffered: offered });
+    render(<App />);
+    await vi.waitFor(() => {
+      expect(offered).toHaveBeenCalled();
+    });
+
+    expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
   });
 });

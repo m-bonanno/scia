@@ -5,6 +5,11 @@ export const BridgeChannel = {
   OpenDownload: 'downloads.open',
   ChooseDownloadFolder: 'settings.chooseDownloadFolder',
   ThemeChanged: 'settings.themeChanged',
+  // The version of an update the next quit would install, or none.
+  UpdateOffered: 'updates.offered',
+  // Sent by main to the page, with nothing in it: what may be offered changed; the page asks.
+  UpdateChanged: 'updates.changed',
+  RestartToUpdate: 'updates.restart',
   OpenCodePage: 'integrations.openCodePage',
 } as const;
 export type BridgeChannel = (typeof BridgeChannel)[keyof typeof BridgeChannel];
@@ -19,6 +24,22 @@ export const FolderChange = {
   Refused: 'refused',
 } as const;
 export type FolderChange = (typeof FolderChange)[keyof typeof FolderChange];
+
+// What main answers to `restartToUpdate`. Main decides, not the page: an update never installs
+// while a download runs or waits (docs/adr/0007-automatic-updates.md).
+export const UpdateRestart = {
+  // Scia quits, installs and starts again.
+  Restarting: 'restarting',
+  // A download runs or waits, or the engine did not say: the update installs at the next quit.
+  Busy: 'busy',
+  // No update is offered any more.
+  Nothing: 'nothing',
+} as const;
+export type UpdateRestart = (typeof UpdateRestart)[keyof typeof UpdateRestart];
+
+export function isUpdateRestart(value: unknown): value is UpdateRestart {
+  return Object.values(UpdateRestart).some((answer) => answer === value);
+}
 
 export function isFolderChange(value: unknown): value is FolderChange {
   return Object.values(FolderChange).some((change) => change === value);

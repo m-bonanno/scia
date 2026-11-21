@@ -1,9 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { canPause, canResume, canStart, DownloadFailure, DownloadStatus } from './download.ts';
+import {
+  canPause,
+  canResume,
+  canStart,
+  DownloadFailure,
+  DownloadStatus,
+  isUnderWay,
+} from './download.ts';
 import { PageFailure } from './page.ts';
 import { ServiceFailure, UnlockFailure } from './service.ts';
 
 describe('download status', () => {
+  it('is under way while it runs or waits for its turn, and not when ready, paused or ended', () => {
+    expect(isUnderWay(DownloadStatus.Downloading)).toBe(true);
+    expect(isUnderWay(DownloadStatus.Queued)).toBe(true);
+    for (const status of [
+      DownloadStatus.Ready,
+      DownloadStatus.Paused,
+      DownloadStatus.Completed,
+      DownloadStatus.Failed,
+    ]) {
+      expect(isUnderWay(status)).toBe(false);
+    }
+  });
+
   it('pauses what waits or runs', () => {
     expect(canPause(DownloadStatus.Queued)).toBe(true);
     expect(canPause(DownloadStatus.Downloading)).toBe(true);

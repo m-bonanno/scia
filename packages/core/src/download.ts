@@ -42,3 +42,8 @@ export function canStart(status: DownloadStatus): boolean {
 export function canResume(status: DownloadStatus): boolean {
   return status === DownloadStatus.Paused || status === DownloadStatus.Failed;
 }
+
+// Running, or waiting in the queue for its turn: what an update never restarts over (#133).
+export function isUnderWay(status: DownloadStatus): boolean {
+  return status === DownloadStatus.Downloading || status === DownloadStatus.Queued;
+}
