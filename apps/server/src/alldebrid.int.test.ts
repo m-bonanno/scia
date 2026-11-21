@@ -1,5 +1,5 @@
 import { integrationAccountSchema } from '@scia/contracts';
-import { ServiceFailure, UnlockFailure, PREPARE_LIMIT_SECONDS } from '@scia/core';
+import { MagnetFailure, ServiceFailure, UnlockFailure, PREPARE_LIMIT_SECONDS } from '@scia/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AllDebrid, DELAYED_LIMIT_MS, PUBLIC_ANSWER_LIMIT_MS } from './alldebrid.ts';
 import { CodeExpiredError, ServiceError } from './service-error.ts';
@@ -76,6 +76,7 @@ describe('AllDebrid', () => {
         authorization: `Bearer ${KEY}`,
         userAgent: 'Scia/spec',
         form: {},
+        lists: {},
       },
     ]);
   });
@@ -296,6 +297,7 @@ describe('AllDebrid', () => {
         authorization: `Bearer ${KEY}`,
         userAgent: 'Scia/spec',
         form: { link: LINK },
+        lists: { link: [LINK] },
       },
     ]);
   });
@@ -517,6 +519,7 @@ describe('AllDebrid', () => {
         authorization: undefined,
         userAgent: 'Scia/spec',
         form: {},
+        lists: {},
       },
     ]);
   });
@@ -557,6 +560,7 @@ describe('AllDebrid', () => {
         authorization: undefined,
         userAgent: 'Scia/spec',
         form: { pin: code, check },
+        lists: { pin: [code], check: [check] },
       });
     }
   });
@@ -578,6 +582,121 @@ describe('AllDebrid', () => {
     server.confirmCode(code, 'two words');
 
     expect(await failureOf(client.confirmedKey(code, check))).toBe(ServiceFailure.Unavailable);
+  });
+
+  describe('magnets', () => {
+    const HASH = '842783e3005495d5d1637f5364b59343c7844707';
+    const OTHER = '194257a7bf4eaea978f4b5b7fbd3b4efcdd99e43';
+    const MAGNET = `magnet:?xt=urn:btih:${HASH}&dn=ubuntu`;
+    const tree = [
+      { n: 'readme.txt', s: 12, l: 'https://alldebrid.com/f/readme' },
+      {
+        n: 'Disc 1',
+        e: [
+          { n: 'a.iso', s: 100, l: 'https://alldebrid.com/f/a' },
+          { n: 'Extras', e: [{ n: 'b.nfo', s: 7, l: 'https://alldebrid.com/f/b' }] },
+        ],
+      },
+    ];
+    const magnets = { [HASH]: { name: 'Ubuntu', size: 119, files: tree, fetchingPolls: 1 } };
+
+    it('sends magnets in one form, each one answered on its own: taken with its id, or refused', async () => {
+      const server = await serviceWith({
+        magnets: {
+          ...magnets,
+          [OTHER]: { name: 'x', size: 1, files: [], error: 'MAGNET_TOO_LARGE' },
+        },
+      });
+      const bad = `magnet:?xt=urn:btih:${OTHER}`;
+
+      const sent = await clientOf(server).uploadMagnets(KEY, [MAGNET, bad]);
+
+      expect(sent).toEqual([
+        {
+          magnet: MAGNET,
+          taken: { id: expect.any(Number) as unknown, name: 'Ubuntu', size: 119, ready: false },
+        },
+        { magnet: bad, failure: MagnetFailure.TooLarge },
+      ]);
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'POST',
+        url: '/v4/magnet/upload',
+        authorization: `Bearer ${KEY}`,
+        lists: { 'magnets[]': [MAGNET, bad] },
+      });
+    });
+
+    it('says what refuses every magnet of a request, as it says it of a link', async () => {
+      const client = clientOf(await serviceWith({ magnets }));
+
+      expect(await failureOf(client.uploadMagnets('free-key-0000000000000000', [MAGNET]))).toBe(
+        UnlockFailure.NotPremium,
+      );
+      expect(await failureOf(client.uploadMagnets('nobody-key-00000000000000', [MAGNET]))).toBe(
+        ServiceFailure.KeyRefused,
+      );
+    });
+
+    it('says where each magnet of the account is: what the service has of it, how fast, and whether it is ready', async () => {
+      const server = await serviceWith({ magnets });
+      const client = clientOf(server);
+      const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+      const id = sent && 'taken' in sent ? sent.taken.id : 0;
+
+      expect(await client.magnetStates(KEY)).toEqual([
+        {
+          id,
+          name: 'Ubuntu',
+          size: 119,
+          downloaded: 59,
+          bytesPerSecond: 1_048_576,
+          stage: 'fetching',
+        },
+      ]);
+      expect((await client.magnetStates(KEY))[0]?.stage).toBe('ready');
+    });
+
+    it("lists a ready magnet's files with the folders they are in, each with its link", async () => {
+      const client = clientOf(
+        await serviceWith({ magnets: { [HASH]: { ...magnets[HASH], fetchingPolls: 0 } } }),
+      );
+      const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+      const id = sent && 'taken' in sent ? sent.taken.id : 0;
+
+      expect(await client.magnetFiles(KEY, id)).toEqual([
+        { folders: [], name: 'readme.txt', size: 12, link: 'https://alldebrid.com/f/readme' },
+        { folders: ['Disc 1'], name: 'a.iso', size: 100, link: 'https://alldebrid.com/f/a' },
+        {
+          folders: ['Disc 1', 'Extras'],
+          name: 'b.nfo',
+          size: 7,
+          link: 'https://alldebrid.com/f/b',
+        },
+      ]);
+    });
+
+    it('says a magnet failed when the service no longer has its files', async () => {
+      const client = clientOf(await serviceWith({ magnets }));
+
+      await expect(client.magnetFiles(KEY, 4242)).rejects.toMatchObject({
+        name: 'MagnetError',
+        failure: MagnetFailure.Failed,
+      });
+    });
+
+    it('takes no file whose link is not an http address, nor a tree deeper than any torrent', async () => {
+      let deep: unknown = { n: 'x.bin', s: 1, l: 'https://alldebrid.com/f/x' };
+      for (let level = 0; level < 100; level += 1) deep = { n: `d${String(level)}`, e: [deep] };
+      for (const files of [[{ n: 'x', s: 1, l: 'javascript:alert(1)' }], [deep]]) {
+        const client = clientOf(
+          await serviceWith({ magnets: { [HASH]: { name: 'x', size: 1, files: files as never } } }),
+        );
+        const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+        const id = sent && 'taken' in sent ? sent.taken.id : 0;
+        expect(await failureOf(client.magnetFiles(KEY, id))).toBe(ServiceFailure.Unavailable);
+        await service?.close();
+      }
+    });
   });
 
   it('never puts the key in what it says of a failure', async () => {

@@ -6,10 +6,10 @@ import {
   IntegrationId,
   isServiceSite,
 } from '@scia/contracts';
-import { PREPARE_LIMIT_SECONDS, ServiceFailure, UnlockFailure } from '@scia/core';
+import { MagnetFailure, PREPARE_LIMIT_SECONDS, ServiceFailure, UnlockFailure } from '@scia/core';
 import { z } from 'zod';
 import type { UnlockedLink } from './link-resolver.ts';
-import { CodeExpiredError, ServiceError } from './service-error.ts';
+import { CodeExpiredError, MagnetError, ServiceError } from './service-error.ts';
 
 export const ALLDEBRID_API = 'https://api.alldebrid.com';
 
@@ -61,7 +61,29 @@ const FAILURE_OF: ReadonlyMap<string, ServiceFailure | UnlockFailure> = new Map<
   ['LINK_NOT_SUPPORTED', UnlockFailure.LinkRefused],
   ['LINK_ERROR', UnlockFailure.LinkRefused],
   ['DELAYED_INVALID_ID', UnlockFailure.LinkRefused],
+  // Said of every magnet of a request at once.
+  ['MAGNET_MUST_BE_PREMIUM', UnlockFailure.NotPremium],
+  ['MAGNET_NO_SERVER', ServiceFailure.NetworkRefused],
 ]);
+
+// What each of the service's refusals of one magnet means (https://docs.alldebrid.com, "All
+// errors"). Every other code is a service that cannot be asked right now, as for a link.
+const MAGNET_FAILURE_OF: ReadonlyMap<string, MagnetFailure> = new Map<string, MagnetFailure>([
+  ['MAGNET_NO_URI', MagnetFailure.Invalid],
+  ['MAGNET_INVALID_URI', MagnetFailure.Invalid],
+  ['MAGNET_INVALID_FILE', MagnetFailure.Invalid],
+  ['MAGNET_TOO_MANY_ACTIVE', MagnetFailure.Limit],
+  ['MAGNET_TOO_MANY', MagnetFailure.Limit],
+  ['MAGNET_TOO_LARGE', MagnetFailure.TooLarge],
+  ['MAGNET_MAGNET_TOO_BIG', MagnetFailure.TooLarge],
+  ['MAGNET_MUST_BE_PREMIUM', MagnetFailure.NotPremium],
+  ['MAGNET_NO_SERVER', MagnetFailure.NetworkRefused],
+  ['MAGNET_INVALID_ID', MagnetFailure.Failed],
+]);
+
+// A torrent's folders are not this deep, nor its files this many: an answer that is, is not one.
+const MAGNET_TREE_DEPTH = 32;
+const MAGNET_FILES_AT_MOST = 10_000;
 
 // A code whose time ran out, and a check the service no longer knows — which is what an expired
 // code's check becomes: either way a new code is asked for. An answer to a code alone.
@@ -110,6 +132,54 @@ const delayedSchema = z.object({
 });
 const DelayedStatus = { Processing: 1, Ready: 2 } as const;
 
+const refusalSchema = z.object({ code: z.coerce.string() });
+
+const uploadSchema = z.object({
+  magnets: z.array(
+    z.union([
+      z.object({ magnet: z.string(), error: refusalSchema }),
+      z.object({
+        magnet: z.string(),
+        id: z.number().int().positive(),
+        name: z.string(),
+        size: z.coerce.number().int().nonnegative(),
+        ready: z.boolean(),
+      }),
+    ]),
+  ),
+});
+
+const magnetStateSchema = z.object({
+  id: z.number().int().positive(),
+  filename: z.string(),
+  size: z.coerce.number().int().nonnegative(),
+  // 0 to 3: queued, fetching, made into an archive, sent on. 4: ready. Past it: failed.
+  statusCode: z.coerce.number().int().nonnegative(),
+  downloaded: z.coerce.number().int().nonnegative().nullish(),
+  downloadSpeed: z.coerce.number().int().nonnegative().nullish(),
+});
+// A list, or — as some of its answers write it — an object by id.
+const magnetStatesSchema = z.object({
+  magnets: z.union([z.array(magnetStateSchema), z.record(z.string(), magnetStateSchema)]),
+});
+const MAGNET_READY = 4;
+
+const magnetFilesSchema = z.object({
+  magnets: z.array(
+    z.object({
+      id: z.coerce.string(),
+      files: z.unknown().optional(),
+      error: refusalSchema.optional(),
+    }),
+  ),
+});
+const fileNodeSchema = z.object({
+  n: z.string(),
+  s: z.coerce.number().int().nonnegative(),
+  l: z.string(),
+});
+const folderNodeSchema = z.object({ n: z.string(), e: z.array(z.unknown()) });
+
 const codeSchema = z.object({
   pin: z.string(),
   check: z.string().min(1),
@@ -121,6 +191,59 @@ const confirmationSchema = z.object({
   activated: z.boolean(),
   apikey: z.string().nullish(),
 });
+
+// What the service says of one magnet it was sent: taken, with its id, or refused.
+export type SentMagnet =
+  | {
+      readonly magnet: string;
+      readonly taken: {
+        readonly id: number;
+        readonly name: string;
+        readonly size: number;
+        readonly ready: boolean;
+      };
+    }
+  | { readonly magnet: string; readonly failure: MagnetFailure };
+
+// Where a magnet of the account is.
+export interface MagnetState {
+  readonly id: number;
+  readonly name: string;
+  readonly size: number;
+  readonly downloaded: number;
+  readonly bytesPerSecond: number;
+  readonly stage: 'fetching' | 'ready' | 'failed';
+}
+
+// A file of a ready magnet: the folders the magnet puts it in, its name, its size, and the link
+// of the service's that is unlocked as a hoster's is.
+export interface MagnetFile {
+  readonly folders: readonly string[];
+  readonly name: string;
+  readonly size: number;
+  readonly link: string;
+}
+
+function answeredElse(): ServiceError {
+  return refused(ServiceFailure.Unavailable, 'AllDebrid answered something else.');
+}
+
+// The service's tree of a magnet's files, as a list. A node that is neither a file nor a folder,
+// a link that is not an http address, a tree deeper or larger than any torrent: no answer.
+function filesOfTree(nodes: unknown, folders: readonly string[], into: MagnetFile[]): void {
+  if (!Array.isArray(nodes) || folders.length > MAGNET_TREE_DEPTH) throw answeredElse();
+  for (const node of nodes) {
+    const file = fileNodeSchema.safeParse(node);
+    if (file.success) {
+      if (!isHttpAddress(file.data.l) || into.length >= MAGNET_FILES_AT_MOST) throw answeredElse();
+      into.push({ folders, name: file.data.n, size: file.data.s, link: file.data.l });
+      continue;
+    }
+    const folder = folderNodeSchema.safeParse(node);
+    if (!folder.success) throw answeredElse();
+    filesOfTree(folder.data.e, [...folders, folder.data.n], into);
+  }
+}
 
 // A code to confirm on the service's site (https://docs.alldebrid.com, "Pin auth"). `check` is
 // what the service gives the key for once the code is confirmed: it never leaves the engine.
@@ -149,6 +272,15 @@ function refused(failure: ServiceFailure | UnlockFailure, message: string, code?
     message,
     code === undefined ? {} : { code },
   );
+}
+
+// A form, a field sent once for every value of a list (`magnets[]`, `id[]`).
+function formBody(form: Readonly<Record<string, string | readonly string[]>>): URLSearchParams {
+  const body = new URLSearchParams();
+  for (const [name, value] of Object.entries(form)) {
+    for (const each of typeof value === 'string' ? [value] : value) body.append(name, each);
+  }
+  return body;
 }
 
 function isHttpAddress(value: string | null | undefined): value is string {
@@ -264,6 +396,80 @@ export class AllDebrid {
     return key.data.apiKey;
   }
 
+  // Magnets for the account to fetch (https://docs.alldebrid.com, "Upload magnet"), in one
+  // request: the service answers each on its own. Sent once — a magnet sent again is the same
+  // one to the service, but a request that may have been carried out is not asked twice.
+  async uploadMagnets(
+    apiKey: string,
+    magnets: readonly string[],
+    signal?: AbortSignal,
+  ): Promise<SentMagnet[]> {
+    const answer = await this.#ask(
+      '/v4/magnet/upload',
+      apiKey,
+      uploadSchema,
+      { 'magnets[]': magnets },
+      signal,
+    );
+    return magnets.map((magnet, index) => {
+      const said = answer.magnets.find((each) => each.magnet === magnet) ?? answer.magnets[index];
+      if (said === undefined) return { magnet, failure: MagnetFailure.Unavailable };
+      if ('error' in said) {
+        return {
+          magnet,
+          failure: MAGNET_FAILURE_OF.get(said.error.code) ?? MagnetFailure.Unavailable,
+        };
+      }
+      return {
+        magnet,
+        taken: { id: said.id, name: said.name, size: said.size, ready: said.ready },
+      };
+    });
+  }
+
+  // Where every magnet of the account is (https://docs.alldebrid.com, "Get Status"), in one
+  // question, whatever the number Scia waits for.
+  async magnetStates(apiKey: string, signal?: AbortSignal): Promise<MagnetState[]> {
+    const { magnets } = await this.#insist(
+      () => this.#ask('/v4.1/magnet/status', apiKey, magnetStatesSchema, {}, signal),
+      signal,
+    );
+    return Object.values(magnets).map((each) => ({
+      id: each.id,
+      name: each.filename,
+      size: each.size,
+      downloaded: each.downloaded ?? 0,
+      bytesPerSecond: each.downloadSpeed ?? 0,
+      stage:
+        each.statusCode < MAGNET_READY
+          ? 'fetching'
+          : each.statusCode === MAGNET_READY
+            ? 'ready'
+            : 'failed',
+    }));
+  }
+
+  // The files of a ready magnet, with their folders (https://docs.alldebrid.com, "Get Files and
+  // Links"): the tree the service keeps of the torrent.
+  async magnetFiles(apiKey: string, id: number, signal?: AbortSignal): Promise<MagnetFile[]> {
+    const { magnets } = await this.#insist(
+      () =>
+        this.#ask('/v4/magnet/files', apiKey, magnetFilesSchema, { 'id[]': [String(id)] }, signal),
+      signal,
+    );
+    const mine = magnets.find((each) => each.id === String(id));
+    if (mine === undefined) throw answeredElse();
+    if (mine.error !== undefined) {
+      const failure = MAGNET_FAILURE_OF.get(mine.error.code);
+      const said = `AllDebrid answered ${mine.error.code}.`;
+      if (failure === undefined) throw refused(ServiceFailure.Unavailable, said, mine.error.code);
+      throw new MagnetError(IntegrationId.AllDebrid, failure, said);
+    }
+    const files: MagnetFile[] = [];
+    filesOfTree(mine.files, [], files);
+    return files;
+  }
+
   // The direct link for a hoster's. A link the service needs time to prepare is waited for,
   // for as long as the service says it is preparing it and nobody stops the wait.
   async unlock(apiKey: string, link: string, signal?: AbortSignal): Promise<UnlockedLink> {
@@ -322,7 +528,7 @@ export class AllDebrid {
     path: string,
     apiKey: string | undefined,
     schema: z.ZodType<T>,
-    form: Readonly<Record<string, string>> | undefined,
+    form: Readonly<Record<string, string | readonly string[]>> | undefined,
     signal: AbortSignal | undefined,
     limitMs = this.#options.answerLimitMs ?? ANSWER_LIMIT_MS,
   ): Promise<T> {
@@ -330,7 +536,7 @@ export class AllDebrid {
     let body: unknown;
     try {
       const response = await fetch(`${this.#options.api}${path}`, {
-        ...(form === undefined ? {} : { method: 'POST', body: new URLSearchParams(form) }),
+        ...(form === undefined ? {} : { method: 'POST', body: formBody(form) }),
         headers: {
           ...(apiKey === undefined ? {} : { authorization: `Bearer ${apiKey}` }),
           accept: 'application/json',

@@ -32,6 +32,11 @@ const MESSAGES: Readonly<Record<string, string>> = {
     'You have reached the free trial limit (7 days / 25GB downloaded or host uneligible for free trial)',
   MUST_BE_PREMIUM: 'You must be premium to process this link',
   PIN_EXPIRED: 'The pin has expired',
+  MAGNET_INVALID_URI: 'Magnet is not valid',
+  MAGNET_INVALID_ID: 'This magnet ID does not exists or is invalid',
+  MAGNET_TOO_MANY_ACTIVE: 'Already have maximum allowed active magnets (30)',
+  MAGNET_TOO_LARGE: 'Magnet files are too large (max 1TB)',
+  MAGNET_MUST_BE_PREMIUM: 'You must be premium to use this feature',
   PIN_INVALID: 'This endpoint check parameter is invalid',
 };
 
@@ -43,6 +48,9 @@ const ROUTES: readonly string[] = [
   'POST /v4/link/delayed',
   'GET /v4.1/pin/get',
   'POST /v4/pin/check',
+  'POST /v4/magnet/upload',
+  'POST /v4.1/magnet/status',
+  'POST /v4/magnet/files',
 ];
 
 // Where the service has a person confirm a code, as its documentation gives it.
@@ -69,6 +77,25 @@ export interface UnlockableLink {
   // processing" this many times before it gives the link — or says it could not, if `fails`.
   readonly delayedPolls?: number;
   readonly fails?: boolean;
+}
+
+// A node of a magnet's files as the service lists them: a folder, with what is in it, or a file,
+// with its size and its link — a link of the service's own, unlocked as a hoster's is.
+export type SimulatedNode =
+  | { readonly n: string; readonly e: readonly SimulatedNode[] }
+  | { readonly n: string; readonly s: number; readonly l: string };
+
+// A magnet the service knows, by the hash of its torrent.
+export interface SimulatedMagnet {
+  readonly name: string;
+  readonly size: number;
+  readonly files: readonly SimulatedNode[];
+  // It is fetched — status 1 — for this many questions about it, then ready (4), or failed (15:
+  // no peer) if `fails`.
+  readonly fetchingPolls?: number;
+  readonly fails?: boolean;
+  // Refused when it is sent, with this code of the service's.
+  readonly error?: string;
 }
 
 // What the service makes of a hoster's link it is asked to unlock: a direct link, or one of
@@ -110,6 +137,9 @@ export interface AllDebridServerOptions {
   // How long a code to confirm on the site lasts, in seconds: ten minutes, as the documentation
   // says, if absent.
   readonly codeLifetimeSeconds?: number;
+  // The magnets it knows, by the hash of their torrent, in lower case. One it does not know is
+  // taken and never ready, as a torrent with no peer.
+  readonly magnets?: Readonly<Record<string, SimulatedMagnet>>;
   // The page it names for a code, when it is not the service's own.
   readonly codePage?: string;
   // The code it gives, when it is not one of its own four letters and digits.
@@ -125,6 +155,8 @@ export interface SimulatedRequest {
   readonly authorization: string | undefined;
   // The fields of a form that was posted; empty for a GET.
   readonly form: Readonly<Record<string, string>>;
+  // Every value of a field sent more than once (`magnets[]`, `id[]`), in order.
+  readonly lists: Readonly<Record<string, readonly string[]>>;
   readonly userAgent: string | undefined;
 }
 
@@ -166,11 +198,21 @@ function refuse(response: ServerResponse, status: number, code: string): void {
   });
 }
 
-async function formOf(request: IncomingMessage): Promise<Record<string, string>> {
-  if (request.method !== 'POST') return {};
+async function formOf(request: IncomingMessage): Promise<URLSearchParams> {
+  if (request.method !== 'POST') return new URLSearchParams();
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(chunk as Buffer);
-  return Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8')));
+  return new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
+}
+
+function listsOf(params: URLSearchParams): Record<string, string[]> {
+  const lists: Record<string, string[]> = {};
+  for (const [name, value] of params) (lists[name] ??= []).push(value);
+  return lists;
+}
+
+function hashOf(magnet: string): string | undefined {
+  return /xt=urn:btih:([0-9a-z]+)/i.exec(magnet)?.[1]?.toLowerCase();
 }
 
 function accountOf(
@@ -209,6 +251,9 @@ export async function startAllDebridServer(
   // The codes given, by the check that goes with each.
   const codes = new Map<string, GivenCode>();
   let keysGiven = 0;
+  // The magnets sent, by the id the service gave each, with the questions left before it is ready.
+  const sent = new Map<number, { readonly hash: string; left: number }>();
+  let nextMagnet = 1000;
 
   function misbehaves(response: ServerResponse): boolean {
     if (misbehaviour === undefined) return false;
@@ -352,8 +397,94 @@ export async function startAllDebridServer(
     );
   }
 
+  function uploadMagnets(response: ServerResponse, magnets: readonly string[]): void {
+    if (magnets.length === 0) {
+      refuse(response, 200, 'MAGNET_NO_URI');
+      return;
+    }
+    succeed(response, {
+      magnets: magnets.map((magnet) => {
+        const hash = hashOf(magnet);
+        const known = hash === undefined ? undefined : options.magnets?.[hash];
+        const code = hash === undefined ? 'MAGNET_INVALID_URI' : known?.error;
+        if (hash === undefined || code !== undefined) {
+          return {
+            magnet,
+            error: {
+              code,
+              message: Object.hasOwn(MESSAGES, code ?? '') ? MESSAGES[code ?? ''] : '',
+            },
+          };
+        }
+        // The same torrent sent again is the same magnet, as the service has it once.
+        const id =
+          [...sent].find(([, each]) => each.hash === hash)?.[0] ??
+          (() => {
+            nextMagnet += 1;
+            sent.set(nextMagnet, { hash, left: known?.fetchingPolls ?? 0 });
+            return nextMagnet;
+          })();
+        const left = sent.get(id)?.left ?? 0;
+        return {
+          magnet,
+          hash,
+          name: known?.name ?? 'noname',
+          size: known?.size ?? 0,
+          ready: known !== undefined && left === 0 && known.fails !== true,
+          id,
+        };
+      }),
+    });
+  }
+
+  function magnetStatuses(response: ServerResponse): void {
+    succeed(response, {
+      magnets: [...sent].map(([id, each]) => {
+        const known = options.magnets?.[each.hash];
+        const fetching = known === undefined || each.left > 0;
+        if (known !== undefined && each.left > 0) each.left -= 1;
+        const statusCode = fetching ? 1 : known.fails === true ? 15 : 4;
+        const size = known?.size ?? 0;
+        return {
+          id,
+          filename: known?.name ?? 'noname',
+          size,
+          status:
+            statusCode === 1
+              ? 'Downloading'
+              : statusCode === 4
+                ? 'Ready'
+                : 'File not available - no peer',
+          statusCode,
+          downloaded: statusCode === 4 ? size : Math.floor(size / 2),
+          uploaded: 0,
+          seeders: 3,
+          downloadSpeed: statusCode === 1 ? 1_048_576 : 0,
+          uploadSpeed: 0,
+          uploadDate: 1_700_000_000,
+          completionDate: statusCode === 4 ? 1_700_000_100 : 0,
+        };
+      }),
+    });
+  }
+
+  function magnetFiles(response: ServerResponse, ids: readonly string[]): void {
+    succeed(response, {
+      magnets: ids.map((id) => {
+        const each = sent.get(Number(id));
+        const known = each === undefined ? undefined : options.magnets?.[each.hash];
+        if (each === undefined || known === undefined || each.left > 0 || known.fails === true) {
+          return { id, error: { code: 'MAGNET_INVALID_ID', message: MESSAGES.MAGNET_INVALID_ID } };
+        }
+        return { id, files: known.files };
+      }),
+    });
+  }
+
   const server = createServer((request, response) => {
-    void formOf(request).then(async (form) => {
+    void formOf(request).then(async (params) => {
+      const form = Object.fromEntries(params);
+      const lists = listsOf(params);
       const url = new URL(request.url ?? '/', 'http://simulated');
       requests.push({
         method: request.method ?? '',
@@ -361,6 +492,7 @@ export async function startAllDebridServer(
         authorization: request.headers.authorization,
         userAgent: request.headers['user-agent'],
         form,
+        lists,
       });
       const slow =
         misbehaviour !== undefined && 'slowMs' in misbehaviour ? misbehaviour : undefined;
@@ -401,6 +533,13 @@ export async function startAllDebridServer(
         user(response, account);
       } else if (route === 'GET /v4.1/user/hosts') {
         hosts(response, account);
+      } else if (route === 'POST /v4/magnet/upload') {
+        if (!isPremium(account)) refuse(response, 200, 'MAGNET_MUST_BE_PREMIUM');
+        else uploadMagnets(response, lists['magnets[]'] ?? []);
+      } else if (route === 'POST /v4.1/magnet/status') {
+        magnetStatuses(response);
+      } else if (route === 'POST /v4/magnet/files') {
+        magnetFiles(response, lists['id[]'] ?? []);
       } else if (route === 'POST /v4/link/unlock') {
         unlock(response, account, form.link);
       } else {
