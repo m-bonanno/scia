@@ -18,13 +18,15 @@ describe('releaseProblems', () => {
     expect(releaseProblems({ ...healthy, headRun: undefined })).toEqual([]);
   });
 
-  it('names a Release run on the head that failed', () => {
-    expect(
-      releaseProblems({
-        ...healthy,
-        headRun: { conclusion: 'failure', url: 'https://example/run/2' },
-      }),
-    ).toEqual(['The newest Release run on develop’s head failed: https://example/run/2']);
+  it('names a Release run on the head that ended any way but success', () => {
+    for (const conclusion of ['failure', 'startup_failure', 'timed_out', 'cancelled']) {
+      expect(
+        releaseProblems({ ...healthy, headRun: { conclusion, url: 'https://example/run/2' } }),
+        conclusion,
+      ).toEqual([
+        `The newest Release run on develop’s head ended ${conclusion}: https://example/run/2`,
+      ]);
+    }
   });
 
   it('names a tag with no release, and a tag with no notes (#160)', () => {

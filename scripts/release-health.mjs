@@ -6,8 +6,11 @@ import { pathToFileURL } from 'node:url';
 // runs in a row and was seen by chance (#185; docs/development/release-flow.md).
 export function releaseProblems({ headRun, tags, releases, notes }) {
   const problems = [];
-  if (headRun?.conclusion === 'failure') {
-    problems.push(`The newest Release run on develop’s head failed: ${headRun.url}`);
+  // Every end but success released nothing: a failure, a workflow that did not start, a job past its
+  // time limit, a cancellation. A run still going has no conclusion yet.
+  const conclusion = headRun?.conclusion;
+  if (conclusion !== undefined && conclusion !== null && conclusion !== 'success') {
+    problems.push(`The newest Release run on develop’s head ended ${conclusion}: ${headRun.url}`);
   }
   for (const tag of tags) {
     if (!releases.includes(tag)) problems.push(`The tag ${tag} has no GitHub release.`);
@@ -57,6 +60,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   });
   for (const problem of problems) console.log(`::error::${problem}`);
   if (problems.length === 0)
-    console.log('Releases are healthy: the last run passed, every tag has its release and notes.');
+    console.log(
+      'Releases are healthy: no finished run on the head failed, and every tag has its release and notes.',
+    );
   process.exitCode = problems.length === 0 ? 0 : 1;
 }
