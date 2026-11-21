@@ -159,8 +159,7 @@ export class MagnetWatch {
         }
         // Pasted twice, or taken from the account too: one row of the list for one magnet of the
         // service, whichever came first.
-        const records = this.#deps.records();
-        if (records.some((other) => other !== record && other.serviceId === said.taken.id)) {
+        if (this.#deps.records().some((other) => other.serviceId === said.taken.id)) {
           this.#deps.same(record);
           return;
         }
