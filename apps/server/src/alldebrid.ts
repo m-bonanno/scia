@@ -102,6 +102,15 @@ const MAGNET_FAILURE_OF: ReadonlyMap<string, MagnetFailure> = new Map<string, Ma
 ]);
 
 // A torrent's folders are not this deep, nor its files this many: an answer that is, is not one.
+// What refuses every magnet of a request — an upload, or the account's list — said as itself;
+// any other failure as it was.
+function asMagnetsRefusal(error: unknown): never {
+  const code = error instanceof ServiceError ? (error.code ?? '') : '';
+  const failure = MAGNETS_REFUSED.get(code);
+  if (failure === undefined) throw error;
+  throw refused(failure, `AllDebrid answered ${code}.`);
+}
+
 const MAGNET_TREE_DEPTH = 32;
 const MAGNET_FILES_AT_MOST = 100_000;
 
@@ -181,8 +190,9 @@ const magnetStateSchema = z.object({
   statusCode: z.coerce.number().int().nonnegative(),
   downloaded: z.coerce.number().int().nonnegative().nullish(),
   downloadSpeed: z.coerce.number().int().nonnegative().nullish(),
-  // Seconds since 1970; 0 or absent when the service does not say.
-  uploadDate: z.coerce.number().int().nonnegative().nullish(),
+  // Seconds since 1970; 0 or absent when the service does not say. One no calendar holds is no
+  // date: it never makes the magnet unreadable.
+  uploadDate: z.coerce.number().int().positive().max(LAST_SECOND).nullish().catch(null),
 });
 const magnetIdSchema = z.object({ id: z.number().int().positive() });
 // A list, or — as some of its answers write it — an object by id. Each entry is read on its own:
@@ -441,15 +451,7 @@ export class AllDebrid {
       uploadSchema,
       { 'magnets[]': magnets },
       signal,
-    ).catch((error: unknown) => {
-      const failure =
-        error instanceof ServiceError ? MAGNETS_REFUSED.get(error.code ?? '') : undefined;
-      if (failure === undefined) throw error;
-      throw refused(
-        failure,
-        `AllDebrid answered ${error instanceof ServiceError ? (error.code ?? '') : ''}.`,
-      );
-    });
+    ).catch(asMagnetsRefusal);
     return magnets.map((magnet, index) => {
       // By the magnet it names; else by its torrent, as the service may write the magnet its way;
       // else by its place.
@@ -477,7 +479,7 @@ export class AllDebrid {
     const { magnets } = await this.#insist(
       () => this.#ask('/v4.1/magnet/status', apiKey, magnetStatesSchema, {}, signal),
       signal,
-    );
+    ).catch(asMagnetsRefusal);
     return Object.values(magnets).flatMap((entry): MagnetState[] => {
       const read = magnetStateSchema.safeParse(entry);
       if (!read.success) {
@@ -493,10 +495,7 @@ export class AllDebrid {
           size: each.size,
           downloaded: each.downloaded ?? 0,
           bytesPerSecond: each.downloadSpeed ?? 0,
-          addedAt:
-            each.uploadDate === undefined || each.uploadDate === null || each.uploadDate === 0
-              ? null
-              : each.uploadDate,
+          addedAt: each.uploadDate ?? null,
           stage:
             each.statusCode < MAGNET_READY
               ? 'fetching'

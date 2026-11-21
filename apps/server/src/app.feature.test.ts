@@ -1,6 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { API_PREFIX, ApiErrorCode, DEFAULT_API_PORT, SETTINGS_LIMITS } from '@scia/contracts';
+import {
+  API_PREFIX,
+  ApiErrorCode,
+  DEFAULT_API_PORT,
+  IntegrationId,
+  SETTINGS_LIMITS,
+} from '@scia/contracts';
+import { UnlockFailure } from '@scia/core';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
 import type { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -10,6 +17,7 @@ import { DownloadManager } from './download-manager.ts';
 import { Integrations } from './integrations.ts';
 import { MemoryVault } from './key-vault.ts';
 import type { MagnetState } from './magnet-service.ts';
+import { ServiceError } from './service-error.ts';
 import { JsonStateStore } from './state-store.ts';
 import { scratchFolder, silentLogger, until } from './testing/scratch.ts';
 import { silentSource } from './testing/silent-source.ts';
@@ -490,7 +498,9 @@ describe('the engine API', () => {
         await served?.close();
         served = undefined;
       });
-      async function withService(): Promise<Hono> {
+      async function withService(
+        read: () => Promise<MagnetState[]> = () => Promise.resolve(states),
+      ): Promise<Hono> {
         served = await DownloadManager.open({
           source: silentSource,
           store: new JsonStateStore(join(folder.path, 'served.json')),
@@ -499,7 +509,7 @@ describe('the engine API', () => {
           magnetPollMs: 60_000,
           magnets: {
             send: () => Promise.resolve([]),
-            states: () => Promise.resolve(states),
+            states: read,
             files: () => Promise.resolve(new Map()),
           },
         });
@@ -552,6 +562,19 @@ describe('the engine API', () => {
             inScia: false,
           },
         ]);
+      });
+
+      it('says an account that is not premium is not', async () => {
+        const on = await withService(() =>
+          Promise.reject(
+            new ServiceError(IntegrationId.AllDebrid, UnlockFailure.NotPremium, 'not premium'),
+          ),
+        );
+
+        const refused = await ask(on, '/magnets/account', { token: APP_TOKEN });
+
+        expect(refused.status).toBe(422);
+        expect(await codeOf(refused)).toBe(ApiErrorCode.NotPremium);
       });
 
       it('takes a ready magnet of the account into the list, for the app alone, once', async () => {

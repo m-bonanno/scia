@@ -341,6 +341,9 @@ export function createApp(deps: AppDeps): Hono {
       if (error.failure === UnlockFailure.NeedsService) {
         return fail(409, ApiErrorCode.ServiceNeeded, error.message);
       }
+      if (error.failure === UnlockFailure.NotPremium) {
+        return fail(422, ApiErrorCode.NotPremium, error.message);
+      }
       // The service was asked and said no (422), or could not be asked (502).
       // A refusal that is about a link has no place here: only a key is given on this API.
       const failure = isServiceFailure(error.failure) ? error.failure : ServiceFailure.Unavailable;

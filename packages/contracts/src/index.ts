@@ -29,6 +29,8 @@ export const ApiErrorCode = {
   KeyNotKept: IntegrationCodeFailure.KeyNotKept,
   // Asked of the connected service while none is connected.
   ServiceNeeded: UnlockFailure.NeedsService,
+  // The service fetches magnets for an account that pays only.
+  NotPremium: UnlockFailure.NotPremium,
 } as const;
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
 

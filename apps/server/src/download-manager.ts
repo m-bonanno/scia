@@ -248,6 +248,10 @@ export class DownloadManager {
       ready: (record, files) => {
         this.#magnetReady(record, files);
       },
+      same: (record) => {
+        this.#magnets = this.#magnets.filter((other) => other !== record);
+        this.#magnetWatch.forget(record.id);
+      },
     });
     this.#settings = settings;
     this.#throttle = new Throttle(settings.speedLimitBytesPerSecond);
