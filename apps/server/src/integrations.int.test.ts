@@ -6,7 +6,11 @@ import { CodeConflictError, Integrations, KeyNotKeptError } from './integrations
 import { type KeyVault, MemoryVault } from './key-vault.ts';
 import type { Logger } from './logger.ts';
 import { ServiceError } from './service-error.ts';
-import { type AllDebridServer, startAllDebridServer } from './testing/alldebrid-server.ts';
+import {
+  type AllDebridServer,
+  type SimulatedRequest,
+  startAllDebridServer,
+} from './testing/alldebrid-server.ts';
 import { until } from './testing/scratch.ts';
 
 // Made up: no account anywhere has these keys.
@@ -77,6 +81,13 @@ describe('Integrations', () => {
   function lastCheck(): string {
     const asked = service.requests.filter((request) => request.form.check !== undefined);
     return asked.at(-1)?.form.check ?? '';
+  }
+  // Whether the service heard of an earlier code after it first heard the check of a later one.
+  // A question sent just before a wait ended may still arrive after a spec looked — the service
+  // records a request once its body is in — but never after the next code's first question.
+  function heardAfter(earlier: (request: SimulatedRequest) => boolean, later: string): boolean {
+    const first = service.requests.findIndex((request) => request.form.check === later);
+    return first >= 0 && service.requests.slice(first + 1).some(earlier);
   }
   function statusOf(integrations: Integrations) {
     return integrations.code(IntegrationId.AllDebrid)?.status;
@@ -450,12 +461,12 @@ describe('Integrations', () => {
 
       clock += 600_000;
       await until(() => statusOf(integrations) === IntegrationCodeStatus.Failed);
-      const asked = checksOf(check).length;
 
       expect(integrations.code(IntegrationId.AllDebrid)?.failure).toBe(CodeFailure.Expired);
       await integrations.startCode(IntegrationId.AllDebrid);
-      await until(() => checksOf(lastCheck()).length >= 2);
-      expect(checksOf(check)).toHaveLength(asked);
+      // The next code's own questions, not the last one heard of the code before.
+      await until(() => lastCheck() !== check && checksOf(lastCheck()).length >= 2);
+      expect(heardAfter((request) => request.form.check === check, lastCheck())).toBe(false);
     });
 
     it('says the code expired when the service says so', async () => {
@@ -522,13 +533,12 @@ describe('Integrations', () => {
       const check = lastCheck();
 
       integrations.cancelCode(IntegrationId.AllDebrid);
-      const asked = checksOf(check).length;
       service.confirmCode(code, KEY);
       expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
       await integrations.startCode(IntegrationId.AllDebrid);
-      await until(() => checksOf(lastCheck()).length >= 2);
+      await until(() => lastCheck() !== check && checksOf(lastCheck()).length >= 2);
 
-      expect(checksOf(check)).toHaveLength(asked);
+      expect(heardAfter((request) => request.form.check === check, lastCheck())).toBe(false);
       expect(await integrations.list()).toEqual([notConnected]);
       // A wait that was ended did not fail: nothing is said of it.
       expect(logged.join('\n')).not.toContain('service_code_failed');
@@ -634,15 +644,14 @@ describe('Integrations', () => {
       const given = await integrations.startCode(IntegrationId.AllDebrid);
 
       await connecting;
-      const asked = () => service.requests.filter((request) => request.form.pin === given.code);
-      const askedThen = asked().length;
+      const before = lastCheck();
 
       expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
       await integrations.disconnect(IntegrationId.AllDebrid);
       service.confirmCode(given.code, REVOKED);
       await integrations.startCode(IntegrationId.AllDebrid);
-      await until(() => checksOf(lastCheck()).length >= 2);
-      expect(asked()).toHaveLength(askedThen);
+      await until(() => lastCheck() !== before && checksOf(lastCheck()).length >= 2);
+      expect(heardAfter((request) => request.form.pin === given.code, lastCheck())).toBe(false);
       expect(await integrations.list()).toEqual([notConnected]);
     });
 
