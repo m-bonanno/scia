@@ -582,6 +582,17 @@ describe('App', () => {
       expect(links).toHaveBeenCalledExactlyOnceWith(['https://example.com/a.zip']);
     });
 
+    it('counts on its button what the field sends: files, or links with a magnet among them', async () => {
+      render(<App />);
+      const field = screen.getByRole('textbox', { name: 'Links to download' });
+      await userEvent.click(field);
+
+      await userEvent.paste('https://example.com/a.zip https://example.com/b.zip');
+      expect(screen.getByRole('button', { name: 'Download 2 files' })).toBeInTheDocument();
+      await userEvent.paste(` ${MAGNET}`);
+      expect(screen.getByRole('button', { name: 'Download 3 links' })).toBeInTheDocument();
+    });
+
     it('sends a magnet typed in the field, and asks the engine for no download', async () => {
       const links = vi.spyOn(api, 'addDownloads').mockResolvedValue([]);
       const magnets = vi.spyOn(api, 'addMagnets').mockResolvedValue([]);

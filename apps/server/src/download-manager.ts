@@ -544,8 +544,8 @@ export class DownloadManager {
       status: record.status,
       totalBytes: record.totalBytes,
       downloadedBytes: record.downloadedBytes,
-      bytesPerSecond:
-        record.status === MagnetStatus.Fetching ? this.#magnetWatch.bytesPerSecond(record.id) : 0,
+      // Known of a magnet the service is fetching only: one that failed or is sent has none.
+      bytesPerSecond: this.#magnetWatch.bytesPerSecond(record.id),
       failure: record.failure,
       createdAt: record.createdAt,
     };

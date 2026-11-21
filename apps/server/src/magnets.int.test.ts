@@ -148,6 +148,7 @@ describe('a magnet that goes through a service', () => {
     await until(() => (scia.snapshot().magnets[0]?.bytesPerSecond ?? 0) > 0);
     expect(scia.snapshot().magnets[0]).toMatchObject({
       totalBytes: holiday().size,
+      downloadedBytes: Math.floor(holiday().size / 2),
       bytesPerSecond: 1_048_576,
     });
     await until(() => allDone(scia));
@@ -254,10 +255,88 @@ describe('a magnet that goes through a service', () => {
     scia.removeMagnet(added?.id ?? '');
 
     expect(scia.snapshot().magnets).toEqual([]);
-    const asked = alldebrid.requests.length;
     await scia.close();
-    expect(alldebrid.requests).toHaveLength(asked);
     expect(await readFile(statePath(), 'utf8')).not.toContain(HASH);
+  });
+
+  it("takes the service's name for a magnet once the service has read it", async () => {
+    const alldebrid = await serviceWith({
+      magnets: { [HASH]: holiday({ nameAtUpload: 'noname', fetchingPolls: 1000 }) },
+    });
+    const scia = await open(await connected(alldebrid));
+
+    scia.addMagnets([`magnet:?xt=urn:btih:${HASH}`]);
+
+    expect(scia.snapshot().magnets[0]?.name).toBe(HASH);
+    await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Fetching);
+    await until(() => scia.snapshot().magnets[0]?.name === 'Holiday films');
+  });
+
+  it('waits on while the service cannot be asked for a while, and says so meanwhile', async () => {
+    const alldebrid = await serviceWith();
+    alldebrid.misbehave({ status: 503, times: 12 });
+    const scia = await open(await connected(alldebrid));
+
+    scia.addMagnets([MAGNET]);
+
+    await until(() => scia.snapshot().magnets[0]?.failure === MagnetFailure.Unavailable);
+    expect(scia.snapshot().magnets[0]?.status).toBe(MagnetStatus.Sending);
+    await until(() => allDone(scia));
+  });
+
+  it('says a magnet failed when it is gone from the account', async () => {
+    const alldebrid = await serviceWith({ magnets: { [HASH]: holiday({ fetchingPolls: 1000 }) } });
+    const scia = await open(await connected(alldebrid));
+    scia.addMagnets([MAGNET]);
+    await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Fetching);
+
+    alldebrid.forgetMagnets();
+
+    await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+    expect(scia.snapshot().magnets[0]).toMatchObject({
+      failure: MagnetFailure.Failed,
+      bytesPerSecond: 0,
+    });
+  });
+
+  it('makes no downloads of a magnet removed while its files were asked for', async () => {
+    const alldebrid = await serviceWith({ magnets: { [HASH]: holiday({ fetchingPolls: 0 }) } });
+    const scia = await open(await connected(alldebrid));
+    // Sent, where it is, then its files: each slow to come.
+    alldebrid.misbehave({ slowMs: 300, times: 3 });
+    const [added] = scia.addMagnets([MAGNET]);
+    await until(() => alldebrid.requests.some((request) => request.url === '/v4/magnet/files'));
+
+    scia.removeMagnet(added?.id ?? '');
+
+    // The files come 300 ms after they were asked for: without the magnet, they make nothing.
+    await expect(until(() => scia.snapshot().downloads.length > 0, 1000)).rejects.toThrow(
+      'never held',
+    );
+  });
+
+  it('asks the service nothing more once no magnet waits', async () => {
+    const alldebrid = await serviceWith();
+    const scia = await open(await connected(alldebrid));
+    scia.addMagnets([MAGNET]);
+    await until(() => allDone(scia));
+    const asked = alldebrid.requests.filter((request) => request.url.includes('/magnet/')).length;
+
+    // Nothing runs, nothing waits: the list stays as it is.
+    let changed = false;
+    void scia.nextChange(await scia.nextChange(-1)).then(() => {
+      changed = true;
+    });
+
+    // At the pace of this spec — every 5 ms — forty turns would come in this time.
+    await expect(
+      until(
+        () =>
+          changed ||
+          alldebrid.requests.filter((request) => request.url.includes('/magnet/')).length > asked,
+        200,
+      ),
+    ).rejects.toThrow('never held');
   });
 
   it('logs how many magnets, never which', async () => {

@@ -132,15 +132,12 @@ export class MagnetWatch {
       );
       sending.forEach((record, index) => {
         const said = sent[index];
-        if (!this.#mine(record) || record.status !== MagnetStatus.Sending || said === undefined)
-          return;
+        if (said === undefined) return;
         if ('failure' in said) {
           this.#fail(record, said.failure);
           return;
         }
         record.serviceId = said.taken.id;
-        // "noname": the service could not read one.
-        if (said.taken.name !== '' && said.taken.name !== 'noname') record.name = said.taken.name;
         record.totalBytes = said.taken.size;
         record.status = MagnetStatus.Fetching;
         record.failure = null;
@@ -148,7 +145,7 @@ export class MagnetWatch {
     } catch (error) {
       this.#stop.signal.throwIfAborted();
       const failure = failureOf(error);
-      for (const record of sending.filter((each) => this.#mine(each))) {
+      for (const record of sending) {
         if (failure === undefined) record.failure = MagnetFailure.Unavailable;
         else this.#fail(record, failure);
       }
@@ -166,14 +163,13 @@ export class MagnetWatch {
     } catch (error) {
       this.#stop.signal.throwIfAborted();
       const failure = failureOf(error);
-      for (const record of fetching.filter((each) => this.#mine(each))) {
+      for (const record of fetching) {
         if (failure === undefined) record.failure = MagnetFailure.Unavailable;
         else this.#fail(record, failure);
       }
       return;
     }
     for (const record of fetching) {
-      if (!this.#mine(record) || record.status !== MagnetStatus.Fetching) continue;
       const state = states.find((each) => each.id === record.serviceId);
       // Gone from the account — deleted on the service's site — or failed there.
       if (state === undefined || state.stage === 'failed') {

@@ -96,6 +96,8 @@ export interface SimulatedMagnet {
   readonly fails?: boolean;
   // Refused when it is sent, with this code of the service's.
   readonly error?: string;
+  // What the service calls it when it is sent, before it has read the torrent: "noname".
+  readonly nameAtUpload?: string;
 }
 
 // What the service makes of a hoster's link it is asked to unlock: a direct link, or one of
@@ -140,6 +142,9 @@ export interface AllDebridServerOptions {
   // The magnets it knows, by the hash of their torrent, in lower case. One it does not know is
   // taken and never ready, as a torrent with no peer.
   readonly magnets?: Readonly<Record<string, SimulatedMagnet>>;
+  // It answers the magnets of a request last to first: an answer is matched by the magnet it
+  // names, not by its place.
+  readonly reverseUploads?: boolean;
   // The page it names for a code, when it is not the service's own.
   readonly codePage?: string;
   // The code it gives, when it is not one of its own four letters and digits.
@@ -167,6 +172,8 @@ export interface AllDebridServer {
   misbehave(how: Misbehaviour | undefined): void;
   // What the person does on the service's site: the code is confirmed, and gives this key.
   confirmCode(code: string, apiKey: string): void;
+  // The account's magnets deleted on the service's site: none is listed any more.
+  forgetMagnets(): void;
   // How many times it has answered a confirmed code with its key.
   readonly keysGiven: number;
   close(): Promise<void>;
@@ -402,8 +409,9 @@ export async function startAllDebridServer(
       refuse(response, 200, 'MAGNET_NO_URI');
       return;
     }
+    const answered = options.reverseUploads === true ? [...magnets].reverse() : magnets;
     succeed(response, {
-      magnets: magnets.map((magnet) => {
+      magnets: answered.map((magnet) => {
         const hash = hashOf(magnet);
         const known = hash === undefined ? undefined : options.magnets?.[hash];
         const code = hash === undefined ? 'MAGNET_INVALID_URI' : known?.error;
@@ -428,7 +436,7 @@ export async function startAllDebridServer(
         return {
           magnet,
           hash,
-          name: known?.name ?? 'noname',
+          name: known?.nameAtUpload ?? known?.name ?? 'noname',
           size: known?.size ?? 0,
           ready: known !== undefined && left === 0 && known.fails !== true,
           id,
@@ -559,6 +567,9 @@ export async function startAllDebridServer(
     },
     get keysGiven() {
       return keysGiven;
+    },
+    forgetMagnets: () => {
+      sent.clear();
     },
     confirmCode: (code, apiKey) => {
       const given = [...codes.values()].find((each) => each.pin === code);

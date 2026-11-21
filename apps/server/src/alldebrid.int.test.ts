@@ -626,6 +626,23 @@ describe('AllDebrid', () => {
       });
     });
 
+    it('matches each answer to the magnet it names, in whatever order the service answers', async () => {
+      const client = clientOf(
+        await serviceWith({
+          reverseUploads: true,
+          magnets: { ...magnets, [OTHER]: { name: 'Other', size: 3, files: [] } },
+        }),
+      );
+      const other = `magnet:?xt=urn:btih:${OTHER}`;
+
+      const sent = await client.uploadMagnets(KEY, [MAGNET, other]);
+
+      expect(sent.map((each) => ('taken' in each ? each.taken.name : each.failure))).toEqual([
+        'Ubuntu',
+        'Other',
+      ]);
+    });
+
     it('says what refuses every magnet of a request, as it says it of a link', async () => {
       const client = clientOf(await serviceWith({ magnets }));
 
