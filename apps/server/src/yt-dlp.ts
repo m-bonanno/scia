@@ -190,10 +190,17 @@ function endTree(child: ChildProcess): void {
   const systemRoot = process.env.SystemRoot;
   const taskkill =
     systemRoot === undefined ? 'taskkill.exe' : join(systemRoot, 'System32', 'taskkill.exe');
-  spawn(taskkill, ['/PID', String(pid), '/T', '/F'], { stdio: 'ignore', windowsHide: true }).on(
-    'error',
-    () => child.kill(),
-  );
+  // Built from nothing, as yt-dlp's own: the engine's environment holds the API's token. A
+  // taskkill that cannot start, or ends nothing, leaves the first process to end alone.
+  spawn(taskkill, ['/PID', String(pid), '/T', '/F'], {
+    env: systemRoot === undefined ? {} : { SystemRoot: systemRoot },
+    stdio: 'ignore',
+    windowsHide: true,
+  })
+    .on('error', () => child.kill())
+    .on('exit', (code) => {
+      if (code !== 0) child.kill();
+    });
 }
 
 // Once Scia has ended the reader, what still holds its output — a process no tree reaches, its
@@ -278,12 +285,16 @@ export class YtDlp implements PageReader {
       const out: Buffer[] = [];
       const err: Buffer[] = [];
       let outBytes = 0;
+      let release: NodeJS.Timeout | undefined;
       const letOutputGo = () => {
-        setTimeout(() => {
+        release ??= setTimeout(() => {
           child.stdout.destroy();
           child.stderr.destroy();
         }, OUTPUT_GRACE_MS);
       };
+      child.on('close', () => {
+        clearTimeout(release);
+      });
       // Settled only once the process has closed: its folder is removed after, not under it.
       let outcome: (() => void) | undefined;
       const end = (settle: () => void) => {
