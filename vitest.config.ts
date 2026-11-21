@@ -2,19 +2,25 @@ import { defineConfig } from 'vitest/config';
 
 const slowerLayers = ['**/*.int.test.ts', '**/*.feature.test.ts'];
 
+// A machine shared by several sessions can run fewer suites' workers at once (#184).
+const workers = Number(process.env.SCIA_TEST_WORKERS);
+
 // A spec found flaky carries `[flaky #N]` in its name, N its issue (docs/development/testing.md,
-// "No retries"): the gates pass it over, and `npm run test:quarantine` runs only those (#186).
+// "No retries"): the gates pass it over, and `npm run test:quarantine` runs only those (#186). The
+// layers `npm test` runs only: the E2E suite is not quarantined.
 const FLAKY = /\[flaky #\d+\]/;
 const quarantine = process.env.SCIA_QUARANTINE === '1';
+const quarantined = { testNamePattern: quarantine ? FLAKY : new RegExp(`^(?!.*${FLAKY.source})`) };
 
 export default defineConfig({
   test: {
-    testNamePattern: quarantine ? FLAKY : new RegExp(`^(?!.*${FLAKY.source})`),
+    ...(Number.isInteger(workers) && workers > 0 ? { maxWorkers: workers } : {}),
     projects: [
       {
         test: {
           name: 'unit',
           environment: 'node',
+          ...quarantined,
           include: [
             'packages/*/src/**/*.test.ts',
             'apps/server/src/**/*.test.ts',
@@ -31,17 +37,22 @@ export default defineConfig({
         test: {
           name: 'integration',
           environment: 'node',
+          ...quarantined,
           include: [
             'apps/server/src/**/*.int.test.ts',
             'apps/desktop/src/**/*.int.test.ts',
             'apps/desktop/build/**/*.int.test.ts',
           ],
+          // Real hosts, real processes and real disks wait on a busy machine: what a spec asserts of
+          // time it bounds itself, so this room hides no slowness it tests for (#165, #184).
+          testTimeout: 15_000,
         },
       },
       {
         test: {
           name: 'feature',
           environment: 'node',
+          ...quarantined,
           include: ['apps/server/src/**/*.feature.test.ts'],
         },
       },

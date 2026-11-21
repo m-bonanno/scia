@@ -120,7 +120,7 @@ describe('HlsTask against a real HTTP host', () => {
     expect(() => timelineSchema.parse(stream.progress().timeline)).not.toThrow();
   });
 
-  it('goes on after a pause with the pieces it has, asking for none of them again [flaky #162]', async () => {
+  it('goes on after a pause with the pieces it has, asking for none of them again', async () => {
     const host = await serve({ delayMs: 150 });
     const first = task(`${host.url}/ts/index.m3u8`, { connections: 1 });
     const pause = new AbortController();

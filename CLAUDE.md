@@ -67,6 +67,7 @@ All from the repo root.
 npm ci                     # also wires the husky hooks
 npm run dev                # engine under plain Node + Vite, for the interface in a browser tab
 npm start                  # builds everything, then the real Electron app on a scratch profile
+npm run gates              # every gate in order, quiet, stopping at the first that fails
 npm run format             # prettier --write  — before staging
 npm run lint               # eslint
 npm run format:check       # what CI runs

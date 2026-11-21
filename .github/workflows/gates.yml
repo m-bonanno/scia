@@ -27,7 +27,7 @@ concurrency:
   group: gates-${{ github.event.pull_request.number || github.run_id }}-${{ inputs.run }}
   cancel-in-progress: true
 
-# Every job's name below is a required check of develop and main (docs/development/git-flow.md,
+# Every job's name below but the quarantine's is a required check of develop and main (docs/development/git-flow.md,
 # "Repository settings"): renaming one blocks every PR until the branch protection changes with it.
 jobs:
   checks:
@@ -96,9 +96,10 @@ jobs:
         run: npm run build
 
   # The specs in quarantine, `[flaky #N]` in their name (docs/development/testing.md, "No retries";
-  # #186): run on both systems, reported, and never blocking. Not a required check.
+  # #186; ADR 0019): run on both systems, on a PR only, reported, and never blocking. Not a required check.
   quarantine:
     name: Quarantine (report only)
+    if: github.event_name == 'pull_request'
     strategy:
       fail-fast: false
       matrix:

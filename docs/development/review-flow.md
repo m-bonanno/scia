@@ -32,18 +32,16 @@ A release into `main` is never small.
 One list, for the author before opening the PR, for the tech lead during the review, for CI on GitHub. On a PR from a fork, CI's run is the only one: "A pull request from outside".
 
 ```bash
-npm run format:check
-npm run lint
-npm run typecheck
-npm test
-npm run build
+npm run gates
 ```
+
+It runs `format:check`, `lint`, `typecheck`, `test` (with a reporter of dots) and `build`, in that order, and stops at the first that fails, naming it (`scripts/gates.mjs`). Each can still be run alone while working. On a machine where other sessions run their suites, `SCIA_TEST_WORKERS=<n>` runs the tests on fewer workers.
 
 With untracked files of other work in the tree, check the format of tracked files only: `git ls-files | xargs npx prettier --check --ignore-unknown`.
 
 A PR that touches the app's runtime — `apps/desktop`, `apps/server`, `apps/renderer`, `packages/` — also runs the E2E suite, after the build, on Windows: `npm run test:e2e` ([`testing.md`](./testing.md), "E2E"). It opens Scia's window while it runs.
 
-CI runs them on Ubuntu, and all but format, lint and types again on Windows, the system Scia ships for, with the E2E suite on every PR; it runs them once more on the commit a merge makes, before that commit is released ([`testing.md`](./testing.md), "Where CI runs them"). A gate green here and red on one of CI's systems is red.
+CI runs them on Ubuntu, and all but format, lint and types again on Windows, the system Scia ships for, with the E2E suite on every PR; it runs them once more on the commit a merge makes, before that commit is released ([`testing.md`](./testing.md), "Where CI runs them"). A gate green here and red on one of CI's systems is red. "Quarantine (report only)" is not a gate ([ADR 0019](../adr/0019-specs-in-quarantine.md)): "CI is green" means every required check.
 
 ## What is blocking
 
@@ -58,7 +56,7 @@ This is the one definition; role files and `CLAUDE.md` point here. A finding is 
 
 Everything else is non-blocking: a suggestion, a question, something to track. Blocking is a fact, never a taste.
 
-A red check on a spec the PR does not touch, with no cause in its diff, is not a round of review: it is filed with its log (or added to its issue, when one exists) and put in quarantine in a PR of its own ([`testing.md`](./testing.md), "No retries"); the run is started again once, and the verdict holds for the head when it is green. #173 spent its third round on the speed limit's spec (#43).
+A red check on a spec the PR does not touch, with no cause in its diff, is not a round of review: it is handled as [`testing.md`](./testing.md), "No retries", says, and the verdict holds for the head once its required checks are green. #173 spent its third round on the speed limit's spec (#43).
 
 ## Rules
 
