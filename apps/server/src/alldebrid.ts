@@ -91,6 +91,14 @@ const MAGNET_FAILURE_OF: ReadonlyMap<string, MagnetFailure> = new Map<string, Ma
   ['MAGNET_MUST_BE_PREMIUM', MagnetFailure.NotPremium],
   ['MAGNET_NO_SERVER', MagnetFailure.NetworkRefused],
   ['MAGNET_INVALID_ID', MagnetFailure.Failed],
+  // The ends the documentation lists for a magnet the service took and could not finish.
+  ['MAGNET_CANT_BOOTSTRAP', MagnetFailure.Failed],
+  ['MAGNET_TOOK_TOO_LONG', MagnetFailure.Failed],
+  ['MAGNET_LINKS_REMOVED', MagnetFailure.Failed],
+  ['MAGNET_PROCESSING_FAILED', MagnetFailure.Failed],
+  ['MAGNET_UPLOAD_FAILED', MagnetFailure.Failed],
+  ['MAGNET_FILE_UPLOAD_FAILED', MagnetFailure.Failed],
+  ['MAGNET_INTERNAL_ERROR', MagnetFailure.Failed],
 ]);
 
 // A torrent's folders are not this deep, nor its files this many: an answer that is, is not one.
@@ -174,6 +182,7 @@ const magnetStateSchema = z.object({
   downloaded: z.coerce.number().int().nonnegative().nullish(),
   downloadSpeed: z.coerce.number().int().nonnegative().nullish(),
 });
+const magnetIdSchema = z.object({ id: z.number().int().positive() });
 // A list, or — as some of its answers write it — an object by id. Each entry is read on its own:
 // a magnet of the account Scia cannot read is passed over, and stops nothing of the others.
 const magnetStatesSchema = z.object({
@@ -223,14 +232,17 @@ export type SentMagnet =
   | { readonly magnet: string; readonly failure: MagnetFailure };
 
 // Where a magnet of the account is.
-export interface MagnetState {
-  readonly id: number;
-  readonly name: string;
-  readonly size: number;
-  readonly downloaded: number;
-  readonly bytesPerSecond: number;
-  readonly stage: 'fetching' | 'ready' | 'failed';
-}
+export type MagnetState =
+  | {
+      readonly id: number;
+      readonly name: string;
+      readonly size: number;
+      readonly downloaded: number;
+      readonly bytesPerSecond: number;
+      readonly stage: 'fetching' | 'ready' | 'failed';
+    }
+  // Listed by its id, the rest of it written in a way Scia cannot read.
+  | { readonly id: number; readonly stage: 'unreadable' };
 
 // A file of a ready magnet: the folders the magnet puts it in, its name, its size, and the link
 // of the service's that is unlocked as a hoster's is.
@@ -462,24 +474,30 @@ export class AllDebrid {
       () => this.#ask('/v4.1/magnet/status', apiKey, magnetStatesSchema, {}, signal),
       signal,
     );
-    return Object.values(magnets)
-      .flatMap((entry) => {
-        const read = magnetStateSchema.safeParse(entry);
-        return read.success ? [read.data] : [];
-      })
-      .map((each) => ({
-        id: each.id,
-        name: each.filename,
-        size: each.size,
-        downloaded: each.downloaded ?? 0,
-        bytesPerSecond: each.downloadSpeed ?? 0,
-        stage:
-          each.statusCode < MAGNET_READY
-            ? 'fetching'
-            : each.statusCode === MAGNET_READY
-              ? 'ready'
-              : 'failed',
-      }));
+    return Object.values(magnets).flatMap((entry): MagnetState[] => {
+      const read = magnetStateSchema.safeParse(entry);
+      if (!read.success) {
+        // Said of the magnet it names, when it names one: else a stranger's, passed over.
+        const named = magnetIdSchema.safeParse(entry);
+        return named.success ? [{ id: named.data.id, stage: 'unreadable' }] : [];
+      }
+      const each = read.data;
+      return [
+        {
+          id: each.id,
+          name: each.filename,
+          size: each.size,
+          downloaded: each.downloaded ?? 0,
+          bytesPerSecond: each.downloadSpeed ?? 0,
+          stage:
+            each.statusCode < MAGNET_READY
+              ? 'fetching'
+              : each.statusCode === MAGNET_READY
+                ? 'ready'
+                : 'failed',
+        },
+      ];
+    });
   }
 
   // The files of ready magnets, with their folders (https://docs.alldebrid.com, "Get Files and

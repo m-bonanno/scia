@@ -745,6 +745,53 @@ describe('AllDebrid', () => {
       expect((await client.magnetFiles(KEY, [id])).get(id)).toBe(MagnetFailure.Unavailable);
     });
 
+    it('says it cannot take a list of more files than any torrent has', async () => {
+      const files = Array.from({ length: 100_001 }, (_, index) => ({
+        n: `f${String(index)}`,
+        s: 1,
+        l: 'https://alldebrid.com/f/x',
+      }));
+      const client = clientOf(
+        await serviceWith({ magnets: { [HASH]: { name: 'Many', size: files.length, files } } }),
+      );
+      const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+      const id = sent && 'taken' in sent ? sent.taken.id : 0;
+
+      expect((await client.magnetFiles(KEY, [id])).get(id)).toBe(MagnetFailure.Unreadable);
+    });
+
+    it('says a magnet failed for each code the service ends one with', async () => {
+      const codes = [
+        'MAGNET_CANT_BOOTSTRAP',
+        'MAGNET_TOOK_TOO_LONG',
+        'MAGNET_LINKS_REMOVED',
+        'MAGNET_PROCESSING_FAILED',
+        'MAGNET_UPLOAD_FAILED',
+        'MAGNET_FILE_UPLOAD_FAILED',
+        'MAGNET_INTERNAL_ERROR',
+      ];
+      const hashes = codes.map((_, index) => String(index).padStart(40, 'c'));
+      const client = clientOf(
+        await serviceWith({
+          magnets: Object.fromEntries(
+            codes.map((code, index) => [
+              hashes[index] ?? '',
+              { name: code, size: 1, files: [], error: code },
+            ]),
+          ),
+        }),
+      );
+
+      const sent = await client.uploadMagnets(
+        KEY,
+        hashes.map((hash) => `magnet:?xt=urn:btih:${hash}`),
+      );
+
+      expect(sent.map((each) => ('failure' in each ? each.failure : 'taken'))).toEqual(
+        codes.map(() => MagnetFailure.Failed),
+      );
+    });
+
     it('says a magnet failed when the service lists no file of it', async () => {
       const client = clientOf(
         await serviceWith({ magnets: { [HASH]: { name: 'Empty', size: 0, files: [] } } }),

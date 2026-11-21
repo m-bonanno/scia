@@ -484,6 +484,69 @@ describe('a magnet that goes through a service', () => {
     expect(scia.snapshot().magnets[0]?.totalBytes).toBeNull();
   });
 
+  it("keeps the service's id on disk once it is given, and says no size, before the service says where the magnet is", async () => {
+    const alldebrid = await serviceWith({ magnets: { [HASH]: holiday({ size: 0 }) } });
+    alldebrid.misbehave({ silent: true, route: 'POST /v4.1/magnet/status' });
+    const scia = await open(await connected(alldebrid));
+
+    scia.addMagnets([MAGNET]);
+
+    // The engine may stop at any moment while the service is asked: what it has kept says the
+    // magnet was sent, and a restart waits for it instead of sending it again.
+    const kept = async () => {
+      const state = JSON.parse(await readFile(statePath(), 'utf8').catch(() => '{}')) as {
+        magnets?: { serviceId: number | null }[];
+      };
+      return typeof state.magnets?.[0]?.serviceId === 'number';
+    };
+    await until(kept, 5000);
+    expect(scia.snapshot().magnets[0]).toMatchObject({
+      status: MagnetStatus.Fetching,
+      totalBytes: null,
+    });
+  });
+
+  it('fails a magnet the service leaves out of its answer about files, as its upload would', async () => {
+    const alldebrid = await serviceWith({
+      magnets: { [HASH]: holiday({ leftOutOfFiles: true }) },
+    });
+    const scia = await open(await connected(alldebrid));
+
+    scia.addMagnets([MAGNET]);
+
+    await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+    expect(scia.snapshot().magnets[0]?.failure).toBe(MagnetFailure.Unavailable);
+    expect(scia.snapshot().downloads).toEqual([]);
+  });
+
+  it('fails a magnet of its own whose state the service writes in a way Scia cannot read, as one it could not ask about', async () => {
+    const alldebrid = await serviceWith({
+      magnets: { [HASH]: holiday({ unreadableState: true }) },
+    });
+    const scia = await open(await connected(alldebrid));
+
+    scia.addMagnets([MAGNET]);
+
+    await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+    expect(scia.snapshot().magnets[0]?.failure).toBe(MagnetFailure.Unavailable);
+  });
+
+  it('puts a file of a magnet under a free name when one of its name is already in its folder', async () => {
+    const root = join(downloads(), 'Holiday films');
+    await mkdir(root, { recursive: true });
+    await writeFile(join(root, 'readme.txt'), 'kept as it was');
+    const scia = await open(await connected(await serviceWith()));
+
+    scia.addMagnets([MAGNET]);
+
+    await until(() => allDone(scia));
+    const readmes = scia.snapshot().downloads.filter((each) => each.directory === root);
+    expect(readmes).toHaveLength(1);
+    expect(readmes[0]?.fileName).not.toBe('readme.txt');
+    expect(Buffer.compare(await readFile(join(root, readmes[0]?.fileName ?? '')), readme)).toBe(0);
+    expect(await readFile(join(root, 'readme.txt'), 'utf8')).toBe('kept as it was');
+  });
+
   it('sends a magnet pasted while the service is asked about another as soon as that ends', async () => {
     const alldebrid = await serviceWith({
       magnets: {

@@ -100,6 +100,10 @@ export interface SimulatedMagnet {
   readonly nameAtUpload?: string;
   // Its files are answered, this many times, with a code of the service's that Scia does not know.
   readonly unknownFilesAnswers?: number;
+  // The answer about files leaves it out, as if it had not been asked about.
+  readonly leftOutOfFiles?: boolean;
+  // Where it is, as the service lists it, is written in a way Scia cannot read — but for its id.
+  readonly unreadableState?: boolean;
 }
 
 // What the service makes of a hoster's link it is asked to unlock: a direct link, or one of
@@ -121,6 +125,8 @@ export type Misbehaviour = (
 ) & {
   // For this many requests, then it answers as it should again; until told otherwise if absent.
   readonly times?: number;
+  // Only the requests of this route ("POST /v4.1/magnet/status"); every request if absent.
+  readonly route?: string;
 };
 
 export interface AllDebridServerOptions {
@@ -464,6 +470,7 @@ export async function startAllDebridServer(
           if (known !== undefined && each.left > 0) each.left -= 1;
           const statusCode = fetching ? 1 : known.fails === true ? 15 : 4;
           const size = known?.size ?? 0;
+          if (known?.unreadableState === true) return { id, filename: known.name, statusCode: 'x' };
           return {
             id,
             filename: known?.name ?? 'noname',
@@ -491,20 +498,29 @@ export async function startAllDebridServer(
   // How many times each magnet's files were answered with a code Scia does not know.
   const filesAnswered = new Map<string, number>();
   function magnetFiles(response: ServerResponse, ids: readonly string[]): void {
+    const leftOut = (id: string) => {
+      const hash = sent.get(Number(id))?.hash;
+      return hash !== undefined && options.magnets?.[hash]?.leftOutOfFiles === true;
+    };
     succeed(response, {
-      magnets: ids.map((id) => {
-        const each = sent.get(Number(id));
-        const known = each === undefined ? undefined : options.magnets?.[each.hash];
-        if (each === undefined || known === undefined || each.left > 0 || known.fails === true) {
-          return { id, error: { code: 'MAGNET_INVALID_ID', message: MESSAGES.MAGNET_INVALID_ID } };
-        }
-        const unknown = filesAnswered.get(each.hash) ?? 0;
-        if (unknown < (known.unknownFilesAnswers ?? 0)) {
-          filesAnswered.set(each.hash, unknown + 1);
-          return { id, error: { code: 'MAGNET_SOMETHING_NEW', message: 'Something new.' } };
-        }
-        return { id, files: known.files };
-      }),
+      magnets: ids
+        .filter((id) => !leftOut(id))
+        .map((id) => {
+          const each = sent.get(Number(id));
+          const known = each === undefined ? undefined : options.magnets?.[each.hash];
+          if (each === undefined || known === undefined || each.left > 0 || known.fails === true) {
+            return {
+              id,
+              error: { code: 'MAGNET_INVALID_ID', message: MESSAGES.MAGNET_INVALID_ID },
+            };
+          }
+          const unknown = filesAnswered.get(each.hash) ?? 0;
+          if (unknown < (known.unknownFilesAnswers ?? 0)) {
+            filesAnswered.set(each.hash, unknown + 1);
+            return { id, error: { code: 'MAGNET_SOMETHING_NEW', message: 'Something new.' } };
+          }
+          return { id, files: known.files };
+        }),
     });
   }
 
@@ -521,16 +537,19 @@ export async function startAllDebridServer(
         form,
         lists,
       });
+      const route = `${request.method ?? ''} ${url.pathname}`;
+      const applies = misbehaviour?.route === undefined || misbehaviour.route === route;
       const slow =
-        misbehaviour !== undefined && 'slowMs' in misbehaviour ? misbehaviour : undefined;
+        applies && misbehaviour !== undefined && 'slowMs' in misbehaviour
+          ? misbehaviour
+          : undefined;
       const misbehavedBefore = misbehaved;
-      if (misbehaves(response)) return;
+      if (applies && misbehaves(response)) return;
       // A slow answer is still the right one: it is only late — for as many requests as it says.
       if (slow !== undefined && (slow.times === undefined || misbehaved > misbehavedBefore)) {
         await sleep(slow.slowMs);
       }
 
-      const route = `${request.method ?? ''} ${url.pathname}`;
       if (!ROUTES.includes(route)) {
         refuse(response, 404, '404');
         return;

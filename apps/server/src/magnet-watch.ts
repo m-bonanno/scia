@@ -191,6 +191,11 @@ export class MagnetWatch {
         this.#fail(record, MagnetFailure.Failed);
         continue;
       }
+      // An answer about it Scia cannot read would be the same at every turn.
+      if (state.stage === 'unreadable') {
+        this.#fail(record, MagnetFailure.Unavailable);
+        continue;
+      }
       if (state.name !== '' && state.name !== 'noname') record.name = state.name;
       record.totalBytes = state.size > 0 ? state.size : null;
       record.downloadedBytes = state.downloaded;
@@ -220,9 +225,10 @@ export class MagnetWatch {
       return;
     }
     for (const record of ready) {
-      // One the service did not answer about is asked about again at the next turn.
-      const files = answered.get(record.serviceId ?? 0);
-      if (files === undefined || !this.#mine(record)) continue;
+      if (!this.#mine(record)) continue;
+      // One the service left out of its answer is failed as its upload would be: asking again
+      // would be asked again for ever.
+      const files = answered.get(record.serviceId ?? 0) ?? MagnetFailure.Unavailable;
       if (typeof files === 'string') {
         this.#fail(record, files);
         continue;
