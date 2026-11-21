@@ -210,4 +210,55 @@ describe('ClipboardWatch', () => {
     await clipboard.beat();
     expect(clipboard.offered).toEqual([]);
   });
+
+  it('takes nothing a read of before a turn off and on finds, nor reads before the new start is known', async () => {
+    // Each read answers when the spec says.
+    const reads: ((text: string) => void)[] = [];
+    const offered: string[][] = [];
+    const beats: (() => void)[] = [];
+    const watch = new ClipboardWatch({
+      read: () =>
+        new Promise((resolve) => {
+          reads.push(resolve);
+        }),
+      offer: async (links) => {
+        offered.push([...links]);
+      },
+      every: (_ms, run) => {
+        beats.push(run);
+        return () => {
+          beats.splice(beats.indexOf(run), 1);
+        };
+      },
+      log: { info: () => undefined, warn: () => undefined },
+    });
+    const settle = () => new Promise((resolve) => setImmediate(resolve));
+    const beat = async () => {
+      for (const run of [...beats]) run();
+      await settle();
+    };
+    const link = 'https://example.com/copied-before.zip';
+
+    watch.watch(true);
+    reads.shift()?.('');
+    await settle();
+    // A beat's read is on its way when the switch goes off and on again.
+    await beat();
+    watch.watch(false);
+    watch.watch(true);
+    reads.shift()?.(link);
+    await settle();
+    // The new start has not read the clipboard yet: no beat reads before it has — one that did,
+    // answered first, would find a clipboard nothing was known of.
+    await beat();
+    reads.pop()?.(link);
+    await settle();
+    reads.shift()?.(link);
+    await settle();
+    await beat();
+    reads.shift()?.(link);
+    await settle();
+
+    expect(offered).toEqual([]);
+  });
 });
