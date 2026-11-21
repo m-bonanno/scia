@@ -2,7 +2,7 @@ import { integrationAccountSchema } from '@scia/contracts';
 import { ServiceFailure, UnlockFailure, PREPARE_LIMIT_SECONDS } from '@scia/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AllDebrid, DELAYED_LIMIT_MS, PUBLIC_ANSWER_LIMIT_MS } from './alldebrid.ts';
-import { ServiceError } from './service-error.ts';
+import { CodeExpiredError, ServiceError } from './service-error.ts';
 import {
   type AllDebridServer,
   type AllDebridServerOptions,
@@ -497,6 +497,75 @@ describe('AllDebrid', () => {
     await failureOf(clientOf(server).account(KEY));
 
     expect(server.requests).toHaveLength(1);
+  });
+
+  it("asks for a code to confirm on the service's site with no key, and says where it is confirmed", async () => {
+    const server = await serviceWith();
+
+    const code = await clientOf(server).code();
+
+    expect(code).toEqual({
+      code: expect.stringMatching(/^[A-Z0-9]{4}$/) as unknown,
+      check: expect.any(String) as unknown,
+      url: `https://alldebrid.com/pin/?pin=${code.code}`,
+      expiresInSeconds: 600,
+    });
+    expect(server.requests).toEqual([
+      {
+        method: 'GET',
+        url: '/v4.1/pin/get',
+        authorization: undefined,
+        userAgent: 'Scia/spec',
+        form: {},
+      },
+    ]);
+  });
+
+  it("refuses a code whose page is not on the service's site", async () => {
+    const server = await serviceWith({ codePage: 'https://alldebrid.com.example/pin/' });
+
+    expect(await failureOf(clientOf(server).code())).toBe(ServiceFailure.Unavailable);
+  });
+
+  it('gives no key until the person confirms the code, then the key, asking with the code and its check in a form', async () => {
+    const server = await serviceWith();
+    const client = clientOf(server);
+    const { code, check } = await client.code();
+
+    expect(await client.confirmedKey(code, check)).toBeUndefined();
+    server.confirmCode(code, KEY);
+    expect(await client.confirmedKey(code, check)).toBe(KEY);
+
+    const asked = server.requests.filter((request) => request.url === '/v4/pin/check');
+    expect(asked).toHaveLength(2);
+    for (const request of asked) {
+      expect(request).toEqual({
+        method: 'POST',
+        url: '/v4/pin/check',
+        authorization: undefined,
+        userAgent: 'Scia/spec',
+        form: { pin: code, check },
+      });
+    }
+  });
+
+  it('says a code expired when its time ran out, and when the service no longer knows it', async () => {
+    const client = clientOf(await serviceWith({ codeLifetimeSeconds: 0 }));
+    const { code, check } = await client.code();
+
+    await expect(client.confirmedKey(code, check)).rejects.toBeInstanceOf(CodeExpiredError);
+    await expect(client.confirmedKey(code, 'not-its-check')).rejects.toBeInstanceOf(
+      CodeExpiredError,
+    );
+  });
+
+  it('refuses a key it is given for a code that is not one a header can carry', async () => {
+    const server = await serviceWith();
+    const client = clientOf(server);
+    const { code, check } = await client.code();
+    server.confirmCode(code, 'two words');
+
+    expect(await failureOf(client.confirmedKey(code, check))).toBe(ServiceFailure.Unavailable);
   });
 
   it('never puts the key in what it says of a failure', async () => {

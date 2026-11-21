@@ -1,4 +1,4 @@
-import { ServiceFailure } from '@scia/core';
+import { CodeFailure, ServiceFailure } from '@scia/core';
 import { z } from 'zod';
 
 // The services Scia can be connected to. What each is called lives in the renderer.
@@ -39,3 +39,46 @@ export const connectIntegrationSchema = z.object({
     .regex(/^[\x21-\x7e]{1,256}$/),
 });
 export type ConnectIntegration = z.infer<typeof connectIntegrationSchema>;
+
+// The site each service has a person confirm a code on: a page Scia opens is on it, or on one of
+// its names, over https — never an address an answer brought as it stands. Read from the start
+// of the address: nobody before the host (`user@`), no port after it, and the host ends there.
+const SERVICE_PAGE: Readonly<Record<IntegrationId, RegExp>> = {
+  alldebrid: /^https:\/\/(?:[a-z0-9-]+\.)*alldebrid\.com(?:[/?#]|$)/i,
+};
+
+export function isServiceSite(id: IntegrationId, url: string): boolean {
+  return SERVICE_PAGE[id].test(url) && z.url().safeParse(url).success;
+}
+
+export const IntegrationCodeStatus = {
+  // The person has not confirmed it yet.
+  Waiting: 'waiting',
+  // Confirmed: the service gave a key, and Scia keeps it.
+  Connected: 'connected',
+  Failed: 'failed',
+} as const;
+export type IntegrationCodeStatus =
+  (typeof IntegrationCodeStatus)[keyof typeof IntegrationCodeStatus];
+
+// Why a code connected nothing: the service's refusals of the key it gave, the code's own, and a
+// system that would not keep the key (ApiErrorCode.KeyNotKept).
+export const IntegrationCodeFailure = {
+  ...ServiceFailure,
+  ...CodeFailure,
+  KeyNotKept: 'KEY_NOT_KEPT',
+} as const;
+export type IntegrationCodeFailure =
+  (typeof IntegrationCodeFailure)[keyof typeof IntegrationCodeFailure];
+
+// A code to confirm on the service's site, and what became of it. What the service needs to give
+// the key for it stays in the engine: only what the person reads and the page they open cross.
+export const integrationCodeSchema = z.object({
+  code: z.string().regex(/^[\x21-\x7e]{1,32}$/),
+  // Where it is confirmed. Main opens it only on the service's site (isServiceSite).
+  url: z.url({ protocol: /^https$/ }),
+  expiresAt: z.iso.datetime(),
+  status: z.enum(IntegrationCodeStatus),
+  failure: z.enum(IntegrationCodeFailure).nullable(),
+});
+export type IntegrationCode = z.infer<typeof integrationCodeSchema>;

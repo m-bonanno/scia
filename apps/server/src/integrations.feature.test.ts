@@ -251,4 +251,53 @@ describe('the engine API, for the services Scia connects to', () => {
     expect(await codeOf(put)).toBe(ApiErrorCode.NotFound);
     expect(removed.status).toBe(404);
   });
+  describe("a code confirmed on the service's site", () => {
+    const code = (method: string, token: string | null = APP_TOKEN, path = 'alldebrid') =>
+      call(`/integrations/${path}/code`, { method, ...(token === null ? {} : { token }) });
+
+    it('gives a code to the app alone, and none of what the service gives the key for', async () => {
+      expect((await code('POST', EXTENSION_TOKEN)).status).toBe(403);
+      expect((await code('POST', null)).status).toBe(401);
+
+      const response = await code('POST');
+
+      expect(response.status).toBe(201);
+      const { data } = (await response.json()) as { data: Record<string, unknown> };
+      expect(Object.keys(data).sort()).toEqual(['code', 'expiresAt', 'failure', 'status', 'url']);
+      expect(data).toMatchObject({ status: 'waiting', failure: null });
+    });
+
+    it('says what became of the code given last, to the app alone', async () => {
+      expect((await code('GET')).status).toBe(404);
+      await code('POST');
+
+      expect((await code('GET', EXTENSION_TOKEN)).status).toBe(403);
+      const response = await code('GET');
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as { data: { status: string } }).data.status).toBe('waiting');
+    });
+
+    it('forgets the code when the app cancels it', async () => {
+      await code('POST');
+
+      expect((await code('DELETE', EXTENSION_TOKEN)).status).toBe(403);
+      expect((await code('DELETE')).status).toBe(204);
+      expect((await code('GET')).status).toBe(404);
+    });
+
+    it('answers 502 when the service gives no code', async () => {
+      service.misbehave({ status: 503 });
+
+      const response = await code('POST');
+
+      expect(response.status).toBe(502);
+      expect(await codeOf(response)).toBe(ApiErrorCode.Unavailable);
+    });
+
+    it('answers 404 for a service it does not know', async () => {
+      for (const method of ['POST', 'GET', 'DELETE']) {
+        expect((await code(method, APP_TOKEN, 'realdebrid')).status, method).toBe(404);
+      }
+    });
+  });
 });

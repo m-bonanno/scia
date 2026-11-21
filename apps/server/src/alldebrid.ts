@@ -1,9 +1,14 @@
 import { setTimeout as sleep } from 'node:timers/promises';
-import { type IntegrationAccount, IntegrationId } from '@scia/contracts';
+import {
+  connectIntegrationSchema,
+  type IntegrationAccount,
+  IntegrationId,
+  isServiceSite,
+} from '@scia/contracts';
 import { PREPARE_LIMIT_SECONDS, ServiceFailure, UnlockFailure } from '@scia/core';
 import { z } from 'zod';
 import type { UnlockedLink } from './link-resolver.ts';
-import { ServiceError } from './service-error.ts';
+import { CodeExpiredError, ServiceError } from './service-error.ts';
 
 export const ALLDEBRID_API = 'https://api.alldebrid.com';
 
@@ -54,6 +59,10 @@ const FAILURE_OF: ReadonlyMap<string, ServiceFailure | UnlockFailure> = new Map<
   ['DELAYED_INVALID_ID', UnlockFailure.LinkRefused],
 ]);
 
+// A code whose time ran out, and a check the service no longer knows — which is what an expired
+// code's check becomes: either way a new code is asked for. An answer to a code alone.
+const CODE_EXPIRED: ReadonlySet<string> = new Set(['PIN_EXPIRED', 'PIN_INVALID']);
+
 // The last second of the year 9999, in seconds since 1970: past it a date is written
 // `+010000-…`, which no ISO date-time the page takes is (integrations.ts of the contracts).
 const LAST_SECOND = 253_402_300_799;
@@ -96,6 +105,27 @@ const delayedSchema = z.object({
   link: z.string().nullish(),
 });
 const DelayedStatus = { Processing: 1, Ready: 2 } as const;
+
+const codeSchema = z.object({
+  pin: z.string(),
+  check: z.string().min(1),
+  expires_in: z.number().int().nonnegative(),
+  user_url: z.string(),
+});
+
+const confirmationSchema = z.object({
+  activated: z.boolean(),
+  apikey: z.string().nullish(),
+});
+
+// A code to confirm on the service's site (https://docs.alldebrid.com, "Pin auth"). `check` is
+// what the service gives the key for once the code is confirmed: it never leaves the engine.
+export interface ServiceCode {
+  readonly code: string;
+  readonly check: string;
+  readonly url: string;
+  readonly expiresInSeconds: number;
+}
 
 export interface AllDebridOptions {
   // Where the service answers: its own address, or the simulated service's (config.ts).
@@ -181,6 +211,53 @@ export class AllDebrid {
       this.#options.publicAnswerLimitMs ?? PUBLIC_ANSWER_LIMIT_MS,
     );
     return hosts.map((domain) => domain.toLowerCase());
+  }
+
+  // A code for the person to confirm on the service's site, asked with no key. The page it names
+  // is on the service's own site, or the answer is not taken.
+  async code(signal?: AbortSignal): Promise<ServiceCode> {
+    const given = await this.#ask('/v4.1/pin/get', undefined, codeSchema, undefined, signal);
+    const visible = /^[!-~]{1,32}$/.test(given.pin);
+    if (!visible || !isServiceSite(IntegrationId.AllDebrid, given.user_url)) {
+      throw refused(ServiceFailure.Unavailable, 'AllDebrid answered something else.');
+    }
+    return {
+      code: given.pin,
+      check: given.check,
+      url: given.user_url,
+      expiresInSeconds: given.expires_in,
+    };
+  }
+
+  // The key a confirmed code gives, or nothing while the person has not confirmed it. Asked with
+  // no key, and once: whoever waits asks again.
+  async confirmedKey(
+    code: string,
+    check: string,
+    signal?: AbortSignal,
+  ): Promise<string | undefined> {
+    const answer = await this.#ask(
+      '/v4/pin/check',
+      undefined,
+      confirmationSchema,
+      { pin: code, check },
+      signal,
+    ).catch((error: unknown) => {
+      if (error instanceof ServiceError && CODE_EXPIRED.has(error.code ?? '')) {
+        throw new CodeExpiredError(
+          IntegrationId.AllDebrid,
+          `AllDebrid answered ${error.code ?? ''}.`,
+        );
+      }
+      throw error;
+    });
+    if (!answer.activated) return undefined;
+    // A key travels in a header: what could not is no key.
+    const key = connectIntegrationSchema.safeParse({ apiKey: answer.apikey });
+    if (!key.success) {
+      throw refused(ServiceFailure.Unavailable, 'AllDebrid answered something else.');
+    }
+    return key.data.apiKey;
   }
 
   // The direct link for a hoster's. A link the service needs time to prepare is waited for,

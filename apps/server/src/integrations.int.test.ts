@@ -1,5 +1,5 @@
-import { IntegrationId } from '@scia/contracts';
-import { ServiceFailure } from '@scia/core';
+import { IntegrationCodeStatus, IntegrationId } from '@scia/contracts';
+import { CodeFailure, ServiceFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
 import { Integrations, KeyNotKeptError } from './integrations.ts';
@@ -65,7 +65,21 @@ describe('Integrations', () => {
       }),
       logger,
       now: () => clock,
+      codePollMs: 5,
     });
+  }
+
+  function checksOf(check: string) {
+    return service.requests.filter((request) => request.form.check === check);
+  }
+  // The check of the code the service gave last: the spec reads it at the service, as the engine
+  // never says it.
+  function lastCheck(): string {
+    const asked = service.requests.filter((request) => request.form.check !== undefined);
+    return asked.at(-1)?.form.check ?? '';
+  }
+  function statusOf(integrations: Integrations) {
+    return integrations.code(IntegrationId.AllDebrid)?.status;
   }
 
   it('lists the services Scia knows, not connected, without asking them anything', async () => {
@@ -396,5 +410,142 @@ describe('Integrations', () => {
     expect(logged.length).toBeGreaterThan(0);
     expect(logged.join('\n')).not.toContain(KEY);
     expect(logged.join('\n')).not.toContain(REVOKED);
+  });
+  describe("a code confirmed on the service's site", () => {
+    it('gives a code and its page, keeps nothing until it is confirmed, then connects with the key it gives', async () => {
+      const vault = new MemoryVault();
+      const integrations = await open(vault);
+
+      const given = await integrations.startCode(IntegrationId.AllDebrid);
+
+      expect(given).toEqual({
+        code: expect.any(String) as unknown,
+        url: `https://alldebrid.com/pin/?pin=${given.code}`,
+        expiresAt: expect.any(String) as unknown,
+        status: IntegrationCodeStatus.Waiting,
+        failure: null,
+      });
+      expect(Date.parse(given.expiresAt) - Date.now()).toBeGreaterThan(590_000);
+      await until(() => lastCheck() !== '');
+      expect(await vault.read(IntegrationId.AllDebrid)).toBeUndefined();
+      expect(statusOf(integrations)).toBe(IntegrationCodeStatus.Waiting);
+
+      service.confirmCode(given.code, KEY);
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Connected);
+
+      expect(await vault.read(IntegrationId.AllDebrid)).toBe(KEY);
+      expect(await integrations.list()).toEqual([
+        { id: 'alldebrid', connected: true, account: ada, failure: null },
+      ]);
+      expect(JSON.stringify(integrations.code(IntegrationId.AllDebrid))).not.toContain(lastCheck());
+      expect(logged.join('\n')).not.toContain(KEY);
+      expect(logged.join('\n')).not.toContain(lastCheck());
+    });
+
+    it('says the code expired when its time ran out, and stops asking about it', async () => {
+      const integrations = await open();
+      await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => lastCheck() !== '');
+      const check = lastCheck();
+
+      clock += 600_000;
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Failed);
+      const asked = checksOf(check).length;
+
+      expect(integrations.code(IntegrationId.AllDebrid)?.failure).toBe(CodeFailure.Expired);
+      await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => checksOf(lastCheck()).length >= 2);
+      expect(checksOf(check)).toHaveLength(asked);
+    });
+
+    it('says the code expired when the service says so', async () => {
+      await service.close();
+      service = await startAllDebridServer({ accounts: {}, codeLifetimeSeconds: 0 });
+      const integrations = await open();
+
+      await integrations.startCode(IntegrationId.AllDebrid);
+
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Failed);
+      expect(integrations.code(IntegrationId.AllDebrid)?.failure).toBe(CodeFailure.Expired);
+    });
+
+    it('says why a confirmed code connected nothing, and keeps nothing: a key the service refuses', async () => {
+      const vault = new MemoryVault();
+      const integrations = await open(vault);
+      const { code } = await integrations.startCode(IntegrationId.AllDebrid);
+
+      service.confirmCode(code, 'nobody-key-00000000000000');
+
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Failed);
+      expect(integrations.code(IntegrationId.AllDebrid)?.failure).toBe(ServiceFailure.KeyRefused);
+      expect(await vault.read(IntegrationId.AllDebrid)).toBeUndefined();
+    });
+
+    it('says the key was not kept when the system will not keep it', async () => {
+      const integrations = await open(refusing('write'));
+      const { code } = await integrations.startCode(IntegrationId.AllDebrid);
+
+      service.confirmCode(code, KEY);
+
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Failed);
+      expect(integrations.code(IntegrationId.AllDebrid)?.failure).toBe('KEY_NOT_KEPT');
+      expect(await integrations.list()).toEqual([notConnected]);
+    });
+
+    it('waits on when the service cannot be asked for a while', async () => {
+      const integrations = await open();
+      const { code } = await integrations.startCode(IntegrationId.AllDebrid);
+      service.misbehave({ status: 503, times: 4 });
+      await until(
+        () => service.requests.filter((request) => request.url === '/v4/pin/check').length >= 5,
+      );
+
+      service.confirmCode(code, KEY);
+
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Connected);
+    });
+
+    it('gives no code when the service cannot be asked for one', async () => {
+      const integrations = await open();
+      service.misbehave({ status: 503 });
+
+      await expect(integrations.startCode(IntegrationId.AllDebrid)).rejects.toMatchObject({
+        failure: ServiceFailure.Unavailable,
+      });
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+    });
+
+    it('stops waiting when the code is cancelled: confirmed afterwards, it connects nothing', async () => {
+      const integrations = await open();
+      const { code } = await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => lastCheck() !== '');
+      const check = lastCheck();
+
+      integrations.cancelCode(IntegrationId.AllDebrid);
+      const asked = checksOf(check).length;
+      service.confirmCode(code, KEY);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+      await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => checksOf(lastCheck()).length >= 2);
+
+      expect(checksOf(check)).toHaveLength(asked);
+      expect(await integrations.list()).toEqual([notConnected]);
+    });
+
+    it('stops waiting for a code when another is asked for, or a key is pasted', async () => {
+      const integrations = await open();
+      const first = await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => lastCheck() !== '');
+      const firstCheck = lastCheck();
+
+      const second = await integrations.startCode(IntegrationId.AllDebrid);
+      expect(integrations.code(IntegrationId.AllDebrid)?.code).toBe(second.code);
+      service.confirmCode(first.code, KEY);
+      await until(() => lastCheck() !== firstCheck && checksOf(lastCheck()).length >= 2);
+      expect(await integrations.list()).toEqual([notConnected]);
+
+      await integrations.connect(IntegrationId.AllDebrid, KEY);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+    });
   });
 });

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -30,6 +31,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
   FREE_TRIAL_LIMIT_REACHED:
     'You have reached the free trial limit (7 days / 25GB downloaded or host uneligible for free trial)',
   MUST_BE_PREMIUM: 'You must be premium to process this link',
+  PIN_EXPIRED: 'The pin has expired',
+  PIN_INVALID: 'This endpoint check parameter is invalid',
 };
 
 const ROUTES: readonly string[] = [
@@ -38,7 +41,12 @@ const ROUTES: readonly string[] = [
   'GET /v4.1/user/hosts',
   'POST /v4/link/unlock',
   'POST /v4/link/delayed',
+  'GET /v4.1/pin/get',
+  'POST /v4/pin/check',
 ];
+
+// Where the service has a person confirm a code, as its documentation gives it.
+const CODE_PAGE = 'https://alldebrid.com/pin/';
 
 export interface SimulatedAccount {
   readonly username: string;
@@ -99,6 +107,11 @@ export interface AllDebridServerOptions {
   readonly refusalStatus?: number;
   // The documentation's table says `premiumUntil` is a number, its example writes it as text.
   readonly timestampsAsText?: boolean;
+  // How long a code to confirm on the site lasts, in seconds: ten minutes, as the documentation
+  // says, if absent.
+  readonly codeLifetimeSeconds?: number;
+  // The page it names for a code, when it is not the service's own.
+  readonly codePage?: string;
   // A port of its own for a run of the real app; a free one otherwise.
   readonly port?: number;
 }
@@ -118,7 +131,20 @@ export interface AllDebridServer {
   readonly api: string;
   readonly requests: SimulatedRequest[];
   misbehave(how: Misbehaviour | undefined): void;
+  // What the person does on the service's site: the code is confirmed, and gives this key.
+  confirmCode(code: string, apiKey: string): void;
   close(): Promise<void>;
+}
+
+interface GivenCode {
+  readonly pin: string;
+  readonly expiresAt: number;
+  apiKey?: string;
+}
+
+// Four letters and digits, as the documentation's example shows a code: the n-th one given.
+function pinOf(n: number): string {
+  return n.toString(36).toUpperCase().padStart(4, 'A');
 }
 
 function send(response: ServerResponse, status: number, body: unknown): void {
@@ -176,6 +202,8 @@ export async function startAllDebridServer(
   let misbehaved = 0;
   // The links being prepared, by their "delayed" id, with the "still processing" answers left.
   const preparing = new Map<number, { left: number; readonly link: UnlockableLink }>();
+  // The codes given, by the check that goes with each.
+  const codes = new Map<string, GivenCode>();
 
   function misbehaves(response: ServerResponse): boolean {
     if (misbehaviour === undefined) return false;
@@ -284,6 +312,40 @@ export async function startAllDebridServer(
     }
   }
 
+  function giveCode(response: ServerResponse): void {
+    const lifetime = options.codeLifetimeSeconds ?? 600;
+    const pin = pinOf(codes.size + 1);
+    const check = randomBytes(20).toString('hex');
+    codes.set(check, { pin, expiresAt: Date.now() + lifetime * 1000 });
+    const page = options.codePage ?? CODE_PAGE;
+    succeed(response, {
+      pin,
+      check,
+      expires_in: lifetime,
+      user_url: `${page}?pin=${pin}`,
+      base_url: page,
+    });
+  }
+
+  function checkCode(response: ServerResponse, pin: string | undefined, check: string | undefined) {
+    const given = check === undefined ? undefined : codes.get(check);
+    if (given === undefined || given.pin !== pin) {
+      refuse(response, 200, 'PIN_INVALID');
+      return;
+    }
+    const left = Math.ceil((given.expiresAt - Date.now()) / 1000);
+    if (left <= 0) {
+      refuse(response, 200, 'PIN_EXPIRED');
+      return;
+    }
+    succeed(
+      response,
+      given.apiKey === undefined
+        ? { activated: false, expires_in: left }
+        : { apikey: given.apiKey, activated: true, expires_in: left },
+    );
+  }
+
   const server = createServer((request, response) => {
     void formOf(request).then(async (form) => {
       const url = new URL(request.url ?? '/', 'http://simulated');
@@ -317,6 +379,15 @@ export async function startAllDebridServer(
         });
         return;
       }
+      // Public too: whoever asks for a code has no key yet.
+      if (route === 'GET /v4.1/pin/get') {
+        giveCode(response);
+        return;
+      }
+      if (route === 'POST /v4/pin/check') {
+        checkCode(response, form.pin, form.check);
+        return;
+      }
       const account = accountOf(request, options);
       if (typeof account === 'string') {
         refuse(response, options.refusalStatus ?? 200, account);
@@ -340,6 +411,11 @@ export async function startAllDebridServer(
     misbehave: (how) => {
       misbehaviour = how;
       misbehaved = 0;
+    },
+    confirmCode: (code, apiKey) => {
+      const given = [...codes.values()].find((each) => each.pin === code);
+      if (given === undefined) throw new Error(`No code ${code} was given.`);
+      given.apiKey = apiKey;
     },
     close: () =>
       new Promise((resolve) => {

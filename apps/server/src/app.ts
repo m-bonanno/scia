@@ -238,6 +238,29 @@ export function createApp(deps: AppDeps): Hono {
     return c.body(null, 204);
   });
 
+  // A code to confirm on the service's site (#136): what the service gives the key for stays in
+  // the engine, and the key it gives is connected as a pasted one is.
+  app.post(`${API_PREFIX}/integrations/:id/code`, async (c) => {
+    const id = c.req.param('id');
+    if (!isIntegrationId(id)) return fail(404, ApiErrorCode.NotFound, 'No such service.');
+    return c.json({ data: await integrations.startCode(id) }, 201);
+  });
+
+  app.get(`${API_PREFIX}/integrations/:id/code`, (c) => {
+    const id = c.req.param('id');
+    if (!isIntegrationId(id)) return fail(404, ApiErrorCode.NotFound, 'No such service.');
+    const code = integrations.code(id);
+    if (code === undefined) return fail(404, ApiErrorCode.NotFound, 'No code was given.');
+    return c.json({ data: code });
+  });
+
+  app.delete(`${API_PREFIX}/integrations/:id/code`, (c) => {
+    const id = c.req.param('id');
+    if (!isIntegrationId(id)) return fail(404, ApiErrorCode.NotFound, 'No such service.');
+    integrations.cancelCode(id);
+    return c.body(null, 204);
+  });
+
   app.get(`${API_PREFIX}/extension/pairing`, (c) => {
     const pairing: Pairing = { token: deps.extensionToken, port: deps.port() };
     return c.json({ data: pairing });
