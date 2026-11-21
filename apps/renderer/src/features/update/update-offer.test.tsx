@@ -432,6 +432,38 @@ describe('UpdateOffer', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    it('does not come back open after an offer that left while main was restarting, and main failed', async () => {
+      let fail: (error: unknown) => void = () => undefined;
+      const onRestart = vi.fn(
+        () =>
+          new Promise<unknown>((_, reject) => {
+            fail = reject;
+          }),
+      );
+      const { rerender } = render(page({ ...base, onRestart }));
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Restart now' }));
+
+      rerender(page({ ...base, onRestart, offered: null }));
+      await act(async () => {
+        fail(new Error('main said nothing'));
+        await Promise.resolve();
+      });
+      rerender(page({ ...base, onRestart, offered: '1.0.0-beta.19' }));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('keeps the focus on "Restarting…" while main restarts, not on a "Later" that does nothing', async () => {
+      const onRestart = vi.fn(() => new Promise<unknown>(() => undefined));
+      render(page({ ...base, onRestart }));
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Restart now' }));
+
+      expect(screen.getByRole('button', { name: 'Restarting…' })).toHaveFocus();
+    });
+
     it('leaves a focus elsewhere alone when a second offer comes and goes untouched', () => {
       const onRestart = vi.fn(async () => UpdateRestart.Restarting);
       const { rerender } = render(page({ ...base, onRestart }));
