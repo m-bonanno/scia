@@ -1,4 +1,5 @@
 import { downloadSchema } from '@scia/contracts';
+import { DownloadStatus, isUnderWay } from '@scia/core';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { activityOf, downloadActivity, unfinished } from './download-activity.ts';
@@ -100,5 +101,15 @@ describe('downloadActivity', () => {
     };
 
     await expect(downloadActivity(silent, 20)).rejects.toThrow('aborted');
+  });
+});
+
+describe('unfinished, of a list main already has', () => {
+  it('counts what the page counts as under way, and nothing else', () => {
+    for (const status of Object.values(DownloadStatus)) {
+      const downloads = z.array(downloadSchema).parse([aDownload('a', status)]);
+
+      expect(unfinished(activityOf(downloads))).toBe(isUnderWay(status) ? 1 : 0);
+    }
   });
 });

@@ -25,6 +25,19 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke(BridgeChannel.ChooseDownloadFolder) as Promise<unknown>,
     // The page says that the theme changed, not which: main asks the engine.
     themeChanged: () => ipcRenderer.invoke(BridgeChannel.ThemeChanged) as Promise<unknown>,
+    // The version of an update a quit would install, or null; main decides.
+    updateOffered: () => ipcRenderer.invoke(BridgeChannel.UpdateOffered) as Promise<unknown>,
+    // Main says only that what it offers changed; the listener is called with nothing.
+    onUpdateChanged: (listener: () => void) => {
+      const heard = () => {
+        listener();
+      };
+      ipcRenderer.on(BridgeChannel.UpdateChanged, heard);
+      return () => {
+        ipcRenderer.off(BridgeChannel.UpdateChanged, heard);
+      };
+    },
+    restartToUpdate: () => ipcRenderer.invoke(BridgeChannel.RestartToUpdate) as Promise<unknown>,
     // The page names a service; main asks the engine for its code's page, and opens it.
     openCodePage: (id: string) =>
       ipcRenderer.invoke(BridgeChannel.OpenCodePage, id) as Promise<unknown>,

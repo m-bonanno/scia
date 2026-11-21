@@ -1,20 +1,27 @@
 import { ApiErrorCode, type Settings } from '@scia/contracts';
-import { DownloadStatus } from '@scia/core';
+import { DownloadStatus, isUnderWay } from '@scia/core';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TEXT_BUTTON } from '@/components/button-styles.ts';
 import { type Added, AddBar } from '@/features/downloads/add-bar.tsx';
+import { type Pasted, pastedIn } from '@/features/downloads/pasted.ts';
 import { DownloadList } from '@/features/downloads/download-list.tsx';
 import type { RowActions } from '@/features/downloads/download-row.tsx';
+import type { MagnetActions } from '@/features/downloads/magnet-row.tsx';
 import { FilterTabs, type FilterTabsHandle } from '@/features/downloads/filter-tabs.tsx';
 import { countByFilter, Filter, matchesFilter } from '@/features/downloads/filters.ts';
-import { extractLinks } from '@scia/contracts/links';
 import { Notices } from '@/features/notices/notices.tsx';
 import { useNotices } from '@/features/notices/use-notices.ts';
 import { SettingsDialog, type SettingsLayer } from '@/features/settings/settings-dialog.tsx';
+import { UpdateOffer } from '@/features/update/update-offer.tsx';
 import { api, ApiError } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { Connection, useLive } from '@/lib/live.ts';
-import { ENGINE_UNREACHABLE, errorMessage, FILE_NOT_OPENED } from '@/lib/messages.ts';
+import {
+  ENGINE_UNREACHABLE,
+  errorMessage,
+  FILE_NOT_OPENED,
+  magnetActionMessage,
+} from '@/lib/messages.ts';
 import { wearTheme } from '@/lib/theme.ts';
 import { TitleBar } from './title-bar.tsx';
 
@@ -38,10 +45,39 @@ export function App(): ReactNode {
     [tell],
   );
 
-  const keepSettings = useCallback((settings: Settings) => {
-    setSpeedLimit(settings.speedLimitBytesPerSecond);
-    wearTheme(settings.theme);
+  // The update a quit would install, as main says it: asked at the start, whenever main says it
+  // changed, and whenever the settings are learned — a beta is offered only while its switch is on.
+  // Only the last ask is kept.
+  const [offered, setOffered] = useState<string | null>(null);
+  const offerAsked = useRef(0);
+  const askOffer = useCallback(() => {
+    const shell = bridge();
+    if (shell === undefined) return;
+    offerAsked.current += 1;
+    const mine = offerAsked.current;
+    const keep = (answer: unknown) => {
+      if (mine !== offerAsked.current) return;
+      setOffered(typeof answer === 'string' && answer !== '' ? answer : null);
+    };
+    shell.updateOffered().then(keep, () => {
+      keep(null);
+    });
   }, []);
+  useEffect(() => {
+    const shell = bridge();
+    if (shell === undefined) return undefined;
+    askOffer();
+    return shell.onUpdateChanged(askOffer);
+  }, [askOffer]);
+
+  const keepSettings = useCallback(
+    (settings: Settings) => {
+      askOffer();
+      setSpeedLimit(settings.speedLimitBytesPerSecond);
+      wearTheme(settings.theme);
+    },
+    [askOffer],
+  );
 
   // The limit the title bar names and the theme the page wears are the engine's: read when the
   // engine is reached, and again whenever it comes back. A read that fails all the same is not
@@ -63,20 +99,31 @@ export function App(): ReactNode {
   }, [reached, keepSettings]);
 
   // From the field, a refusal of what was sent is the field's to say; anything else, and any
-  // failure of links pasted on the page, is a notice.
+  // failure of links pasted on the page, is a notice. Links and magnets are sent apart: when one
+  // half is refused, the other is taken, and the field keeps only what was refused.
   const add = useCallback(
-    async (urls: string[], fromField: boolean): Promise<Added> => {
-      try {
-        await api.addDownloads(urls);
+    async ({ links, magnets }: Pasted, fromField: boolean): Promise<Added> => {
+      const halves = [links, magnets] as const;
+      const answers = await Promise.allSettled([
+        links.length === 0 ? Promise.resolve() : api.addDownloads(links),
+        magnets.length === 0 ? Promise.resolve() : api.addMagnets(magnets),
+      ]);
+      const refused = halves.filter((_, index) => answers[index]?.status === 'rejected').flat();
+      if (refused.length < links.length + magnets.length) {
         setFilter((current) => (current === Filter.Completed ? Filter.All : current));
-        return { taken: true };
-      } catch (error) {
-        if (fromField && error instanceof ApiError && error.code === ApiErrorCode.InvalidRequest) {
-          return { taken: false, refusal: errorMessage(error) };
-        }
-        report(error);
-        return { taken: false, refusal: null };
       }
+      if (refused.length === 0) return { taken: true };
+      let refusal: string | null = null;
+      for (const answer of answers) {
+        if (answer.status === 'fulfilled') continue;
+        const error: unknown = answer.reason;
+        const theFields =
+          fromField && error instanceof ApiError && error.code === ApiErrorCode.InvalidRequest;
+        if (theFields && refusal === null) refusal = errorMessage(error);
+        else report(error);
+      }
+      const partly = refused.length < links.length + magnets.length;
+      return { taken: false, refusal, left: partly ? refused.join(' ') : null };
     },
     [report],
   );
@@ -85,8 +132,8 @@ export function App(): ReactNode {
   useEffect(() => {
     const onPaste = (event: ClipboardEvent) => {
       if (isTextField(event.target)) return;
-      const links = extractLinks(event.clipboardData?.getData('text/plain') ?? '');
-      if (links.length > 0) void add(links, false);
+      const pasted = pastedIn(event.clipboardData?.getData('text/plain') ?? '');
+      if (pasted.links.length > 0 || pasted.magnets.length > 0) void add(pasted, false);
     };
     window.addEventListener('paste', onPaste);
     return () => {
@@ -126,11 +173,28 @@ export function App(): ReactNode {
     };
   }, [report, tell]);
 
+  const magnetActions = useMemo(
+    (): MagnetActions => ({
+      retry: (id) => {
+        api.retryMagnet(id).catch((error: unknown) => {
+          tell(magnetActionMessage(error));
+        });
+      },
+      remove: (id) => {
+        api.removeMagnet(id).catch((error: unknown) => {
+          tell(magnetActionMessage(error));
+        });
+      },
+    }),
+    [tell],
+  );
+
   // Newest first: what was just added is what the eye looks for.
   const visible = useMemo(
     () => live.downloads.filter((download) => matchesFilter(filter, download.status)).reverse(),
     [live.downloads, filter],
   );
+  const shell = bridge();
   const bytesPerSecond = live.downloads.reduce((sum, download) => sum + download.bytesPerSecond, 0);
   const hasReady = live.downloads.some((download) => download.status === DownloadStatus.Ready);
   // "Start all" leaves the page under its own press. Decided when it leaves, from where the focus
@@ -152,15 +216,27 @@ export function App(): ReactNode {
         onOpenSettings={() => {
           setSettingsOpen(true);
         }}
+        beside={
+          shell === undefined ? undefined : (
+            <UpdateOffer
+              version={shell.version}
+              offered={offered}
+              downloading={live.downloads.some((download) => isUnderWay(download.status))}
+              onRestart={() => shell.restartToUpdate()}
+              onGone={askOffer}
+              home={() => field.current}
+            />
+          )
+        }
       />
       <main className="flex min-h-0 flex-1 flex-col">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 pt-4 pb-4">
-          <AddBar onAdd={(urls) => add(urls, true)} inputRef={field} />
+          <AddBar onAdd={(pasted) => add(pasted, true)} inputRef={field} />
           <div className="flex items-center justify-between gap-2">
             <FilterTabs
               ref={filterTabs}
               filter={filter}
-              counts={countByFilter(live.downloads)}
+              counts={countByFilter(live.downloads, live.magnets.length)}
               onChange={setFilter}
             />
             {hasReady && (
@@ -179,7 +255,13 @@ export function App(): ReactNode {
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl px-6 pb-8">
             {live.connection !== Connection.Connecting && (
-              <DownloadList downloads={visible} filter={filter} actions={actions} />
+              <DownloadList
+                downloads={visible}
+                magnets={live.magnets}
+                filter={filter}
+                actions={actions}
+                magnetActions={magnetActions}
+              />
             )}
           </div>
         </div>

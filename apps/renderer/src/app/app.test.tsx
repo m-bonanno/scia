@@ -1,4 +1,4 @@
-import { ApiErrorCode, type Download } from '@scia/contracts';
+import { ApiErrorCode, type Download, type Magnet } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -21,13 +21,20 @@ const settings = {
 } as const;
 
 // What the page hears of the engine: changed by a spec, then the page is rendered again.
-const live = vi.hoisted((): { connection: Live.Connection; downloads: Download[] } => ({
-  connection: 'live',
-  downloads: [],
-}));
+const live = vi.hoisted(
+  (): { connection: Live.Connection; downloads: Download[]; magnets: Magnet[] } => ({
+    connection: 'live',
+    downloads: [],
+    magnets: [],
+  }),
+);
 vi.mock('@/lib/live.ts', async (original) => ({
   ...(await original<typeof Live>()),
-  useLive: () => ({ connection: live.connection, downloads: live.downloads }),
+  useLive: () => ({
+    connection: live.connection,
+    downloads: live.downloads,
+    magnets: live.magnets,
+  }),
 }));
 
 beforeAll(() => {
@@ -42,6 +49,8 @@ beforeAll(() => {
 
 beforeEach(() => {
   live.connection = 'live';
+  live.downloads = [];
+  live.magnets = [];
   vi.spyOn(api, 'settings').mockResolvedValue(settings);
 });
 afterEach(() => {
@@ -64,6 +73,9 @@ describe('App', () => {
       openDownload,
       chooseDownloadFolder: vi.fn(async () => 'kept'),
       themeChanged: vi.fn(async () => undefined),
+      updateOffered: vi.fn(async () => null),
+      onUpdateChanged: vi.fn(() => () => undefined),
+      restartToUpdate: vi.fn(async () => 'nothing'),
       openCodePage: vi.fn(async () => undefined),
     };
     render(<App />);
@@ -180,6 +192,9 @@ describe('App', () => {
       }),
       chooseDownloadFolder: vi.fn(async () => 'kept'),
       themeChanged: vi.fn(async () => undefined),
+      updateOffered: vi.fn(async () => null),
+      onUpdateChanged: vi.fn(() => () => undefined),
+      restartToUpdate: vi.fn(async () => 'nothing'),
       openCodePage: vi.fn(async () => undefined),
     };
     const add = vi.spyOn(api, 'addDownloads').mockResolvedValue([]);
@@ -546,4 +561,321 @@ describe('App', () => {
       expect(screen.queryByText(/limit\s/)).not.toBeInTheDocument();
     });
   });
+  describe('magnets', () => {
+    const MAGNET = `magnet:?xt=urn:btih:${'a'.repeat(40)}&dn=films`;
+    const magnet: Magnet = {
+      id: 'm1',
+      name: 'Holiday films',
+      status: 'fetching',
+      totalBytes: 400,
+      downloadedBytes: 100,
+      bytesPerSecond: 0,
+      failure: null,
+      createdAt: '2026-11-21T12:00:00.000Z',
+    };
+
+    it('sends the magnets of a text pasted on the page to the service, and its links as downloads', async () => {
+      const links = vi.spyOn(api, 'addDownloads').mockResolvedValue([]);
+      const magnets = vi.spyOn(api, 'addMagnets').mockResolvedValue([]);
+      render(<App />);
+      await userEvent.click(screen.getByRole('button', { name: /^All/ }));
+
+      await userEvent.paste(`https://example.com/a.zip and ${MAGNET}`);
+
+      await vi.waitFor(() => {
+        expect(magnets).toHaveBeenCalledExactlyOnceWith([MAGNET]);
+      });
+      expect(links).toHaveBeenCalledExactlyOnceWith(['https://example.com/a.zip']);
+    });
+
+    it('counts on its button what the field sends: files, or links with a magnet among them', async () => {
+      render(<App />);
+      const field = screen.getByRole('textbox', { name: 'Links to download' });
+      await userEvent.click(field);
+
+      await userEvent.paste('https://example.com/a.zip https://example.com/b.zip');
+      expect(screen.getByRole('button', { name: 'Download 2 files' })).toBeInTheDocument();
+      await userEvent.paste(` ${MAGNET}`);
+      expect(screen.getByRole('button', { name: 'Download 3 links' })).toBeInTheDocument();
+    });
+
+    it('sends a magnet typed in the field, and asks the engine for no download', async () => {
+      const links = vi.spyOn(api, 'addDownloads').mockResolvedValue([]);
+      const magnets = vi.spyOn(api, 'addMagnets').mockResolvedValue([]);
+      render(<App />);
+      const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+      await userEvent.click(field);
+      await userEvent.paste(MAGNET);
+      await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+      expect(magnets).toHaveBeenCalledExactlyOnceWith([MAGNET]);
+      expect(links).not.toHaveBeenCalled();
+      await vi.waitFor(() => {
+        expect(field).toHaveValue('');
+      });
+    });
+
+    it('lists the magnets the service is fetching above the downloads, not among the completed', async () => {
+      live.magnets = [magnet];
+      live.downloads = [aDownload({ status: DownloadStatus.Completed })];
+      render(<App />);
+
+      const rows = screen.getAllByRole('listitem');
+      expect(within(rows[0] ?? document.body).getByText('Holiday films')).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: /^Completed/ }));
+      expect(screen.queryByText('Holiday films')).not.toBeInTheDocument();
+    });
+
+    it('lists the newest magnet first, as the downloads below it', () => {
+      live.magnets = [
+        magnet,
+        { ...magnet, id: 'm2', name: 'Concert', createdAt: '2026-11-21T12:05:00.000Z' },
+      ];
+      render(<App />);
+
+      const rows = screen.getAllByRole('listitem');
+      expect(within(rows[0] ?? document.body).getByText('Concert')).toBeInTheDocument();
+      expect(within(rows[1] ?? document.body).getByText('Holiday films')).toBeInTheDocument();
+    });
+
+    it('stops waiting for a magnet at its Remove, and tries one that failed again at its Retry', async () => {
+      live.magnets = [{ ...magnet, status: 'failed', failure: 'MAGNET_FAILED' }];
+      const remove = vi.spyOn(api, 'removeMagnet').mockResolvedValue();
+      const retry = vi.spyOn(api, 'retryMagnet').mockResolvedValue(magnet);
+      render(<App />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+      expect(retry).toHaveBeenCalledExactlyOnceWith('m1');
+      expect(remove).toHaveBeenCalledExactlyOnceWith('m1');
+    });
+
+    it('takes the half of the field the engine took, and keeps only the half it refused', async () => {
+      vi.spyOn(api, 'addDownloads').mockRejectedValue(new TypeError('Failed to fetch'));
+      const magnets = vi.spyOn(api, 'addMagnets').mockResolvedValue([]);
+      render(<App />);
+      const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+      await userEvent.click(field);
+      await userEvent.paste(`https://example.com/a.zip ${MAGNET}`);
+      await userEvent.click(screen.getByRole('button', { name: 'Download 2 links' }));
+
+      await vi.waitFor(() => {
+        expect(field).toHaveValue('https://example.com/a.zip');
+      });
+      expect(magnets).toHaveBeenCalledExactlyOnceWith([MAGNET]);
+      expect(screen.getByRole('list', { name: 'Notices' })).toHaveTextContent(ENGINE_UNREACHABLE);
+    });
+
+    it('keeps the whole field when nothing of it was taken', async () => {
+      vi.spyOn(api, 'addDownloads').mockRejectedValue(new TypeError('Failed to fetch'));
+      vi.spyOn(api, 'addMagnets').mockRejectedValue(new TypeError('Failed to fetch'));
+      render(<App />);
+      const field = screen.getByRole('textbox', { name: 'Links to download' });
+      const typed = `https://example.com/a.zip ${MAGNET}`;
+
+      await userEvent.click(field);
+      await userEvent.paste(typed);
+      await userEvent.click(screen.getByRole('button', { name: 'Download 2 links' }));
+
+      await vi.waitFor(() => {
+        expect(screen.getByRole('list', { name: 'Notices' })).toHaveTextContent(ENGINE_UNREACHABLE);
+      });
+      expect(field).toHaveValue(typed);
+    });
+
+    it('counts a magnet the service is fetching among the downloads in progress', () => {
+      live.magnets = [magnet];
+      render(<App />);
+
+      expect(screen.getByRole('button', { name: /^In progress/ })).toHaveTextContent(/1$/);
+      expect(screen.getByRole('button', { name: /^Completed/ })).toHaveTextContent(/0$/);
+    });
+
+    it("says in a magnet's words that one changed before its Retry or Remove reached the engine", async () => {
+      live.magnets = [{ ...magnet, status: 'failed', failure: 'MAGNET_FAILED' }];
+      vi.spyOn(api, 'retryMagnet').mockRejectedValue(
+        new ApiError(409, ApiErrorCode.Conflict, 'not failed'),
+      );
+      vi.spyOn(api, 'removeMagnet').mockRejectedValue(
+        new ApiError(404, ApiErrorCode.NotFound, 'no magnet'),
+      );
+      render(<App />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+      const notices = await screen.findByRole('list', { name: 'Notices' });
+      await vi.waitFor(() => {
+        expect(notices).toHaveTextContent('This magnet is no longer in the list.');
+      });
+      expect(notices).toHaveTextContent('This magnet is already being sent again.');
+    });
+  });
+});
+
+describe('App, its version and an update', () => {
+  beforeEach(() => {
+    live.downloads = [];
+  });
+
+  function aShell(overrides: Partial<NonNullable<typeof window.scia>> = {}) {
+    let changed: () => void = () => undefined;
+    const shell = {
+      apiToken: 'token',
+      version: '1.0.0-beta.17',
+      platform: 'win32',
+      revealDownload: vi.fn(async () => undefined),
+      openDownload: vi.fn(async () => undefined),
+      chooseDownloadFolder: vi.fn(async () => 'kept'),
+      themeChanged: vi.fn(async () => undefined),
+      updateOffered: vi.fn(async (): Promise<unknown> => null),
+      onUpdateChanged: vi.fn((listener: () => void) => {
+        changed = listener;
+        return () => undefined;
+      }),
+      restartToUpdate: vi.fn(async (): Promise<unknown> => 'restarting'),
+      openCodePage: vi.fn(async () => undefined),
+      ...overrides,
+    };
+    window.scia = shell;
+    return {
+      shell,
+      change: () => {
+        changed();
+      },
+    };
+  }
+
+  it('says beside the name the version Scia is', () => {
+    aShell();
+    render(<App />);
+
+    expect(within(screen.getByRole('banner')).getByText('1.0.0-beta.17')).toBeInTheDocument();
+  });
+
+  it('offers the update main says a quit would install, and asks again when main says it changed', async () => {
+    const offered = vi.fn(async (): Promise<unknown> => null);
+    const { change } = aShell({ updateOffered: offered });
+    render(<App />);
+    await vi.waitFor(() => {
+      expect(offered).toHaveBeenCalled();
+    });
+    expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
+
+    offered.mockResolvedValue('1.0.0-beta.18');
+    change();
+
+    expect(await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' })).toBeVisible();
+  });
+
+  it('asks again what is offered once it learns the settings: a beta goes with its switch', async () => {
+    const offered = vi.fn(async (): Promise<unknown> => '1.0.0-beta.18');
+    aShell({ updateOffered: offered });
+    render(<App />);
+    expect(await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' })).toBeVisible();
+
+    offered.mockResolvedValue(null);
+    vi.spyOn(api, 'updateSettings').mockResolvedValue({ ...settings, betaUpdates: false });
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+
+    await vi.waitFor(() => {
+      expect(
+        screen.queryByRole('button', { name: 'Update to 1.0.0-beta.18' }),
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  it('keeps what main answered last, whichever answer comes back first', async () => {
+    const answers: ((answer: unknown) => void)[] = [];
+    const offered = vi.fn(
+      () =>
+        new Promise<unknown>((resolve) => {
+          answers.push(resolve);
+        }),
+    );
+    const { change } = aShell({ updateOffered: offered });
+    render(<App />);
+    await vi.waitFor(() => {
+      expect(answers).toHaveLength(1);
+    });
+    const before = answers.length;
+    change();
+    await vi.waitFor(() => {
+      expect(answers.length).toBeGreaterThan(before);
+    });
+
+    // The last ask is answered first; every earlier one after it, with a version.
+    answers.at(-1)?.(null);
+    for (const answer of answers.slice(0, -1)) answer('1.0.0-beta.18');
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
+  });
+
+  it('hands the focus to the field when the offer leaves under it', async () => {
+    const offered = vi.fn(async (): Promise<unknown> => '1.0.0-beta.18');
+    const { change } = aShell({ updateOffered: offered });
+    render(<App />);
+    const button = await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' });
+    button.focus();
+
+    offered.mockResolvedValue(null);
+    change();
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Links to download' })).toHaveFocus();
+    });
+  });
+
+  it('stops listening to main when the page goes', () => {
+    const stop = vi.fn();
+    aShell({ onUpdateChanged: vi.fn(() => stop) });
+    const { unmount } = render(<App />);
+
+    unmount();
+
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
+  it('asks main to restart when the person says so', async () => {
+    const { shell } = aShell({ updateOffered: vi.fn(async () => '1.0.0-beta.18') });
+    render(<App />);
+    await userEvent.click(await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Restart now' }));
+
+    expect(shell.restartToUpdate).toHaveBeenCalledOnce();
+  });
+
+  it('says the update waits for the quit while a download runs', async () => {
+    live.downloads = [aDownload({ status: DownloadStatus.Downloading })];
+    const { shell } = aShell({ updateOffered: vi.fn(async () => '1.0.0-beta.18') });
+    render(<App />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('Scia is downloading.');
+    expect(shell.restartToUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each([{ version: '9' }, '', 18])(
+    'offers nothing for an answer of main that is not a version: %j',
+    async (notAVersion) => {
+      const offered = vi.fn(async (): Promise<unknown> => '1.0.0-beta.18');
+      const { change } = aShell({ updateOffered: offered });
+      render(<App />);
+      expect(await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' })).toBeVisible();
+
+      offered.mockResolvedValue(notAVersion);
+      change();
+
+      await vi.waitFor(() => {
+        expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
+      });
+      expect(within(screen.getByRole('banner')).getByText('1.0.0-beta.17')).toBeVisible();
+    },
+  );
 });

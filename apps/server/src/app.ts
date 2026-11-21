@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { extname, join, normalize, sep } from 'node:path';
 import {
   addDownloadsSchema,
+  addMagnetsSchema,
   API_PREFIX,
   ApiErrorCode,
   connectIntegrationSchema,
@@ -147,6 +148,22 @@ export function createApp(deps: AppDeps): Hono {
   });
 
   app.post(`${API_PREFIX}/downloads/start-ready`, (c) => c.json({ data: manager.startReady() }));
+
+  // Magnets pasted into the page, for the connected service to fetch (#137; docs/adr/0014).
+  app.post(`${API_PREFIX}/magnets`, async (c) => {
+    const parsed = addMagnetsSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return fail(400, ApiErrorCode.InvalidRequest, 'Give one or more magnets.');
+    return c.json({ data: manager.addMagnets(parsed.data.magnets) }, 201);
+  });
+
+  app.post(`${API_PREFIX}/magnets/:id/retry`, (c) =>
+    c.json({ data: manager.retryMagnet(c.req.param('id')) }),
+  );
+
+  app.delete(`${API_PREFIX}/magnets/:id`, (c) => {
+    manager.removeMagnet(c.req.param('id'));
+    return c.body(null, 204);
+  });
 
   app.get(`${API_PREFIX}/downloads/:id`, (c) => c.json({ data: manager.find(c.req.param('id')) }));
 

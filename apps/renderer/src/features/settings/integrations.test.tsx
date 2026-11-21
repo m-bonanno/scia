@@ -496,6 +496,9 @@ describe('IntegrationsSection', () => {
         chooseDownloadFolder: vi.fn(async () => undefined),
         themeChanged: vi.fn(async () => undefined),
         openCodePage,
+        updateOffered: vi.fn(async () => null),
+        onUpdateChanged: vi.fn(() => () => undefined),
+        restartToUpdate: vi.fn(async () => 'nothing'),
       };
     }
     // The engine is asked what became of the code at its pace: the spec moves the clock.

@@ -1,13 +1,16 @@
-import type { Download } from '@scia/contracts';
+import type { Download, Magnet } from '@scia/contracts';
 import type { ReactNode } from 'react';
 import { Logo } from '@/app/logo.tsx';
 import { DownloadRow, type RowActions } from './download-row.tsx';
-import type { Filter } from './filters.ts';
+import { Filter } from './filters.ts';
+import { type MagnetActions, MagnetRow } from './magnet-row.tsx';
 
 interface DownloadListProps {
   readonly downloads: readonly Download[];
+  readonly magnets: readonly Magnet[];
   readonly filter: Filter;
   readonly actions: RowActions;
+  readonly magnetActions: MagnetActions;
 }
 
 const EMPTY: Readonly<Record<Filter, { readonly title: string; readonly hint: string }>> = {
@@ -19,8 +22,17 @@ const EMPTY: Readonly<Record<Filter, { readonly title: string; readonly hint: st
   completed: { title: 'No completed files yet', hint: 'Completed files show up here.' },
 };
 
-export function DownloadList({ downloads, filter, actions }: DownloadListProps): ReactNode {
-  if (downloads.length === 0) {
+export function DownloadList({
+  downloads,
+  magnets,
+  filter,
+  actions,
+  magnetActions,
+}: DownloadListProps): ReactNode {
+  // A magnet is not finished: it is in "All" and "In progress", above the downloads — newest first,
+  // as they are.
+  const shownMagnets = filter === Filter.Completed ? [] : [...magnets].reverse();
+  if (downloads.length === 0 && shownMagnets.length === 0) {
     const { title, hint } = EMPTY[filter];
     return (
       <div className="flex flex-col items-center gap-2 px-6 pt-20 text-center">
@@ -34,6 +46,9 @@ export function DownloadList({ downloads, filter, actions }: DownloadListProps):
   }
   return (
     <ul className="flex flex-col gap-2">
+      {shownMagnets.map((magnet) => (
+        <MagnetRow key={magnet.id} magnet={magnet} actions={magnetActions} />
+      ))}
       {downloads.map((download) => (
         <DownloadRow key={download.id} download={download} actions={actions} />
       ))}

@@ -112,7 +112,7 @@ Mechanics in [`docs/development/release-flow.md`](./docs/development/release-flo
 - Squash merge to `develop` → tag `vX.Y.Z-beta.N`; merge commit to `main` → `vX.Y.Z` — each once the gates are green on the merged commit ([ADR 0008](./docs/adr/0008-the-delivery-pipeline.md)). Each GitHub release carries its notes, the Windows installer and the updater's files (`latest.yml`, the blockmap; [ADR 0007](./docs/adr/0007-automatic-updates.md)). The Linux job is off until Linux is tried.
 - The commit type decides the number: `fix`/`perf`/`hotfix` a patch, `feat` a minor, a breaking change a major; `chore`, `docs`, `ci`, `test`, `refactor` release nothing. Choose the type for what the change is to whoever uses Scia.
 - **Verify the artefact, not the build**: CI installs every release's installer before attaching it, starts it on a scratch profile, downloads a file, reads its log and uninstalls it; a person installs a stable over the previous stable, when there is one ([`release-flow.md`](./docs/development/release-flow.md)).
-- Never push a tag by hand, never edit a published one.
+- Never push a tag by hand, never edit or delete a published one. The only tag deleted by hand is one semantic-release pushed and never released, on the owner's word: [`release-flow.md`](./docs/development/release-flow.md), "A tag pushed without its notes".
 
 ---
 

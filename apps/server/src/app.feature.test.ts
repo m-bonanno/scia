@@ -10,7 +10,7 @@ import { DownloadManager } from './download-manager.ts';
 import { Integrations } from './integrations.ts';
 import { MemoryVault } from './key-vault.ts';
 import { JsonStateStore } from './state-store.ts';
-import { scratchFolder, silentLogger } from './testing/scratch.ts';
+import { scratchFolder, silentLogger, until } from './testing/scratch.ts';
 import { silentSource } from './testing/silent-source.ts';
 
 const APP_TOKEN = 'app-token-0000000000000000';
@@ -152,7 +152,9 @@ describe('the engine API', () => {
     await reader.cancel();
 
     expect(
-      heard.startsWith('event: snapshot\ndata: {"downloads":[],"watchClipboard":false}\n\n'),
+      heard.startsWith(
+        'event: snapshot\ndata: {"downloads":[],"magnets":[],"watchClipboard":false}\n\n',
+      ),
     ).toBe(true);
     expect(heard.match(/event: snapshot/g)).toHaveLength(1);
     expect(heard.split(comment).length).toBeGreaterThanOrEqual(4);
@@ -401,6 +403,63 @@ describe('the engine API', () => {
       }
       expect(await switchOf(await turn(true))).toBe(true);
       expect(await switchOf(await turn(false))).toBe(false);
+    });
+  });
+
+  describe('magnets', () => {
+    const MAGNET = `magnet:?xt=urn:btih:${'a'.repeat(40)}&dn=films`;
+    const add = (magnets: unknown, token = APP_TOKEN) =>
+      call('/magnets', { method: 'POST', token, body: JSON.stringify({ magnets }) });
+    const dataOf = async <T>(response: Response) => ((await response.json()) as { data: T }).data;
+
+    it('takes magnets from the app alone, and says what it has of each, never the magnet', async () => {
+      expect((await add([MAGNET], EXTENSION_TOKEN)).status).toBe(403);
+
+      const response = await add([MAGNET]);
+
+      expect(response.status).toBe(201);
+      const [added] = await dataOf<Record<string, unknown>[]>(response);
+      expect(added).toMatchObject({ name: 'films', status: 'sending', failure: null });
+      expect(JSON.stringify(added)).not.toContain('a'.repeat(40));
+      expect(manager.snapshot().magnets).toHaveLength(1);
+    });
+
+    it('refuses what is not a list of magnets, before keeping anything', async () => {
+      for (const magnets of [[], ['https://example.com/a.zip'], ['magnet:?dn=x'], 'magnet']) {
+        const response = await add(magnets);
+        expect(response.status, JSON.stringify(magnets)).toBe(400);
+        expect(await codeOf(response)).toBe(ApiErrorCode.InvalidRequest);
+      }
+      expect(manager.snapshot().magnets).toEqual([]);
+    });
+
+    it('lets the app alone stop waiting for a magnet, and try again one that failed', async () => {
+      const [added] = await dataOf<{ id: string }[]>(await add([MAGNET]));
+      const id = added?.id ?? '';
+      // Only one that failed is tried again: it is still being sent, at the same instant.
+      expect(
+        (await call(`/magnets/${id}/retry`, { method: 'POST', token: APP_TOKEN })).status,
+      ).toBe(409);
+      // With no service to fetch it, it fails: then it can be tried again.
+      await until(() => manager.snapshot().magnets[0]?.status === 'failed');
+
+      expect(
+        (await call(`/magnets/${id}/retry`, { method: 'POST', token: EXTENSION_TOKEN })).status,
+      ).toBe(403);
+      const retried = await call(`/magnets/${id}/retry`, { method: 'POST', token: APP_TOKEN });
+      expect(retried.status).toBe(200);
+      expect(await dataOf<{ status: string }>(retried)).toMatchObject({ status: 'sending' });
+
+      expect(
+        (await call(`/magnets/${id}`, { method: 'DELETE', token: EXTENSION_TOKEN })).status,
+      ).toBe(403);
+      expect((await call(`/magnets/${id}`, { method: 'DELETE', token: APP_TOKEN })).status).toBe(
+        204,
+      );
+      expect(manager.snapshot().magnets).toEqual([]);
+      expect((await call(`/magnets/${id}`, { method: 'DELETE', token: APP_TOKEN })).status).toBe(
+        404,
+      );
     });
   });
 
