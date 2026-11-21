@@ -240,7 +240,7 @@ describe('AccountMagnets', () => {
     const mendedInSettings: [ApiErrorCode, string][] = [
       [
         ApiErrorCode.KeyRefused,
-        'AllDebrid no longer accepts the key. Disconnect, then connect with a new one.',
+        'AllDebrid no longer accepts the key. In Settings, disconnect it and connect again.',
       ],
       [ApiErrorCode.ServiceNeeded, 'AllDebrid is no longer connected. Connect it in Settings.'],
     ];

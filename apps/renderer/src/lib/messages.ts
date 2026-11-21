@@ -146,16 +146,22 @@ function said(table: Readonly<Record<string, string>>, code: string): string | u
 }
 
 // What the service said of the account itself when it was asked about its magnets (#138), each
-// true of its cause alone, with its remedy: the sentences Settings says of the same refusal.
-// What is mended in Settings — a new key, a service connected — is asked again when Settings
-// closes; what is mended elsewhere is seen at the next ask.
+// true of its cause alone, with its remedy: the sentences Settings says of the same refusal, but
+// where Settings names a control of its own. What is mended in Settings — the key connected again,
+// a service connected — is asked again when Settings closes; what is mended elsewhere is seen at
+// the next ask.
 function accountRefused(
   code: string,
 ): { readonly text: string; readonly heals: boolean } | undefined {
   const service = SERVICE_NAME.alldebrid;
   switch (code) {
     case ApiErrorCode.KeyRefused:
-      return { text: serviceTroubleMessage(ServiceFailure.KeyRefused, 'alldebrid'), heals: false };
+      // Settings' own sentence sits beside its Disconnect: read anywhere else, it says where to
+      // act, and to connect again, by a code or a key (#136), as a link's row says.
+      return {
+        text: `${service} no longer accepts the key. In Settings, disconnect it and connect again.`,
+        heals: false,
+      };
     case ApiErrorCode.ServiceNeeded:
       return { text: `${service} is no longer connected. Connect it in Settings.`, heals: false };
     case ApiErrorCode.KeyBlocked:
