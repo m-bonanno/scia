@@ -55,6 +55,9 @@ export function connectFailureMessage(error: unknown, id: IntegrationId): string
 
 // Said when Settings asked for a code to confirm on the service's site and got none.
 const CODE_NOT_GIVEN: Readonly<Record<string, (service: string) => string>> = {
+  // A service connected meanwhile, or another code asked for: whatever it was, none came.
+  [ApiErrorCode.Conflict]: (service) =>
+    `Scia could not get a code from ${service}. Try again in a moment.`,
   // Not answering, under maintenance, or answering what Scia does not understand.
   [ApiErrorCode.Unavailable]: (service) =>
     `Scia could not get a code from ${service}. Try again in a moment.`,
@@ -72,7 +75,7 @@ const CODE_FAILED: Readonly<Record<IntegrationCodeFailure, (service: string) => 
   // Its time ran out, or the service, or the engine, no longer knows it.
   [IntegrationCodeFailure.Expired]: () => 'This code is no longer valid. Get a new one.',
   [IntegrationCodeFailure.KeyRefused]: (service) =>
-    `${service} did not accept the key it gave for this code. Get a new code, then try again.`,
+    `${service} did not accept the key it gave for this code. Get a new code.`,
   [IntegrationCodeFailure.KeyBlocked]: (service) =>
     `${service} is blocking the key from here. If ${service} emailed you about a new sign-in, confirm it; otherwise check your network. Then get a new code.`,
   [IntegrationCodeFailure.AccountBanned]: (service) => `${service} says this account is banned.`,
@@ -81,7 +84,7 @@ const CODE_FAILED: Readonly<Record<IntegrationCodeFailure, (service: string) => 
   // The account could not be asked about once the code was confirmed, or something Scia does
   // not understand: what is true of all of them is that nothing was connected.
   [IntegrationCodeFailure.Unavailable]: (service) =>
-    `Scia could not finish connecting with ${service}. Get a new code, then try again.`,
+    `Scia could not finish connecting with ${service}. Get a new code.`,
   [IntegrationCodeFailure.KeyNotKept]: () =>
     'Scia could not keep the key safely on this computer. Nothing was connected.',
 };

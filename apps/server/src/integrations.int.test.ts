@@ -537,10 +537,12 @@ describe('Integrations', () => {
     it('waits only for the last of two codes asked for together: the first is given up', async () => {
       const integrations = await open();
 
-      const first = integrations.startCode(IntegrationId.AllDebrid);
+      const first = integrations
+        .startCode(IntegrationId.AllDebrid)
+        .catch((error: unknown) => error);
       const second = await integrations.startCode(IntegrationId.AllDebrid);
 
-      await expect(first).rejects.toBeInstanceOf(CodeConflictError);
+      expect(await first).toBeInstanceOf(CodeConflictError);
       expect(service.requests.filter((request) => request.url === '/v4.1/pin/get')).toHaveLength(2);
       await until(() => checksOf(lastCheck()).length >= 2);
       expect(integrations.code(IntegrationId.AllDebrid)?.code).toBe(second.code);
@@ -580,6 +582,40 @@ describe('Integrations', () => {
       expect(await integrations.list()).toEqual([
         { id: 'alldebrid', connected: true, account: ada, failure: null },
       ]);
+    });
+
+    it('connects nothing for a code whose wait ended while its key waited its turn', async () => {
+      const kept = new MemoryVault();
+      let release = () => undefined as unknown;
+      // A disconnection whose system is slow: the changes after it wait their turn.
+      const slow: KeyVault = {
+        read: (name) => kept.read(name),
+        write: (name, key) => kept.write(name, key),
+        remove: (name) =>
+          new Promise((done) => {
+            release = () => {
+              done(kept.remove(name));
+            };
+          }),
+      };
+      const integrations = await open(slow);
+      const { code } = await integrations.startCode(IntegrationId.AllDebrid);
+      const busy = integrations.disconnect(IntegrationId.AllDebrid);
+      service.confirmCode(code, KEY);
+      await until(() => service.keysGiven > 0);
+      // The answer with the key reaches the engine, which then waits behind the disconnection.
+      await until(() => service.requests.at(-1)?.url === '/v4/pin/check');
+
+      integrations.cancelCode(IntegrationId.AllDebrid);
+      release();
+      await busy;
+      // A key the service refuses, sent after: once it is answered, what waited before it has run.
+      await expect(
+        integrations.connect(IntegrationId.AllDebrid, 'nobody-key-00000000000000'),
+      ).rejects.toBeInstanceOf(ServiceError);
+
+      expect(await kept.read(IntegrationId.AllDebrid)).toBeUndefined();
+      expect(await integrations.list()).toEqual([notConnected]);
     });
 
     it('gives no code while a service is connected: a confirmed code would replace its key', async () => {

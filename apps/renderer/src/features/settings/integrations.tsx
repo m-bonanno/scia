@@ -62,7 +62,7 @@ export function IntegrationsSection({ open, onError }: IntegrationsSectionProps)
           Integrations
         </h3>
         <p className="text-sm text-muted-foreground">
-          Services Scia can use. Each is connected once, with the key of your account.
+          Services Scia can use. Each is connected once, with your account.
         </p>
       </div>
       <ul className="flex flex-col gap-2">

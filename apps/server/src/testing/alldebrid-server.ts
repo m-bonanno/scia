@@ -135,6 +135,8 @@ export interface AllDebridServer {
   misbehave(how: Misbehaviour | undefined): void;
   // What the person does on the service's site: the code is confirmed, and gives this key.
   confirmCode(code: string, apiKey: string): void;
+  // How many times it has answered a confirmed code with its key.
+  readonly keysGiven: number;
   close(): Promise<void>;
 }
 
@@ -206,6 +208,7 @@ export async function startAllDebridServer(
   const preparing = new Map<number, { left: number; readonly link: UnlockableLink }>();
   // The codes given, by the check that goes with each.
   const codes = new Map<string, GivenCode>();
+  let keysGiven = 0;
 
   function misbehaves(response: ServerResponse): boolean {
     if (misbehaviour === undefined) return false;
@@ -340,6 +343,7 @@ export async function startAllDebridServer(
       refuse(response, 200, 'PIN_EXPIRED');
       return;
     }
+    if (given.apiKey !== undefined) keysGiven += 1;
     succeed(
       response,
       given.apiKey === undefined
@@ -413,6 +417,9 @@ export async function startAllDebridServer(
     misbehave: (how) => {
       misbehaviour = how;
       misbehaved = 0;
+    },
+    get keysGiven() {
+      return keysGiven;
     },
     confirmCode: (code, apiKey) => {
       const given = [...codes.values()].find((each) => each.pin === code);
