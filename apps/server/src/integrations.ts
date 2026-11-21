@@ -9,7 +9,7 @@ import {
   IntegrationCodeStatus,
   IntegrationId,
 } from '@scia/contracts';
-import { isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
+import { type MagnetFailure, isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
 import type { AllDebrid } from './alldebrid.ts';
 import type { KeyVault } from './key-vault.ts';
 import type { LinkResolver, UnlockedLink } from './link-resolver.ts';
@@ -380,16 +380,19 @@ export class Integrations implements LinkResolver, MagnetService {
       : undefined;
   }
 
-  send(magnets: readonly string[], signal?: AbortSignal): Promise<SentMagnet[]> {
+  async send(magnets: readonly string[], signal?: AbortSignal): Promise<SentMagnet[]> {
     return this.#deps.alldebrid.uploadMagnets(this.#keyForMagnets(), magnets, signal);
   }
 
-  states(signal?: AbortSignal): Promise<MagnetState[]> {
+  async states(signal?: AbortSignal): Promise<MagnetState[]> {
     return this.#deps.alldebrid.magnetStates(this.#keyForMagnets(), signal);
   }
 
-  files(id: number, signal?: AbortSignal): Promise<MagnetFile[]> {
-    return this.#deps.alldebrid.magnetFiles(this.#keyForMagnets(), id, signal);
+  async files(
+    ids: readonly number[],
+    signal?: AbortSignal,
+  ): Promise<Map<number, MagnetFile[] | MagnetFailure>> {
+    return this.#deps.alldebrid.magnetFiles(this.#keyForMagnets(), ids, signal);
   }
 
   // A magnet goes through a service or nowhere: Scia is not a torrent client.

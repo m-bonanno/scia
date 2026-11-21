@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import {
@@ -22,6 +22,7 @@ import {
   fileKindOfName,
   fileNameFromHost,
   fileNameFromUrl,
+  hashOfMagnet,
   magnetFolders,
   MagnetStatus,
   nextToStart,
@@ -38,7 +39,7 @@ import { HlsTask, piecesOf, type Timeline } from './hls-task.ts';
 import type { LinkResolver } from './link-resolver.ts';
 import { describeFailure, type Logger } from './logger.ts';
 import type { MagnetFile, MagnetService } from './magnet-service.ts';
-import { hashOfMagnet, MagnetWatch, nameOfMagnet } from './magnet-watch.ts';
+import { MagnetWatch, nameOfMagnet } from './magnet-watch.ts';
 import { chooseMedia, type MediaKind, PageError } from './media-choice.ts';
 import { offeredAs } from './offered-links.ts';
 import { type MarkDownloaded, markerFor } from './origin-mark.ts';
@@ -187,6 +188,15 @@ function addressOf(url: string): string {
     return new URL(url).href;
   } catch {
     return url;
+  }
+}
+
+// Something that is not a folder stands at this path.
+function isFileThere(path: string): boolean {
+  try {
+    return !statSync(path).isDirectory();
+  } catch {
+    return false;
   }
 }
 
@@ -555,10 +565,15 @@ export class DownloadManager {
   // the magnet puts it in, under the name the magnet gives it — and the magnet leaves the list.
   #magnetReady(record: MagnetRecord, files: readonly MagnetFile[]): void {
     this.#magnets = this.#magnets.filter((other) => other !== record);
+    // Its folder, or the first free one beside it when a file of its name stands there: a folder of
+    // that name is the magnet's to share, as its files take free names inside it.
+    const [own = FALLBACK_FILE_NAME] = magnetFolders(record.name, []);
+    const root = uniqueFileName(own, (candidate) => isFileThere(join(record.directory, candidate)));
     const added = files.map((file) => {
       const download = this.#newRecord(file.link, null, DownloadStatus.Queued);
       download.via = IntegrationId.AllDebrid;
-      download.directory = join(record.directory, ...magnetFolders(record.name, file.folders));
+      const [, ...folders] = magnetFolders(record.name, file.folders);
+      download.directory = join(record.directory, root, ...folders);
       download.fileName = fileNameFromHost(file.name) ?? FALLBACK_FILE_NAME;
       download.nameKept = true;
       return download;

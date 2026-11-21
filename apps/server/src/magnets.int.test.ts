@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { IntegrationId } from '@scia/contracts';
 import { DownloadStatus, MagnetFailure, MagnetStatus } from '@scia/core';
@@ -182,14 +182,36 @@ describe('a magnet that goes through a service', () => {
 
   it('says that magnets need a service when none is connected, and sends it once one is, at Retry', async () => {
     const alldebrid = await serviceWith();
-    const scia = await open(undefined);
+    const integrations = await Integrations.open({
+      vault: new MemoryVault(),
+      alldebrid: new AllDebrid({
+        api: alldebrid.api,
+        userAgent: 'Scia/spec',
+        retryDelayMs: () => 1,
+      }),
+      logger,
+    });
+    const scia = await open(integrations);
 
     const [added] = scia.addMagnets([MAGNET]);
     await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
 
     expect(scia.snapshot().magnets[0]?.failure).toBe(MagnetFailure.NeedsService);
     expect(alldebrid.requests).toEqual([]);
-    expect(() => scia.retryMagnet(added?.id ?? '')).not.toThrow();
+    await integrations.connect(IntegrationId.AllDebrid, KEY);
+    scia.retryMagnet(added?.id ?? '');
+    await until(() => allDone(scia));
+    expect(
+      alldebrid.requests.filter((request) => request.url === '/v4/magnet/upload'),
+    ).toHaveLength(1);
+  });
+
+  it('says it with no service at all to ask', async () => {
+    const scia = await open(undefined);
+
+    scia.addMagnets([MAGNET]);
+
+    await until(() => scia.snapshot().magnets[0]?.failure === MagnetFailure.NeedsService);
   });
 
   it('says why the service refuses a magnet, and fetches the others of the same paste', async () => {
@@ -284,6 +306,19 @@ describe('a magnet that goes through a service', () => {
     await until(() => allDone(scia));
   });
 
+  it('fails a magnet whose files the service answers with a code Scia does not know, as its upload would', async () => {
+    const alldebrid = await serviceWith({
+      magnets: { [HASH]: holiday({ unknownFilesAnswers: 1 }) },
+    });
+    const scia = await open(await connected(alldebrid));
+
+    scia.addMagnets([MAGNET]);
+
+    await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+    expect(scia.snapshot().magnets[0]?.failure).toBe(MagnetFailure.Unavailable);
+    expect(scia.snapshot().downloads).toEqual([]);
+  });
+
   it('says a magnet failed when it is gone from the account', async () => {
     const alldebrid = await serviceWith({ magnets: { [HASH]: holiday({ fetchingPolls: 1000 }) } });
     const scia = await open(await connected(alldebrid));
@@ -337,6 +372,150 @@ describe('a magnet that goes through a service', () => {
         200,
       ),
     ).rejects.toThrow('never held');
+  });
+
+  it('asks for the files of every magnet ready in one turn in one request', async () => {
+    const hashes = ['c', 'd', 'e'].map((letter) => letter.repeat(40));
+    const alldebrid = await serviceWith({
+      magnets: Object.fromEntries(
+        hashes.map((hash, index) => [
+          hash,
+          {
+            name: `Pack ${String(index)}`,
+            size: readme.length,
+            fetchingPolls: 0,
+            files: [{ n: 'readme.txt', s: readme.length, l: 'https://alldebrid.com/f/readme' }],
+          },
+        ]),
+      ),
+    });
+    const scia = await open(await connected(alldebrid));
+
+    scia.addMagnets(hashes.map((hash) => `magnet:?xt=urn:btih:${hash}`));
+
+    await until(
+      () =>
+        scia.snapshot().downloads.length === 3 &&
+        scia.snapshot().downloads.every((each) => each.status === DownloadStatus.Completed),
+    );
+    const asked = alldebrid.requests.filter((request) => request.url === '/v4/magnet/files');
+    expect(asked.map((request) => request.lists['id[]']?.length)).toEqual([3]);
+  });
+
+  it('fails a magnet whose list of files it cannot take, and asks about it no more', async () => {
+    const alldebrid = await serviceWith({
+      magnets: {
+        [HASH]: holiday({ fetchingPolls: 0, files: [{ n: 'x', s: 1, l: 'javascript:alert(1)' }] }),
+      },
+    });
+    const scia = await open(await connected(alldebrid));
+
+    scia.addMagnets([MAGNET]);
+
+    await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+    expect(scia.snapshot().magnets[0]?.failure).toBe(MagnetFailure.Unreadable);
+    expect(alldebrid.requests.filter((request) => request.url === '/v4/magnet/files')).toHaveLength(
+      1,
+    );
+  });
+
+  it("puts a magnet's files in a folder of their own when a file stands where its folder goes", async () => {
+    await mkdir(downloads(), { recursive: true });
+    await writeFile(join(downloads(), 'Holiday films'), 'a file of the same name');
+    const scia = await open(await connected(await serviceWith()));
+
+    scia.addMagnets([MAGNET]);
+
+    await until(() => allDone(scia));
+    const root = join(downloads(), 'Holiday films (1)');
+    expect(Buffer.compare(await readFile(join(root, 'Day 1', 'beach.mkv')), film)).toBe(0);
+    expect(await readFile(join(downloads(), 'Holiday films'), 'utf8')).toBe(
+      'a file of the same name',
+    );
+  });
+
+  it('keeps every file of a magnet under its folder, whatever names its tree gives', async () => {
+    const hostile = {
+      name: '..',
+      size: 3 * readme.length,
+      fetchingPolls: 0,
+      files: [
+        {
+          n: '..',
+          e: [{ n: '../../evil1.txt', s: readme.length, l: 'https://alldebrid.com/f/readme' }],
+        },
+        {
+          n: 'C:\\Windows',
+          e: [{ n: 'CON', s: readme.length, l: 'https://alldebrid.com/f/readme' }],
+        },
+        {
+          n: '.',
+          e: [{ n: '/etc/evil3.txt', s: readme.length, l: 'https://alldebrid.com/f/readme' }],
+        },
+      ],
+    };
+    const scia = await open(await connected(await serviceWith({ magnets: { [HASH]: hostile } })));
+
+    scia.addMagnets([`magnet:?xt=urn:btih:${HASH}`]);
+
+    await until(
+      () =>
+        scia.snapshot().downloads.length === 3 &&
+        scia.snapshot().downloads.every((each) => each.status === DownloadStatus.Completed),
+    );
+    // Nothing beside the engine's data and the download folder; everything under the magnet's.
+    expect((await readdir(folder.path)).sort()).toEqual(['data', 'downloads']);
+    expect(await readdir(downloads())).toEqual(['download']);
+    for (const each of scia.snapshot().downloads) {
+      expect(each.directory.startsWith(join(downloads(), 'download'))).toBe(true);
+      expect(Buffer.compare(await readFile(join(each.directory, each.fileName)), readme)).toBe(0);
+    }
+  });
+
+  it('says nothing of a size before the service has read the torrent', async () => {
+    const alldebrid = await serviceWith({
+      magnets: { [HASH]: holiday({ size: 0, nameAtUpload: 'noname', fetchingPolls: 1000 }) },
+    });
+    const scia = await open(await connected(alldebrid));
+
+    scia.addMagnets([MAGNET]);
+
+    await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Fetching);
+    expect(scia.snapshot().magnets[0]?.totalBytes).toBeNull();
+  });
+
+  it('sends a magnet pasted while the service is asked about another as soon as that ends', async () => {
+    const alldebrid = await serviceWith({
+      magnets: {
+        [HASH]: holiday({ fetchingPolls: 1000 }),
+        ['b'.repeat(40)]: holiday({ name: 'Other', fetchingPolls: 1000 }),
+      },
+    });
+    manager = await DownloadManager.open({
+      source,
+      store: new JsonStateStore(statePath()),
+      defaultDirectory: downloads(),
+      logger,
+      // A pace far longer than the spec: what is sent within it is sent at once.
+      magnetPollMs: 60_000,
+      ...(await (async () => {
+        const integrations = await connected(alldebrid);
+        return { resolver: integrations, magnets: integrations };
+      })()),
+    });
+    const scia = manager;
+    // The first magnet's turn is slow: the second is pasted while it runs.
+    alldebrid.misbehave({ slowMs: 300, times: 2 });
+    scia.addMagnets([MAGNET]);
+    await until(() => alldebrid.requests.length > 0);
+
+    scia.addMagnets([OTHER]);
+
+    await until(
+      () =>
+        alldebrid.requests.filter((request) => request.url === '/v4/magnet/upload').length === 2,
+      3000,
+    );
   });
 
   it('logs how many magnets, never which', async () => {

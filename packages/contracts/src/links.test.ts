@@ -42,6 +42,15 @@ describe('extractMagnets', () => {
   it('leaves the magnets out of the links, and the links out of the magnets', () => {
     expect(extractLinks(`magnet:?xt=urn:btih:${HASH}`)).toEqual([]);
   });
+
+  it("takes no tracker of a magnet for a link: it is the magnet's, not a file", () => {
+    const magnet = `magnet:?xt=urn:btih:${HASH}&tr=http://tracker.example.org:6969/announce&tr=udp://open.example:1337`;
+
+    expect(extractLinks(`${magnet} and https://example.com/a.zip`)).toEqual([
+      'https://example.com/a.zip',
+    ]);
+    expect(extractMagnets(magnet)).toEqual([magnet]);
+  });
 });
 
 describe('magnetUri', () => {

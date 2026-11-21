@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { magnetFolders } from './magnet.ts';
+import { hashOfMagnet, magnetFolders } from './magnet.ts';
+
+describe('hashOfMagnet', () => {
+  it('reads the hash of the torrent wherever it stands, in lower case', () => {
+    expect(hashOfMagnet(`magnet:?dn=x&xt=urn:btih:${'A'.repeat(40)}&tr=y`)).toBe('a'.repeat(40));
+  });
+
+  it('gives the magnet itself when it names no hash', () => {
+    expect(hashOfMagnet('magnet:?dn=x')).toBe('magnet:?dn=x');
+  });
+});
 
 describe('magnetFolders', () => {
   it("puts a file in the magnet's folder, then in the folders the magnet has", () => {

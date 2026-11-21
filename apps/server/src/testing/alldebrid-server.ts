@@ -98,6 +98,8 @@ export interface SimulatedMagnet {
   readonly error?: string;
   // What the service calls it when it is sent, before it has read the torrent: "noname".
   readonly nameAtUpload?: string;
+  // Its files are answered, this many times, with a code of the service's that Scia does not know.
+  readonly unknownFilesAnswers?: number;
 }
 
 // What the service makes of a hoster's link it is asked to unlock: a direct link, or one of
@@ -476,6 +478,8 @@ export async function startAllDebridServer(
     });
   }
 
+  // How many times each magnet's files were answered with a code Scia does not know.
+  const filesAnswered = new Map<string, number>();
   function magnetFiles(response: ServerResponse, ids: readonly string[]): void {
     succeed(response, {
       magnets: ids.map((id) => {
@@ -483,6 +487,11 @@ export async function startAllDebridServer(
         const known = each === undefined ? undefined : options.magnets?.[each.hash];
         if (each === undefined || known === undefined || each.left > 0 || known.fails === true) {
           return { id, error: { code: 'MAGNET_INVALID_ID', message: MESSAGES.MAGNET_INVALID_ID } };
+        }
+        const unknown = filesAnswered.get(each.hash) ?? 0;
+        if (unknown < (known.unknownFilesAnswers ?? 0)) {
+          filesAnswered.set(each.hash, unknown + 1);
+          return { id, error: { code: 'MAGNET_SOMETHING_NEW', message: 'Something new.' } };
         }
         return { id, files: known.files };
       }),

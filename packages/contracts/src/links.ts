@@ -11,7 +11,8 @@ const TRAILING = /[.,;:!?)\]}]+$/;
 // in the order they appear, each one the engine takes.
 export function extractLinks(text: string): string[] {
   const links = new Set<string>();
-  for (const match of text.matchAll(LINK)) {
+  // A magnet's trackers are its own, never links of their own.
+  for (const match of text.replace(MAGNET_IN_TEXT, ' ').matchAll(LINK)) {
     const link = match[0].replace(TRAILING, '');
     if (httpUrl.safeParse(link).success) links.add(link);
   }

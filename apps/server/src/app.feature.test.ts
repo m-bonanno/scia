@@ -436,12 +436,10 @@ describe('the engine API', () => {
     it('lets the app alone stop waiting for a magnet, and try again one that failed', async () => {
       const [added] = await dataOf<{ id: string }[]>(await add([MAGNET]));
       const id = added?.id ?? '';
-      // Only one that failed is tried again.
-      if (manager.snapshot().magnets[0]?.status === 'sending') {
-        expect(
-          (await call(`/magnets/${id}/retry`, { method: 'POST', token: APP_TOKEN })).status,
-        ).toBe(409);
-      }
+      // Only one that failed is tried again: it is still being sent, at the same instant.
+      expect(
+        (await call(`/magnets/${id}/retry`, { method: 'POST', token: APP_TOKEN })).status,
+      ).toBe(409);
       // With no service to fetch it, it fails: then it can be tried again.
       await until(() => manager.snapshot().magnets[0]?.status === 'failed');
 

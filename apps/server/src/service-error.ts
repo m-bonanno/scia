@@ -1,10 +1,5 @@
 import type { IntegrationId } from '@scia/contracts';
-import {
-  CodeFailure,
-  type MagnetFailure,
-  type ServiceFailure,
-  type UnlockFailure,
-} from '@scia/core';
+import { CodeFailure, type ServiceFailure, type UnlockFailure } from '@scia/core';
 
 // A service refused, or did not answer. What it carries is safe to log: never a key, never a
 // link.
@@ -38,19 +33,5 @@ export class CodeExpiredError extends Error {
   constructor(service: IntegrationId, message: string, options: ErrorOptions = {}) {
     super(message, options);
     this.service = service;
-  }
-}
-
-// A magnet the service will not fetch, or no longer has (#137). Never a download's failure: a
-// magnet is not a download.
-export class MagnetError extends Error {
-  override readonly name = 'MagnetError';
-  readonly service: IntegrationId;
-  readonly failure: MagnetFailure;
-
-  constructor(service: IntegrationId, failure: MagnetFailure, message: string) {
-    super(message);
-    this.service = service;
-    this.failure = failure;
   }
 }
