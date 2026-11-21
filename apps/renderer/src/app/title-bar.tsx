@@ -19,6 +19,8 @@ interface TitleBarProps {
     readonly onToggle: () => void;
   };
   readonly magnetsToggleRef?: Ref<HTMLButtonElement> | undefined;
+  // Beside the name: the version, and an update to restart for (`UpdateOffer`).
+  readonly beside?: ReactNode;
 }
 
 // The window's title bar, drawn by the page beside the window's own buttons. It moves the
@@ -29,11 +31,13 @@ export function TitleBar({
   onOpenSettings,
   magnets,
   magnetsToggleRef,
+  beside,
 }: TitleBarProps): ReactNode {
   return (
     <header className="title-bar flex h-10 shrink-0 items-center gap-2 pr-1 pl-4">
       <Logo />
       <span className="text-sm font-semibold tracking-tight">Scia</span>
+      {beside}
       <div className="ml-auto flex items-center gap-2">
         {bytesPerSecond > 0 && (
           <span className="flex items-center gap-1 text-sm text-muted-foreground tabular-nums">

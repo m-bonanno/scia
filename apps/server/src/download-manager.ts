@@ -555,7 +555,7 @@ export class DownloadManager {
     return this.#settings;
   }
 
-  // The magnets of the connected service's account, as it lists them (#138; docs/adr/0015): also
+  // The magnets of the connected service's account, as it lists them (#138; docs/adr/0016): also
   // those added on its site or by other applications. Asked only while the page shows them.
   async accountMagnets(): Promise<AccountMagnet[]> {
     const states = await this.#magnetService().states();

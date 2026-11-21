@@ -1,5 +1,5 @@
 import { ApiErrorCode, type Settings } from '@scia/contracts';
-import { DownloadStatus } from '@scia/core';
+import { DownloadStatus, isUnderWay } from '@scia/core';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TEXT_BUTTON } from '@/components/button-styles.ts';
 import { AccountMagnets } from '@/features/account/account-magnets.tsx';
@@ -13,6 +13,7 @@ import { countByFilter, Filter, matchesFilter } from '@/features/downloads/filte
 import { Notices } from '@/features/notices/notices.tsx';
 import { useNotices } from '@/features/notices/use-notices.ts';
 import { SettingsDialog, type SettingsLayer } from '@/features/settings/settings-dialog.tsx';
+import { UpdateOffer } from '@/features/update/update-offer.tsx';
 import { api, ApiError } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { Connection, useLive } from '@/lib/live.ts';
@@ -54,10 +55,39 @@ export function App(): ReactNode {
     [tell],
   );
 
-  const keepSettings = useCallback((settings: Settings) => {
-    setSpeedLimit(settings.speedLimitBytesPerSecond);
-    wearTheme(settings.theme);
+  // The update a quit would install, as main says it: asked at the start, whenever main says it
+  // changed, and whenever the settings are learned — a beta is offered only while its switch is on.
+  // Only the last ask is kept.
+  const [offered, setOffered] = useState<string | null>(null);
+  const offerAsked = useRef(0);
+  const askOffer = useCallback(() => {
+    const shell = bridge();
+    if (shell === undefined) return;
+    offerAsked.current += 1;
+    const mine = offerAsked.current;
+    const keep = (answer: unknown) => {
+      if (mine !== offerAsked.current) return;
+      setOffered(typeof answer === 'string' && answer !== '' ? answer : null);
+    };
+    shell.updateOffered().then(keep, () => {
+      keep(null);
+    });
   }, []);
+  useEffect(() => {
+    const shell = bridge();
+    if (shell === undefined) return undefined;
+    askOffer();
+    return shell.onUpdateChanged(askOffer);
+  }, [askOffer]);
+
+  const keepSettings = useCallback(
+    (settings: Settings) => {
+      askOffer();
+      setSpeedLimit(settings.speedLimitBytesPerSecond);
+      wearTheme(settings.theme);
+    },
+    [askOffer],
+  );
 
   // Learned when the engine is reached and whenever Settings closes, where a service is connected
   // or let go; an answer to an ask that is no longer the last is not kept.
@@ -201,6 +231,7 @@ export function App(): ReactNode {
     () => live.downloads.filter((download) => matchesFilter(filter, download.status)).reverse(),
     [live.downloads, filter],
   );
+  const shell = bridge();
   const bytesPerSecond = live.downloads.reduce((sum, download) => sum + download.bytesPerSecond, 0);
   const hasReady = live.downloads.some((download) => download.status === DownloadStatus.Ready);
   // "Start all" leaves the page under its own press. Decided when it leaves, from where the focus
@@ -235,6 +266,18 @@ export function App(): ReactNode {
               },
             }
           : {})}
+        beside={
+          shell === undefined ? undefined : (
+            <UpdateOffer
+              version={shell.version}
+              offered={offered}
+              downloading={live.downloads.some((download) => isUnderWay(download.status))}
+              onRestart={() => shell.restartToUpdate()}
+              onGone={askOffer}
+              home={() => field.current}
+            />
+          )
+        }
       />
       <div className="relative flex min-h-0 flex-1">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">

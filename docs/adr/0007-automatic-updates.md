@@ -1,6 +1,6 @@
 # ADR 0007 — Automatic updates, from the releases of this repository
 
-- **Status**: accepted
+- **Status**: accepted; decision 4 ("Scia stays closed") amended for a restart the person asks for by [ADR 0015](./0015-a-restart-to-install-an-update.md), after which Scia opens again
 - **Date**: 2026-11-20
 
 ## Context

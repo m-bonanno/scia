@@ -1,4 +1,4 @@
-# ADR 0015 — The magnets of the account are read while their panel is open
+# ADR 0016 — The magnets of the account are read while their panel is open
 
 - **Status**: accepted
 - **Date**: 2026-11-21
