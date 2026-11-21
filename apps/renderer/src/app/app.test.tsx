@@ -222,6 +222,28 @@ describe('App', () => {
     expect(dialog).toHaveAttribute('open');
   });
 
+  it('leaves the focus on a notice when the ready rows and "Start all" leave', async () => {
+    live.downloads = [aDownload({ status: DownloadStatus.Ready })];
+    vi.spyOn(api, 'addDownloads').mockRejectedValue(
+      new ApiError(500, ApiErrorCode.InternalError, 'it broke'),
+    );
+    const { rerender } = render(<App />);
+    await userEvent.type(
+      screen.getByRole('textbox', { name: 'Links to download' }),
+      'https://example.com/a.zip',
+    );
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+    const notices = await screen.findByRole('list', { name: 'Notices' });
+    const dismiss = within(notices).getByRole('button', { name: 'Dismiss' });
+    dismiss.focus();
+
+    live.downloads = [aDownload({ status: DownloadStatus.Downloading })];
+    rerender(<App />);
+
+    expect(screen.queryByRole('button', { name: 'Start all' })).not.toBeInTheDocument();
+    expect(dismiss).toHaveFocus();
+  });
+
   it('hands the focus to Close when the last notice over Settings is dismissed', async () => {
     vi.spyOn(api, 'updateSettings').mockRejectedValue(
       new ApiError(500, ApiErrorCode.InternalError, 'it broke'),
