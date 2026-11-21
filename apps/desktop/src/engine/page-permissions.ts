@@ -18,8 +18,13 @@ function originOf(address: string | undefined): string | undefined {
   }
 }
 
-export function grantsPermission(ask: PermissionAsk, appOrigin: string): boolean {
-  return PAGE_PERMISSIONS.has(ask.permission) && originOf(ask.asker) === appOrigin;
+// What is granted is given, so that the rule on the origin is held while nothing is granted.
+export function grantsPermission(
+  ask: PermissionAsk,
+  appOrigin: string,
+  granted: ReadonlySet<string>,
+): boolean {
+  return granted.has(ask.permission) && originOf(ask.asker) === appOrigin;
 }
 
 // The two handlers of an Electron session. Chromium checks a permission and asks for it apart,
@@ -41,9 +46,11 @@ export interface PermissionGate {
 // The origin is read at every ask: the engine may come back on another port.
 export function guardPermissions(session: PermissionGate, appOrigin: () => string): void {
   session.setPermissionRequestHandler((_contents, permission, respond, details) => {
-    respond(grantsPermission({ permission, asker: details.requestingUrl }, appOrigin()));
+    respond(
+      grantsPermission({ permission, asker: details.requestingUrl }, appOrigin(), PAGE_PERMISSIONS),
+    );
   });
   session.setPermissionCheckHandler((_contents, permission, requestingOrigin) =>
-    grantsPermission({ permission, asker: requestingOrigin }, appOrigin()),
+    grantsPermission({ permission, asker: requestingOrigin }, appOrigin(), PAGE_PERMISSIONS),
   );
 }

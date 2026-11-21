@@ -84,6 +84,11 @@
   ::-webkit-scrollbar-thumb:hover {
     background: var(--foreground);
   }
+  /* Chromium does not clip a scrollbar to its area's rounding: the track of Settings starts and
+     ends where its corners do (`rounded-2xl`), or the thumb is drawn on the veil beyond them. */
+  dialog::-webkit-scrollbar-track {
+    margin-block: var(--radius-2xl);
+  }
   /* A button that does nothing for now — disabled, or `aria-disabled` to keep the focus — does
      not offer itself to the pointer. */
   button:not(:disabled, [aria-disabled='true']) {
