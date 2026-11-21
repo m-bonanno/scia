@@ -1,6 +1,6 @@
 import { ApiErrorCode, type Download } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app.tsx';
@@ -17,6 +17,7 @@ const settings = {
   speedLimitBytesPerSecond: null,
   theme: 'black-tie',
   betaUpdates: false,
+  watchClipboard: false,
 } as const;
 
 // What the page hears of the engine: changed by a spec, then the page is rendered again.
@@ -229,6 +230,128 @@ describe('App', () => {
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(dialog).not.toContainElement(screen.getByRole('list', { name: 'Notices' }));
+  });
+
+  it('offers "Start all" while there are ready links, and starts them all at one press', async () => {
+    const startReady = vi.spyOn(api, 'startReady').mockResolvedValue([]);
+    live.downloads = [aDownload({ status: DownloadStatus.Completed })];
+    const { rerender } = render(<App />);
+    expect(screen.queryByRole('button', { name: 'Start all' })).not.toBeInTheDocument();
+
+    live.downloads = [
+      aDownload({ id: 'a', status: DownloadStatus.Ready }),
+      aDownload({ id: 'b', status: DownloadStatus.Ready }),
+    ];
+    rerender(<App />);
+    await userEvent.click(screen.getByRole('button', { name: 'Start all' }));
+
+    expect(startReady).toHaveBeenCalledOnce();
+  });
+
+  it('hands the focus to the filter in use when "Start all" leaves under it', async () => {
+    vi.spyOn(api, 'startReady').mockResolvedValue([]);
+    live.downloads = [aDownload({ status: DownloadStatus.Ready })];
+    const { rerender } = render(<App />);
+    screen.getByRole('button', { name: 'Start all' }).focus();
+
+    await userEvent.keyboard('{Enter}');
+    live.downloads = [aDownload({ status: DownloadStatus.Queued })];
+    rerender(<App />);
+
+    expect(screen.queryByRole('button', { name: 'Start all' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^All/ })).toHaveFocus();
+  });
+
+  it('takes no focus when the page opens, and hands it on when ready rows that came later leave', async () => {
+    vi.spyOn(api, 'startReady').mockResolvedValue([]);
+    live.downloads = [];
+    const { rerender } = render(<App />);
+    // The field the page opens on keeps it, even when it is let go.
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+    expect(field).toHaveFocus();
+    field.blur();
+    rerender(<App />);
+    expect(document.body).toHaveFocus();
+
+    // Ready rows arriving take nothing either.
+    live.downloads = [aDownload({ status: DownloadStatus.Ready })];
+    rerender(<App />);
+    expect(document.body).toHaveFocus();
+    screen.getByRole('button', { name: 'Start all' }).focus();
+    await userEvent.keyboard('{Enter}');
+    live.downloads = [aDownload({ status: DownloadStatus.Queued })];
+    rerender(<App />);
+
+    expect(screen.getByRole('button', { name: /^All/ })).toHaveFocus();
+  });
+
+  it('moves no focus that "Start all" did not hold', () => {
+    vi.spyOn(api, 'startReady').mockResolvedValue([]);
+    live.downloads = [aDownload({ status: DownloadStatus.Ready })];
+    const { rerender } = render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+    field.focus();
+
+    // A press that does not take the focus, as some pointers' do.
+    fireEvent.click(screen.getByRole('button', { name: 'Start all' }));
+    live.downloads = [aDownload({ status: DownloadStatus.Queued })];
+    rerender(<App />);
+
+    expect(field).toHaveFocus();
+  });
+
+  it('leaves the focus on a row whose Start emptied the ready rows after a refused "Start all"', async () => {
+    vi.spyOn(api, 'startReady').mockRejectedValue(new Error('The engine is restarting.'));
+    vi.spyOn(api, 'start').mockResolvedValue(aDownload({ status: DownloadStatus.Queued }));
+    live.downloads = [aDownload({ status: DownloadStatus.Ready })];
+    const { rerender } = render(<App />);
+    screen.getByRole('button', { name: 'Start all' }).focus();
+    await userEvent.keyboard('{Enter}');
+
+    screen.getByRole('button', { name: 'Start' }).focus();
+    await userEvent.keyboard('{Enter}');
+    live.downloads = [aDownload({ status: DownloadStatus.Queued })];
+    rerender(<App />);
+
+    expect(screen.getByRole('button', { name: 'Pause' })).toHaveFocus();
+  });
+
+  it('leaves the focus on a row whose Start emptied the ready rows, when a link arrived with "Start all"', async () => {
+    vi.spyOn(api, 'startReady').mockResolvedValue([]);
+    vi.spyOn(api, 'start').mockResolvedValue(aDownload({ id: 'b', status: DownloadStatus.Queued }));
+    live.downloads = [aDownload({ id: 'a', status: DownloadStatus.Ready })];
+    const { rerender } = render(<App />);
+    screen.getByRole('button', { name: 'Start all' }).focus();
+    await userEvent.keyboard('{Enter}');
+    // The first row started; a link copied at that moment is ready.
+    live.downloads = [
+      aDownload({ id: 'a', status: DownloadStatus.Queued, fileName: 'a.mkv' }),
+      aDownload({ id: 'b', status: DownloadStatus.Ready, fileName: 'b.mkv' }),
+    ];
+    rerender(<App />);
+
+    screen.getByRole('button', { name: 'Start' }).focus();
+    await userEvent.keyboard('{Enter}');
+    live.downloads = [
+      aDownload({ id: 'a', status: DownloadStatus.Queued, fileName: 'a.mkv' }),
+      aDownload({ id: 'b', status: DownloadStatus.Queued, fileName: 'b.mkv' }),
+    ];
+    rerender(<App />);
+
+    expect(document.activeElement).toHaveAccessibleName('Pause');
+    expect(screen.getByRole('button', { name: /^All/ })).not.toHaveFocus();
+  });
+
+  it('starts one ready link from its row', async () => {
+    const start = vi
+      .spyOn(api, 'start')
+      .mockResolvedValue(aDownload({ status: DownloadStatus.Queued }));
+    live.downloads = [aDownload({ status: DownloadStatus.Ready })];
+    render(<App />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+
+    expect(start).toHaveBeenCalledExactlyOnceWith('d1');
   });
 
   it('wears the theme the engine keeps, and the one chosen in Settings as soon as it is kept', async () => {

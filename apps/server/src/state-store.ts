@@ -69,6 +69,7 @@ const storedSettingsSchema = settingsSchema.extend({
   speedLimitBytesPerSecond: settingsSchema.shape.speedLimitBytesPerSecond.catch(null),
   theme: settingsSchema.shape.theme.catch(DEFAULT_THEME),
   betaUpdates: settingsSchema.shape.betaUpdates.catch(false),
+  watchClipboard: settingsSchema.shape.watchClipboard.catch(false),
 });
 
 export const stateSchema = z.object({

@@ -1,22 +1,25 @@
 import { type ReactNode, useId } from 'react';
 
-interface BetaUpdatesProps {
+interface SettingSwitchProps {
+  readonly label: string;
+  // What turning it on does, in a sentence.
+  readonly hint: string;
   readonly value: boolean;
   readonly onChange: (value: boolean) => void;
 }
 
-// Whether Scia updates itself to the betas too (#82). Off, the stables only.
-export function BetaUpdates({ value, onChange }: BetaUpdatesProps): ReactNode {
+// A setting that is on or off: the betas (#82), the links of the clipboard (#128).
+export function SettingSwitch({ label, hint, value, onChange }: SettingSwitchProps): ReactNode {
   const labelId = useId();
   const hintId = useId();
   return (
     <label className="flex items-center justify-between gap-4">
       <span className="min-w-0">
         <span id={labelId} className="block text-sm font-medium">
-          Beta versions
+          {label}
         </span>
         <span id={hintId} className="block text-sm text-muted-foreground">
-          Also update to versions still being tried. Scia updates itself when you quit it.
+          {hint}
         </span>
       </span>
       <input

@@ -15,7 +15,7 @@ import { IconButton } from '@/components/icon-button.tsx';
 import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { FOLDER_REFUSED } from '@/lib/messages.ts';
-import { BetaUpdates } from './beta-updates.tsx';
+import { SettingSwitch } from './setting-switch.tsx';
 import { IntegrationsSection } from './integrations.tsx';
 import { SpeedLimit } from './speed-limit.tsx';
 import { ThemeChoice } from './theme-choice.tsx';
@@ -185,12 +185,25 @@ export function SettingsDialog({
                 change({ theme });
               }}
             />
+            {/* Main reads the clipboard: a browser tab has no main to do it. */}
+            {shell !== undefined && (
+              <SettingSwitch
+                label="Take links from the clipboard"
+                hint="Links to files and videos you copy appear in the list, ready to start."
+                value={settings.watchClipboard}
+                onChange={(watchClipboard) => {
+                  change({ watchClipboard });
+                }}
+              />
+            )}
           </section>
         )}
         <IntegrationsSection open={open} onError={onError} />
         {pairing !== null && <PairingSection pairing={pairing} onError={onError} />}
         {settings !== null && updatesItself && (
-          <BetaUpdates
+          <SettingSwitch
+            label="Beta versions"
+            hint="Also update to versions still being tried. Scia updates itself when you quit it."
             value={settings.betaUpdates}
             onChange={(betaUpdates) => {
               change({ betaUpdates });

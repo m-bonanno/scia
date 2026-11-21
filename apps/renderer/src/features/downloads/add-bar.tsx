@@ -1,6 +1,6 @@
 import { Link } from 'lucide-react';
 import { type ReactNode, type Ref, type SubmitEvent, useId, useRef, useState } from 'react';
-import { extractLinks } from './links.ts';
+import { extractLinks } from '@scia/contracts/links';
 
 // What became of the links sent from the field. A refusal of the text itself is the field's to
 // say; any other failure the page says elsewhere.

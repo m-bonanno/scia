@@ -112,6 +112,9 @@ export function statusLine(download: Download): string {
     ...(service === undefined ? [] : [`via ${service}`]),
   ];
   switch (download.status) {
+    // Taken from the clipboard: nothing is known of the file before its Start.
+    case DownloadStatus.Ready:
+      return 'Ready';
     case DownloadStatus.Queued:
       return 'Queued';
     case DownloadStatus.Completed:

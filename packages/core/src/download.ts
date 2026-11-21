@@ -2,6 +2,9 @@ import { PageFailure } from './page.ts';
 import { ServiceFailure, UnlockFailure } from './service.ts';
 
 export const DownloadStatus = {
+  // Offered — taken from the clipboard — and not started: it waits for the person's Start, never
+  // for a free slot of the queue.
+  Ready: 'ready',
   Queued: 'queued',
   Downloading: 'downloading',
   Paused: 'paused',
@@ -30,6 +33,10 @@ export type DownloadFailure = (typeof DownloadFailure)[keyof typeof DownloadFail
 
 export function canPause(status: DownloadStatus): boolean {
   return status === DownloadStatus.Queued || status === DownloadStatus.Downloading;
+}
+
+export function canStart(status: DownloadStatus): boolean {
+  return status === DownloadStatus.Ready;
 }
 
 export function canResume(status: DownloadStatus): boolean {

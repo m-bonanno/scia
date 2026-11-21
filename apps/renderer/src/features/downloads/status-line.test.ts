@@ -26,6 +26,12 @@ describe('statusLine', () => {
     expect(statusLine(aDownload({ totalBytes: null, downloadedBytes: 0 }))).toBe('Connecting…');
   });
 
+  it('says a link taken from the clipboard is ready, and nothing it does not know yet', () => {
+    expect(
+      statusLine(aDownload({ status: DownloadStatus.Ready, totalBytes: null, downloadedBytes: 0 })),
+    ).toBe('Ready');
+  });
+
   it('says a download waits its turn', () => {
     expect(statusLine(aDownload({ status: DownloadStatus.Queued }))).toBe('Queued');
   });

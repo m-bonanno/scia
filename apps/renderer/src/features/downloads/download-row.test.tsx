@@ -7,6 +7,7 @@ import { aDownload } from '@/test/a-download.ts';
 
 function actions(overrides: Partial<RowActions> = {}): RowActions {
   return {
+    start: vi.fn(),
     pause: vi.fn(),
     resume: vi.fn(),
     remove: vi.fn(),
@@ -39,6 +40,117 @@ describe('DownloadRow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(row.resume).toHaveBeenCalledTimes(2);
+  });
+
+  it('offers a ready link its Start and its removal, at one press each, and nothing else', async () => {
+    const row = actions();
+    const ready = aDownload({ status: DownloadStatus.Ready, totalBytes: null, downloadedBytes: 0 });
+    render(<DownloadRow download={ready} actions={row} />);
+
+    expect(screen.getByText('Ready')).toHaveClass('text-muted-foreground');
+    expect(
+      screen.getAllByRole('button').map((button) => button.getAttribute('aria-label')),
+    ).toEqual(['Start', 'Remove']);
+    // Its bar is empty and still: nothing has started.
+    expect(screen.getByRole('progressbar')).toBeEmptyDOMElement();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }));
+    expect(row.start).toHaveBeenCalledExactlyOnceWith('d1');
+
+    // Nothing is on the disk yet: the row goes at the first press, asking nothing.
+    screen.getByRole('button', { name: 'Remove' }).focus();
+    await userEvent.keyboard('{Enter}');
+    expect(row.remove).toHaveBeenCalledExactlyOnceWith('d1');
+  });
+
+  it('starts a ready link once at a double click, and pauses nothing with its second click', () => {
+    const row = actions();
+    const ready = aDownload({ status: DownloadStatus.Ready, totalBytes: null, downloadedBytes: 0 });
+    const { rerender } = render(<DownloadRow download={ready} actions={row} />);
+    const start = screen.getByRole('button', { name: 'Start' });
+
+    fireEvent.click(start, { detail: 1 });
+    // The list says it started before the second click of the same double click lands.
+    rerender(<DownloadRow download={aDownload({ status: DownloadStatus.Queued })} actions={row} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }), { detail: 2 });
+
+    expect(row.start).toHaveBeenCalledOnce();
+    expect(row.pause).not.toHaveBeenCalled();
+  });
+
+  it('keeps the focus on the main action of a row whose state its press changed', async () => {
+    const row = actions();
+    const { rerender } = render(
+      <DownloadRow
+        download={aDownload({ status: DownloadStatus.Ready, totalBytes: null, downloadedBytes: 0 })}
+        actions={row}
+      />,
+    );
+    screen.getByRole('button', { name: 'Start' }).focus();
+    await userEvent.keyboard('{Enter}');
+
+    for (const [status, name] of [
+      [DownloadStatus.Queued, 'Pause'],
+      [DownloadStatus.Paused, 'Resume'],
+      [DownloadStatus.Failed, 'Retry'],
+    ] as const) {
+      rerender(<DownloadRow download={aDownload({ status })} actions={row} />);
+      expect(screen.getByRole('button', { name })).toHaveFocus();
+    }
+  });
+
+  it('starts a ready link once at Enter held down', async () => {
+    const row = actions();
+    render(
+      <DownloadRow
+        download={aDownload({ status: DownloadStatus.Ready, totalBytes: null, downloadedBytes: 0 })}
+        actions={row}
+      />,
+    );
+    screen.getByRole('button', { name: 'Start' }).focus();
+
+    await userEvent.keyboard('{Enter>5/}');
+
+    expect(row.start).toHaveBeenCalledOnce();
+  });
+
+  it('names a ready link that names no file by its address, which is all that is known before its Start', () => {
+    const { rerender } = render(
+      <DownloadRow
+        download={aDownload({
+          status: DownloadStatus.Ready,
+          url: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
+          fileName: 'watch',
+          kind: FileKind.Other,
+        })}
+        actions={actions()}
+      />,
+    );
+    expect(screen.getByTitle('youtube.com/watch?v=aqz-KE-bpKQ')).toHaveTextContent(
+      'youtube.com/watch?v=aqz-KE-bpKQ',
+    );
+
+    rerender(
+      <DownloadRow
+        download={aDownload({
+          status: DownloadStatus.Ready,
+          url: 'https://example.com/files/archive.zip',
+          fileName: 'archive.zip',
+          kind: FileKind.Archive,
+        })}
+        actions={actions()}
+      />,
+    );
+    expect(screen.getByTitle('archive.zip')).toBeInTheDocument();
+
+    // Once started, the row names what the host or the site calls the file.
+    rerender(
+      <DownloadRow
+        download={aDownload({ url: 'https://www.youtube.com/watch?v=x', fileName: 'watch' })}
+        actions={actions()}
+      />,
+    );
+    expect(screen.getByTitle('watch')).toBeInTheDocument();
   });
 
   it('shows the whole sentence of a failure, remedy included, where a running line is cut', () => {

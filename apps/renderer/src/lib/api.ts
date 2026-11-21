@@ -59,6 +59,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ urls }),
     }),
+  start: (id: string): Promise<Download> =>
+    request(`/downloads/${encodeURIComponent(id)}/start`, downloadSchema, { method: 'POST' }),
+  startReady: (): Promise<Download[]> =>
+    request('/downloads/start-ready', z.array(downloadSchema), { method: 'POST' }),
   pause: (id: string): Promise<Download> =>
     request(`/downloads/${encodeURIComponent(id)}/pause`, downloadSchema, { method: 'POST' }),
   resume: (id: string): Promise<Download> =>

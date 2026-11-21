@@ -1,11 +1,13 @@
 import { ApiErrorCode, type Settings } from '@scia/contracts';
+import { DownloadStatus } from '@scia/core';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { TEXT_BUTTON } from '@/components/button-styles.ts';
 import { type Added, AddBar } from '@/features/downloads/add-bar.tsx';
 import { DownloadList } from '@/features/downloads/download-list.tsx';
 import type { RowActions } from '@/features/downloads/download-row.tsx';
-import { FilterTabs } from '@/features/downloads/filter-tabs.tsx';
+import { FilterTabs, type FilterTabsHandle } from '@/features/downloads/filter-tabs.tsx';
 import { countByFilter, Filter, matchesFilter } from '@/features/downloads/filters.ts';
-import { extractLinks } from '@/features/downloads/links.ts';
+import { extractLinks } from '@scia/contracts/links';
 import { Notices } from '@/features/notices/notices.tsx';
 import { useNotices } from '@/features/notices/use-notices.ts';
 import { SettingsDialog } from '@/features/settings/settings-dialog.tsx';
@@ -95,6 +97,9 @@ export function App(): ReactNode {
   const actions = useMemo((): RowActions => {
     const shell = bridge();
     return {
+      start: (id) => {
+        api.start(id).catch(report);
+      },
       pause: (id) => {
         api.pause(id).catch(report);
       },
@@ -127,6 +132,17 @@ export function App(): ReactNode {
     [live.downloads, filter],
   );
   const bytesPerSecond = live.downloads.reduce((sum, download) => sum + download.bytesPerSecond, 0);
+  const hasReady = live.downloads.some((download) => download.status === DownloadStatus.Ready);
+  // "Start all" leaves the page under its own press. Decided when it leaves, from where the focus
+  // is then: a focus left on nothing goes to the filter in use, beside it; one that went anywhere
+  // else stays where it is.
+  const filterTabs = useRef<FilterTabsHandle>(null);
+  useEffect(() => {
+    if (hasReady) return;
+    if (document.activeElement === null || document.activeElement === document.body) {
+      filterTabs.current?.focus();
+    }
+  }, [hasReady]);
 
   return (
     <div className="flex h-screen flex-col">
@@ -140,7 +156,25 @@ export function App(): ReactNode {
       <main className="flex min-h-0 flex-1 flex-col">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 pt-4 pb-4">
           <AddBar onAdd={(urls) => add(urls, true)} inputRef={field} />
-          <FilterTabs filter={filter} counts={countByFilter(live.downloads)} onChange={setFilter} />
+          <div className="flex items-center justify-between gap-2">
+            <FilterTabs
+              ref={filterTabs}
+              filter={filter}
+              counts={countByFilter(live.downloads)}
+              onChange={setFilter}
+            />
+            {hasReady && (
+              <button
+                type="button"
+                className={TEXT_BUTTON}
+                onClick={() => {
+                  api.startReady().catch(report);
+                }}
+              >
+                Start all
+              </button>
+            )}
+          </div>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
           <div className="mx-auto w-full max-w-3xl px-6 pb-8">
