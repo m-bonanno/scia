@@ -279,6 +279,16 @@ describe('UpdateOffer', () => {
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
+    it('hears Escape after a press on its text', async () => {
+      offer();
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+      await userEvent.click(screen.getByText('Restart now to install 1.0.0-beta.18?'));
+
+      await userEvent.keyboard('{Escape}');
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
     it('closes with Escape from the button it hangs from', async () => {
       offer();
       await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
@@ -357,6 +367,86 @@ describe('UpdateOffer', () => {
 
       rerender(page({ ...props, offered: '1.0.0-beta.19' }));
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('a focus that moved on', () => {
+    const base = {
+      version: '1.0.0-beta.17',
+      offered: '1.0.0-beta.18' as string | null,
+      downloading: false,
+      onGone: vi.fn(),
+      home: () => screen.queryByRole('textbox', { name: 'Links to download' }),
+    };
+    const page = (props: Parameters<typeof UpdateOffer>[0]) => (
+      <>
+        <input aria-label="Links to download" />
+        <UpdateOffer {...props} />
+        <button type="button">Elsewhere</button>
+      </>
+    );
+
+    it('is not pulled back to Close when main refuses after the person went elsewhere', async () => {
+      let answer: (value: unknown) => void = () => undefined;
+      const onRestart = vi.fn(
+        () =>
+          new Promise<unknown>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      render(page({ ...base, onRestart }));
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Restart now' }));
+      act(() => {
+        screen.getByRole('textbox', { name: 'Links to download' }).focus();
+      });
+
+      await act(async () => {
+        answer(UpdateRestart.Busy);
+        await Promise.resolve();
+      });
+
+      expect(screen.getByRole('dialog')).toHaveTextContent('Scia could not restart now.');
+      expect(screen.getByRole('textbox', { name: 'Links to download' })).toHaveFocus();
+    });
+
+    it('does not come back open after an offer that left while main was restarting', async () => {
+      let answer: (value: unknown) => void = () => undefined;
+      const onRestart = vi.fn(
+        () =>
+          new Promise<unknown>((resolve) => {
+            answer = resolve;
+          }),
+      );
+      const { rerender } = render(page({ ...base, onRestart }));
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Restart now' }));
+
+      rerender(page({ ...base, onRestart, offered: null }));
+      await act(async () => {
+        answer(UpdateRestart.Busy);
+        await Promise.resolve();
+      });
+      rerender(page({ ...base, onRestart, offered: '1.0.0-beta.19' }));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('leaves a focus elsewhere alone when a second offer comes and goes untouched', () => {
+      const onRestart = vi.fn(async () => UpdateRestart.Restarting);
+      const { rerender } = render(page({ ...base, onRestart }));
+      act(() => {
+        screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }).focus();
+      });
+      rerender(page({ ...base, onRestart, offered: null }));
+      act(() => {
+        screen.getByRole('button', { name: 'Elsewhere' }).focus();
+      });
+
+      rerender(page({ ...base, onRestart, offered: '1.0.0-beta.19' }));
+      rerender(page({ ...base, onRestart, offered: null }));
+
+      expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus();
     });
   });
 });

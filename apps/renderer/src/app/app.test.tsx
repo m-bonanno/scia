@@ -816,6 +816,21 @@ describe('App, its version and an update', () => {
     expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
   });
 
+  it('hands the focus to the field when the offer leaves under it', async () => {
+    const offered = vi.fn(async (): Promise<unknown> => '1.0.0-beta.18');
+    const { change } = aShell({ updateOffered: offered });
+    render(<App />);
+    const button = await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' });
+    button.focus();
+
+    offered.mockResolvedValue(null);
+    change();
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('textbox', { name: 'Links to download' })).toHaveFocus();
+    });
+  });
+
   it('stops listening to main when the page goes', () => {
     const stop = vi.fn();
     aShell({ onUpdateChanged: vi.fn(() => stop) });

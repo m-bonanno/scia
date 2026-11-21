@@ -45,6 +45,7 @@ export function UpdateOffer({
   home,
 }: UpdateOfferProps): ReactNode {
   const [asked, setAsked] = useState<Asked>(Asked.Closed);
+  const [shownFor, setShownFor] = useState(offered);
   const wrapper = useRef<HTMLDivElement>(null);
   const opener = useRef<HTMLButtonElement>(null);
   const first = useRef<HTMLButtonElement>(null);
@@ -53,9 +54,15 @@ export function UpdateOffer({
   const panelId = useId();
   const textId = useId();
 
-  // A question that sees a download begin — or opens while one runs — becomes the note. (An offer
-  // that leaves closes its question as the focus goes home: a focus elsewhere puts it away.)
-  if (asked === Asked.Question && downloading) setAsked(Asked.Waiting);
+  // An offer that leaves takes its question with it, also while main restarts: the next one
+  // starts closed. A question that sees a download begin — or opens while one runs — becomes the
+  // note.
+  if (shownFor !== offered) {
+    setShownFor(offered);
+    if (offered === null) setAsked(Asked.Closed);
+  } else if (asked === Asked.Question && downloading) {
+    setAsked(Asked.Waiting);
+  }
   const open = asked !== Asked.Closed;
   const restarting = asked === Asked.Restarting;
 
@@ -81,9 +88,11 @@ export function UpdateOffer({
     };
   }, [open, restarting]);
 
-  // The least consequential answer takes the focus as the question opens or changes.
+  // The least consequential answer takes the focus as the question opens or changes — a focus
+  // still on the button or in its question, not one the person took elsewhere meanwhile.
   useEffect(() => {
-    if (asked !== Asked.Closed && asked !== Asked.Restarting) first.current?.focus();
+    if (asked === Asked.Closed || asked === Asked.Restarting) return;
+    if (holdsFocus.current) first.current?.focus();
   }, [asked]);
 
   // The button leaves with the offer: a focus it held goes home, not to the page's body.
@@ -107,6 +116,11 @@ export function UpdateOffer({
   const restart = () => {
     if (asked !== Asked.Question) return;
     setAsked(Asked.Restarting);
+    // An answer is for the question still waiting on it: one the offer took away meanwhile is not
+    // opened again by it.
+    const notRestarted = () => {
+      setAsked((now) => (now === Asked.Restarting ? Asked.NotRestarted : now));
+    };
     onRestart()
       .then((answer) => {
         if (answer === UpdateRestart.Restarting) return;
@@ -116,11 +130,9 @@ export function UpdateOffer({
           onGone();
           return;
         }
-        setAsked(Asked.NotRestarted);
+        notRestarted();
       })
-      .catch(() => {
-        setAsked(Asked.NotRestarted);
-      });
+      .catch(notRestarted);
   };
 
   const waits = asked === Asked.Waiting || asked === Asked.NotRestarted;
@@ -175,6 +187,8 @@ export function UpdateOffer({
           id={panelId}
           role="dialog"
           aria-labelledby={textId}
+          // A press on its text keeps the focus in it, where Escape is heard.
+          tabIndex={-1}
           className="absolute top-full left-0 z-20 mt-2 flex w-72 animate-row-in flex-col gap-3 rounded-xl bg-tonal p-4 text-sm text-foreground"
         >
           <p id={textId}>{text}</p>

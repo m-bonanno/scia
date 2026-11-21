@@ -37,10 +37,6 @@ export const UpdateRestart = {
 } as const;
 export type UpdateRestart = (typeof UpdateRestart)[keyof typeof UpdateRestart];
 
-export function isUpdateRestart(value: unknown): value is UpdateRestart {
-  return Object.values(UpdateRestart).some((answer) => answer === value);
-}
-
 export function isFolderChange(value: unknown): value is FolderChange {
   return Object.values(FolderChange).some((change) => change === value);
 }
