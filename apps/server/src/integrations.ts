@@ -75,6 +75,12 @@ export class KeyNotKeptError extends Error {
   override readonly name = 'KeyNotKeptError';
 }
 
+// A code that is not given: the service is connected, or the wait was ended — by Cancel, by a
+// pasted key, by another code — while the service was giving it.
+export class CodeConflictError extends Error {
+  override readonly name = 'CodeConflictError';
+}
+
 export interface IntegrationsDeps {
   readonly vault: KeyVault;
   readonly alldebrid: AllDebrid;
@@ -146,6 +152,8 @@ export class Integrations implements LinkResolver {
   #changing: Promise<unknown> = Promise.resolve();
   // The code the person was given to confirm on the service's site, if any (#136).
   #code: PendingCode | undefined;
+  // Moved on by every end of a wait: a code the service gives after it is nobody's.
+  #codeTurn = 0;
 
   constructor(deps: IntegrationsDeps, key: string | undefined, hosts?: HostList) {
     this.#deps = deps;
@@ -199,10 +207,15 @@ export class Integrations implements LinkResolver {
   // pasted one is. A new code ends the wait for the one before. Rejects with a ServiceError when
   // the service gives no code.
   async startCode(id: IntegrationId): Promise<IntegrationCode> {
+    if (this.#key !== undefined) {
+      throw new CodeConflictError('The service is connected: a code would replace its key.');
+    }
     this.cancelCode(id);
+    const turn = this.#codeTurn;
     const given = await this.#deps.alldebrid.code();
-    // Another code asked for meanwhile: this one is the last.
-    this.cancelCode(id);
+    if (turn !== this.#codeTurn) {
+      throw new CodeConflictError('The wait for this code was ended while it was given.');
+    }
     const pending: PendingCode = {
       code: given.code,
       url: given.url,
@@ -219,7 +232,7 @@ export class Integrations implements LinkResolver {
     return this.#codeView(pending);
   }
 
-  // The code given last, and what became of it.
+  // The code given last, and what became of it. One slot for every service: there is one.
   code(_id: IntegrationId): IntegrationCode | undefined {
     return this.#code === undefined ? undefined : this.#codeView(this.#code);
   }
@@ -227,6 +240,7 @@ export class Integrations implements LinkResolver {
   cancelCode(_id: IntegrationId): void {
     this.#code?.stop.abort();
     this.#code = undefined;
+    this.#codeTurn += 1;
   }
 
   async #waitFor(id: IntegrationId, pending: PendingCode): Promise<void> {
@@ -252,7 +266,11 @@ export class Integrations implements LinkResolver {
             throw error;
           });
         if (key === undefined) continue;
-        await this.#oneAtATime(() => this.#connect(id, key));
+        // In turn with the other changes: a wait ended while one of them ran connects nothing.
+        await this.#oneAtATime(() => {
+          signal.throwIfAborted();
+          return this.#connect(id, key);
+        });
         pending.status = IntegrationCodeStatus.Connected;
         return;
       }

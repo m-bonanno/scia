@@ -20,7 +20,7 @@ import { isServiceFailure, ServiceFailure } from '@scia/core';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { type DownloadManager, ManagerError, ManagerRefusal } from './download-manager.ts';
-import { type Integrations, KeyNotKeptError } from './integrations.ts';
+import { CodeConflictError, type Integrations, KeyNotKeptError } from './integrations.ts';
 import { describeFailure, type Logger } from './logger.ts';
 import { ServiceError } from './service-error.ts';
 
@@ -308,6 +308,9 @@ export function createApp(deps: AppDeps): Hono {
       const failure = isServiceFailure(error.failure) ? error.failure : ServiceFailure.Unavailable;
       const status = failure === ServiceFailure.Unavailable ? 502 : 422;
       return fail(status, failure, error.message);
+    }
+    if (error instanceof CodeConflictError) {
+      return fail(409, ApiErrorCode.Conflict, error.message);
     }
     if (error instanceof KeyNotKeptError) {
       return fail(500, ApiErrorCode.KeyNotKept, error.message);

@@ -2,7 +2,7 @@ import { IntegrationCodeStatus, IntegrationId } from '@scia/contracts';
 import { CodeFailure, ServiceFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
-import { Integrations, KeyNotKeptError } from './integrations.ts';
+import { CodeConflictError, Integrations, KeyNotKeptError } from './integrations.ts';
 import { type KeyVault, MemoryVault } from './key-vault.ts';
 import type { Logger } from './logger.ts';
 import { ServiceError } from './service-error.ts';
@@ -534,19 +534,62 @@ describe('Integrations', () => {
       expect(logged.join('\n')).not.toContain('service_code_failed');
     });
 
-    it('waits only for the last of two codes asked for together', async () => {
+    it('waits only for the last of two codes asked for together: the first is given up', async () => {
       const integrations = await open();
 
-      const [first, second] = await Promise.all([
-        integrations.startCode(IntegrationId.AllDebrid),
-        integrations.startCode(IntegrationId.AllDebrid),
-      ]);
-      service.confirmCode(first.code, KEY);
-      expect(service.requests.filter((request) => request.url === '/v4.1/pin/get')).toHaveLength(2);
-      await until(() => checksOf(lastCheck()).length >= 3);
+      const first = integrations.startCode(IntegrationId.AllDebrid);
+      const second = await integrations.startCode(IntegrationId.AllDebrid);
 
+      await expect(first).rejects.toBeInstanceOf(CodeConflictError);
+      expect(service.requests.filter((request) => request.url === '/v4.1/pin/get')).toHaveLength(2);
+      await until(() => checksOf(lastCheck()).length >= 2);
       expect(integrations.code(IntegrationId.AllDebrid)?.code).toBe(second.code);
-      expect(await integrations.list()).toEqual([notConnected]);
+      const checks = new Set(service.requests.map((request) => request.form.check));
+      checks.delete(undefined);
+      expect(checks.size).toBe(1);
+    });
+
+    it('waits for no code whose wait was cancelled while the service gave it', async () => {
+      const integrations = await open();
+      service.misbehave({ slowMs: 200, times: 1 });
+
+      const asked = integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => service.requests.length > 0);
+      integrations.cancelCode(IntegrationId.AllDebrid);
+
+      await expect(asked).rejects.toBeInstanceOf(CodeConflictError);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+      // Another code, asked for afterwards, is the only one asked about.
+      await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => checksOf(lastCheck()).length >= 2);
+      const checks = new Set(service.requests.map((request) => request.form.check));
+      checks.delete(undefined);
+      expect(checks.size).toBe(1);
+    });
+
+    it('keeps a key pasted while the service gave a code, and waits for no code', async () => {
+      const integrations = await open();
+      service.misbehave({ slowMs: 200, times: 1 });
+
+      const asked = integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => service.requests.length > 0);
+      await integrations.connect(IntegrationId.AllDebrid, KEY);
+
+      await expect(asked).rejects.toBeInstanceOf(CodeConflictError);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+      expect(await integrations.list()).toEqual([
+        { id: 'alldebrid', connected: true, account: ada, failure: null },
+      ]);
+    });
+
+    it('gives no code while a service is connected: a confirmed code would replace its key', async () => {
+      const integrations = await open();
+      await integrations.connect(IntegrationId.AllDebrid, KEY);
+
+      await expect(integrations.startCode(IntegrationId.AllDebrid)).rejects.toBeInstanceOf(
+        CodeConflictError,
+      );
+      expect(service.requests.some((request) => request.url === '/v4.1/pin/get')).toBe(false);
     });
 
     it('stops waiting for a code when another is asked for, or a key is pasted', async () => {

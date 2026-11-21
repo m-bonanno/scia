@@ -527,6 +527,12 @@ describe('AllDebrid', () => {
     expect(await failureOf(clientOf(server).code())).toBe(ServiceFailure.Unavailable);
   });
 
+  it('waits ten minutes at most for a code, whatever the service says', async () => {
+    const server = await serviceWith({ codeLifetimeSeconds: 1e13 });
+
+    expect((await clientOf(server).code()).expiresInSeconds).toBe(600);
+  });
+
   it('refuses a code a page could not show as it is', async () => {
     const server = await serviceWith({ codePin: 'AB CD' });
 

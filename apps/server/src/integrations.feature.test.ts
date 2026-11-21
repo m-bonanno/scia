@@ -285,6 +285,16 @@ describe('the engine API, for the services Scia connects to', () => {
       expect((await code('GET')).status).toBe(404);
     });
 
+    it('answers 409, and asks the service nothing, while the service is connected', async () => {
+      await connect(KEY);
+
+      const response = await code('POST');
+
+      expect(response.status).toBe(409);
+      expect(await codeOf(response)).toBe(ApiErrorCode.Conflict);
+      expect(service.requests.some((request) => request.url === '/v4.1/pin/get')).toBe(false);
+    });
+
     it('answers 502 when the service gives no code', async () => {
       service.misbehave({ status: 503 });
 

@@ -131,8 +131,12 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
   // Set when what the focus is on is about to leave the page: the control named here takes the
   // focus as it arrives.
   const handFocusOn = useRef<FocusTarget | null>(null);
-  // The engine holds a code for this row: it is cancelled when the row leaves the page.
+  // The engine holds a code for this row, or is being asked for one: it is cancelled when the row
+  // leaves the page.
   const holdsCode = useRef(false);
+  // Moved on whenever the person leaves the code — Cancel, "Use an API key", Settings closed — and
+  // at every new ask: an answer to an ask that is no longer the last one is not shown.
+  const askTurn = useRef(0);
   const row = useRef<HTMLLIElement>(null);
   // Only a focus that is on what leaves is handed on: one that went elsewhere stays there.
   const focusIsHere = () => row.current?.contains(document.activeElement) ?? false;
@@ -148,6 +152,7 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
   // Settings closed, or the row left: a code nobody can see is not waited for.
   useEffect(
     () => () => {
+      askTurn.current += 1;
       if (holdsCode.current) void api.cancelIntegrationCode(id).catch(() => undefined);
     },
     [id],
@@ -163,12 +168,15 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
       if (connected !== undefined) onChange(connected);
       return;
     }
+    // A sentence about the page not opened is not true of a code that no longer connects.
+    if (now.status === IntegrationCodeStatus.Failed) setRefusal(null);
     setCode(now);
   });
   // An engine that no longer knows the code — it was started again — has none to wait for.
   // Anything else is an engine that is restarting: the next reading tells.
   const codeNotRead = useEffectEvent((error: unknown) => {
     if (!(error instanceof ApiError && error.status === 404)) return;
+    setRefusal(null);
     setCode((shown) =>
       shown === null
         ? null
@@ -207,31 +215,49 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
 
   const startCode = () => {
     if (asking) return;
+    askTurn.current += 1;
+    const turn = askTurn.current;
+    // From the moment it is asked for, the engine may hold a code: leaving cancels it.
+    holdsCode.current = true;
     setAsking(true);
     setRefusal(null);
     api
       .startIntegrationCode(id)
       .then((given) => {
-        holdsCode.current = true;
+        if (turn !== askTurn.current) {
+          // The person left while it came: the engine is told to forget it, whatever it
+          // was told before the code existed.
+          void api.cancelIntegrationCode(id).catch(() => undefined);
+          return;
+        }
         handFocusTo('code-action');
         setCode(given);
         setMode('code');
       })
       .catch((error: unknown) => {
+        if (turn !== askTurn.current) return;
+        holdsCode.current = false;
         setRefusal(codeNotGivenMessage(error, id));
       })
       .finally(() => {
-        setAsking(false);
+        if (turn === askTurn.current) setAsking(false);
       });
   };
 
-  const cancelCode = () => {
+  // The person leaves the code, shown or still coming: the engine forgets it.
+  const leaveCode = () => {
+    askTurn.current += 1;
+    setAsking(false);
+    if (holdsCode.current) void api.cancelIntegrationCode(id).catch(() => undefined);
     holdsCode.current = false;
-    void api.cancelIntegrationCode(id).catch(() => undefined);
-    handFocusOn.current = 'connect-code';
-    setMode('idle');
     setCode(null);
     setRefusal(null);
+  };
+
+  const cancelCode = () => {
+    leaveCode();
+    handFocusOn.current = 'connect-code';
+    setMode('idle');
   };
 
   const openCodePage = (shown: IntegrationCode) => {
@@ -239,7 +265,8 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
     bridge()
       ?.openCodePage(id)
       .catch(() => {
-        setRefusal(`Scia could not open your browser. Go to ${placeOf(shown)} and enter the code.`);
+        // Main says only that it failed: the browser, or an engine that no longer has the code.
+        setRefusal(`Scia could not open the page. Go to ${placeOf(shown)} and enter the code.`);
       });
   };
 
@@ -317,7 +344,8 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
                 ref={takeFocus('connect-key')}
                 className={QUIET_BUTTON}
                 onClick={() => {
-                  setRefusal(null);
+                  // A code still being asked for is left for the key.
+                  leaveCode();
                   setMode('key');
                 }}
               >
@@ -403,10 +431,16 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
       )}
       {mode === 'code' && code !== null && !integration.connected && (
         <CodePanel
+          // A new code is a new panel: what it says of its lifetime is its own.
+          key={code.code}
           code={code}
           name={name}
           alert={alert}
-          failure={code.failure === null ? null : codeFailedMessage(code.failure, id)}
+          // A newer refusal — no new code given — is the one said.
+          failure={
+            code.failure === null || refusal !== null ? null : codeFailedMessage(code.failure, id)
+          }
+          asking={asking}
           canOpen={bridge() !== undefined}
           actionRef={takeFocus('code-action')}
           onOpen={() => {
@@ -417,6 +451,15 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
         />
       )}
       {mode === 'idle' && alert}
+      {/* Said to who does not see the page change, from a line that is always there: a live
+          region, not a second status of the row, which is the account line. */}
+      <p aria-live="polite" className="sr-only">
+        {asking
+          ? `Getting a code from ${name}…`
+          : mode === 'code' && code?.status === IntegrationCodeStatus.Waiting
+            ? `Enter the code ${code.code} on ${placeOf(code)}. Waiting for you to confirm it on ${name}…`
+            : ''}
+      </p>
     </li>
   );
 }
@@ -429,6 +472,8 @@ interface CodePanelProps {
   readonly alert: ReactNode;
   // What the code said when it connected nothing.
   readonly failure: string | null;
+  // A new code is being asked for.
+  readonly asking: boolean;
   // Main opens the service's page; a page in a plain browser has nobody to ask.
   readonly canOpen: boolean;
   readonly actionRef: (control: { focus(): void } | null) => void;
@@ -442,6 +487,7 @@ function CodePanel({
   name,
   alert,
   failure,
+  asking,
   canOpen,
   actionRef,
   onOpen,
@@ -449,17 +495,23 @@ function CodePanel({
   onCancel,
 }: CodePanelProps): ReactNode {
   const waiting = code.status === IntegrationCodeStatus.Waiting;
-  // How long it lasts, said once and in whole minutes: a clock that ticks would be read aloud at
-  // every tick, and the code was given a moment ago.
+  const whereId = useId();
+  // How long it lasts, said once and in whole minutes — one at least: a clock that ticks would be
+  // read aloud at every tick, and the code was given a moment ago.
   const [lasts] = useState(
-    () => Math.round((Date.parse(code.expiresAt) - Date.now()) / 60_000) * 60,
+    () => Math.max(1, Math.round((Date.parse(code.expiresAt) - Date.now()) / 60_000)) * 60,
   );
+  // With no main to open the page, Cancel is what the focus goes to.
+  const opens = waiting && canOpen;
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-sm">
-        On <span className="font-medium">{placeOf(code)}</span>, enter this code:
+      <p id={whereId} className="text-sm">
+        On <span className="font-medium">{placeOf(code)}</span>, enter this code:{' '}
+        <span className="sr-only">{code.code}</span>
       </p>
-      <p className="font-mono text-2xl font-medium tracking-widest select-all">{code.code}</p>
+      <p aria-hidden="true" className="font-mono text-2xl font-medium tracking-widest select-all">
+        {code.code}
+      </p>
       {failure !== null && (
         <p role="alert" className="text-sm text-destructive">
           {failure}
@@ -472,25 +524,40 @@ function CodePanel({
         </p>
       )}
       <div className="flex justify-end gap-2">
-        <button type="button" className={QUIET_BUTTON} onClick={onCancel}>
+        <button
+          type="button"
+          ref={waiting && !canOpen ? actionRef : undefined}
+          aria-describedby={waiting && !canOpen ? whereId : undefined}
+          className={QUIET_BUTTON}
+          onClick={onCancel}
+        >
           Cancel
         </button>
         {!waiting ? (
-          <button type="button" ref={actionRef} className={TEXT_BUTTON} onClick={onAgain}>
-            Get a new code
+          // While a new code is asked for it does nothing, and keeps the focus a press gave it.
+          <button
+            type="button"
+            ref={actionRef}
+            aria-disabled={asking}
+            className={TEXT_BUTTON}
+            onClick={onAgain}
+          >
+            {asking ? 'Getting a code…' : 'Get a new code'}
           </button>
         ) : (
-          canOpen && (
-            <button type="button" ref={actionRef} className={TEXT_BUTTON} onClick={onOpen}>
+          opens && (
+            <button
+              type="button"
+              ref={actionRef}
+              aria-describedby={whereId}
+              className={TEXT_BUTTON}
+              onClick={onOpen}
+            >
               Open {name}
             </button>
           )
         )}
       </div>
-      {/* Said to who does not see the page change. */}
-      <p role="status" className="sr-only">
-        {waiting ? `Waiting for you to confirm the code on ${name}…` : ''}
-      </p>
     </div>
   );
 }

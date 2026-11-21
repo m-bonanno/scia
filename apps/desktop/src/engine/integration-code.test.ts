@@ -25,6 +25,16 @@ describe('codePageAddress', () => {
     expect(init.headers).toEqual({ authorization: 'Bearer token' });
   });
 
+  it('hands the system the address as a browser writes it', async () => {
+    const engine = engineAnswering({
+      data: { ...code, url: 'https://AllDebrid.com/pin/?pin=ABCD' },
+    });
+
+    expect(await codePageAddress('alldebrid', engine, 1000)).toBe(
+      'https://alldebrid.com/pin/?pin=ABCD',
+    );
+  });
+
   it('never puts in a request what is not the id of a service', async () => {
     const engine = engineAnswering({ data: code });
 

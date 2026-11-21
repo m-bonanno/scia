@@ -18,5 +18,6 @@ export async function codePageAddress(
   if (!response.ok) throw new Error('No code is waiting for this service.');
   const { url } = z.object({ data: integrationCodeSchema }).parse(await response.json()).data;
   if (!isServiceSite(id, url)) throw new Error("The code's page is not on the service's site.");
-  return url;
+  // What the system is handed is the address as a browser writes it, not the text as it came.
+  return new URL(url).href;
 }

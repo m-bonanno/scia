@@ -2,6 +2,7 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import {
   connectIntegrationSchema,
   type IntegrationAccount,
+  integrationCodeSchema,
   IntegrationId,
   isServiceSite,
 } from '@scia/contracts';
@@ -17,6 +18,9 @@ const ANSWER_LIMIT_MS = 10_000;
 // The public list is asked with no service connected, and a direct link waits on it: one
 // question, given up on soon, never asked again in the same breath (#49).
 export const PUBLIC_ANSWER_LIMIT_MS = 3000;
+// A code is waited for this long at most, whatever the service says: its documentation gives ten
+// minutes, and a lifetime from outside becomes a date (#136).
+export const CODE_LIMIT_SECONDS = 600;
 // A link that is being prepared is asked about this often: the documentation says "every 5
 // seconds or more".
 const DELAYED_POLL_MS = 5000;
@@ -217,15 +221,15 @@ export class AllDebrid {
   // is on the service's own site, or the answer is not taken.
   async code(signal?: AbortSignal): Promise<ServiceCode> {
     const given = await this.#ask('/v4.1/pin/get', undefined, codeSchema, undefined, signal);
-    const visible = /^[!-~]{1,32}$/.test(given.pin);
-    if (!visible || !isServiceSite(IntegrationId.AllDebrid, given.user_url)) {
+    const shown = integrationCodeSchema.shape.code.safeParse(given.pin).success;
+    if (!shown || !isServiceSite(IntegrationId.AllDebrid, given.user_url)) {
       throw refused(ServiceFailure.Unavailable, 'AllDebrid answered something else.');
     }
     return {
       code: given.pin,
       check: given.check,
       url: given.user_url,
-      expiresInSeconds: given.expires_in,
+      expiresInSeconds: Math.min(given.expires_in, CODE_LIMIT_SECONDS),
     };
   }
 
