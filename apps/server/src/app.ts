@@ -257,7 +257,8 @@ export function createApp(deps: AppDeps): Hono {
   app.delete(`${API_PREFIX}/integrations/:id/code`, (c) => {
     const id = c.req.param('id');
     if (!isIntegrationId(id)) return fail(404, ApiErrorCode.NotFound, 'No such service.');
-    integrations.cancelCode(id);
+    // A code may be named: only that one is forgotten.
+    integrations.cancelCode(id, c.req.query('code'));
     return c.body(null, 204);
   });
 

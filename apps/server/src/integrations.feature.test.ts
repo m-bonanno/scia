@@ -295,6 +295,29 @@ describe('the engine API, for the services Scia connects to', () => {
       expect(service.requests.some((request) => request.url === '/v4.1/pin/get')).toBe(false);
     });
 
+    it('forgets only the code a cancel names, when it names one', async () => {
+      const given = ((await (await code('POST')).json()) as { data: { code: string } }).data.code;
+
+      expect(
+        (
+          await call(`/integrations/alldebrid/code?code=ZZZZ`, {
+            method: 'DELETE',
+            token: APP_TOKEN,
+          })
+        ).status,
+      ).toBe(204);
+      expect((await code('GET')).status).toBe(200);
+      expect(
+        (
+          await call(`/integrations/alldebrid/code?code=${given}`, {
+            method: 'DELETE',
+            token: APP_TOKEN,
+          })
+        ).status,
+      ).toBe(204);
+      expect((await code('GET')).status).toBe(404);
+    });
+
     it('answers 502 when the service gives no code', async () => {
       service.misbehave({ status: 503 });
 

@@ -225,9 +225,9 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
       .startIntegrationCode(id)
       .then((given) => {
         if (turn !== askTurn.current) {
-          // The person left while it came: the engine is told to forget it, whatever it
-          // was told before the code existed.
-          void api.cancelIntegrationCode(id).catch(() => undefined);
+          // The person left while it came: the engine is told to forget it — that code, by
+          // name, so that a newer one is not forgotten with it.
+          void api.cancelIntegrationCode(id, given.code).catch(() => undefined);
           return;
         }
         handFocusTo('code-action');

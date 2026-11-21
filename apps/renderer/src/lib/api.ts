@@ -94,6 +94,11 @@ export const api = {
     }),
   integrationCode: (id: IntegrationId): Promise<IntegrationCode> =>
     request(`/integrations/${encodeURIComponent(id)}/code`, integrationCodeSchema),
-  cancelIntegrationCode: (id: IntegrationId): Promise<void> =>
-    request(`/integrations/${encodeURIComponent(id)}/code`, null, { method: 'DELETE' }),
+  // With a code named, the engine forgets that one only.
+  cancelIntegrationCode: (id: IntegrationId, code?: string): Promise<void> =>
+    request(
+      `/integrations/${encodeURIComponent(id)}/code${code === undefined ? '' : `?code=${encodeURIComponent(code)}`}`,
+      null,
+      { method: 'DELETE' },
+    ),
 };

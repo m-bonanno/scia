@@ -871,8 +871,9 @@ describe('IntegrationsSection', () => {
       expect(service.getByLabelText('AllDebrid API key')).toHaveFocus();
       expect(service.getByLabelText('AllDebrid API key')).toHaveValue(KEY);
       expect(service.queryByText('ABCD', { selector: 'p' })).not.toBeInTheDocument();
-      // Told when it was left, and again once the code was there.
-      expect(cancel).toHaveBeenCalledTimes(2);
+      // Told when it was left, and again once the code was there — that code, by name, so that
+      // a newer one is not forgotten with it.
+      expect(cancel.mock.calls).toEqual([['alldebrid'], ['alldebrid', 'ABCD']]);
     });
 
     it('does not bring back a code that came after Cancel', async () => {

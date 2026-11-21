@@ -193,7 +193,12 @@ export class Integrations implements LinkResolver {
   // A key pasted while a code waits is the one the person chose: the code no longer connects.
   connect(id: IntegrationId, apiKey: string): Promise<Integration> {
     this.cancelCode(id);
-    return this.#oneAtATime(() => this.#connect(id, apiKey));
+    return this.#oneAtATime(async () => {
+      const connected = await this.#connect(id, apiKey);
+      // A code given while this key was checked would replace it once confirmed.
+      this.cancelCode(id);
+      return connected;
+    });
   }
 
   // The key leaves the vault first: one that stayed there would connect Scia again by itself
@@ -213,6 +218,8 @@ export class Integrations implements LinkResolver {
     this.cancelCode(id);
     const turn = this.#codeTurn;
     const given = await this.#deps.alldebrid.code();
+    // The turn moved meanwhile: Cancel, another code, a key pasted — or a key kept, which moves it
+    // too, so that a code given while a key was checked is not given.
     if (turn !== this.#codeTurn) {
       throw new CodeConflictError('The wait for this code was ended while it was given.');
     }
@@ -237,7 +244,9 @@ export class Integrations implements LinkResolver {
     return this.#code === undefined ? undefined : this.#codeView(this.#code);
   }
 
-  cancelCode(_id: IntegrationId): void {
+  // With a code named, only that code: an ask that brought one late does not end a newer one.
+  cancelCode(_id: IntegrationId, code?: string): void {
+    if (code !== undefined && this.#code?.code !== code) return;
     this.#code?.stop.abort();
     this.#code = undefined;
     this.#codeTurn += 1;

@@ -618,6 +618,60 @@ describe('Integrations', () => {
       expect(await integrations.list()).toEqual([notConnected]);
     });
 
+    it('forgets a code given while a key was being connected: confirmed later, it connects nothing', async () => {
+      await service.close();
+      service = await startAllDebridServer({
+        accounts: {
+          [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL },
+          [REVOKED]: { username: 'bob', premiumUntil: PREMIUM_UNTIL },
+        },
+      });
+      const integrations = await open();
+      // The account is slow to say whose key it is: the code is given meanwhile.
+      service.misbehave({ slowMs: 300, times: 1 });
+      const connecting = integrations.connect(IntegrationId.AllDebrid, KEY);
+      await until(() => service.requests.length > 0);
+      const given = await integrations.startCode(IntegrationId.AllDebrid);
+
+      await connecting;
+      const asked = () => service.requests.filter((request) => request.form.pin === given.code);
+      const askedThen = asked().length;
+
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+      await integrations.disconnect(IntegrationId.AllDebrid);
+      service.confirmCode(given.code, REVOKED);
+      await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => checksOf(lastCheck()).length >= 2);
+      expect(asked()).toHaveLength(askedThen);
+      expect(await integrations.list()).toEqual([notConnected]);
+    });
+
+    it('gives no code that the service gave once a key it began to check had been kept', async () => {
+      const integrations = await open();
+      const connecting = integrations.connect(IntegrationId.AllDebrid, KEY);
+      await until(() => service.requests.length > 0);
+      // The code is slow to come: the key is kept meanwhile.
+      service.misbehave({ slowMs: 300, times: 1 });
+
+      const asked = integrations
+        .startCode(IntegrationId.AllDebrid)
+        .catch((error: unknown) => error);
+      await connecting;
+
+      expect(await asked).toBeInstanceOf(CodeConflictError);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+    });
+
+    it('forgets a code only when the one named is the one it waits for', async () => {
+      const integrations = await open();
+      const waiting = await integrations.startCode(IntegrationId.AllDebrid);
+
+      integrations.cancelCode(IntegrationId.AllDebrid, 'ZZZZ');
+      expect(integrations.code(IntegrationId.AllDebrid)?.code).toBe(waiting.code);
+      integrations.cancelCode(IntegrationId.AllDebrid, waiting.code);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+    });
+
     it('gives no code while a service is connected: a confirmed code would replace its key', async () => {
       const integrations = await open();
       await integrations.connect(IntegrationId.AllDebrid, KEY);
