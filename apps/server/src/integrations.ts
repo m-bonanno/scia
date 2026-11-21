@@ -191,7 +191,6 @@ export class Integrations implements LinkResolver {
   // The key leaves the vault first: one that stayed there would connect Scia again by itself
   // at its next start.
   disconnect(id: IntegrationId): Promise<void> {
-    this.cancelCode(id);
     return this.#oneAtATime(() => this.#disconnect(id));
   }
 
@@ -253,7 +252,6 @@ export class Integrations implements LinkResolver {
             throw error;
           });
         if (key === undefined) continue;
-        signal.throwIfAborted();
         await this.#oneAtATime(() => this.#connect(id, key));
         pending.status = IntegrationCodeStatus.Connected;
         return;

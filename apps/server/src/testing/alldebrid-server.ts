@@ -112,6 +112,8 @@ export interface AllDebridServerOptions {
   readonly codeLifetimeSeconds?: number;
   // The page it names for a code, when it is not the service's own.
   readonly codePage?: string;
+  // The code it gives, when it is not one of its own four letters and digits.
+  readonly codePin?: string;
   // A port of its own for a run of the real app; a free one otherwise.
   readonly port?: number;
 }
@@ -314,7 +316,7 @@ export async function startAllDebridServer(
 
   function giveCode(response: ServerResponse): void {
     const lifetime = options.codeLifetimeSeconds ?? 600;
-    const pin = pinOf(codes.size + 1);
+    const pin = options.codePin ?? pinOf(codes.size + 1);
     const check = randomBytes(20).toString('hex');
     codes.set(check, { pin, expiresAt: Date.now() + lifetime * 1000 });
     const page = options.codePage ?? CODE_PAGE;

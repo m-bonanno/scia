@@ -530,6 +530,23 @@ describe('Integrations', () => {
 
       expect(checksOf(check)).toHaveLength(asked);
       expect(await integrations.list()).toEqual([notConnected]);
+      // A wait that was ended did not fail: nothing is said of it.
+      expect(logged.join('\n')).not.toContain('service_code_failed');
+    });
+
+    it('waits only for the last of two codes asked for together', async () => {
+      const integrations = await open();
+
+      const [first, second] = await Promise.all([
+        integrations.startCode(IntegrationId.AllDebrid),
+        integrations.startCode(IntegrationId.AllDebrid),
+      ]);
+      service.confirmCode(first.code, KEY);
+      expect(service.requests.filter((request) => request.url === '/v4.1/pin/get')).toHaveLength(2);
+      await until(() => checksOf(lastCheck()).length >= 3);
+
+      expect(integrations.code(IntegrationId.AllDebrid)?.code).toBe(second.code);
+      expect(await integrations.list()).toEqual([notConnected]);
     });
 
     it('stops waiting for a code when another is asked for, or a key is pasted', async () => {

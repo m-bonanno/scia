@@ -1,5 +1,5 @@
 import { ApiErrorCode, type Integration, type IntegrationCode } from '@scia/contracts';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '@/lib/api.ts';
@@ -585,7 +585,7 @@ describe('IntegrationsSection', () => {
         .spyOn(api, 'integrationCode')
         .mockResolvedValueOnce(given)
         .mockResolvedValue({ ...given, status: 'connected' });
-      render(<IntegrationsSection open onError={ignore} />);
+      const { rerender } = render(<IntegrationsSection open onError={ignore} />);
       const service = await theService();
       await user.click(service.getByRole('button', { name: 'Connect with a code' }));
       await service.findByText('ABCD');
@@ -600,10 +600,67 @@ describe('IntegrationsSection', () => {
       const readings = read.mock.calls.length;
       await nextReading();
       expect(read).toHaveBeenCalledTimes(readings);
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      rerender(<IntegrationsSection open={false} onError={ignore} />);
+      expect(cancel).not.toHaveBeenCalled();
     });
 
-    it('says the code expired, stops asking, and offers a new one', async () => {
+    for (const [what, late] of [
+      [
+        'a failure',
+        (answer: (code: IntegrationCode) => void) => {
+          answer({ ...given, status: 'failed', failure: 'CODE_EXPIRED' });
+        },
+      ],
+      [
+        'an engine that no longer knows it',
+        (_answer: unknown, refuse: (error: unknown) => void) => {
+          refuse(new ApiError(404, ApiErrorCode.NotFound, 'No code was given.'));
+        },
+      ],
+    ] as const) {
+      it(`takes no word of the code before, when a reading of it says ${what} after Cancel`, async () => {
+        const user = setUp();
+        listing([notConnected]);
+        vi.spyOn(api, 'startIntegrationCode')
+          .mockResolvedValueOnce(given)
+          .mockResolvedValueOnce({ ...given, code: 'EFGH' });
+        vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+        let answer: (code: IntegrationCode) => void = () => undefined;
+        let refuse: (error: unknown) => void = () => undefined;
+        const read = vi.spyOn(api, 'integrationCode').mockImplementation(
+          () =>
+            new Promise((resolve, reject) => {
+              answer = resolve;
+              refuse = reject;
+            }),
+        );
+        render(<IntegrationsSection open onError={ignore} />);
+        const service = await theService();
+        await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+        await service.findByText('ABCD');
+        await nextReading();
+        await vi.waitFor(() => {
+          expect(read).toHaveBeenCalled();
+        });
+        const [answerBefore, refuseBefore] = [answer, refuse];
+
+        await user.click(service.getByRole('button', { name: 'Cancel' }));
+        await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+        await service.findByText('EFGH');
+        await act(async () => {
+          late(answerBefore, refuseBefore);
+          await vi.advanceTimersByTimeAsync(0);
+        });
+
+        expect(service.getByText('EFGH')).toBeInTheDocument();
+        expect(service.queryByRole('alert')).not.toBeInTheDocument();
+      });
+    }
+
+    it('says the code expired, stops asking, and offers a new one, which takes the focus', async () => {
       const user = setUp();
+      withMain();
       listing([notConnected]);
       const start = vi
         .spyOn(api, 'startIntegrationCode')
@@ -622,6 +679,7 @@ describe('IntegrationsSection', () => {
       expect(await service.findByRole('alert')).toHaveTextContent(
         'This code is no longer valid. Get a new one.',
       );
+      expect(service.getByRole('button', { name: 'Get a new code' })).toHaveFocus();
       await nextReading();
       expect(read).toHaveBeenCalledTimes(1);
       await user.click(service.getByRole('button', { name: 'Get a new code' }));
@@ -652,16 +710,26 @@ describe('IntegrationsSection', () => {
       const user = setUp();
       listing([notConnected]);
       vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
-      vi.spyOn(api, 'integrationCode')
+      const read = vi
+        .spyOn(api, 'integrationCode')
         .mockRejectedValueOnce(new TypeError('Failed to fetch'))
-        .mockResolvedValue(given);
+        // The reading after it is still on its way: nothing it says can hide what the first did.
+        .mockImplementation(() => new Promise(() => undefined));
       render(<IntegrationsSection open onError={ignore} />);
       const service = await theService();
       await user.click(service.getByRole('button', { name: 'Connect with a code' }));
       await service.findByText('ABCD');
 
       await nextReading();
+      await vi.waitFor(() => {
+        expect(read).toHaveBeenCalledTimes(1);
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(service.queryByRole('alert')).not.toBeInTheDocument();
       await nextReading();
+      await vi.waitFor(() => {
+        expect(read).toHaveBeenCalledTimes(2);
+      });
 
       expect(service.queryByRole('alert')).not.toBeInTheDocument();
       expect(service.getByText(/^Scia connects as soon as you confirm it/)).toBeInTheDocument();

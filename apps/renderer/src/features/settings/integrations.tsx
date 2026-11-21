@@ -163,14 +163,12 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
       if (connected !== undefined) onChange(connected);
       return;
     }
-    if (now.status === IntegrationCodeStatus.Failed) handFocusTo('code-action');
     setCode(now);
   });
   // An engine that no longer knows the code — it was started again — has none to wait for.
   // Anything else is an engine that is restarting: the next reading tells.
   const codeNotRead = useEffectEvent((error: unknown) => {
     if (!(error instanceof ApiError && error.status === 404)) return;
-    handFocusTo('code-action');
     setCode((shown) =>
       shown === null
         ? null

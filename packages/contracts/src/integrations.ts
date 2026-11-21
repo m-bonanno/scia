@@ -48,7 +48,7 @@ const SERVICE_PAGE: Readonly<Record<IntegrationId, RegExp>> = {
 };
 
 export function isServiceSite(id: IntegrationId, url: string): boolean {
-  return SERVICE_PAGE[id].test(url) && z.url().safeParse(url).success;
+  return SERVICE_PAGE[id].test(url);
 }
 
 export const IntegrationCodeStatus = {

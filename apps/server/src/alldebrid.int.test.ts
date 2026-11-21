@@ -527,6 +527,12 @@ describe('AllDebrid', () => {
     expect(await failureOf(clientOf(server).code())).toBe(ServiceFailure.Unavailable);
   });
 
+  it('refuses a code a page could not show as it is', async () => {
+    const server = await serviceWith({ codePin: 'AB CD' });
+
+    expect(await failureOf(clientOf(server).code())).toBe(ServiceFailure.Unavailable);
+  });
+
   it('gives no key until the person confirms the code, then the key, asking with the code and its check in a form', async () => {
     const server = await serviceWith();
     const client = clientOf(server);
