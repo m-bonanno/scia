@@ -10,7 +10,8 @@ import {
 import { createPortal } from 'react-dom';
 import { IconButton } from '@/components/icon-button.tsx';
 import { cn } from '@/lib/cn.ts';
-import { type Notice, NOTICE_MS, NOTICES_AT_MOST } from './use-notices.ts';
+import { NOTICE_MS, NOTICES_AT_MOST } from './notice-limits.ts';
+import type { Notice } from './use-notices.ts';
 
 interface NoticesProps {
   readonly notices: readonly Notice[];
@@ -80,21 +81,29 @@ function Stack({ timed, lasting, onDismiss, home, announced }: StackProps): Reac
   const list = useRef<HTMLUListElement>(null);
   // The notice whose × has the focus: it holds the stack while it is there.
   const [focusedId, setFocusedId] = useState<number | null>(null);
-  // The last × the focus was on, and where it stood. However its notice leaves — dismissed, gone
-  // by itself, pushed out by a newer one, put aside for the engine's — the focus goes to the ×
-  // now in its place, else to the one before it, else home. Read after every change rather than
-  // from a blur: the blur the removal causes comes during React's commit, which React does not
-  // hand to its handlers.
-  const lastFocus = useRef<{ readonly id: number; readonly at: number } | null>(null);
+  // The notice whose × the focus was on last, and the notices as they stood the render before.
+  // However that notice leaves — dismissed, gone by itself, pushed out by a newer one, put aside
+  // for the engine's — the focus goes to the × of the notice that came after it, else of the one
+  // before it, else home: read from where it stood then, since older ones may have left since it
+  // took the focus. Read after every change rather than from a blur: the blur the removal causes
+  // comes during React's commit, which React does not hand to its handlers.
+  const lastFocus = useRef<number | null>(null);
+  const before = useRef<readonly number[]>([]);
 
   useLayoutEffect(() => {
     const last = lastFocus.current;
+    const was = before.current;
+    before.current = timed.map((notice) => notice.id);
     if (last === null || (list.current?.contains(document.activeElement) ?? false)) return;
     lastFocus.current = null;
     // Still there: the person took the focus elsewhere.
-    if (timed.some((notice) => notice.id === last.id)) return;
+    if (before.current.includes(last)) return;
+    const at = was.indexOf(last);
+    const after = was.slice(at + 1).find((id) => before.current.includes(id));
+    const earlier = was.slice(0, Math.max(at, 0)).findLast((id) => before.current.includes(id));
+    const next = after ?? earlier;
     const buttons = [...(list.current?.querySelectorAll('button') ?? [])];
-    (buttons[Math.min(last.at, buttons.length - 1)] ?? home())?.focus();
+    (next === undefined ? home() : buttons[before.current.indexOf(next)])?.focus();
   });
 
   if (timed.length === 0 && lasting === null) return null;
@@ -105,9 +114,9 @@ function Stack({ timed, lasting, onDismiss, home, announced }: StackProps): Reac
       onFocus={(target) => {
         const buttons = [...(list.current?.querySelectorAll('button') ?? [])];
         const at = buttons.findIndex((button) => button === target);
-        const id = timed[at]?.id;
-        lastFocus.current = id === undefined ? null : { id, at };
-        setFocusedId(id ?? null);
+        const id = timed[at]?.id ?? null;
+        lastFocus.current = id;
+        setFocusedId(id);
       }}
       onBlur={() => {
         setFocusedId(null);
@@ -172,6 +181,26 @@ function List({
   );
 }
 
+// Enter held on a × dismisses one notice: its repeats would press whatever the focus goes to
+// next — the next ×, the field and its links, Settings' Close. They are swallowed, wherever they
+// land, until the key is let go. A held Tab is not touched: it walks on.
+let swallowing = false;
+function swallowHeldEnter(): void {
+  if (swallowing) return;
+  swallowing = true;
+  const swallow = (event: KeyboardEvent) => {
+    if (event.key === 'Enter' && event.repeat) event.preventDefault();
+  };
+  const release = (event: KeyboardEvent) => {
+    if (event.key !== 'Enter') return;
+    swallowing = false;
+    window.removeEventListener('keydown', swallow, true);
+    window.removeEventListener('keyup', release, true);
+  };
+  window.addEventListener('keydown', swallow, true);
+  window.addEventListener('keyup', release, true);
+}
+
 function TimedNotice({
   notice,
   held,
@@ -202,7 +231,7 @@ function TimedNotice({
         onTonal
         // The focus moves to the next notice's ×: Enter held down would dismiss them all.
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && event.repeat) event.preventDefault();
+          if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
         }}
         onClick={() => {
           onDismiss(id);

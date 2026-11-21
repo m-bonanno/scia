@@ -26,8 +26,14 @@ interface SettingsDialogProps {
   readonly onError: (error: unknown) => void;
   // Told every time the dialog learns what the engine keeps: what it read, what it changed.
   readonly onSettings: (settings: Settings) => void;
-  // The dialog itself, for what has to be drawn over it while it is open: the page's notices.
-  readonly ref?: Ref<HTMLDialogElement | null>;
+  readonly ref?: Ref<SettingsLayer | null>;
+}
+
+// What the page draws over Settings while it is open — its notices — needs the dialog, and the
+// top of it for a focus left on nothing there.
+export interface SettingsLayer {
+  readonly element: HTMLDialogElement;
+  readonly top: () => HTMLElement | null;
 }
 
 export function SettingsDialog({
@@ -38,9 +44,10 @@ export function SettingsDialog({
   ref,
 }: SettingsDialogProps): ReactNode {
   const dialog = useRef<HTMLDialogElement>(null);
-  useImperativeHandle<HTMLDialogElement | null, HTMLDialogElement | null>(
+  const close = useRef<HTMLButtonElement>(null);
+  useImperativeHandle<SettingsLayer | null, SettingsLayer | null>(
     ref,
-    () => dialog.current,
+    () => (dialog.current === null ? null : { element: dialog.current, top: () => close.current }),
     [],
   );
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -127,7 +134,7 @@ export function SettingsDialog({
         <h2 id="settings-title" className="text-base font-semibold">
           Settings
         </h2>
-        <IconButton label="Close" onClick={onClose}>
+        <IconButton ref={close} label="Close" onClick={onClose}>
           <X size={16} aria-hidden="true" />
         </IconButton>
       </div>

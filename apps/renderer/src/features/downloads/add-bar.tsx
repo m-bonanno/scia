@@ -34,9 +34,14 @@ export function AddBar({ onAdd, inputRef }: AddBarProps): ReactNode {
     const sent = text;
     void onAdd(links)
       .then((added) => {
-        // A failed add never clears what was typed.
-        if (added.taken) edit('');
-        else if (holds.current === sent) setRefusal(added.refusal);
+        // What was typed while the links were on their way is kept, and a failed add never clears
+        // what was typed.
+        const same = holds.current === sent;
+        if (added.taken) {
+          if (same) edit('');
+        } else if (same) {
+          setRefusal(added.refusal);
+        }
       })
       .finally(() => {
         setBusy(false);

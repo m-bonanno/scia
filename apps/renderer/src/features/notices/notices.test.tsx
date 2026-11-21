@@ -2,7 +2,8 @@ import { act, fireEvent, render, renderHook, screen } from '@testing-library/rea
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Notices } from './notices.tsx';
-import { NOTICE_MS, NOTICES_AT_MOST, useNotices } from './use-notices.ts';
+import { NOTICE_MS, NOTICES_AT_MOST } from './notice-limits.ts';
+import { useNotices } from './use-notices.ts';
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -243,6 +244,64 @@ describe('Notices', () => {
     expect(screen.getByText('Three')).toBeInTheDocument();
   });
 
+  it('lets a held Tab walk on while the Enter that dismissed a notice is still down', async () => {
+    vi.useRealTimers();
+    render(<Page told={['One', 'Two', 'Three']} />);
+    for (const text of ['One', 'Two', 'Three']) {
+      fireEvent.click(screen.getByRole('button', { name: `tell ${text}` }));
+    }
+    const [first, , last] = screen.getAllByRole('button', { name: 'Dismiss' });
+    act(() => {
+      first?.focus();
+    });
+
+    await userEvent.keyboard('{Enter>}{Tab>2/}{/Enter}');
+
+    expect(screen.queryByText('One')).not.toBeInTheDocument();
+    expect(last).not.toHaveFocus();
+  });
+
+  it('swallows nothing once the Enter that dismissed a notice is let go', async () => {
+    vi.useRealTimers();
+    const pressed = vi.fn();
+    render(
+      <>
+        <button type="button" onClick={pressed}>
+          Press
+        </button>
+        <Page told={['One']} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'tell One' }));
+    act(() => {
+      screen.getByRole('button', { name: 'Dismiss' }).focus();
+    });
+    await userEvent.keyboard('{Enter}');
+    act(() => {
+      screen.getByRole('button', { name: 'Press' }).focus();
+    });
+
+    await userEvent.keyboard('{Enter>3/}');
+
+    expect(pressed).toHaveBeenCalledTimes(3);
+  });
+
+  it('hands the focus of a middle notice, dismissed, to the one after it', () => {
+    render(<Page told={['One', 'Two', 'Three']} />);
+    for (const text of ['One', 'Two', 'Three']) {
+      fireEvent.click(screen.getByRole('button', { name: `tell ${text}` }));
+    }
+    const [, middle, newest] = screen.getAllByRole('button', { name: 'Dismiss' });
+    act(() => {
+      middle?.focus();
+    });
+
+    pressFocused();
+
+    expect(screen.queryByText('Two')).not.toBeInTheDocument();
+    expect(newest).toHaveFocus();
+  });
+
   it('hands the focus of the newest notice, dismissed, to the one before it', () => {
     render(<Page told={['One', 'Two', 'Three']} />);
     for (const text of ['One', 'Two', 'Three']) {
@@ -315,6 +374,26 @@ describe('Notices', () => {
     wait(NOTICE_MS);
     expect(screen.queryAllByRole('button', { name: 'Dismiss' })).toHaveLength(0);
     expect(screen.getByText(engine)).toBeInTheDocument();
+  });
+
+  it('hands the focus on from where the notice stands now, after an older one was pushed out', () => {
+    const told = Array.from({ length: NOTICES_AT_MOST + 1 }, (_, i) => `N${String(i)}`);
+    render(<Page told={told} />);
+    for (const text of told.slice(0, -1)) {
+      fireEvent.click(screen.getByRole('button', { name: `tell ${text}` }));
+    }
+    act(() => {
+      screen.getAllByRole('button', { name: 'Dismiss' })[1]?.focus();
+    });
+    fireEvent.click(screen.getByRole('button', { name: `tell ${told.at(-1) ?? ''}` }));
+    expect(screen.queryByText('N0')).not.toBeInTheDocument();
+
+    pressFocused();
+
+    expect(screen.queryByText('N1')).not.toBeInTheDocument();
+    const [n2] = screen.getAllByRole('button', { name: 'Dismiss' });
+    expect(n2).toHaveFocus();
+    expect(n2?.closest('li')).toHaveTextContent('N2');
   });
 
   it('is no longer held by a focus that went home with its notice', () => {

@@ -10,7 +10,7 @@ import { countByFilter, Filter, matchesFilter } from '@/features/downloads/filte
 import { extractLinks } from '@scia/contracts/links';
 import { Notices } from '@/features/notices/notices.tsx';
 import { useNotices } from '@/features/notices/use-notices.ts';
-import { SettingsDialog } from '@/features/settings/settings-dialog.tsx';
+import { SettingsDialog, type SettingsLayer } from '@/features/settings/settings-dialog.tsx';
 import { api, ApiError } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { Connection, useLive } from '@/lib/live.ts';
@@ -28,7 +28,7 @@ export function App(): ReactNode {
   const { notices, tell, dismiss } = useNotices();
   const field = useRef<HTMLInputElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsLayer, setSettingsLayer] = useState<HTMLDialogElement | null>(null);
+  const [settingsLayer, setSettingsLayer] = useState<SettingsLayer | null>(null);
   const [speedLimit, setSpeedLimit] = useState<number | null>(null);
 
   const report = useCallback(
@@ -199,10 +199,8 @@ export function App(): ReactNode {
         notices={notices}
         lasting={live.connection === Connection.Offline ? ENGINE_UNREACHABLE : null}
         onDismiss={dismiss}
-        home={() =>
-          settingsOpen ? (settingsLayer?.querySelector('button') ?? null) : field.current
-        }
-        layer={settingsOpen ? settingsLayer : null}
+        home={() => (settingsOpen ? (settingsLayer?.top() ?? null) : field.current)}
+        layer={settingsOpen ? (settingsLayer?.element ?? null) : null}
       />
     </div>
   );

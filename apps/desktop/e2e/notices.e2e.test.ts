@@ -5,7 +5,7 @@ import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import type { Locator } from 'playwright-core';
 import { API_PREFIX, ApiErrorCode } from '@scia/contracts';
 import { describe, expect, it } from 'vitest';
-import { NOTICE_MS } from '../../renderer/src/features/notices/use-notices.ts';
+import { NOTICE_MS } from '../../renderer/src/features/notices/notice-limits.ts';
 import { paste, rowOf, until, useRun } from './scia.ts';
 
 const NOT_OPENED = 'Scia could not open the file. It may have been moved or deleted.';

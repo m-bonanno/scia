@@ -147,6 +147,81 @@ describe('App', () => {
     expect(field).not.toHaveAttribute('aria-invalid', 'true');
   });
 
+  it('keeps text typed while the add was on its way when the links sent are taken', async () => {
+    let take: (downloads: Download[]) => void = () => undefined;
+    vi.spyOn(api, 'addDownloads').mockReturnValue(
+      new Promise((resolve) => {
+        take = resolve;
+      }),
+    );
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+    await userEvent.type(field, 'https://example.com/a.zip');
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+    await userEvent.type(field, ' https://example.com/b.zip');
+    take([]);
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: /^Download/ })).toBeEnabled();
+    });
+    expect(field).toHaveValue('https://example.com/a.zip https://example.com/b.zip');
+  });
+
+  it('sends nothing from the field when Enter, held to dismiss the last notice, lands on it', async () => {
+    live.downloads = [aDownload({ status: DownloadStatus.Completed })];
+    window.scia = {
+      apiToken: 'token',
+      version: '1.0.0',
+      platform: 'win32',
+      revealDownload: vi.fn(async () => undefined),
+      openDownload: vi.fn(async () => {
+        throw new Error('not there');
+      }),
+      chooseDownloadFolder: vi.fn(async () => 'kept'),
+      themeChanged: vi.fn(async () => undefined),
+    };
+    const add = vi.spyOn(api, 'addDownloads').mockResolvedValue([]);
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+    await userEvent.type(field, 'https://example.com/a.zip');
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+    const notices = await screen.findByRole('list', { name: 'Notices' });
+    within(notices).getByRole('button', { name: 'Dismiss' }).focus();
+
+    await userEvent.keyboard('{Enter>4/}');
+
+    expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
+    expect(field).toHaveFocus();
+    expect(add).not.toHaveBeenCalled();
+    expect(field).toHaveValue('https://example.com/a.zip');
+
+    await userEvent.keyboard('{Enter}');
+    expect(add).toHaveBeenCalledOnce();
+  });
+
+  it('keeps Settings open when Enter, held to dismiss the last notice over it, lands on Close', async () => {
+    vi.spyOn(api, 'updateSettings').mockRejectedValue(
+      new ApiError(500, ApiErrorCode.InternalError, 'it broke'),
+    );
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    await userEvent.selectOptions(
+      await within(dialog).findByRole('combobox', { name: 'Theme' }),
+      'Space',
+    );
+    const notices = await within(dialog).findByRole('list', { name: 'Notices' });
+    const dismisses = within(notices).getAllByRole('button', { name: 'Dismiss' });
+    for (const dismiss of dismisses.slice(1).reverse()) await userEvent.click(dismiss);
+    dismisses[0]?.focus();
+
+    await userEvent.keyboard('{Enter>4/}');
+
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toHaveFocus();
+    expect(dialog).toHaveAttribute('open');
+  });
+
   it('hands the focus to Close when the last notice over Settings is dismissed', async () => {
     vi.spyOn(api, 'updateSettings').mockRejectedValue(
       new ApiError(500, ApiErrorCode.InternalError, 'it broke'),

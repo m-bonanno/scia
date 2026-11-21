@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import type { ButtonHTMLAttributes, ReactNode, Ref } from 'react';
 import { cn } from '@/lib/cn.ts';
 import { ICON_BUTTON, ICON_BUTTON_ON_TONAL } from './button-styles.ts';
 
@@ -8,6 +8,7 @@ interface IconButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   // It sits on a `tonal` ground, not on the background or a surface.
   readonly onTonal?: boolean;
   readonly children: ReactNode;
+  readonly ref?: Ref<HTMLButtonElement>;
 }
 
 export function IconButton({
@@ -15,10 +16,12 @@ export function IconButton({
   onTonal = false,
   children,
   className,
+  ref,
   ...rest
 }: IconButtonProps): ReactNode {
   return (
     <button
+      ref={ref}
       type="button"
       aria-label={label}
       title={label}
