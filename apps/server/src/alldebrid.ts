@@ -101,7 +101,6 @@ const MAGNET_FAILURE_OF: ReadonlyMap<string, MagnetFailure> = new Map<string, Ma
   ['MAGNET_INTERNAL_ERROR', MagnetFailure.Failed],
 ]);
 
-// A torrent's folders are not this deep, nor its files this many: an answer that is, is not one.
 // What refuses every magnet of a request — an upload, or the account's list — said as itself;
 // any other failure as it was.
 function asMagnetsRefusal(error: unknown): never {
@@ -111,6 +110,7 @@ function asMagnetsRefusal(error: unknown): never {
   throw refused(failure, `AllDebrid answered ${code}.`);
 }
 
+// A torrent's folders are not this deep, nor its files this many: an answer that is, is not one.
 const MAGNET_TREE_DEPTH = 32;
 const MAGNET_FILES_AT_MOST = 100_000;
 
@@ -477,9 +477,13 @@ export class AllDebrid {
   // question, whatever the number Scia waits for.
   async magnetStates(apiKey: string, signal?: AbortSignal): Promise<MagnetState[]> {
     const { magnets } = await this.#insist(
-      () => this.#ask('/v4.1/magnet/status', apiKey, magnetStatesSchema, {}, signal),
+      // Said as itself inside the attempt: a refusal of every magnet is not asked again.
+      () =>
+        this.#ask('/v4.1/magnet/status', apiKey, magnetStatesSchema, {}, signal).catch(
+          asMagnetsRefusal,
+        ),
       signal,
-    ).catch(asMagnetsRefusal);
+    );
     return Object.values(magnets).flatMap((entry): MagnetState[] => {
       const read = magnetStateSchema.safeParse(entry);
       if (!read.success) {

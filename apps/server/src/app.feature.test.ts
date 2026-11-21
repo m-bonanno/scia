@@ -572,9 +572,12 @@ describe('the engine API', () => {
         );
 
         const refused = await ask(on, '/magnets/account', { token: APP_TOKEN });
+        const taken = await ask(on, '/magnets/account/7', { method: 'POST', token: APP_TOKEN });
 
-        expect(refused.status).toBe(422);
-        expect(await codeOf(refused)).toBe(ApiErrorCode.NotPremium);
+        for (const response of [refused, taken]) {
+          expect(response.status).toBe(422);
+          expect(await codeOf(response)).toBe(ApiErrorCode.NotPremium);
+        }
       });
 
       it('takes a ready magnet of the account into the list, for the app alone, once', async () => {

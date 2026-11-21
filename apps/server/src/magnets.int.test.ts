@@ -837,7 +837,28 @@ describe('a magnet that goes through a service', () => {
       await expect(scia.accountMagnets()).rejects.toMatchObject({
         failure: UnlockFailure.NotPremium,
       });
+      // Said once: a refusal is not asked again as a service not answering is.
+      expect(alldebrid.requests.filter((r) => r.url === '/v4.1/magnet/status')).toHaveLength(1);
     });
+
+    it.each([
+      ['MAGNET_MUST_BE_PREMIUM', MagnetFailure.NotPremium],
+      ['MAGNET_NO_SERVER', MagnetFailure.NetworkRefused],
+    ])(
+      'fails a waiting pasted magnet when the service answers %s about the account',
+      async (code, failure) => {
+        const alldebrid = await serviceWith({
+          magnets: { [HASH]: holiday({ fetchingPolls: 1000 }) },
+        });
+        alldebrid.misbehave({ error: code, route: 'POST /v4.1/magnet/status' });
+        const scia = await open(await connected(alldebrid));
+
+        scia.addMagnets([MAGNET]);
+
+        await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+        expect(scia.snapshot().magnets[0]?.failure).toBe(failure);
+      },
+    );
 
     it('says a service is needed when none is connected', async () => {
       const alldebrid = await serviceWith({ onTheAccount: [HASH] });
