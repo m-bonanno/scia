@@ -21,7 +21,13 @@ describe('DownloadList', () => {
       open: undefined,
     };
     const list = (ids: string[]) => (
-      <DownloadList downloads={ids.map(finished)} filter={Filter.Completed} actions={actions} />
+      <DownloadList
+        downloads={ids.map(finished)}
+        filter={Filter.Completed}
+        actions={actions}
+        magnets={[]}
+        magnetActions={{ retry: vi.fn(), remove: vi.fn() }}
+      />
     );
     const topCross = () => screen.getAllByRole('button', { name: 'Remove from list' })[0]!;
     const { rerender } = render(list(['one', 'two', 'three']));

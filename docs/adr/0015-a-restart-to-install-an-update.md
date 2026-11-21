@@ -1,4 +1,4 @@
-# ADR 0013 — A restart the person asks for, to install an update
+# ADR 0015 — A restart the person asks for, to install an update
 
 - **Status**: accepted
 - **Date**: 2026-11-21

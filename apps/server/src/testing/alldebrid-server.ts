@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -30,6 +31,13 @@ const MESSAGES: Readonly<Record<string, string>> = {
   FREE_TRIAL_LIMIT_REACHED:
     'You have reached the free trial limit (7 days / 25GB downloaded or host uneligible for free trial)',
   MUST_BE_PREMIUM: 'You must be premium to process this link',
+  PIN_EXPIRED: 'The pin has expired',
+  MAGNET_INVALID_URI: 'Magnet is not valid',
+  MAGNET_INVALID_ID: 'This magnet ID does not exists or is invalid',
+  MAGNET_TOO_MANY_ACTIVE: 'Already have maximum allowed active magnets (30)',
+  MAGNET_TOO_LARGE: 'Magnet files are too large (max 1TB)',
+  MAGNET_MUST_BE_PREMIUM: 'You must be premium to use this feature',
+  PIN_INVALID: 'This endpoint check parameter is invalid',
 };
 
 const ROUTES: readonly string[] = [
@@ -38,7 +46,15 @@ const ROUTES: readonly string[] = [
   'GET /v4.1/user/hosts',
   'POST /v4/link/unlock',
   'POST /v4/link/delayed',
+  'GET /v4.1/pin/get',
+  'POST /v4/pin/check',
+  'POST /v4/magnet/upload',
+  'POST /v4.1/magnet/status',
+  'POST /v4/magnet/files',
 ];
+
+// Where the service has a person confirm a code, as its documentation gives it.
+const CODE_PAGE = 'https://alldebrid.com/pin/';
 
 export interface SimulatedAccount {
   readonly username: string;
@@ -63,6 +79,33 @@ export interface UnlockableLink {
   readonly fails?: boolean;
 }
 
+// A node of a magnet's files as the service lists them: a folder, with what is in it, or a file,
+// with its size and its link — a link of the service's own, unlocked as a hoster's is.
+export type SimulatedNode =
+  | { readonly n: string; readonly e: readonly SimulatedNode[] }
+  | { readonly n: string; readonly s: number; readonly l: string };
+
+// A magnet the service knows, by the hash of its torrent.
+export interface SimulatedMagnet {
+  readonly name: string;
+  readonly size: number;
+  readonly files: readonly SimulatedNode[];
+  // It is fetched — status 1 — for this many questions about it, then ready (4), or failed (15:
+  // no peer) if `fails`.
+  readonly fetchingPolls?: number;
+  readonly fails?: boolean;
+  // Refused when it is sent, with this code of the service's.
+  readonly error?: string;
+  // What the service calls it when it is sent, before it has read the torrent: "noname".
+  readonly nameAtUpload?: string;
+  // Its files are answered, this many times, with a code of the service's that Scia does not know.
+  readonly unknownFilesAnswers?: number;
+  // The answer about files leaves it out, as if it had not been asked about.
+  readonly leftOutOfFiles?: boolean;
+  // Where it is, as the service lists it, is written in a way Scia cannot read — but for its id.
+  readonly unreadableState?: boolean;
+}
+
 // What the service makes of a hoster's link it is asked to unlock: a direct link, or one of
 // its refusals, by its code.
 export type SimulatedLink = UnlockableLink | { readonly error: string };
@@ -82,6 +125,8 @@ export type Misbehaviour = (
 ) & {
   // For this many requests, then it answers as it should again; until told otherwise if absent.
   readonly times?: number;
+  // Only the requests of this route ("POST /v4.1/magnet/status"); every request if absent.
+  readonly route?: string;
 };
 
 export interface AllDebridServerOptions {
@@ -99,6 +144,24 @@ export interface AllDebridServerOptions {
   readonly refusalStatus?: number;
   // The documentation's table says `premiumUntil` is a number, its example writes it as text.
   readonly timestampsAsText?: boolean;
+  // How long a code to confirm on the site lasts, in seconds: ten minutes, as the documentation
+  // says, if absent.
+  readonly codeLifetimeSeconds?: number;
+  // The magnets it knows, by the hash of their torrent, in lower case. One it does not know is
+  // taken and never ready, as a torrent with no peer.
+  readonly magnets?: Readonly<Record<string, SimulatedMagnet>>;
+  // It answers the magnets of a request last to first: an answer is matched by the magnet it
+  // names, not by its place.
+  readonly reverseUploads?: boolean;
+  // It writes each magnet of its answer its own way — the hash alone, in upper case — so that
+  // only the hash it gives beside it says which magnet it is.
+  readonly rewriteUploads?: boolean;
+  // Its list of the account's magnets has one, added elsewhere, written in a way Scia cannot read.
+  readonly unreadableStranger?: boolean;
+  // The page it names for a code, when it is not the service's own.
+  readonly codePage?: string;
+  // The code it gives, when it is not one of its own four letters and digits.
+  readonly codePin?: string;
   // A port of its own for a run of the real app; a free one otherwise.
   readonly port?: number;
 }
@@ -110,6 +173,8 @@ export interface SimulatedRequest {
   readonly authorization: string | undefined;
   // The fields of a form that was posted; empty for a GET.
   readonly form: Readonly<Record<string, string>>;
+  // Every value of a field sent more than once (`magnets[]`, `id[]`), in order.
+  readonly lists: Readonly<Record<string, readonly string[]>>;
   readonly userAgent: string | undefined;
 }
 
@@ -118,7 +183,24 @@ export interface AllDebridServer {
   readonly api: string;
   readonly requests: SimulatedRequest[];
   misbehave(how: Misbehaviour | undefined): void;
+  // What the person does on the service's site: the code is confirmed, and gives this key.
+  confirmCode(code: string, apiKey: string): void;
+  // The account's magnets deleted on the service's site: none is listed any more.
+  forgetMagnets(): void;
+  // How many times it has answered a confirmed code with its key.
+  readonly keysGiven: number;
   close(): Promise<void>;
+}
+
+interface GivenCode {
+  readonly pin: string;
+  readonly expiresAt: number;
+  apiKey?: string;
+}
+
+// Four letters and digits, as the documentation's example shows a code: the n-th one given.
+function pinOf(n: number): string {
+  return n.toString(36).toUpperCase().padStart(4, 'A');
 }
 
 function send(response: ServerResponse, status: number, body: unknown): void {
@@ -136,11 +218,21 @@ function refuse(response: ServerResponse, status: number, code: string): void {
   });
 }
 
-async function formOf(request: IncomingMessage): Promise<Record<string, string>> {
-  if (request.method !== 'POST') return {};
+async function formOf(request: IncomingMessage): Promise<URLSearchParams> {
+  if (request.method !== 'POST') return new URLSearchParams();
   const chunks: Buffer[] = [];
   for await (const chunk of request) chunks.push(chunk as Buffer);
-  return Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8')));
+  return new URLSearchParams(Buffer.concat(chunks).toString('utf8'));
+}
+
+function listsOf(params: URLSearchParams): Record<string, string[]> {
+  const lists: Record<string, string[]> = {};
+  for (const [name, value] of params) (lists[name] ??= []).push(value);
+  return lists;
+}
+
+function hashOf(magnet: string): string | undefined {
+  return /xt=urn:btih:([0-9a-z]+)/i.exec(magnet)?.[1]?.toLowerCase();
 }
 
 function accountOf(
@@ -176,6 +268,12 @@ export async function startAllDebridServer(
   let misbehaved = 0;
   // The links being prepared, by their "delayed" id, with the "still processing" answers left.
   const preparing = new Map<number, { left: number; readonly link: UnlockableLink }>();
+  // The codes given, by the check that goes with each.
+  const codes = new Map<string, GivenCode>();
+  let keysGiven = 0;
+  // The magnets sent, by the id the service gave each, with the questions left before it is ready.
+  const sent = new Map<number, { readonly hash: string; left: number }>();
+  let nextMagnet = 1000;
 
   function misbehaves(response: ServerResponse): boolean {
     if (misbehaviour === undefined) return false;
@@ -284,8 +382,152 @@ export async function startAllDebridServer(
     }
   }
 
+  function giveCode(response: ServerResponse): void {
+    const lifetime = options.codeLifetimeSeconds ?? 600;
+    const pin = options.codePin ?? pinOf(codes.size + 1);
+    const check = randomBytes(20).toString('hex');
+    codes.set(check, { pin, expiresAt: Date.now() + lifetime * 1000 });
+    const page = options.codePage ?? CODE_PAGE;
+    succeed(response, {
+      pin,
+      check,
+      expires_in: lifetime,
+      user_url: `${page}?pin=${pin}`,
+      base_url: page,
+    });
+  }
+
+  function checkCode(response: ServerResponse, pin: string | undefined, check: string | undefined) {
+    const given = check === undefined ? undefined : codes.get(check);
+    if (given === undefined || given.pin !== pin) {
+      refuse(response, 200, 'PIN_INVALID');
+      return;
+    }
+    const left = Math.ceil((given.expiresAt - Date.now()) / 1000);
+    if (left <= 0) {
+      refuse(response, 200, 'PIN_EXPIRED');
+      return;
+    }
+    if (given.apiKey !== undefined) keysGiven += 1;
+    succeed(
+      response,
+      given.apiKey === undefined
+        ? { activated: false, expires_in: left }
+        : { apikey: given.apiKey, activated: true, expires_in: left },
+    );
+  }
+
+  function uploadMagnets(response: ServerResponse, magnets: readonly string[]): void {
+    if (magnets.length === 0) {
+      refuse(response, 200, 'MAGNET_NO_URI');
+      return;
+    }
+    const answered = options.reverseUploads === true ? [...magnets].reverse() : magnets;
+    succeed(response, {
+      magnets: answered.map((magnet) => {
+        const hash = hashOf(magnet);
+        const known = hash === undefined ? undefined : options.magnets?.[hash];
+        const code = hash === undefined ? 'MAGNET_INVALID_URI' : known?.error;
+        if (hash === undefined || code !== undefined) {
+          return {
+            magnet,
+            error: {
+              code,
+              message: Object.hasOwn(MESSAGES, code ?? '') ? MESSAGES[code ?? ''] : '',
+            },
+          };
+        }
+        // The same torrent sent again is the same magnet, as the service has it once.
+        const id =
+          [...sent].find(([, each]) => each.hash === hash)?.[0] ??
+          (() => {
+            nextMagnet += 1;
+            sent.set(nextMagnet, { hash, left: known?.fetchingPolls ?? 0 });
+            return nextMagnet;
+          })();
+        const left = sent.get(id)?.left ?? 0;
+        return {
+          magnet:
+            options.rewriteUploads === true ? `magnet:?xt=urn:btih:${hash.toUpperCase()}` : magnet,
+          hash,
+          name: known?.nameAtUpload ?? known?.name ?? 'noname',
+          size: known?.size ?? 0,
+          ready: known !== undefined && left === 0 && known.fails !== true,
+          id,
+        };
+      }),
+    });
+  }
+
+  function magnetStatuses(response: ServerResponse): void {
+    const stranger = options.unreadableStranger === true ? [{ id: 'x', statusCode: 'ready' }] : [];
+    succeed(response, {
+      magnets: [
+        ...stranger,
+        ...[...sent].map(([id, each]) => {
+          const known = options.magnets?.[each.hash];
+          const fetching = known === undefined || each.left > 0;
+          if (known !== undefined && each.left > 0) each.left -= 1;
+          const statusCode = fetching ? 1 : known.fails === true ? 15 : 4;
+          const size = known?.size ?? 0;
+          if (known?.unreadableState === true) return { id, filename: known.name, statusCode: 'x' };
+          return {
+            id,
+            filename: known?.name ?? 'noname',
+            size,
+            status:
+              statusCode === 1
+                ? 'Downloading'
+                : statusCode === 4
+                  ? 'Ready'
+                  : 'File not available - no peer',
+            statusCode,
+            downloaded: statusCode === 4 ? size : Math.floor(size / 2),
+            uploaded: 0,
+            seeders: 3,
+            downloadSpeed: statusCode === 1 ? 1_048_576 : 0,
+            uploadSpeed: 0,
+            uploadDate: 1_700_000_000,
+            completionDate: statusCode === 4 ? 1_700_000_100 : 0,
+          };
+        }),
+      ],
+    });
+  }
+
+  // How many times each magnet's files were answered with a code Scia does not know.
+  const filesAnswered = new Map<string, number>();
+  function magnetFiles(response: ServerResponse, ids: readonly string[]): void {
+    const leftOut = (id: string) => {
+      const hash = sent.get(Number(id))?.hash;
+      return hash !== undefined && options.magnets?.[hash]?.leftOutOfFiles === true;
+    };
+    succeed(response, {
+      magnets: ids
+        .filter((id) => !leftOut(id))
+        .map((id) => {
+          const each = sent.get(Number(id));
+          const known = each === undefined ? undefined : options.magnets?.[each.hash];
+          if (each === undefined || known === undefined || each.left > 0 || known.fails === true) {
+            return {
+              id,
+              error: { code: 'MAGNET_INVALID_ID', message: MESSAGES.MAGNET_INVALID_ID },
+            };
+          }
+          const unknown = filesAnswered.get(each.hash) ?? 0;
+          if (unknown < (known.unknownFilesAnswers ?? 0)) {
+            filesAnswered.set(each.hash, unknown + 1);
+            return { id, error: { code: 'MAGNET_SOMETHING_NEW', message: 'Something new.' } };
+          }
+          return { id, files: known.files };
+        }),
+    });
+  }
+
   const server = createServer((request, response) => {
-    void formOf(request).then(async (form) => {
+    void formOf(request).then(async (params) => {
+      const form = Object.fromEntries(params);
+      const lists = listsOf(params);
       const url = new URL(request.url ?? '/', 'http://simulated');
       requests.push({
         method: request.method ?? '',
@@ -293,17 +535,21 @@ export async function startAllDebridServer(
         authorization: request.headers.authorization,
         userAgent: request.headers['user-agent'],
         form,
+        lists,
       });
+      const route = `${request.method ?? ''} ${url.pathname}`;
+      const applies = misbehaviour?.route === undefined || misbehaviour.route === route;
       const slow =
-        misbehaviour !== undefined && 'slowMs' in misbehaviour ? misbehaviour : undefined;
+        applies && misbehaviour !== undefined && 'slowMs' in misbehaviour
+          ? misbehaviour
+          : undefined;
       const misbehavedBefore = misbehaved;
-      if (misbehaves(response)) return;
+      if (applies && misbehaves(response)) return;
       // A slow answer is still the right one: it is only late — for as many requests as it says.
       if (slow !== undefined && (slow.times === undefined || misbehaved > misbehavedBefore)) {
         await sleep(slow.slowMs);
       }
 
-      const route = `${request.method ?? ''} ${url.pathname}`;
       if (!ROUTES.includes(route)) {
         refuse(response, 404, '404');
         return;
@@ -317,6 +563,15 @@ export async function startAllDebridServer(
         });
         return;
       }
+      // Public too: whoever asks for a code has no key yet.
+      if (route === 'GET /v4.1/pin/get') {
+        giveCode(response);
+        return;
+      }
+      if (route === 'POST /v4/pin/check') {
+        checkCode(response, form.pin, form.check);
+        return;
+      }
       const account = accountOf(request, options);
       if (typeof account === 'string') {
         refuse(response, options.refusalStatus ?? 200, account);
@@ -324,6 +579,13 @@ export async function startAllDebridServer(
         user(response, account);
       } else if (route === 'GET /v4.1/user/hosts') {
         hosts(response, account);
+      } else if (route === 'POST /v4/magnet/upload') {
+        if (!isPremium(account)) refuse(response, 200, 'MAGNET_MUST_BE_PREMIUM');
+        else uploadMagnets(response, lists['magnets[]'] ?? []);
+      } else if (route === 'POST /v4.1/magnet/status') {
+        magnetStatuses(response);
+      } else if (route === 'POST /v4/magnet/files') {
+        magnetFiles(response, lists['id[]'] ?? []);
       } else if (route === 'POST /v4/link/unlock') {
         unlock(response, account, form.link);
       } else {
@@ -340,6 +602,17 @@ export async function startAllDebridServer(
     misbehave: (how) => {
       misbehaviour = how;
       misbehaved = 0;
+    },
+    get keysGiven() {
+      return keysGiven;
+    },
+    forgetMagnets: () => {
+      sent.clear();
+    },
+    confirmCode: (code, apiKey) => {
+      const given = [...codes.values()].find((each) => each.pin === code);
+      if (given === undefined) throw new Error(`No code ${code} was given.`);
+      given.apiKey = apiKey;
     },
     close: () =>
       new Promise((resolve) => {

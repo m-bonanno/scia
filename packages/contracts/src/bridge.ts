@@ -10,6 +10,7 @@ export const BridgeChannel = {
   // Sent by main to the page, with nothing in it: what may be offered changed; the page asks.
   UpdateChanged: 'updates.changed',
   RestartToUpdate: 'updates.restart',
+  OpenCodePage: 'integrations.openCodePage',
 } as const;
 export type BridgeChannel = (typeof BridgeChannel)[keyof typeof BridgeChannel];
 

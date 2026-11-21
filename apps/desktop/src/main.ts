@@ -11,6 +11,7 @@ import { CloseOutcome, WindowCloser } from './engine/close-policy.ts';
 import { activityOf, downloadActivity, unfinished } from './engine/download-activity.ts';
 import { chooseDownloadFolder, oneAtATime } from './engine/download-folder.ts';
 import { completedDownloadPath } from './engine/download-location.ts';
+import { codePageAddress } from './engine/integration-code.ts';
 import { EndedBatch } from './engine/ended-batch.ts';
 import { type Ended, EndedDownloads, Ending } from './engine/ended-downloads.ts';
 import { endedNotice, STILL_IN_TRAY } from './engine/ended-notice.ts';
@@ -428,6 +429,10 @@ async function boot(): Promise<void> {
     const answer = await updates.restart(async () => unfinished(await activity()));
     if (answer === UpdateRestart.Restarting) quitAsAsked();
     return answer;
+  });
+
+  window.answer(BridgeChannel.OpenCodePage, async (id) => {
+    await shell.openExternal(await codePageAddress(id, engine(), ENGINE_ANSWER_LIMIT_MS));
   });
 
   try {

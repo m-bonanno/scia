@@ -20,4 +20,12 @@ describe('the filters of the list', () => {
     ];
     expect(countByFilter(downloads)).toEqual({ all: 3, active: 2, completed: 1 });
   });
+
+  it('count a magnet the service is fetching in "All" and in "In progress", never among the completed', () => {
+    expect(countByFilter([aDownload({ status: DownloadStatus.Completed })], 2)).toEqual({
+      all: 3,
+      active: 2,
+      completed: 1,
+    });
+  });
 });

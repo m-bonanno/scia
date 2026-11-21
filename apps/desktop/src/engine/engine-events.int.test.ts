@@ -28,7 +28,7 @@ function aDownload(id: string, status: string) {
 }
 
 const snapshot = (...downloads: unknown[]) =>
-  `event: snapshot\ndata: ${JSON.stringify({ downloads, watchClipboard: false })}\n\n`;
+  `event: snapshot\ndata: ${JSON.stringify({ downloads, magnets: [], watchClipboard: false })}\n\n`;
 
 // What the follower logged, with the reason it gave.
 function aLog() {

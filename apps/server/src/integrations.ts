@@ -1,13 +1,21 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { type Integration, type IntegrationAccount, IntegrationId } from '@scia/contracts';
-import { isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
+import {
+  type Integration,
+  type IntegrationAccount,
+  type IntegrationCode,
+  IntegrationCodeFailure,
+  IntegrationCodeStatus,
+  IntegrationId,
+} from '@scia/contracts';
+import { type MagnetFailure, isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
 import type { AllDebrid } from './alldebrid.ts';
 import type { KeyVault } from './key-vault.ts';
 import type { LinkResolver, UnlockedLink } from './link-resolver.ts';
+import type { MagnetFile, MagnetService, MagnetState, SentMagnet } from './magnet-service.ts';
 import { describeFailure, type Logger } from './logger.ts';
-import { ServiceError } from './service-error.ts';
+import { CodeExpiredError, ServiceError } from './service-error.ts';
 
 // What the service said of the account is believed for this long: Settings may be opened many
 // times, the service is asked once.
@@ -21,6 +29,9 @@ const HOSTS_RETRY_MS = 60_000;
 // much later: a direct link waits on each reading, and nobody asked Scia to speak to the
 // service (#49).
 const PUBLIC_HOSTS_RETRY_MS = 60 * 60_000;
+// A code is asked about this often while the person confirms it: the documentation's example
+// waits five seconds between two questions.
+const CODE_POLL_MS = 5000;
 
 // `work`, or the reason of `signal` as soon as it stops: what many wait for together is not
 // stopped by one of them leaving.
@@ -65,6 +76,12 @@ export class KeyNotKeptError extends Error {
   override readonly name = 'KeyNotKeptError';
 }
 
+// A code that is not given: the service is connected, or the wait was ended — by Cancel, by a
+// pasted key, by another code — while the service was giving it.
+export class CodeConflictError extends Error {
+  override readonly name = 'CodeConflictError';
+}
+
 export interface IntegrationsDeps {
   readonly vault: KeyVault;
   readonly alldebrid: AllDebrid;
@@ -72,6 +89,7 @@ export interface IntegrationsDeps {
   // A clock that never steps, in milliseconds.
   readonly now?: () => number;
   readonly listWaitMs?: number;
+  readonly codePollMs?: number;
   // Where the last list of hosts the service gave is kept between runs, so that a run in which
   // the service does not answer still knows which links are its own (the owner's decision, #7).
   // Nothing is kept without it.
@@ -84,6 +102,27 @@ interface HostList {
   readonly readAt: number;
 }
 
+// A code being confirmed on the service's site, and what the engine needs to ask for its key.
+interface PendingCode {
+  readonly code: string;
+  readonly url: string;
+  // What the service gives the key for: never logged, never in an answer.
+  readonly check: string;
+  readonly expiresAt: string;
+  // On the clock that never steps.
+  readonly endsAt: number;
+  readonly stop: AbortController;
+  status: IntegrationCodeStatus;
+  failure: IntegrationCodeFailure | null;
+}
+
+function codeFailureOf(error: unknown): IntegrationCodeFailure {
+  if (error instanceof KeyNotKeptError) return IntegrationCodeFailure.KeyNotKept;
+  if (error instanceof CodeExpiredError) return error.failure;
+  if (error instanceof ServiceError && isServiceFailure(error.failure)) return error.failure;
+  return ServiceFailure.Unavailable;
+}
+
 function isDomainList(value: unknown): value is { readonly domains: string[] } {
   const domains = (value as { domains?: unknown } | null)?.domains;
   return Array.isArray(domains) && domains.every((domain) => typeof domain === 'string');
@@ -93,7 +132,7 @@ function isDomainList(value: unknown): value is { readonly domains: string[] } {
 // and what the service last said of the account behind it. A key is never logged and never
 // given back to whoever calls. It is also what a download asks whether a link is a service's,
 // and for the direct link behind it (link-resolver.ts).
-export class Integrations implements LinkResolver {
+export class Integrations implements LinkResolver, MagnetService {
   readonly #deps: IntegrationsDeps;
   #key: string | undefined;
   #account: IntegrationAccount | null = null;
@@ -112,6 +151,10 @@ export class Integrations implements LinkResolver {
   // Connecting and disconnecting, one after the other: two at once would write one key over
   // another, in an order nobody chose.
   #changing: Promise<unknown> = Promise.resolve();
+  // The code the person was given to confirm on the service's site, if any (#136).
+  #code: PendingCode | undefined;
+  // Moved on by every end of a wait: a code the service gives after it is nobody's.
+  #codeTurn = 0;
 
   constructor(deps: IntegrationsDeps, key: string | undefined, hosts?: HostList) {
     this.#deps = deps;
@@ -148,14 +191,119 @@ export class Integrations implements LinkResolver {
   // Asks the service whose key it is, and only then keeps it. Rejects with a ServiceError when
   // the service does not take it or cannot be asked, with a KeyNotKeptError when the system
   // will not keep it — and what was connected before stays as it was.
+  // A key pasted while a code waits is the one the person chose: the code no longer connects.
   connect(id: IntegrationId, apiKey: string): Promise<Integration> {
-    return this.#oneAtATime(() => this.#connect(id, apiKey));
+    this.cancelCode(id);
+    return this.#oneAtATime(async () => {
+      const connected = await this.#connect(id, apiKey);
+      // A code given while this key was checked would replace it once confirmed.
+      this.cancelCode(id);
+      return connected;
+    });
   }
 
   // The key leaves the vault first: one that stayed there would connect Scia again by itself
   // at its next start.
   disconnect(id: IntegrationId): Promise<void> {
     return this.#oneAtATime(() => this.#disconnect(id));
+  }
+
+  // A code for the person to confirm on the service's site. From then on the service is asked,
+  // every few seconds, whether it was confirmed; once it is, the key it gives is connected as a
+  // pasted one is. A new code ends the wait for the one before. Rejects with a ServiceError when
+  // the service gives no code.
+  async startCode(id: IntegrationId): Promise<IntegrationCode> {
+    if (this.#key !== undefined) {
+      throw new CodeConflictError('The service is connected: a code would replace its key.');
+    }
+    this.cancelCode(id);
+    const turn = this.#codeTurn;
+    const given = await this.#deps.alldebrid.code();
+    // The turn moved meanwhile: Cancel, another code, a key pasted — or a key kept, which moves it
+    // too, so that a code given while a key was checked is not given.
+    if (turn !== this.#codeTurn) {
+      throw new CodeConflictError('The wait for this code was ended while it was given.');
+    }
+    const pending: PendingCode = {
+      code: given.code,
+      url: given.url,
+      check: given.check,
+      expiresAt: new Date(Date.now() + given.expiresInSeconds * 1000).toISOString(),
+      endsAt: this.#now() + given.expiresInSeconds * 1000,
+      stop: new AbortController(),
+      status: IntegrationCodeStatus.Waiting,
+      failure: null,
+    };
+    this.#code = pending;
+    this.#deps.logger.info('service_code_given', { service: id });
+    void this.#waitFor(id, pending);
+    return this.#codeView(pending);
+  }
+
+  // The code given last, and what became of it. One slot for every service: there is one.
+  code(_id: IntegrationId): IntegrationCode | undefined {
+    return this.#code === undefined ? undefined : this.#codeView(this.#code);
+  }
+
+  // With a code named, only that code: an ask that brought one late does not end a newer one.
+  cancelCode(_id: IntegrationId, code?: string): void {
+    if (code !== undefined && this.#code?.code !== code) return;
+    this.#code?.stop.abort();
+    this.#code = undefined;
+    this.#codeTurn += 1;
+  }
+
+  async #waitFor(id: IntegrationId, pending: PendingCode): Promise<void> {
+    const { signal } = pending.stop;
+    try {
+      for (;;) {
+        const left = pending.endsAt - this.#now();
+        if (left <= 0) {
+          throw new CodeExpiredError(id, 'The code was not confirmed in time.');
+        }
+        // A wait nobody may be watching any longer never keeps the engine from ending.
+        await sleep(Math.min(this.#deps.codePollMs ?? CODE_POLL_MS, left), undefined, {
+          signal,
+          ref: false,
+        });
+        const key = await this.#deps.alldebrid
+          .confirmedKey(pending.code, pending.check, signal)
+          .catch((error: unknown) => {
+            // A service that cannot be asked for a moment is asked again at the next turn.
+            if (error instanceof ServiceError && error.failure === ServiceFailure.Unavailable) {
+              return undefined;
+            }
+            throw error;
+          });
+        if (key === undefined) continue;
+        // In turn with the other changes: a wait ended while one of them ran connects nothing.
+        await this.#oneAtATime(() => {
+          signal.throwIfAborted();
+          return this.#connect(id, key);
+        });
+        pending.status = IntegrationCodeStatus.Connected;
+        return;
+      }
+    } catch (error) {
+      if (signal.aborted) return;
+      pending.status = IntegrationCodeStatus.Failed;
+      pending.failure = codeFailureOf(error);
+      this.#deps.logger.warn('service_code_failed', {
+        service: id,
+        failure: pending.failure,
+        error: describeFailure(error),
+      });
+    }
+  }
+
+  #codeView(pending: PendingCode): IntegrationCode {
+    return {
+      code: pending.code,
+      url: pending.url,
+      expiresAt: pending.expiresAt,
+      status: pending.status,
+      failure: pending.failure,
+    };
   }
 
   #oneAtATime<T>(change: () => Promise<T>): Promise<T> {
@@ -230,6 +378,34 @@ export class Integrations implements LinkResolver {
     return domains.some((domain) => host === domain || host.endsWith(`.${domain}`))
       ? IntegrationId.AllDebrid
       : undefined;
+  }
+
+  async send(magnets: readonly string[], signal?: AbortSignal): Promise<SentMagnet[]> {
+    return this.#deps.alldebrid.uploadMagnets(this.#keyForMagnets(), magnets, signal);
+  }
+
+  async states(signal?: AbortSignal): Promise<MagnetState[]> {
+    return this.#deps.alldebrid.magnetStates(this.#keyForMagnets(), signal);
+  }
+
+  async files(
+    ids: readonly number[],
+    signal?: AbortSignal,
+  ): Promise<Map<number, MagnetFile[] | MagnetFailure>> {
+    return this.#deps.alldebrid.magnetFiles(this.#keyForMagnets(), ids, signal);
+  }
+
+  // A magnet goes through a service or nowhere: Scia is not a torrent client.
+  #keyForMagnets(): string {
+    const key = this.#key;
+    if (key === undefined) {
+      throw new ServiceError(
+        IntegrationId.AllDebrid,
+        UnlockFailure.NeedsService,
+        'A magnet, and no service is connected.',
+      );
+    }
+    return key;
   }
 
   async unlock(service: IntegrationId, url: string, signal: AbortSignal): Promise<UnlockedLink> {

@@ -1,9 +1,10 @@
-import { ApiErrorCode, type Integration } from '@scia/contracts';
-import { render, screen, within } from '@testing-library/react';
+import { ApiErrorCode, type Integration, type IntegrationCode } from '@scia/contracts';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '@/lib/api.ts';
-import { IntegrationsSection } from './integrations.tsx';
+import type { SciaBridge } from '@/lib/bridge.ts';
+import { CODE_READ_MS, IntegrationsSection } from './integrations.tsx';
 
 // Made up: no account anywhere has this key.
 const KEY = 'spec-key-0000000000000000';
@@ -35,7 +36,7 @@ async function theService() {
 
 async function typeAKey(key = KEY) {
   const service = await theService();
-  await userEvent.click(service.getByRole('button', { name: 'Connect' }));
+  await userEvent.click(service.getByRole('button', { name: 'Use an API key' }));
   await userEvent.type(service.getByLabelText('AllDebrid API key'), key);
   return service;
 }
@@ -53,16 +54,16 @@ describe('IntegrationsSection', () => {
     const service = await theService();
     expect(service.getByText('AllDebrid')).toBeInTheDocument();
     expect(service.getByText('Not connected')).toBeInTheDocument();
-    expect(service.getByRole('button', { name: 'Connect' })).toBeInTheDocument();
+    expect(service.getByRole('button', { name: 'Use an API key' })).toBeInTheDocument();
     expect(service.queryByLabelText('AllDebrid API key')).not.toBeInTheDocument();
   });
 
-  it('asks for the key when Connect is pressed, in a field that hides it and takes the focus', async () => {
+  it('asks for the key when "Use an API key" is pressed, in a field that hides it and takes the focus', async () => {
     listing([notConnected]);
     render(<IntegrationsSection open onError={ignore} />);
     const service = await theService();
 
-    await userEvent.click(service.getByRole('button', { name: 'Connect' }));
+    await userEvent.click(service.getByRole('button', { name: 'Use an API key' }));
 
     const field = service.getByLabelText('AllDebrid API key');
     expect(field).toHaveFocus();
@@ -83,7 +84,7 @@ describe('IntegrationsSection', () => {
       /^Connected as ada · premium until Jun 30, 2027$/,
     );
     expect(service.queryByLabelText('AllDebrid API key')).not.toBeInTheDocument();
-    expect(service.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument();
+    expect(service.queryByRole('button', { name: 'Use an API key' })).not.toBeInTheDocument();
     // What the focus was on has left the page: it goes to what can be done next.
     expect(service.getByRole('button', { name: 'Disconnect' })).toHaveFocus();
   });
@@ -211,7 +212,7 @@ describe('IntegrationsSection', () => {
 
     await userEvent.click(await service.findByRole('button', { name: 'Disconnect' }));
     await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
-    await userEvent.click(await service.findByRole('button', { name: 'Connect' }));
+    await userEvent.click(await service.findByRole('button', { name: 'Use an API key' }));
 
     expect(service.getByLabelText('AllDebrid API key')).toHaveValue('');
   });
@@ -353,7 +354,7 @@ describe('IntegrationsSection', () => {
     expect(elsewhere).toHaveFocus();
   });
 
-  it('closes the field at Cancel, forgets what was typed and what was said of it, and gives the focus back to Connect', async () => {
+  it('closes the field at Cancel, forgets what was typed and what was said of it, and gives the focus back to "Use an API key"', async () => {
     listing([notConnected]);
     vi.spyOn(api, 'connectIntegration').mockRejectedValue(
       new ApiError(422, ApiErrorCode.KeyRefused, 'no'),
@@ -367,8 +368,8 @@ describe('IntegrationsSection', () => {
 
     expect(service.queryByRole('alert')).not.toBeInTheDocument();
     expect(service.queryByLabelText('AllDebrid API key')).not.toBeInTheDocument();
-    expect(service.getByRole('button', { name: 'Connect' })).toHaveFocus();
-    await userEvent.click(service.getByRole('button', { name: 'Connect' }));
+    expect(service.getByRole('button', { name: 'Use an API key' })).toHaveFocus();
+    await userEvent.click(service.getByRole('button', { name: 'Use an API key' }));
     expect(service.getByLabelText('AllDebrid API key')).toHaveValue('');
   });
 
@@ -384,7 +385,7 @@ describe('IntegrationsSection', () => {
 
     expect(disconnect).toHaveBeenCalledExactlyOnceWith('alldebrid');
     expect(await service.findByText('Not connected')).toBeInTheDocument();
-    expect(service.getByRole('button', { name: 'Connect' })).toHaveFocus();
+    expect(service.getByRole('button', { name: 'Connect with a code' })).toHaveFocus();
   });
 
   it('stays connected, and says so by the service, when it could not be disconnected', async () => {
@@ -459,7 +460,7 @@ describe('IntegrationsSection', () => {
     const again = await theService();
     expect(again.queryByRole('alert')).not.toBeInTheDocument();
     expect(again.queryByLabelText('AllDebrid API key')).not.toBeInTheDocument();
-    await userEvent.click(again.getByRole('button', { name: 'Connect' }));
+    await userEvent.click(again.getByRole('button', { name: 'Use an API key' }));
     expect(again.getByLabelText('AllDebrid API key')).toHaveValue('');
   });
 
@@ -473,5 +474,737 @@ describe('IntegrationsSection', () => {
       expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
     });
     expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
+  });
+  describe("a code confirmed on the service's site", () => {
+    const given: IntegrationCode = {
+      code: 'ABCD',
+      url: 'https://alldebrid.com/pin/?pin=ABCD',
+      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      status: 'waiting',
+      failure: null,
+    };
+    let openCodePage: ReturnType<typeof vi.fn<SciaBridge['openCodePage']>>;
+
+    function withMain() {
+      openCodePage = vi.fn<SciaBridge['openCodePage']>(async () => undefined);
+      window.scia = {
+        apiToken: 'token',
+        version: '0.0.0',
+        platform: 'win32',
+        revealDownload: vi.fn(async () => undefined),
+        openDownload: vi.fn(async () => undefined),
+        chooseDownloadFolder: vi.fn(async () => undefined),
+        themeChanged: vi.fn(async () => undefined),
+        openCodePage,
+        updateOffered: vi.fn(async () => null),
+        onUpdateChanged: vi.fn(() => () => undefined),
+        restartToUpdate: vi.fn(async () => 'nothing'),
+      };
+    }
+    // The engine is asked what became of the code at its pace: the spec moves the clock.
+    async function nextReading() {
+      await vi.advanceTimersByTimeAsync(CODE_READ_MS);
+    }
+    function setUp() {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      return userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+    }
+
+    afterEach(() => {
+      vi.useRealTimers();
+      delete window.scia;
+    });
+
+    it('offers a code first, and a key as the other way', async () => {
+      listing([notConnected]);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      const code = service.getByRole('button', { name: 'Connect with a code' });
+      const key = service.getByRole('button', { name: 'Use an API key' });
+      expect(code).toBeInTheDocument();
+      expect(key).toBeInTheDocument();
+    });
+
+    it('shows the code, where to enter it and how long it works, and opens the page through main', async () => {
+      const user = setUp();
+      withMain();
+      listing([notConnected]);
+      const start = vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+
+      expect(start).toHaveBeenCalledExactlyOnceWith('alldebrid');
+      expect(await service.findByText('ABCD', { selector: 'p' })).toBeInTheDocument();
+      expect(service.getByText('alldebrid.com/pin')).toBeInTheDocument();
+      expect(service.getByText(/The code works for 10\smin\.$/)).toBeInTheDocument();
+      // Said to who does not see it: by a live region, and by the button the focus lands on.
+      expect(
+        service.getByText(
+          'Enter the code ABCD on alldebrid.com/pin. Waiting for you to confirm it on AllDebrid…',
+        ),
+      ).toHaveAttribute('aria-live', 'polite');
+      const open = service.getByRole('button', { name: 'Open AllDebrid' });
+      expect(open).toHaveFocus();
+      expect(open).toHaveAccessibleDescription('On alldebrid.com/pin, enter this code: ABCD');
+      await user.click(open);
+      expect(openCodePage).toHaveBeenCalledExactlyOnceWith('alldebrid');
+    });
+
+    it('offers no button to open the page where nobody can open it, and still says where', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+
+      expect(await service.findByText('alldebrid.com/pin')).toBeInTheDocument();
+      expect(service.queryByRole('button', { name: 'Open AllDebrid' })).not.toBeInTheDocument();
+    });
+
+    it('says where to go when main could not open the page', async () => {
+      const user = setUp();
+      withMain();
+      openCodePage.mockRejectedValue(new Error('no browser'));
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+
+      await user.click(await service.findByRole('button', { name: 'Open AllDebrid' }));
+
+      expect(await service.findByRole('alert')).toHaveTextContent(
+        'Scia could not open the page. Go to alldebrid.com/pin and enter the code.',
+      );
+    });
+
+    it('connects once the code is confirmed, says whose account it is, and gives the focus to Disconnect', async () => {
+      const user = setUp();
+      withMain();
+      listing([notConnected], [connected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const read = vi
+        .spyOn(api, 'integrationCode')
+        .mockResolvedValueOnce(given)
+        .mockResolvedValue({ ...given, status: 'connected' });
+      const { rerender } = render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await service.findByText('ABCD', { selector: 'p' });
+
+      await nextReading();
+      expect(service.getByText('ABCD', { selector: 'p' })).toBeInTheDocument();
+      await nextReading();
+
+      expect(await service.findByText(/^Connected as ada/)).toBeInTheDocument();
+      expect(service.queryByText('ABCD', { selector: 'p' })).not.toBeInTheDocument();
+      expect(service.getByRole('button', { name: 'Disconnect' })).toHaveFocus();
+      const readings = read.mock.calls.length;
+      await nextReading();
+      expect(read).toHaveBeenCalledTimes(readings);
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      rerender(<IntegrationsSection open={false} onError={ignore} />);
+      expect(cancel).not.toHaveBeenCalled();
+    });
+
+    for (const [what, late] of [
+      [
+        'a failure',
+        (answer: (code: IntegrationCode) => void) => {
+          answer({ ...given, status: 'failed', failure: 'CODE_EXPIRED' });
+        },
+      ],
+      [
+        'an engine that no longer knows it',
+        (_answer: unknown, refuse: (error: unknown) => void) => {
+          refuse(new ApiError(404, ApiErrorCode.NotFound, 'No code was given.'));
+        },
+      ],
+    ] as const) {
+      it(`takes no word of the code before, when a reading of it says ${what} after Cancel`, async () => {
+        const user = setUp();
+        listing([notConnected]);
+        vi.spyOn(api, 'startIntegrationCode')
+          .mockResolvedValueOnce(given)
+          .mockResolvedValueOnce({ ...given, code: 'EFGH' });
+        vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+        let answer: (code: IntegrationCode) => void = () => undefined;
+        let refuse: (error: unknown) => void = () => undefined;
+        const read = vi.spyOn(api, 'integrationCode').mockImplementation(
+          () =>
+            new Promise((resolve, reject) => {
+              answer = resolve;
+              refuse = reject;
+            }),
+        );
+        render(<IntegrationsSection open onError={ignore} />);
+        const service = await theService();
+        await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+        await service.findByText('ABCD', { selector: 'p' });
+        await nextReading();
+        await vi.waitFor(() => {
+          expect(read).toHaveBeenCalled();
+        });
+        const [answerBefore, refuseBefore] = [answer, refuse];
+
+        await user.click(service.getByRole('button', { name: 'Cancel' }));
+        await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+        await service.findByText('EFGH', { selector: 'p' });
+        await act(async () => {
+          late(answerBefore, refuseBefore);
+          await vi.advanceTimersByTimeAsync(0);
+        });
+
+        expect(service.getByText('EFGH', { selector: 'p' })).toBeInTheDocument();
+        expect(service.queryByRole('alert')).not.toBeInTheDocument();
+      });
+    }
+
+    it('says the code expired, stops asking, and offers a new one, which takes the focus', async () => {
+      const user = setUp();
+      withMain();
+      listing([notConnected]);
+      const start = vi
+        .spyOn(api, 'startIntegrationCode')
+        .mockResolvedValueOnce(given)
+        .mockResolvedValueOnce({ ...given, code: 'EFGH' });
+      const read = vi
+        .spyOn(api, 'integrationCode')
+        .mockResolvedValueOnce({ ...given, status: 'failed', failure: 'CODE_EXPIRED' });
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await service.findByText('ABCD', { selector: 'p' });
+
+      await nextReading();
+
+      expect(await service.findByRole('alert')).toHaveTextContent(
+        'This code is no longer valid. Get a new one.',
+      );
+      expect(service.getByRole('button', { name: 'Get a new code' })).toHaveFocus();
+      await nextReading();
+      expect(read).toHaveBeenCalledTimes(1);
+      await user.click(service.getByRole('button', { name: 'Get a new code' }));
+      expect(await service.findByText('EFGH', { selector: 'p' })).toBeInTheDocument();
+      expect(start).toHaveBeenCalledTimes(2);
+    });
+
+    it('says the code expired when the engine no longer knows it', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      vi.spyOn(api, 'integrationCode').mockRejectedValue(
+        new ApiError(404, ApiErrorCode.NotFound, 'No code was given.'),
+      );
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await service.findByText('ABCD', { selector: 'p' });
+
+      await nextReading();
+
+      expect(await service.findByRole('alert')).toHaveTextContent(
+        'This code is no longer valid. Get a new one.',
+      );
+    });
+
+    it('waits on while the engine cannot be reached for a moment', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const read = vi
+        .spyOn(api, 'integrationCode')
+        .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+        // The reading after it is still on its way: nothing it says can hide what the first did.
+        .mockImplementation(() => new Promise(() => undefined));
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await service.findByText('ABCD', { selector: 'p' });
+
+      await nextReading();
+      await vi.waitFor(() => {
+        expect(read).toHaveBeenCalledTimes(1);
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      expect(service.queryByRole('alert')).not.toBeInTheDocument();
+      await nextReading();
+      await vi.waitFor(() => {
+        expect(read).toHaveBeenCalledTimes(2);
+      });
+
+      expect(service.queryByRole('alert')).not.toBeInTheDocument();
+      expect(service.getByText(/^Scia connects as soon as you confirm it/)).toBeInTheDocument();
+    });
+
+    it('says why the service connected nothing for a confirmed code', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      vi.spyOn(api, 'integrationCode').mockResolvedValue({
+        ...given,
+        status: 'failed',
+        failure: 'KEY_NOT_KEPT',
+      });
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await service.findByText('ABCD', { selector: 'p' });
+
+      await nextReading();
+
+      expect(await service.findByRole('alert')).toHaveTextContent(
+        'Scia could not keep the key safely on this computer. Nothing was connected.',
+      );
+    });
+
+    it('says why no code was given, and offers the press again', async () => {
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockRejectedValue(
+        new ApiError(502, ApiErrorCode.Unavailable, 'no'),
+      );
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await userEvent.click(service.getByRole('button', { name: 'Connect with a code' }));
+
+      expect(await service.findByRole('alert')).toHaveTextContent(
+        'Scia could not get a code from AllDebrid. Try again in a moment.',
+      );
+      expect(service.getByRole('button', { name: 'Connect with a code' })).toBeInTheDocument();
+    });
+
+    it('asks for one code however often it is pressed while it comes', async () => {
+      listing([notConnected]);
+      let give: (code: IntegrationCode) => void = () => undefined;
+      const start = vi.spyOn(api, 'startIntegrationCode').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            give = resolve;
+          }),
+      );
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      const button = service.getByRole('button', { name: 'Connect with a code' });
+
+      await userEvent.click(button);
+      await userEvent.click(service.getByRole('button', { name: 'Getting a code…' }));
+
+      expect(start).toHaveBeenCalledTimes(1);
+      give(given);
+      expect(await service.findByText('ABCD', { selector: 'p' })).toBeInTheDocument();
+    });
+
+    it('forgets the code at Cancel, tells the engine, and gives the focus back to "Connect with a code"', async () => {
+      const user = setUp();
+      withMain();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      const read = vi.spyOn(api, 'integrationCode').mockResolvedValue(given);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await service.findByText('ABCD', { selector: 'p' });
+
+      await user.click(service.getByRole('button', { name: 'Cancel' }));
+
+      expect(cancel).toHaveBeenCalledExactlyOnceWith('alldebrid');
+      expect(service.queryByText('ABCD', { selector: 'p' })).not.toBeInTheDocument();
+      expect(service.getByRole('button', { name: 'Connect with a code' })).toHaveFocus();
+      await nextReading();
+      expect(read).not.toHaveBeenCalled();
+    });
+
+    it('tells the engine to forget the code when Settings closes, and shows none at the next visit', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      const { rerender } = render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await service.findByText('ABCD', { selector: 'p' });
+
+      rerender(<IntegrationsSection open={false} onError={ignore} />);
+
+      expect(cancel).toHaveBeenCalledExactlyOnceWith('alldebrid');
+      rerender(<IntegrationsSection open onError={ignore} />);
+      const again = await theService();
+      expect(again.queryByText('ABCD', { selector: 'p' })).not.toBeInTheDocument();
+      expect(again.getByRole('button', { name: 'Connect with a code' })).toBeInTheDocument();
+    });
+    // A code still on its way, held open by the spec.
+    function codeComing() {
+      let give: (code: IntegrationCode) => void = () => undefined;
+      const start = vi.spyOn(api, 'startIntegrationCode').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            give = resolve;
+          }),
+      );
+      return {
+        start,
+        give: (code: IntegrationCode) => {
+          give(code);
+        },
+      };
+    }
+
+    it('leaves a code still coming for the key: the field stays, and the engine forgets the code', async () => {
+      listing([notConnected]);
+      const coming = codeComing();
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await userEvent.click(service.getByRole('button', { name: 'Connect with a code' }));
+
+      await userEvent.click(service.getByRole('button', { name: 'Use an API key' }));
+      await userEvent.type(service.getByLabelText('AllDebrid API key'), KEY);
+      await act(async () => {
+        coming.give(given);
+        await Promise.resolve();
+      });
+
+      expect(service.getByLabelText('AllDebrid API key')).toHaveFocus();
+      expect(service.getByLabelText('AllDebrid API key')).toHaveValue(KEY);
+      expect(service.queryByText('ABCD', { selector: 'p' })).not.toBeInTheDocument();
+      // Told when it was left, and again once the code was there — that code, by name, so that
+      // a newer one is not forgotten with it.
+      expect(cancel.mock.calls).toEqual([['alldebrid'], ['alldebrid', 'ABCD']]);
+    });
+
+    it('does not bring back a code that came after Cancel', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'integrationCode').mockResolvedValue({
+        ...given,
+        status: 'failed',
+        failure: 'CODE_EXPIRED',
+      });
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      const start = vi.spyOn(api, 'startIntegrationCode').mockResolvedValueOnce(given);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await nextReading();
+      await service.findByRole('button', { name: 'Get a new code' });
+      let give: (code: IntegrationCode) => void = () => undefined;
+      start.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            give = resolve;
+          }),
+      );
+
+      await user.click(service.getByRole('button', { name: 'Get a new code' }));
+      await user.click(service.getByRole('button', { name: 'Cancel' }));
+      await act(async () => {
+        give({ ...given, code: 'EFGH' });
+        await Promise.resolve();
+      });
+
+      expect(service.queryByText('EFGH', { selector: 'p' })).not.toBeInTheDocument();
+      expect(service.getByRole('button', { name: 'Connect with a code' })).toHaveFocus();
+      expect(service.getByRole('button', { name: 'Connect with a code' })).not.toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+      expect(cancel).toHaveBeenCalledTimes(2);
+    });
+
+    it('tells the engine to forget a code still coming when Settings closes', async () => {
+      listing([notConnected]);
+      const coming = codeComing();
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      const { rerender } = render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await userEvent.click(service.getByRole('button', { name: 'Connect with a code' }));
+
+      rerender(<IntegrationsSection open={false} onError={ignore} />);
+      expect(cancel).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        coming.give(given);
+        await Promise.resolve();
+      });
+
+      expect(cancel).toHaveBeenCalledTimes(2);
+    });
+
+    it('says a new code is being asked for, and asks once however often it is pressed', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'integrationCode').mockResolvedValue({
+        ...given,
+        status: 'failed',
+        failure: 'CODE_EXPIRED',
+      });
+      const start = vi.spyOn(api, 'startIntegrationCode').mockResolvedValueOnce(given);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await nextReading();
+      const again = await service.findByRole('button', { name: 'Get a new code' });
+      start.mockImplementation(() => new Promise(() => undefined));
+
+      await user.click(again);
+      await user.click(again);
+
+      expect(again).toHaveTextContent('Getting a code…');
+      expect(again).toHaveAttribute('aria-disabled', 'true');
+      expect(service.getByText('Getting a code from AllDebrid…')).toHaveAttribute(
+        'aria-live',
+        'polite',
+      );
+      expect(start).toHaveBeenCalledTimes(2);
+    });
+
+    it('says only the newer of two failures: a code that expired, then no new code given', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'integrationCode').mockResolvedValue({
+        ...given,
+        status: 'failed',
+        failure: 'CODE_EXPIRED',
+      });
+      vi.spyOn(api, 'startIntegrationCode')
+        .mockResolvedValueOnce(given)
+        .mockRejectedValueOnce(new ApiError(502, ApiErrorCode.Unavailable, 'no'));
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await nextReading();
+
+      await user.click(await service.findByRole('button', { name: 'Get a new code' }));
+
+      await vi.waitFor(() => {
+        expect(service.getByRole('alert')).toHaveTextContent(
+          'Scia could not get a code from AllDebrid. Try again in a moment.',
+        );
+      });
+    });
+
+    for (const [what, reading] of [
+      [
+        'it expired',
+        () =>
+          vi.spyOn(api, 'integrationCode').mockResolvedValue({
+            ...given,
+            status: 'failed',
+            failure: 'CODE_EXPIRED',
+          }),
+      ],
+      [
+        'the engine no longer knows it',
+        () =>
+          vi
+            .spyOn(api, 'integrationCode')
+            .mockRejectedValue(new ApiError(404, ApiErrorCode.NotFound, 'No code was given.')),
+      ],
+    ] as const) {
+      it(`takes back the sentence of a page not opened once ${what}`, async () => {
+        const user = setUp();
+        withMain();
+        openCodePage.mockRejectedValue(new Error('no code'));
+        listing([notConnected]);
+        vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+        reading();
+        render(<IntegrationsSection open onError={ignore} />);
+        const service = await theService();
+        await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+        await user.click(await service.findByRole('button', { name: 'Open AllDebrid' }));
+        expect(await service.findByRole('alert')).toHaveTextContent(
+          'Scia could not open the page.',
+        );
+
+        await nextReading();
+
+        await vi.waitFor(() => {
+          expect(service.getByRole('alert')).toHaveTextContent(
+            'This code is no longer valid. Get a new one.',
+          );
+        });
+      });
+    }
+
+    it('gives the focus to Cancel, which says the code, where nobody can open the page', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+
+      const cancel = await service.findByRole('button', { name: 'Cancel' });
+      expect(cancel).toHaveFocus();
+      expect(cancel).toHaveAccessibleDescription('On alldebrid.com/pin, enter this code: ABCD');
+    });
+
+    it('says nothing of an ask the person left that then fails', async () => {
+      listing([notConnected]);
+      let refuse: (error: unknown) => void = () => undefined;
+      vi.spyOn(api, 'startIntegrationCode').mockImplementation(
+        () =>
+          new Promise((_resolve, reject) => {
+            refuse = reject;
+          }),
+      );
+      vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await userEvent.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await userEvent.click(service.getByRole('button', { name: 'Use an API key' }));
+
+      await act(async () => {
+        refuse(new ApiError(409, ApiErrorCode.Conflict, 'The wait for this code was ended.'));
+        await Promise.resolve();
+      });
+
+      expect(service.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    it('keeps saying a code is coming when an ask the person left ends after a new one began', async () => {
+      listing([notConnected]);
+      const answers: ((code: IntegrationCode) => void)[] = [];
+      vi.spyOn(api, 'startIntegrationCode').mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            answers.push(resolve);
+          }),
+      );
+      vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await userEvent.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await userEvent.click(service.getByRole('button', { name: 'Use an API key' }));
+      await userEvent.click(service.getByRole('button', { name: 'Cancel' }));
+      await userEvent.click(service.getByRole('button', { name: 'Connect with a code' }));
+
+      await act(async () => {
+        answers[0]?.(given);
+        await Promise.resolve();
+      });
+
+      expect(service.getByRole('button', { name: 'Getting a code…' })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      );
+    });
+
+    it('says a code works for a minute at least, when it has less left', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue({
+        ...given,
+        expiresAt: new Date(Date.now() + 20_000).toISOString(),
+      });
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+
+      expect(await service.findByText(/The code works for 1\smin\.$/)).toBeInTheDocument();
+    });
+
+    it('says how long each new code works, not the first one', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'integrationCode').mockResolvedValue({
+        ...given,
+        status: 'failed',
+        failure: 'CODE_EXPIRED',
+      });
+      vi.spyOn(api, 'startIntegrationCode')
+        .mockResolvedValueOnce(given)
+        .mockResolvedValueOnce({
+          ...given,
+          code: 'EFGH',
+          expiresAt: new Date(Date.now() + 300_000).toISOString(),
+        });
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await nextReading();
+
+      vi.spyOn(api, 'integrationCode').mockResolvedValue({ ...given, code: 'EFGH' });
+      await user.click(await service.findByRole('button', { name: 'Get a new code' }));
+
+      await service.findByText('EFGH', { selector: 'p' });
+      expect(service.getByText(/The code works for 5\smin\.$/)).toBeInTheDocument();
+    });
+    it('asks for one code, and opens no page, while Enter is held on "Connect with a code"', async () => {
+      withMain();
+      listing([notConnected]);
+      const start = vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      service.getByRole('button', { name: 'Connect with a code' }).focus();
+
+      await userEvent.keyboard('{Enter>8/}');
+
+      expect(await service.findByText('ABCD', { selector: 'p' })).toBeInTheDocument();
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(openCodePage).not.toHaveBeenCalled();
+      expect(cancel).not.toHaveBeenCalled();
+    });
+
+    it('cancels nothing while Enter is held on "Connect with a code" where Cancel takes the focus', async () => {
+      listing([notConnected]);
+      const start = vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      service.getByRole('button', { name: 'Connect with a code' }).focus();
+
+      await userEvent.keyboard('{Enter>8/}');
+
+      expect(await service.findByText('ABCD', { selector: 'p' })).toBeInTheDocument();
+      expect(service.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(cancel).not.toHaveBeenCalled();
+    });
+
+    it('asks for one new code, and opens no page, while Enter is held on "Get a new code"', async () => {
+      withMain();
+      listing([notConnected]);
+      const start = vi
+        .spyOn(api, 'startIntegrationCode')
+        .mockResolvedValueOnce({ ...given, status: 'failed', failure: 'CODE_EXPIRED' })
+        .mockResolvedValue({ ...given, code: 'EFGH' });
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await userEvent.click(service.getByRole('button', { name: 'Connect with a code' }));
+      (await service.findByRole('button', { name: 'Get a new code' })).focus();
+
+      await userEvent.keyboard('{Enter>8/}');
+
+      expect(await service.findByText('EFGH', { selector: 'p' })).toBeInTheDocument();
+      expect(start).toHaveBeenCalledTimes(2);
+      expect(openCodePage).not.toHaveBeenCalled();
+    });
+
+    it('opens the page once for a double click, also one whose first click asked for the code', async () => {
+      withMain();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await userEvent.click(service.getByRole('button', { name: 'Connect with a code' }));
+      const open = await service.findByRole('button', { name: 'Open AllDebrid' });
+
+      // The second click of a double click that began on the button the code replaced.
+      fireEvent.click(open, { detail: 2 });
+      expect(openCodePage).not.toHaveBeenCalled();
+      fireEvent.click(open, { detail: 1 });
+      fireEvent.click(open, { detail: 2 });
+      expect(openCodePage).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -20,6 +20,9 @@ export interface SciaBridge {
   // Main restarts to install only while nothing is downloading: what it did is an
   // `UpdateRestart` (@scia/contracts/bridge).
   restartToUpdate(): Promise<unknown>;
+  // Main asks the engine for the page where the code it gave is confirmed, and opens it in the
+  // person's browser: the page names the service, never an address.
+  openCodePage(id: string): Promise<unknown>;
 }
 
 declare global {

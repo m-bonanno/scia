@@ -1,5 +1,5 @@
-import { ApiErrorCode, type IntegrationId } from '@scia/contracts';
-import { PREPARE_LIMIT_SECONDS, ServiceFailure, UnlockFailure } from '@scia/core';
+import { ApiErrorCode, IntegrationCodeFailure, type IntegrationId } from '@scia/contracts';
+import { MagnetFailure, PREPARE_LIMIT_SECONDS, ServiceFailure, UnlockFailure } from '@scia/core';
 import { ApiError } from './api.ts';
 import { formatDuration } from './format.ts';
 
@@ -53,6 +53,91 @@ export function connectFailureMessage(error: unknown, id: IntegrationId): string
   return text === undefined ? errorMessage(error) : text(SERVICE_NAME[id]);
 }
 
+// Said when Settings asked for a code to confirm on the service's site and got none.
+const CODE_NOT_GIVEN: Readonly<Record<string, (service: string) => string>> = {
+  // A service connected meanwhile, or another code asked for: whatever it was, none came.
+  [ApiErrorCode.Conflict]: (service) =>
+    `Scia could not get a code from ${service}. Try again in a moment.`,
+  // Not answering, under maintenance, or answering what Scia does not understand.
+  [ApiErrorCode.Unavailable]: (service) =>
+    `Scia could not get a code from ${service}. Try again in a moment.`,
+  [ApiErrorCode.NetworkRefused]: (service) =>
+    `${service} does not serve this network: it refuses servers and some VPNs. Connect from another network, then try again.`,
+};
+
+export function codeNotGivenMessage(error: unknown, id: IntegrationId): string {
+  const text = error instanceof ApiError ? CODE_NOT_GIVEN[error.code] : undefined;
+  return text === undefined ? errorMessage(error) : text(SERVICE_NAME[id]);
+}
+
+// Said by a code that connected nothing. "Get a new code" is the button beside it.
+const CODE_FAILED: Readonly<Record<IntegrationCodeFailure, (service: string) => string>> = {
+  // Its time ran out, or the service, or the engine, no longer knows it.
+  [IntegrationCodeFailure.Expired]: () => 'This code is no longer valid. Get a new one.',
+  [IntegrationCodeFailure.KeyRefused]: (service) =>
+    `${service} did not accept the key it gave for this code. Get a new code.`,
+  [IntegrationCodeFailure.KeyBlocked]: (service) =>
+    `${service} is blocking the key from here. If ${service} emailed you about a new sign-in, confirm it; otherwise check your network. Then get a new code.`,
+  [IntegrationCodeFailure.AccountBanned]: (service) => `${service} says this account is banned.`,
+  [IntegrationCodeFailure.NetworkRefused]: (service) =>
+    `${service} does not serve this network: it refuses servers and some VPNs. Connect from another network, then get a new code.`,
+  // The account could not be asked about once the code was confirmed, or something Scia does
+  // not understand: what is true of all of them is that nothing was connected.
+  [IntegrationCodeFailure.Unavailable]: (service) =>
+    `Scia could not finish connecting with ${service}. Get a new code.`,
+  [IntegrationCodeFailure.KeyNotKept]: () =>
+    'Scia could not keep the key safely on this computer. Nothing was connected.',
+};
+
+export function codeFailedMessage(failure: IntegrationCodeFailure, id: IntegrationId): string {
+  return CODE_FAILED[failure](SERVICE_NAME[id]);
+}
+
+// Said on the row of a magnet the service gave no files for (#137). Every sentence of the
+// service's refusal begins with who said so.
+const MAGNET_FAILED: Readonly<Record<MagnetFailure, (service: string) => string>> = {
+  [MagnetFailure.Invalid]: (service) => `${service} does not take this as a magnet.`,
+  [MagnetFailure.Limit]: (service) =>
+    `${service} already has as many magnets for this account as it allows. Remove some on ${service}, then try again.`,
+  [MagnetFailure.TooLarge]: (service) => `${service} says this magnet is too large to fetch.`,
+  // No peer, too slow, an error of its own, its links removed, deleted on its site by the person,
+  // an empty list: true of all of them is that it gave no files, and names no cause.
+  [MagnetFailure.Failed]: (service) => `${service} gave no files for this magnet. Try again later.`,
+  [MagnetFailure.Unreadable]: (service) =>
+    `Scia cannot take the list of files ${service} gave for this magnet: too many, too deep, or not links.`,
+  // The same sentence as a link's: a refused key is one fact, whatever it was for. "Connect
+  // again", not "a new key": a code is the main way to connect (#136).
+  [MagnetFailure.KeyRefused]: (service) =>
+    `${service} no longer accepts the key. In Settings, disconnect it and connect again, then try again.`,
+  [MagnetFailure.KeyBlocked]: (service) =>
+    `${service} is blocking the key from here. If ${service} emailed you about a new sign-in, confirm it; otherwise check your network, then try again.`,
+  [MagnetFailure.AccountBanned]: (service) => `${service} says the account is banned.`,
+  [MagnetFailure.NetworkRefused]: (service) =>
+    `${service} does not serve this network: it refuses servers and some VPNs. Try again from another network.`,
+  [MagnetFailure.Unavailable]: (service) =>
+    `Scia could not tell from ${service}'s answer what became of this magnet. Try again in a moment.`,
+  [MagnetFailure.NotPremium]: (service) => `${service} fetches magnets for premium accounts only.`,
+  // Said with no service connected, so it names the one there is to connect.
+  [MagnetFailure.NeedsService]: () =>
+    `This is a magnet: Scia downloads magnets through ${SERVICE_NAME.alldebrid}. Connect ${SERVICE_NAME.alldebrid} in Settings, then try again.`,
+};
+
+export function magnetFailureMessage(failure: MagnetFailure): string {
+  return MAGNET_FAILED[failure](SERVICE_NAME.alldebrid);
+}
+
+// Said when Retry or Remove of a magnet was refused: its state moved on meanwhile.
+const MAGNET_MOVED: Readonly<Record<string, string>> = {
+  [ApiErrorCode.NotFound]: 'This magnet is no longer in the list.',
+  // Only Retry meets it: the magnet is no longer failed, so it is already on its way again.
+  [ApiErrorCode.Conflict]: 'This magnet is already being sent again.',
+};
+
+export function magnetActionMessage(error: unknown): string {
+  const text = error instanceof ApiError ? MAGNET_MOVED[error.code] : undefined;
+  return text ?? errorMessage(error);
+}
+
 // Said of a service that is connected, when it last answered with a refusal or not at all.
 const SERVICE_TROUBLE: Readonly<Record<ServiceFailure, (service: string) => string>> = {
   [ServiceFailure.KeyRefused]: (service) =>
@@ -77,7 +162,7 @@ const LINK_NOT_UNLOCKED: Readonly<
   Record<ServiceFailure | UnlockFailure, (service: string) => string>
 > = {
   [ServiceFailure.KeyRefused]: (service) =>
-    `${service} no longer accepts the key. In Settings, disconnect it and connect a new key, then try again.`,
+    `${service} no longer accepts the key. In Settings, disconnect it and connect again, then try again.`,
   [ServiceFailure.KeyBlocked]: (service) =>
     `${service} is blocking the key from here. If ${service} emailed you about a new sign-in, confirm it; otherwise check your network, then try again.`,
   [ServiceFailure.AccountBanned]: (service) => `${service} says the account is banned.`,

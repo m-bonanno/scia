@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { swallowHeldEnter } from '@/components/held-enter.ts';
 import { IconButton } from '@/components/icon-button.tsx';
 import { cn } from '@/lib/cn.ts';
 import { NOTICE_MS, NOTICES_AT_MOST } from './notice-limits.ts';
@@ -179,26 +180,6 @@ function List({
       {children(pointed || focusHeld)}
     </ul>
   );
-}
-
-// Enter held on a × dismisses one notice: its repeats would press whatever the focus goes to
-// next — the next ×, the field and its links, Settings' Close. They are swallowed, wherever they
-// land, until the key is let go. A held Tab is not touched: it walks on.
-let swallowing = false;
-function swallowHeldEnter(): void {
-  if (swallowing) return;
-  swallowing = true;
-  const swallow = (event: KeyboardEvent) => {
-    if (event.key === 'Enter' && event.repeat) event.preventDefault();
-  };
-  const release = (event: KeyboardEvent) => {
-    if (event.key !== 'Enter') return;
-    swallowing = false;
-    window.removeEventListener('keydown', swallow, true);
-    window.removeEventListener('keyup', release, true);
-  };
-  window.addEventListener('keydown', swallow, true);
-  window.addEventListener('keyup', release, true);
 }
 
 function TimedNotice({

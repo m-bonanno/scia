@@ -27,7 +27,7 @@ export function updatesApply(app: {
 // after it — the person asked to quit (the owner, #82). electron-updater passes `--updated /S`.
 export const INSTALL_AT_QUIT = { silent: true, runAfter: false } as const;
 // How it is started at a restart the person asked for: in silence, and Scia is started again after
-// it (the owner, #133; docs/adr/0013-a-restart-to-install-an-update.md). electron-updater adds
+// it (the owner, #133; docs/adr/0015-a-restart-to-install-an-update.md). electron-updater adds
 // `--force-run`.
 export const INSTALL_AND_RESTART = { silent: true, runAfter: true } as const;
 

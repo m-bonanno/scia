@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { connectIntegrationSchema, integrationSchema, isIntegrationId } from './integrations.ts';
+import {
+  connectIntegrationSchema,
+  integrationCodeSchema,
+  integrationSchema,
+  isIntegrationId,
+  isServiceSite,
+} from './integrations.ts';
 
 const connected = {
   id: 'alldebrid',
@@ -66,6 +72,62 @@ describe('isIntegrationId', () => {
     expect(isIntegrationId('alldebrid')).toBe(true);
     for (const other of ['AllDebrid', 'constructor', '../alldebrid', '', 7, null, undefined]) {
       expect(isIntegrationId(other), String(other)).toBe(false);
+    }
+  });
+});
+
+const waiting = {
+  code: 'ABCD',
+  url: 'https://alldebrid.com/pin/?pin=ABCD',
+  expiresAt: '2026-11-21T12:10:00.000Z',
+  status: 'waiting',
+  failure: null,
+};
+
+describe('integrationCodeSchema', () => {
+  it('takes a code that waits, one that connected, and one that failed with why', () => {
+    expect(integrationCodeSchema.safeParse(waiting).success).toBe(true);
+    expect(integrationCodeSchema.safeParse({ ...waiting, status: 'connected' }).success).toBe(true);
+    for (const failure of ['CODE_EXPIRED', 'KEY_REFUSED', 'SERVICE_UNAVAILABLE', 'KEY_NOT_KEPT']) {
+      expect(
+        integrationCodeSchema.safeParse({ ...waiting, status: 'failed', failure }).success,
+        failure,
+      ).toBe(true);
+    }
+  });
+
+  it("refuses a failure that is not a code's, a page that is not https, and a code a page could not show as it is", () => {
+    expect(integrationCodeSchema.safeParse({ ...waiting, failure: 'LINK_DOWN' }).success).toBe(
+      false,
+    );
+    expect(
+      integrationCodeSchema.safeParse({ ...waiting, url: 'http://alldebrid.com/pin/' }).success,
+    ).toBe(false);
+    for (const code of ['', 'AB CD', 'x'.repeat(33)]) {
+      expect(integrationCodeSchema.safeParse({ ...waiting, code }).success, code).toBe(false);
+    }
+  });
+});
+
+describe('isServiceSite', () => {
+  it("takes a page of the service's own site, over https", () => {
+    expect(isServiceSite('alldebrid', 'https://alldebrid.com/pin/?pin=ABCD')).toBe(true);
+    expect(isServiceSite('alldebrid', 'https://www.alldebrid.com/pin/')).toBe(true);
+  });
+
+  it('refuses another site, a name that only contains it, plain http, a port, and someone in the address', () => {
+    for (const url of [
+      'https://alldebrid.com.example/pin/',
+      'https://notalldebrid.com/pin/',
+      'https://example.com/?u=alldebrid.com',
+      'http://alldebrid.com/pin/',
+      'https://alldebrid.com:8443/pin/',
+      'https://user@alldebrid.com/pin/',
+      'javascript:alert(1)//alldebrid.com',
+      'not an address',
+      'https://alldebrid.com\\@evil.example/pin/',
+    ]) {
+      expect(isServiceSite('alldebrid', url), url).toBe(false);
     }
   });
 });

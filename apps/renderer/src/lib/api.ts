@@ -5,8 +5,12 @@ import {
   downloadSchema,
   errorEnvelopeSchema,
   type Integration,
+  type IntegrationCode,
+  integrationCodeSchema,
   type IntegrationId,
   integrationSchema,
+  type Magnet,
+  magnetSchema,
   type Pairing,
   pairingSchema,
   type Settings,
@@ -59,6 +63,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ urls }),
     }),
+  // Magnets for the connected service to fetch (#137): the page sends them, and never reads one back.
+  addMagnets: (magnets: readonly string[]): Promise<Magnet[]> =>
+    request('/magnets', z.array(magnetSchema), {
+      method: 'POST',
+      body: JSON.stringify({ magnets }),
+    }),
+  retryMagnet: (id: string): Promise<Magnet> =>
+    request(`/magnets/${encodeURIComponent(id)}/retry`, magnetSchema, { method: 'POST' }),
+  removeMagnet: (id: string): Promise<void> =>
+    request(`/magnets/${encodeURIComponent(id)}`, null, { method: 'DELETE' }),
   start: (id: string): Promise<Download> =>
     request(`/downloads/${encodeURIComponent(id)}/start`, downloadSchema, { method: 'POST' }),
   startReady: (): Promise<Download[]> =>
@@ -84,4 +98,19 @@ export const api = {
     }),
   disconnectIntegration: (id: IntegrationId): Promise<void> =>
     request(`/integrations/${encodeURIComponent(id)}`, null, { method: 'DELETE' }),
+  // A code to confirm on the service's site: the engine waits for it, and connects the key the
+  // service gives — which never reaches the page.
+  startIntegrationCode: (id: IntegrationId): Promise<IntegrationCode> =>
+    request(`/integrations/${encodeURIComponent(id)}/code`, integrationCodeSchema, {
+      method: 'POST',
+    }),
+  integrationCode: (id: IntegrationId): Promise<IntegrationCode> =>
+    request(`/integrations/${encodeURIComponent(id)}/code`, integrationCodeSchema),
+  // With a code named, the engine forgets that one only.
+  cancelIntegrationCode: (id: IntegrationId, code?: string): Promise<void> =>
+    request(
+      `/integrations/${encodeURIComponent(id)}/code${code === undefined ? '' : `?code=${encodeURIComponent(code)}`}`,
+      null,
+      { method: 'DELETE' },
+    ),
 };

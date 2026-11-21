@@ -1,6 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { DownloadFailure, DownloadStatus } from '@scia/core';
+import { DownloadFailure, DownloadStatus, MagnetFailure, MagnetStatus } from '@scia/core';
 import {
   IntegrationId,
   mediaSchema,
@@ -57,10 +57,30 @@ export const recordSchema = z.object({
   // How far a stream's pieces are, kept for the row while it does not run. The pieces on disk are
   // the truth: what is there is not asked for again.
   timeline: timelineSchema.nullable().catch(null),
+  // A file of a magnet (#137): its name is the magnet's, not the one its link's host gives.
+  nameKept: z.boolean().catch(false),
   createdAt: z.string(),
   completedAt: z.string().nullable(),
 });
 export type DownloadRecord = z.infer<typeof recordSchema>;
+
+// A magnet the service is fetching, or could not (#137). Its files are downloads once it is
+// ready; until then this is all Scia knows of it.
+export const magnetRecordSchema = z.object({
+  id: z.string(),
+  magnet: z.string(),
+  name: z.string(),
+  // The service's id of it, once the service took it.
+  serviceId: z.number().int().positive().nullable(),
+  status: z.enum(MagnetStatus),
+  totalBytes: z.number().nullable(),
+  downloadedBytes: z.number(),
+  failure: z.enum(MagnetFailure).nullable(),
+  // The folder downloads went to when it was pasted: its files go there.
+  directory: z.string(),
+  createdAt: z.string(),
+});
+export type MagnetRecord = z.infer<typeof magnetRecordSchema>;
 
 // A setting added after a state was written is read with its default, and so is one whose
 // stored value the bounds of today refuse: the file loads with its downloads, it is not set
@@ -76,6 +96,9 @@ export const stateSchema = z.object({
   version: z.literal(1),
   settings: storedSettingsSchema,
   downloads: z.array(recordSchema),
+  // A state written before magnets has none; one a later version cannot read loses its magnets,
+  // never its downloads.
+  magnets: z.array(magnetRecordSchema).catch([]),
 });
 export type PersistedState = z.infer<typeof stateSchema>;
 
