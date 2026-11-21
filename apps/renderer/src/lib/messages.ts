@@ -138,6 +138,19 @@ export function magnetActionMessage(error: unknown): string {
   return text ?? errorMessage(error);
 }
 
+// Said when a magnet of the account was not taken into the list (#138): the account moved on
+// since the panel last read it, or the service is no longer connected.
+const ACCOUNT_MAGNET_REFUSED: Readonly<Record<string, string>> = {
+  [ApiErrorCode.NotFound]: `This magnet is no longer on the ${SERVICE_NAME.alldebrid} account.`,
+  [ApiErrorCode.Conflict]: 'This magnet is already in the list, or no longer ready.',
+  [ApiErrorCode.ServiceNeeded]: `${SERVICE_NAME.alldebrid} is no longer connected. Connect it in Settings.`,
+};
+
+export function accountMagnetMessage(error: unknown): string {
+  const text = error instanceof ApiError ? ACCOUNT_MAGNET_REFUSED[error.code] : undefined;
+  return text ?? errorMessage(error);
+}
+
 // Said of a service that is connected, when it last answered with a refusal or not at all.
 const SERVICE_TROUBLE: Readonly<Record<ServiceFailure, (service: string) => string>> = {
   [ServiceFailure.KeyRefused]: (service) =>

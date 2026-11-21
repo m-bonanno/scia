@@ -1,4 +1,6 @@
 import {
+  type AccountMagnet,
+  accountMagnetSchema,
   API_PREFIX,
   ApiErrorCode,
   type Download,
@@ -69,6 +71,11 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ magnets }),
     }),
+  // The magnets of the connected service's account (#138).
+  accountMagnets: (): Promise<AccountMagnet[]> =>
+    request('/magnets/account', z.array(accountMagnetSchema)),
+  addAccountMagnet: (id: number): Promise<Magnet> =>
+    request(`/magnets/account/${String(id)}`, magnetSchema, { method: 'POST' }),
   retryMagnet: (id: string): Promise<Magnet> =>
     request(`/magnets/${encodeURIComponent(id)}/retry`, magnetSchema, { method: 'POST' }),
   removeMagnet: (id: string): Promise<void> =>
