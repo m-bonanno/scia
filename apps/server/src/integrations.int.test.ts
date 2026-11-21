@@ -463,10 +463,14 @@ describe('Integrations', () => {
       await until(() => statusOf(integrations) === IntegrationCodeStatus.Failed);
 
       expect(integrations.code(IntegrationId.AllDebrid)?.failure).toBe(CodeFailure.Expired);
-      await integrations.startCode(IntegrationId.AllDebrid);
-      // The next code's own questions, not the last one heard of the code before.
-      await until(() => lastCheck() !== check && checksOf(lastCheck()).length >= 2);
+      // A code of another engine, asked about at the same pace: a new code here would end the
+      // old wait itself, and hold nothing of whether expiring did.
+      const other = await open();
+      await other.startCode(IntegrationId.AllDebrid);
+      // Its own questions, not the last one heard of the code before.
+      await until(() => lastCheck() !== check && checksOf(lastCheck()).length >= 3);
       expect(heardAfter((request) => request.form.check === check, lastCheck())).toBe(false);
+      other.cancelCode(IntegrationId.AllDebrid);
     });
 
     it('says the code expired when the service says so', async () => {
