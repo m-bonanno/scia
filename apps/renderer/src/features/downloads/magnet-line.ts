@@ -14,7 +14,8 @@ export function magnetLine(magnet: Magnet): string {
   // Not answering, under maintenance, answering what Scia does not understand: true of all of
   // them is that it could not ask, and that it asks again.
   if (magnet.failure === MagnetFailure.Unavailable) {
-    return `Scia could not ask ${SERVICE} about this magnet just now. It asks again in a moment.`;
+    // Short enough for the line at the window's narrowest: its second half must not be lost.
+    return `Scia could not ask ${SERVICE} just now. It asks again soon.`;
   }
   if (magnet.status === MagnetStatus.Sending) return `Sending to ${SERVICE}…`;
   // Before the service has read the torrent, it knows no size.

@@ -100,8 +100,9 @@ const MAGNET_FAILED: Readonly<Record<MagnetFailure, (service: string) => string>
   [MagnetFailure.Limit]: (service) =>
     `${service} already has as many magnets for this account as it allows. Remove some on ${service}, then try again.`,
   [MagnetFailure.TooLarge]: (service) => `${service} says this magnet is too large to fetch.`,
-  // No peer, too slow, an error of its own, or deleted on its site: true of all of them.
-  [MagnetFailure.Failed]: (service) => `${service} could not fetch this magnet. Try again later.`,
+  // No peer, too slow, an error of its own, its links removed, deleted on its site by the person,
+  // an empty list: true of all of them is that it gave no files, and names no cause.
+  [MagnetFailure.Failed]: (service) => `${service} gave no files for this magnet. Try again later.`,
   [MagnetFailure.Unreadable]: (service) =>
     `Scia cannot take the list of files ${service} gave for this magnet: too many, too deep, or not links.`,
   // The same sentence as a link's: a refused key is one fact, whatever it was for. "Connect
@@ -114,7 +115,7 @@ const MAGNET_FAILED: Readonly<Record<MagnetFailure, (service: string) => string>
   [MagnetFailure.NetworkRefused]: (service) =>
     `${service} does not serve this network: it refuses servers and some VPNs. Try again from another network.`,
   [MagnetFailure.Unavailable]: (service) =>
-    `Scia cannot read what ${service} answered about this magnet. Try again in a moment.`,
+    `Scia could not tell from ${service}'s answer what became of this magnet. Try again in a moment.`,
   [MagnetFailure.NotPremium]: (service) => `${service} fetches magnets for premium accounts only.`,
   // Said with no service connected, so it names the one there is to connect.
   [MagnetFailure.NeedsService]: () =>
@@ -128,7 +129,8 @@ export function magnetFailureMessage(failure: MagnetFailure): string {
 // Said when Retry or Remove of a magnet was refused: its state moved on meanwhile.
 const MAGNET_MOVED: Readonly<Record<string, string>> = {
   [ApiErrorCode.NotFound]: 'This magnet is no longer in the list.',
-  [ApiErrorCode.Conflict]: 'This magnet has already changed. Try again in a moment.',
+  // Only Retry meets it: the magnet is no longer failed, so it is already on its way again.
+  [ApiErrorCode.Conflict]: 'This magnet is already being sent again.',
 };
 
 export function magnetActionMessage(error: unknown): string {

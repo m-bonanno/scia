@@ -34,17 +34,17 @@ describe('magnetLine', () => {
 
   it('says the service is not answering while Scia keeps asking, and why one failed', () => {
     expect(magnetLine({ ...fetching, failure: 'SERVICE_UNAVAILABLE' })).toBe(
-      'Scia could not ask AllDebrid about this magnet just now. It asks again in a moment.',
+      'Scia could not ask AllDebrid just now. It asks again soon.',
     );
     expect(magnetLine({ ...fetching, status: 'failed', failure: 'SERVICE_NEEDED' })).toBe(
       'This is a magnet: Scia downloads magnets through AllDebrid. Connect AllDebrid in Settings, then try again.',
     );
     expect(magnetLine({ ...fetching, status: 'failed', failure: 'MAGNET_FAILED' })).toBe(
-      'AllDebrid could not fetch this magnet. Try again later.',
+      'AllDebrid gave no files for this magnet. Try again later.',
     );
-    // Failed on an answer Scia cannot read: AllDebrid was asked, and answered.
+    // Failed on an answer that says nothing Scia can read of the magnet, or nothing of it at all.
     expect(magnetLine({ ...fetching, status: 'failed', failure: 'SERVICE_UNAVAILABLE' })).toBe(
-      'Scia cannot read what AllDebrid answered about this magnet. Try again in a moment.',
+      "Scia could not tell from AllDebrid's answer what became of this magnet. Try again in a moment.",
     );
   });
 });

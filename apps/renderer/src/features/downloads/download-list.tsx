@@ -29,8 +29,9 @@ export function DownloadList({
   actions,
   magnetActions,
 }: DownloadListProps): ReactNode {
-  // A magnet is not finished: it is in "All" and "In progress", above the downloads.
-  const shownMagnets = filter === Filter.Completed ? [] : magnets;
+  // A magnet is not finished: it is in "All" and "In progress", above the downloads — newest first,
+  // as they are.
+  const shownMagnets = filter === Filter.Completed ? [] : [...magnets].reverse();
   if (downloads.length === 0 && shownMagnets.length === 0) {
     const { title, hint } = EMPTY[filter];
     return (

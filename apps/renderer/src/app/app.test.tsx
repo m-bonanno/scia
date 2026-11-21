@@ -622,6 +622,18 @@ describe('App', () => {
       expect(screen.queryByText('Holiday films')).not.toBeInTheDocument();
     });
 
+    it('lists the newest magnet first, as the downloads below it', () => {
+      live.magnets = [
+        magnet,
+        { ...magnet, id: 'm2', name: 'Concert', createdAt: '2026-11-21T12:05:00.000Z' },
+      ];
+      render(<App />);
+
+      const rows = screen.getAllByRole('listitem');
+      expect(within(rows[0] ?? document.body).getByText('Concert')).toBeInTheDocument();
+      expect(within(rows[1] ?? document.body).getByText('Holiday films')).toBeInTheDocument();
+    });
+
     it('stops waiting for a magnet at its Remove, and tries one that failed again at its Retry', async () => {
       live.magnets = [{ ...magnet, status: 'failed', failure: 'MAGNET_FAILED' }];
       const remove = vi.spyOn(api, 'removeMagnet').mockResolvedValue();
@@ -694,7 +706,7 @@ describe('App', () => {
       await vi.waitFor(() => {
         expect(notices).toHaveTextContent('This magnet is no longer in the list.');
       });
-      expect(notices).toHaveTextContent('This magnet has already changed. Try again in a moment.');
+      expect(notices).toHaveTextContent('This magnet is already being sent again.');
     });
   });
 });
