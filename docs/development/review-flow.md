@@ -32,12 +32,10 @@ A release into `main` is never small.
 One list, for the author before opening the PR, for the tech lead during the review, for CI on GitHub. On a PR from a fork, CI's run is the only one: "A pull request from outside".
 
 ```bash
-npm run format:check
-npm run lint
-npm run typecheck
-npm test
-npm run build
+npm run gates
 ```
+
+It runs `format:check`, `lint`, `typecheck`, `test` (with a reporter of dots) and `build`, in that order, and stops at the first that fails, naming it (`scripts/gates.mjs`). Each can still be run alone while working. On a machine where other sessions run their suites, `SCIA_TEST_WORKERS=<n>` runs the tests on fewer workers.
 
 With untracked files of other work in the tree, check the format of tracked files only: `git ls-files | xargs npx prettier --check --ignore-unknown`.
 

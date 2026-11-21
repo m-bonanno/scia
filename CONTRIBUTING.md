@@ -18,12 +18,10 @@ Do not paste private links, keys of a service or tokens in an issue: describe th
 
    ```bash
    npm ci
-   npm run format:check
-   npm run lint
-   npm run typecheck
-   npm test
-   npm run build
+   npm run gates
    ```
+
+   It runs format check, lint, typecheck, tests and build, and stops at the first that fails.
 
 4. Open the PR into `develop`. Its title is a conventional commit too; its body follows the template and says **`Closes #N`**, with the number of the issue. A PR that closes no issue fails the `Linked issue` check.
 
