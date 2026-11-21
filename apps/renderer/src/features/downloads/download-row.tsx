@@ -19,6 +19,7 @@ import {
 import { type ReactNode, useRef } from 'react';
 import { ConfirmButton, type ConfirmButtonHandle } from '@/components/confirm-button.tsx';
 import { IconButton } from '@/components/icon-button.tsx';
+import { useOnePress } from '@/components/one-press.ts';
 import { cn } from '@/lib/cn.ts';
 import { SegmentBar } from './segment-bar.tsx';
 import { statusLine } from './status-line.ts';
@@ -54,6 +55,40 @@ function shownName(download: Download): string {
   return download.url.replace(/^https?:\/\/(www\.)?/i, '');
 }
 
+interface Main {
+  readonly label: string;
+  readonly Icon: LucideIcon;
+  readonly press: 'start' | 'pause' | 'resume';
+}
+
+// The one thing a row does next, in one place: a press that changes the row's state changes this
+// button, and leaves the focus on it.
+const MAIN: Readonly<Record<DownloadStatus, Main | undefined>> = {
+  ready: { label: 'Start', Icon: Play, press: 'start' },
+  queued: { label: 'Pause', Icon: Pause, press: 'pause' },
+  downloading: { label: 'Pause', Icon: Pause, press: 'pause' },
+  paused: { label: 'Resume', Icon: Play, press: 'resume' },
+  failed: { label: 'Retry', Icon: RotateCw, press: 'resume' },
+  completed: undefined,
+};
+
+// One element whatever it says, so that the focus stays on it and the second click of a double
+// click — which may land after the state, and the button, changed — is not a press of its own.
+function MainAction({ action, onPress }: { readonly action: Main; readonly onPress: () => void }) {
+  const press = useOnePress();
+  return (
+    <IconButton
+      label={action.label}
+      onKeyDown={press.onKeyDown}
+      onClick={(event) => {
+        if (!press.sawTheOneBefore(event)) onPress();
+      }}
+    >
+      <action.Icon size={16} aria-hidden="true" />
+    </IconButton>
+  );
+}
+
 interface DownloadRowProps {
   readonly download: Download;
   readonly actions: RowActions;
@@ -65,6 +100,7 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
   const completed = status === DownloadStatus.Completed;
   const failed = status === DownloadStatus.Failed;
   const ready = status === DownloadStatus.Ready;
+  const main = MAIN[status];
   const program = download.kind === FileKind.Program;
   const { open, reveal } = actions;
   const openButton = useRef<ConfirmButtonHandle>(null);
@@ -100,45 +136,13 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          {ready && (
-            <IconButton
-              label="Start"
-              onClick={() => {
-                actions.start(id);
+          {main !== undefined && (
+            <MainAction
+              action={main}
+              onPress={() => {
+                actions[main.press](id);
               }}
-            >
-              <Play size={16} aria-hidden="true" />
-            </IconButton>
-          )}
-          {(status === DownloadStatus.Downloading || status === DownloadStatus.Queued) && (
-            <IconButton
-              label="Pause"
-              onClick={() => {
-                actions.pause(id);
-              }}
-            >
-              <Pause size={16} aria-hidden="true" />
-            </IconButton>
-          )}
-          {status === DownloadStatus.Paused && (
-            <IconButton
-              label="Resume"
-              onClick={() => {
-                actions.resume(id);
-              }}
-            >
-              <Play size={16} aria-hidden="true" />
-            </IconButton>
-          )}
-          {failed && (
-            <IconButton
-              label="Retry"
-              onClick={() => {
-                actions.resume(id);
-              }}
-            >
-              <RotateCw size={16} aria-hidden="true" />
-            </IconButton>
+            />
           )}
           {completed && open !== undefined && (
             <ConfirmButton

@@ -2,7 +2,7 @@ import { FileKind, fileKindOfName } from '@scia/core';
 
 // What a link copied to the clipboard is, among those Scia takes (#128). A file host's link is
 // the third kind, and the connected service, or AllDebrid's public list, decides it
-// (`LinkResolver.isFileHost`).
+// (`LinkResolver.serviceFor`, in `DownloadManager`).
 export const Offered = { File: 'file', VideoPage: 'video-page' } as const;
 export type Offered = (typeof Offered)[keyof typeof Offered];
 

@@ -228,9 +228,8 @@ async function boot(): Promise<void> {
   // person is not looking at the list.
   const clipboardWatch = new ClipboardWatch({
     read: () => clipboard.readText(),
-    offer: async (links) => {
-      notifyOffered(await offerToEngine(links, engine(), OFFER_ANSWER_LIMIT_MS));
-    },
+    offer: (links) => offerToEngine(links, engine(), OFFER_ANSWER_LIMIT_MS),
+    added: notifyOffered,
     every: (ms, run) => {
       const timer = setInterval(run, ms);
       return () => {

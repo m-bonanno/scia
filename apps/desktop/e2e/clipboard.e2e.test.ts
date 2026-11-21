@@ -18,7 +18,8 @@ interface Copied {
 const answerClipboard = (app: ElectronApplication) =>
   app.evaluate(({ clipboard }) => {
     const copied = globalThis as Copied;
-    copied.sciaCopied = '';
+    // Something was copied before Scia read the clipboard, as it nearly always is.
+    copied.sciaCopied = 'copied before the switch was turned on';
     clipboard.readText = () => Promise.resolve(copied.sciaCopied ?? '');
   });
 

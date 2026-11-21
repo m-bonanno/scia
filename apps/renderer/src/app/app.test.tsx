@@ -1,6 +1,6 @@
 import type { Download } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app.tsx';
@@ -92,6 +92,35 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Start all' }));
 
     expect(startReady).toHaveBeenCalledOnce();
+  });
+
+  it('hands the focus to the filter in use when "Start all" leaves under it', async () => {
+    vi.spyOn(api, 'startReady').mockResolvedValue([]);
+    live.downloads = [aDownload({ status: DownloadStatus.Ready })];
+    const { rerender } = render(<App />);
+    screen.getByRole('button', { name: 'Start all' }).focus();
+
+    await userEvent.keyboard('{Enter}');
+    live.downloads = [aDownload({ status: DownloadStatus.Queued })];
+    rerender(<App />);
+
+    expect(screen.queryByRole('button', { name: 'Start all' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^All/ })).toHaveFocus();
+  });
+
+  it('moves no focus that "Start all" did not hold', () => {
+    vi.spyOn(api, 'startReady').mockResolvedValue([]);
+    live.downloads = [aDownload({ status: DownloadStatus.Ready })];
+    const { rerender } = render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+    field.focus();
+
+    // A press that does not take the focus, as some pointers' do.
+    fireEvent.click(screen.getByRole('button', { name: 'Start all' }));
+    live.downloads = [aDownload({ status: DownloadStatus.Queued })];
+    rerender(<App />);
+
+    expect(field).toHaveFocus();
   });
 
   it('starts one ready link from its row', async () => {

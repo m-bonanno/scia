@@ -63,6 +63,57 @@ describe('DownloadRow', () => {
     expect(row.remove).toHaveBeenCalledExactlyOnceWith('d1');
   });
 
+  it('starts a ready link once at a double click, and pauses nothing with its second click', () => {
+    const row = actions();
+    const ready = aDownload({ status: DownloadStatus.Ready, totalBytes: null, downloadedBytes: 0 });
+    const { rerender } = render(<DownloadRow download={ready} actions={row} />);
+    const start = screen.getByRole('button', { name: 'Start' });
+
+    fireEvent.click(start, { detail: 1 });
+    // The list says it started before the second click of the same double click lands.
+    rerender(<DownloadRow download={aDownload({ status: DownloadStatus.Queued })} actions={row} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Pause' }), { detail: 2 });
+
+    expect(row.start).toHaveBeenCalledOnce();
+    expect(row.pause).not.toHaveBeenCalled();
+  });
+
+  it('keeps the focus on the main action of a row whose state its press changed', async () => {
+    const row = actions();
+    const { rerender } = render(
+      <DownloadRow
+        download={aDownload({ status: DownloadStatus.Ready, totalBytes: null, downloadedBytes: 0 })}
+        actions={row}
+      />,
+    );
+    screen.getByRole('button', { name: 'Start' }).focus();
+    await userEvent.keyboard('{Enter}');
+
+    for (const [status, name] of [
+      [DownloadStatus.Queued, 'Pause'],
+      [DownloadStatus.Paused, 'Resume'],
+      [DownloadStatus.Failed, 'Retry'],
+    ] as const) {
+      rerender(<DownloadRow download={aDownload({ status })} actions={row} />);
+      expect(screen.getByRole('button', { name })).toHaveFocus();
+    }
+  });
+
+  it('starts a ready link once at Enter held down', async () => {
+    const row = actions();
+    render(
+      <DownloadRow
+        download={aDownload({ status: DownloadStatus.Ready, totalBytes: null, downloadedBytes: 0 })}
+        actions={row}
+      />,
+    );
+    screen.getByRole('button', { name: 'Start' }).focus();
+
+    await userEvent.keyboard('{Enter>5/}');
+
+    expect(row.start).toHaveBeenCalledOnce();
+  });
+
   it('names a ready link that names no file by its address, which is all that is known before its Start', () => {
     const { rerender } = render(
       <DownloadRow
