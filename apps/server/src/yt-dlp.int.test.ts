@@ -350,15 +350,11 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
       async () => {
         const stopped = new AbortController();
         spawned.length = 0;
-        process.env.SCIA_API_TOKEN = 'the-engine-token-0000';
-        try {
-          const reading = reader().read('https://site.example/two-processes', stopped.signal);
-          await started();
-          stopped.abort(new Error('paused'));
-          await expect(reading).rejects.toThrow('paused');
-        } finally {
-          delete process.env.SCIA_API_TOKEN;
-        }
+        vi.stubEnv('SCIA_API_TOKEN', 'the-engine-token-0000');
+        const reading = reader().read('https://site.example/two-processes', stopped.signal);
+        await started();
+        stopped.abort(new Error('paused'));
+        await expect(reading).rejects.toThrow('paused');
 
         const taskkill = spawned.filter(({ command }) => /taskkill\.exe$/i.test(command));
         expect(taskkill).toHaveLength(1);
