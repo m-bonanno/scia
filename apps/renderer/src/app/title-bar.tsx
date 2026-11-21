@@ -49,7 +49,7 @@ export function TitleBar({
           <IconButton
             {...(magnetsToggleRef === undefined ? {} : { ref: magnetsToggleRef })}
             label="AllDebrid magnets"
-            className="no-drag"
+            className="no-drag aria-expanded:bg-tonal"
             aria-expanded={magnets.open}
             aria-controls={magnets.open ? magnets.panelId : undefined}
             onClick={magnets.onToggle}
