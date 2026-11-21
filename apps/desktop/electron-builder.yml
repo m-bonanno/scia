@@ -68,8 +68,11 @@ nsis:
   createDesktopShortcut: always
   createStartMenuShortcut: true
   shortcutName: Scia
-  # The history and the unfinished downloads must survive an uninstall.
+  # The history and the unfinished downloads must survive an uninstall. The installer's refusal of
+  # an older version says so (build/installer.nsh, held by build/installer.int.test.ts).
   deleteAppDataOnUninstall: false
+  # Refuses to install a version older than the one installed (docs/adr/0018).
+  include: build/installer.nsh
 
 linux:
   target:

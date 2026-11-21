@@ -77,6 +77,19 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
+      # The spec of the installer's include compiles it with the makensis electron-builder packs
+      # with (apps/desktop/build/installer.int.test.ts), fetched once into this cache. A key of its
+      # own: this job fetches makensis alone, and must not save a cache the packing job then reads
+      # as complete.
+      - name: electron-builder version
+        id: builder
+        shell: bash
+        run: echo "version=$(node -p "require('./node_modules/electron-builder/package.json').version")" >> "$GITHUB_OUTPUT"
+      - name: Cache electron-builder's makensis
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/AppData/Local/electron-builder/Cache
+          key: electron-builder-makensis-${{ runner.os }}-${{ steps.builder.outputs.version }}
       - name: Test
         run: npm test
       - name: Build
