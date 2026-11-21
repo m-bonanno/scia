@@ -254,7 +254,7 @@ export class DownloadManager {
   }
 
   // Whether a download of the person's runs or waits its turn: what the engine's own fetches wait
-  // for (docs/adr/0011). A paused or failed download waits for the person, not for the engine.
+  // for (docs/adr/0011). A paused, failed or ready download waits for the person, not for the engine.
   isBusy(): boolean {
     return this.#records.some(
       ({ status }) => status === DownloadStatus.Downloading || status === DownloadStatus.Queued,

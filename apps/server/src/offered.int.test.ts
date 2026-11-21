@@ -225,6 +225,14 @@ describe('links offered from the clipboard', () => {
     ]);
   });
 
+  it('is not busy with ready links: they wait for the person, not for the engine', async () => {
+    const downloads = await open();
+
+    await downloads.offer([at('a.zip')]);
+
+    expect(downloads.isBusy()).toBe(false);
+  });
+
   it('refuses to start what is not ready', async () => {
     const downloads = await open();
     const [queued] = downloads.add({ urls: [at('a.zip')] });
