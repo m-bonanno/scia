@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
-import { access, readFile } from 'node:fs/promises';
+import { access, readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { type RangeServer, startRangeServer } from '@scia/server/testing/range-server.ts';
@@ -31,6 +31,56 @@ const YT_DLP = join(INSTALL_DIR, 'resources', 'tools', YT_DLP_OF_PLATFORM.win32!
 // NSIS installs in seconds; a cold runner's disk is slow, and an uninstaller hands itself to a
 // copy in the temporary folder and returns before it has removed anything.
 const INSTALL_LIMIT_MS = 120_000;
+
+// Where electron-builder's installer writes what it installed, under a key named after the app:
+// DisplayVersion under the uninstaller's, InstallLocation under the app's own.
+const UNINSTALL_KEYS = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall';
+// Newer than any version this spec is run with.
+const NEWER = '999.0.0';
+// Windows' ERROR_PRODUCT_VERSION, the exit code of a refused install (build/installer.nsh).
+const REFUSED = 1638;
+
+const reg = async (...args: string[]) => (await run('reg', args, { timeout: 30_000 })).stdout;
+
+// The uninstaller's key of the Scia this spec installed: the one whose uninstaller is in its folder.
+const uninstallKey = async () => {
+  const blocks = (await reg('query', UNINSTALL_KEYS, '/s', '/v', 'UninstallString')).split(
+    /\r?\n\r?\n/,
+  );
+  const block = blocks.find((it) => it.toLowerCase().includes(UNINSTALLER.toLowerCase()));
+  const key = block?.trim().split(/\r?\n/)[0];
+  if (key === undefined) throw new Error(`No uninstaller key names ${UNINSTALLER}`);
+  return key;
+};
+
+const appKey = (uninstall: string) => `HKCU\\Software\\${uninstall.split('\\').at(-1)!}`;
+
+const displayVersion = async (key: string) =>
+  /DisplayVersion\s+REG_SZ\s+(\S+)/.exec(await reg('query', key, '/v', 'DisplayVersion'))?.[1];
+
+const setDisplayVersion = (key: string, version: string) =>
+  reg('add', key, '/v', 'DisplayVersion', '/t', 'REG_SZ', '/d', version, '/f');
+
+// What an install writes: the program's files and both keys.
+const footprint = async (key: string) => {
+  const stamp = async (path: string) => {
+    const { mtimeMs, size } = await stat(path);
+    return { mtimeMs, size };
+  };
+  return {
+    folder: await readdir(INSTALL_DIR),
+    exe: await stamp(EXE),
+    uninstaller: await stamp(UNINSTALLER),
+    uninstallKey: await reg('query', key),
+    appKey: await reg('query', appKey(key)),
+  };
+};
+
+const exitCodeOf = (attempt: Promise<unknown>) =>
+  attempt.then(
+    () => 0,
+    (error: unknown) => (error as { code?: unknown }).code,
+  );
 
 // An error of main's, or of the engine's, which main copies into its log as a line of its own.
 const errorsIn = (log: string) => /\[error\]|"level":"error"/.test(log);
@@ -80,6 +130,31 @@ describe('the installer, installed and started', () => {
 
     expect(await exists(EXE)).toBe(true);
     expect(await exists(UNINSTALLER)).toBe(true);
+    expect(await displayVersion(await uninstallKey())).toBe(VERSION);
+  });
+
+  // The installer reads the version installed from the key every installer writes: a newer one
+  // is made there, rather than installed (docs/adr/0016).
+  it('refuses, silently and writing nothing, to install over a newer Scia', async () => {
+    const key = await uninstallKey();
+    await setDisplayVersion(key, NEWER);
+    try {
+      const before = await footprint(key);
+
+      const code = await exitCodeOf(run(INSTALLER!, ['/S'], { timeout: INSTALL_LIMIT_MS }));
+
+      expect(code).toBe(REFUSED);
+      expect(await footprint(key)).toEqual(before);
+    } finally {
+      await setDisplayVersion(key, VERSION!);
+    }
+  });
+
+  it('installs the same version again, as a repair', async () => {
+    await run(INSTALLER!, ['/S'], { timeout: INSTALL_LIMIT_MS });
+
+    expect(await exists(EXE)).toBe(true);
+    expect(await displayVersion(await uninstallKey())).toBe(VERSION);
   });
 
   it('ships yt-dlp at the version it fixes, and yt-dlp answers', async () => {
