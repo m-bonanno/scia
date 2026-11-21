@@ -1,0 +1,272 @@
+import { randomBytes } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
+import { IntegrationId } from '@scia/contracts';
+import { DownloadStatus, MagnetFailure, MagnetStatus } from '@scia/core';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { AllDebrid } from './alldebrid.ts';
+import { DownloadManager } from './download-manager.ts';
+import { HttpSource } from './http-source.ts';
+import { Integrations } from './integrations.ts';
+import { MemoryVault } from './key-vault.ts';
+import type { Logger } from './logger.ts';
+import { JsonStateStore } from './state-store.ts';
+import {
+  type AllDebridServer,
+  type AllDebridServerOptions,
+  type SimulatedMagnet,
+  startAllDebridServer,
+} from './testing/alldebrid-server.ts';
+import { type RangeServer, startRangeServer } from './testing/range-server.ts';
+import { scratchFolder, until } from './testing/scratch.ts';
+
+// Made up: no account anywhere has this key, and no torrent has these hashes.
+const KEY = 'spec-key-0000000000000000';
+const PREMIUM_UNTIL = Date.UTC(2027, 5, 30, 12) / 1000;
+const HASH = '842783e3005495d5d1637f5364b59343c7844707';
+const MAGNET = `magnet:?xt=urn:btih:${HASH}&dn=Holiday%20films`;
+const OTHER = `magnet:?xt=urn:btih:${'b'.repeat(40)}`;
+
+// A pasted magnet, from the paste to its files on disk: the manager, the services, AllDebrid's
+// client and the downloader, against the simulated service and real local hosts.
+describe('a magnet that goes through a service', () => {
+  const source = new HttpSource('scia-test');
+  const readme = randomBytes(5000);
+  const film = randomBytes(300_000);
+  const extra = randomBytes(9000);
+  let folder: Awaited<ReturnType<typeof scratchFolder>>;
+  let hosts: RangeServer[];
+  let service: AllDebridServer | undefined;
+  let manager: DownloadManager | undefined;
+  let logged: string[];
+  let logger: Logger;
+
+  beforeEach(async () => {
+    folder = await scratchFolder();
+    hosts = await Promise.all([readme, film, extra].map((body) => startRangeServer({ body })));
+    logged = [];
+    const log = (event: string, details?: object) => {
+      logged.push(JSON.stringify({ event, ...details }));
+    };
+    logger = { info: log, warn: log, error: log };
+  });
+  afterEach(async () => {
+    await manager?.close();
+    manager = undefined;
+    await service?.close();
+    service = undefined;
+    await Promise.all(hosts.map((host) => host.close()));
+    await folder.remove();
+  });
+
+  // Its files: one at its root, one in a folder, one deeper — each an AllDebrid link the service
+  // unlocks into one of the local hosts.
+  function holiday(options: Partial<SimulatedMagnet> = {}): SimulatedMagnet {
+    return {
+      name: 'Holiday films',
+      size: readme.length + film.length + extra.length,
+      fetchingPolls: 2,
+      files: [
+        { n: 'readme.txt', s: readme.length, l: 'https://alldebrid.com/f/readme' },
+        {
+          n: 'Day 1',
+          e: [
+            { n: 'beach.mkv', s: film.length, l: 'https://alldebrid.com/f/beach' },
+            {
+              n: 'Extras',
+              e: [{ n: 'notes.nfo', s: extra.length, l: 'https://alldebrid.com/f/notes' }],
+            },
+          ],
+        },
+      ],
+      ...options,
+    };
+  }
+
+  async function serviceWith(
+    options: Partial<AllDebridServerOptions> = {},
+  ): Promise<AllDebridServer> {
+    const [one, two, three] = hosts;
+    service = await startAllDebridServer({
+      accounts: {
+        [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL },
+        'free-key-0000000000000000': { username: 'bob' },
+      },
+      hosts: { alldebrid: ['alldebrid.com'] },
+      links: {
+        'https://alldebrid.com/f/readme': { direct: one?.url ?? '', filename: 'readme.txt' },
+        'https://alldebrid.com/f/beach': { direct: two?.url ?? '', filename: 'something-else.mkv' },
+        'https://alldebrid.com/f/notes': { direct: three?.url ?? '', filename: 'notes.nfo' },
+      },
+      magnets: { [HASH]: holiday() },
+      ...options,
+    });
+    return service;
+  }
+
+  async function connected(to: AllDebridServer, key = KEY): Promise<Integrations> {
+    const vault = new MemoryVault();
+    await vault.write(IntegrationId.AllDebrid, key);
+    return Integrations.open({
+      vault,
+      alldebrid: new AllDebrid({ api: to.api, userAgent: 'Scia/spec', retryDelayMs: () => 1 }),
+      logger,
+    });
+  }
+
+  const statePath = () => join(folder.path, 'data', 'state.json');
+  const downloads = () => join(folder.path, 'downloads');
+  async function open(integrations: Integrations | undefined): Promise<DownloadManager> {
+    manager = await DownloadManager.open({
+      source,
+      store: new JsonStateStore(statePath()),
+      defaultDirectory: downloads(),
+      logger,
+      retryDelayMs: () => 1,
+      magnetPollMs: 5,
+      ...(integrations === undefined ? {} : { resolver: integrations, magnets: integrations }),
+    });
+    return manager;
+  }
+  function allDone(of: DownloadManager): boolean {
+    const { downloads: all } = of.snapshot();
+    return all.length === 3 && all.every((each) => each.status === DownloadStatus.Completed);
+  }
+
+  it('sends a pasted magnet to the service, and downloads its files in its folder, their folders rebuilt', async () => {
+    const alldebrid = await serviceWith();
+    const scia = await open(await connected(alldebrid));
+
+    const [added] = scia.addMagnets([MAGNET]);
+
+    expect(added).toMatchObject({
+      name: 'Holiday films',
+      status: MagnetStatus.Sending,
+      failure: null,
+    });
+    // Asked about once it was taken: what the service has of it, and how fast.
+    await until(() => (scia.snapshot().magnets[0]?.bytesPerSecond ?? 0) > 0);
+    expect(scia.snapshot().magnets[0]).toMatchObject({
+      totalBytes: holiday().size,
+      bytesPerSecond: 1_048_576,
+    });
+    await until(() => allDone(scia));
+
+    expect(scia.snapshot().magnets).toEqual([]);
+    const root = join(downloads(), 'Holiday films');
+    expect(Buffer.compare(await readFile(join(root, 'readme.txt')), readme)).toBe(0);
+    // The magnet's own name for its file, not the one its link's host gives.
+    expect(Buffer.compare(await readFile(join(root, 'Day 1', 'beach.mkv')), film)).toBe(0);
+    expect(Buffer.compare(await readFile(join(root, 'Day 1', 'Extras', 'notes.nfo')), extra)).toBe(
+      0,
+    );
+    expect(scia.snapshot().downloads.every((each) => each.via === 'alldebrid')).toBe(true);
+    // One upload, and one question at a time about where the magnet is.
+    expect(
+      alldebrid.requests.filter((request) => request.url === '/v4/magnet/upload'),
+    ).toHaveLength(1);
+  });
+
+  it('takes a magnet already in the list once', () => {
+    return (async () => {
+      const scia = await open(await connected(await serviceWith()));
+
+      scia.addMagnets([MAGNET]);
+      const again = scia.addMagnets([MAGNET.toUpperCase().replace('MAGNET:', 'magnet:'), OTHER]);
+
+      expect(again).toHaveLength(1);
+      expect(scia.snapshot().magnets).toHaveLength(2);
+    })();
+  });
+
+  it('says that magnets need a service when none is connected, and sends it once one is, at Retry', async () => {
+    const alldebrid = await serviceWith();
+    const scia = await open(undefined);
+
+    const [added] = scia.addMagnets([MAGNET]);
+    await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+
+    expect(scia.snapshot().magnets[0]?.failure).toBe(MagnetFailure.NeedsService);
+    expect(alldebrid.requests).toEqual([]);
+    expect(() => scia.retryMagnet(added?.id ?? '')).not.toThrow();
+  });
+
+  it('says why the service refuses a magnet, and fetches the others of the same paste', async () => {
+    const alldebrid = await serviceWith({
+      magnets: {
+        [HASH]: holiday(),
+        ['b'.repeat(40)]: { ...holiday(), error: 'MAGNET_TOO_MANY_ACTIVE' },
+      },
+    });
+    const scia = await open(await connected(alldebrid));
+
+    scia.addMagnets([OTHER, MAGNET]);
+
+    await until(() => allDone(scia));
+    expect(scia.snapshot().magnets).toMatchObject([
+      { status: MagnetStatus.Failed, failure: MagnetFailure.Limit },
+    ]);
+  });
+
+  it('says a magnet failed when the service could not fetch it, and that an account not premium cannot send one', async () => {
+    const failing = await serviceWith({ magnets: { [HASH]: holiday({ fails: true }) } });
+    const scia = await open(await connected(failing));
+    scia.addMagnets([MAGNET]);
+    await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+    expect(scia.snapshot().magnets[0]?.failure).toBe(MagnetFailure.Failed);
+    await manager?.close();
+    await failing.close();
+    await folder.remove();
+    folder = await scratchFolder();
+
+    const free = await open(await connected(await serviceWith(), 'free-key-0000000000000000'));
+    free.addMagnets([MAGNET]);
+    await until(() => free.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+    expect(free.snapshot().magnets[0]?.failure).toBe(MagnetFailure.NotPremium);
+  });
+
+  it('goes on waiting for a magnet after a restart, without sending it again', async () => {
+    const alldebrid = await serviceWith({ magnets: { [HASH]: holiday({ fetchingPolls: 1000 }) } });
+    const integrations = await connected(alldebrid);
+    const first = await open(integrations);
+    first.addMagnets([MAGNET]);
+    await until(() => first.snapshot().magnets[0]?.status === MagnetStatus.Fetching);
+    await first.close();
+
+    const again = await open(integrations);
+
+    expect(again.snapshot().magnets).toMatchObject([
+      { name: 'Holiday films', status: MagnetStatus.Fetching },
+    ]);
+    const asked = alldebrid.requests.length;
+    await until(() => alldebrid.requests.length > asked + 1);
+    expect(
+      alldebrid.requests.filter((request) => request.url === '/v4/magnet/upload'),
+    ).toHaveLength(1);
+  });
+
+  it('stops waiting for a magnet that is removed, and keeps nothing of it', async () => {
+    const alldebrid = await serviceWith({ magnets: { [HASH]: holiday({ fetchingPolls: 1000 }) } });
+    const scia = await open(await connected(alldebrid));
+    const [added] = scia.addMagnets([MAGNET]);
+    await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Fetching);
+
+    scia.removeMagnet(added?.id ?? '');
+
+    expect(scia.snapshot().magnets).toEqual([]);
+    const asked = alldebrid.requests.length;
+    await scia.close();
+    expect(alldebrid.requests).toHaveLength(asked);
+    expect(await readFile(statePath(), 'utf8')).not.toContain(HASH);
+  });
+
+  it('logs how many magnets, never which', async () => {
+    const scia = await open(await connected(await serviceWith()));
+
+    scia.addMagnets([MAGNET]);
+    await until(() => allDone(scia));
+
+    expect(logged.join('\n')).not.toContain(HASH);
+    expect(logged.join('\n')).not.toContain('Holiday');
+  });
+});
