@@ -762,6 +762,25 @@ describe('Updates, offered to the person', () => {
       expect(restarts).toEqual([false]);
     });
 
+    it('does not restart once a quit began while the engine was asked', async () => {
+      const restarts: boolean[] = [];
+      const { updates } = await downloaded({
+        install: (restart) => {
+          restarts.push(restart);
+          return true;
+        },
+      });
+
+      const answer = await updates.restart(async () => {
+        await updates.atQuit({ askedByPerson: true });
+        return 0;
+      });
+      updates.install();
+
+      expect(answer).toBe(UpdateRestart.Nothing);
+      expect(restarts).toEqual([false]);
+    });
+
     it('says in the log that the person asked, and why it was refused', async () => {
       const { updates, lines } = await downloaded();
 

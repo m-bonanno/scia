@@ -624,6 +624,33 @@ describe('App, its version and an update', () => {
     });
   });
 
+  it('keeps what main answered last, whichever answer comes back first', async () => {
+    const answers: ((answer: unknown) => void)[] = [];
+    const offered = vi.fn(
+      () =>
+        new Promise<unknown>((resolve) => {
+          answers.push(resolve);
+        }),
+    );
+    const { change } = aShell({ updateOffered: offered });
+    render(<App />);
+    await vi.waitFor(() => {
+      expect(answers).toHaveLength(1);
+    });
+    const before = answers.length;
+    change();
+    await vi.waitFor(() => {
+      expect(answers.length).toBeGreaterThan(before);
+    });
+
+    // The last ask is answered first; every earlier one after it, with a version.
+    answers.at(-1)?.(null);
+    for (const answer of answers.slice(0, -1)) answer('1.0.0-beta.18');
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
+  });
+
   it('asks main to restart when the person says so', async () => {
     const { shell } = aShell({ updateOffered: vi.fn(async () => '1.0.0-beta.18') });
     render(<App />);

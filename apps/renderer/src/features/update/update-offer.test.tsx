@@ -106,6 +106,17 @@ describe('UpdateOffer', () => {
     expect(props.onRestart).not.toHaveBeenCalled();
   });
 
+  it('becomes the note, with the focus on Close, when a download starts while it asks', async () => {
+    const { props, rerender } = offer();
+    await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+    expect(screen.getByRole('button', { name: 'Restart now' })).toHaveFocus();
+
+    rerender(<UpdateOffer {...props} downloading />);
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('Scia is downloading.');
+    expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
+  });
+
   it('says so when main does not restart, in words true whatever kept it', async () => {
     offer({ onRestart: vi.fn(async () => UpdateRestart.Busy) });
     await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
@@ -139,6 +150,18 @@ describe('UpdateOffer', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     expect(props.onGone).toHaveBeenCalledOnce();
+  });
+
+  it('offers no way back while it restarts: "Later" does nothing then, and says so', async () => {
+    offer({ onRestart: vi.fn(() => new Promise<unknown>(() => undefined)) });
+    await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Restart now' }));
+
+    const later = screen.getByRole('button', { name: 'Later' });
+    expect(later).toHaveAttribute('aria-disabled', 'true');
+    await userEvent.click(later);
+
+    expect(screen.getByRole('dialog')).toHaveTextContent('Restarting…');
   });
 
   it('asks once for a burst of presses on "Restart now"', async () => {

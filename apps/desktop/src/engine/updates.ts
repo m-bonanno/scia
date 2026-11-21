@@ -159,7 +159,7 @@ export class Updates {
     if (this.#isStopped() || ready === undefined) return undefined;
     if (!isBeta(ready)) return ready;
     try {
-      return (await this.#options.betas()) && ready === this.#ready ? ready : undefined;
+      return (await this.#options.betas()) ? ready : undefined;
     } catch {
       return undefined;
     }
@@ -186,7 +186,8 @@ export class Updates {
       this.#options.log.info('update_restart_refused', { version, reason: 'busy' });
       return UpdateRestart.Busy;
     }
-    if (this.#isStopped() || version !== this.#ready) return UpdateRestart.Nothing;
+    // A quit that began while the engine was asked is the quit; it installs at no restart.
+    if (this.#isStopped()) return UpdateRestart.Nothing;
     this.#restart = true;
     this.#options.log.info('update_restart', { version });
     return UpdateRestart.Restarting;
