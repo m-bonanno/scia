@@ -32,6 +32,7 @@
     "test:e2e": "vitest run --project e2e",
     "test:smoke": "vitest run --project smoke",
     "release": "semantic-release",
+    "test:quarantine": "node scripts/quarantine.mjs",
     "gates": "node scripts/gates.mjs",
     "check:adr": "node scripts/adr-numbers.mjs"
   },

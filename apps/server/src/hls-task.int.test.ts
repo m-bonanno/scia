@@ -293,7 +293,7 @@ describe('HlsTask against a real HTTP host', () => {
     expect((failure as RemoteError).status).toBe(404);
   });
 
-  it('stops every connection when a piece fails for good, and fetches nothing after', async () => {
+  it('stops every connection when a piece fails for good, and fetches nothing after [flaky #162]', async () => {
     const copy = join(folder.path, 'site');
     await cp(join(FIXTURES, 'ts'), copy, { recursive: true });
     const names = [

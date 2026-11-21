@@ -1,6 +1,6 @@
 # ADR 0008 — The delivery pipeline: what runs on a PR, a beta and a stable
 
-- **Status**: accepted
+- **Status**: accepted; the quarantine of a flaky spec (a skip) and "a red job is a red gate" amended by [ADR 0019](./0019-specs-in-quarantine.md): a quarantined spec runs in a job of its own, which is not a gate
 - **Date**: 2026-11-20
 
 ## Context

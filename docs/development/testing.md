@@ -18,10 +18,16 @@ The pipeline is [ADR 0008](../adr/0008-the-delivery-pipeline.md). The gates are 
 | `Windows tests, build`              | `windows-latest` | the three layers above, the build                                   |
 | `E2E (Windows)`                     | `windows-latest` | the build, then the E2E suite                                       |
 | `Installer smoke (Windows)`         | `windows-latest` | the installer of the commit, then the smoke test                    |
+| `Quarantine (report only)`          | both, PRs only   | the specs in quarantine; not a gate (ADR 0019)                      |
 
 A spec that holds on one system and not on the other is a bug of the spec or of the app on that system: Windows rounds a timer under 16 ms up to 16, and forgives a path written with the wrong separator, which Linux does not.
 
-**No retries.** A spec that fails in CI without a cause in the change is not run again until it passes: it is filed as an issue with its log, then fixed, or skipped with that issue's number beside it until it is.
+**No retries.** A spec that fails in CI without a cause in the change is not run again until it passes. It is filed as an issue with its log (or the log is added to its issue), then fixed, or put in quarantine until it is ([ADR 0019](../adr/0019-specs-in-quarantine.md), #186). On a PR that does not touch it, the run is started again once, so that the PR's own checks are read; that is not a review round (`review-flow.md`, "What is blocking").
+
+- **Quarantine** is `[flaky #N]` at the end of the spec's name, `N` its issue, in the `unit`, `integration` and `feature` projects. The gates and `npm test` pass it over (`testNamePattern` in `vitest.config.ts`); `npm run test:quarantine` runs those specs alone; CI runs them on every PR in "Quarantine (report only)", on both systems — not a required check, never a gate.
+- The renderer's specs and the E2E suite have no quarantine: a flaky one is fixed, or skipped with its issue's number beside it.
+- A spec leaves the quarantine only with its fix, in the PR that closes its issue, after `npm run test:quarantine` and the job are read green.
+- The roadmap does not count a quarantined spec as holding what it tests.
 
 ### Burn-in
 

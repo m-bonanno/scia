@@ -41,7 +41,7 @@ With untracked files of other work in the tree, check the format of tracked file
 
 A PR that touches the app's runtime — `apps/desktop`, `apps/server`, `apps/renderer`, `packages/` — also runs the E2E suite, after the build, on Windows: `npm run test:e2e` ([`testing.md`](./testing.md), "E2E"). It opens Scia's window while it runs.
 
-CI runs them on Ubuntu, and all but the ADR numbers, format, lint and types again on Windows, the system Scia ships for, with the E2E suite on every PR; it runs them once more on the commit a merge makes, before that commit is released ([`testing.md`](./testing.md), "Where CI runs them"). A gate green here and red on one of CI's systems is red.
+CI runs them on Ubuntu, and all but the ADR numbers, format, lint and types again on Windows, the system Scia ships for, with the E2E suite on every PR; it runs them once more on the commit a merge makes, before that commit is released ([`testing.md`](./testing.md), "Where CI runs them"). A gate green here and red on one of CI's systems is red. "Quarantine (report only)" is not a gate ([ADR 0019](../adr/0019-specs-in-quarantine.md)): "CI is green" means every required check.
 
 ## What is blocking
 
@@ -55,6 +55,8 @@ This is the one definition; role files and `CLAUDE.md` point here. A finding is 
 6. a point of the linked issue neither delivered nor declared out of scope in the PR body.
 
 Everything else is non-blocking: a suggestion, a question, something to track. Blocking is a fact, never a taste.
+
+A red check on a spec the PR does not touch, with no cause in its diff, is not a round of review: it is handled as [`testing.md`](./testing.md), "No retries", says, and the verdict holds for the head once its required checks are green. #173 spent its third round on the speed limit's spec (#43).
 
 ## Rules
 

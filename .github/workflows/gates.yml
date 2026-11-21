@@ -27,7 +27,7 @@ concurrency:
   group: gates-${{ github.event.pull_request.number || github.run_id }}-${{ inputs.run }}
   cancel-in-progress: true
 
-# Every job's name below is a required check of develop and main (docs/development/git-flow.md,
+# Every job's name below but the quarantine's is a required check of develop and main (docs/development/git-flow.md,
 # "Repository settings"): renaming one blocks every PR until the branch protection changes with it.
 jobs:
   checks:
@@ -97,6 +97,33 @@ jobs:
         run: npm test
       - name: Build
         run: npm run build
+
+  # The specs in quarantine, `[flaky #N]` in their name (docs/development/testing.md, "No retries";
+  # #186; ADR 0019): run on both systems, on a PR only, reported, and never blocking. Not a required check.
+  quarantine:
+    name: Quarantine (report only)
+    if: github.event_name == 'pull_request'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    timeout-minutes: 15
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Quarantine
+        run: npm run test:quarantine
 
   # The built app, started by Electron on the system it ships for, against local hosts only
   # (docs/development/testing.md, "E2E").
