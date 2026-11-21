@@ -25,6 +25,8 @@ export interface MagnetWatchDeps {
   readonly changed: () => void;
   // A magnet whose files are ready: the manager makes them downloads, and lets the magnet go.
   readonly ready: (record: MagnetRecord, files: readonly MagnetFile[]) => void;
+  // A magnet the service gave the id of another of the list: the same torrent, let go.
+  readonly same: (record: MagnetRecord) => void;
 }
 
 // What a failure of the service means for a magnet: a failure of its own, or undefined for a
@@ -136,7 +138,12 @@ export class MagnetWatch {
   }
 
   async #send(service: MagnetService): Promise<void> {
-    const sending = this.#deps.records().filter((record) => record.status === MagnetStatus.Sending);
+    const sending = this.#deps
+      .records()
+      .filter(
+        (record): record is MagnetRecord & { magnet: string } =>
+          record.status === MagnetStatus.Sending && record.magnet !== null,
+      );
     if (sending.length === 0) return;
     try {
       const sent = await service.send(
@@ -148,6 +155,12 @@ export class MagnetWatch {
         if (said === undefined) return;
         if ('failure' in said) {
           this.#fail(record, said.failure);
+          return;
+        }
+        // Pasted twice, or taken from the account too: one row of the list for one magnet of the
+        // service, whichever came first.
+        if (this.#deps.records().some((other) => other.serviceId === said.taken.id)) {
+          this.#deps.same(record);
           return;
         }
         record.serviceId = said.taken.id;

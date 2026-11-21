@@ -2,6 +2,7 @@ import { ApiErrorCode, type Settings } from '@scia/contracts';
 import { DownloadStatus, isUnderWay } from '@scia/core';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TEXT_BUTTON } from '@/components/button-styles.ts';
+import { AccountMagnets } from '@/features/account/account-magnets.tsx';
 import { type Added, AddBar } from '@/features/downloads/add-bar.tsx';
 import { type Pasted, pastedIn } from '@/features/downloads/pasted.ts';
 import { DownloadList } from '@/features/downloads/download-list.tsx';
@@ -25,6 +26,8 @@ import {
 import { wearTheme } from '@/lib/theme.ts';
 import { TitleBar } from './title-bar.tsx';
 
+const PANEL_ID = 'account-magnets';
+
 function isTextField(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
 }
@@ -37,6 +40,13 @@ export function App(): ReactNode {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsLayer, setSettingsLayer] = useState<SettingsLayer | null>(null);
   const [speedLimit, setSpeedLimit] = useState<number | null>(null);
+  // Whether AllDebrid is connected, from the last ask: it offers the panel of its magnets.
+  const [connected, setConnected] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
+  // Each close of Settings, where a key may have been mended: the panel asks again at once.
+  const [settingsClosed, setSettingsClosed] = useState(0);
+  const panelToggle = useRef<HTMLButtonElement>(null);
+  const connectedAsks = useRef(0);
 
   const report = useCallback(
     (error: unknown) => {
@@ -79,6 +89,29 @@ export function App(): ReactNode {
     [askOffer],
   );
 
+  // Learned when the engine is reached and whenever Settings closes, where a service is connected
+  // or let go; an answer to an ask that is no longer the last is not kept.
+  const learnConnected = useCallback(() => {
+    connectedAsks.current += 1;
+    const ask = connectedAsks.current;
+    api
+      .integrations()
+      .then((integrations) => {
+        if (ask !== connectedAsks.current) return;
+        const on = integrations.some((integration) => integration.connected);
+        setConnected(on);
+        if (!on) setPanelOpen(false);
+      })
+      // An engine that did not answer: what was learned last stands, and the notice that the
+      // engine is not responding says the rest.
+      .catch(() => undefined);
+  }, []);
+
+  const closePanel = useCallback(() => {
+    setPanelOpen(false);
+    panelToggle.current?.focus();
+  }, []);
+
   // The limit the title bar names and the theme the page wears are the engine's: read when the
   // engine is reached, and again whenever it comes back. A read that fails all the same is not
   // reported here: the limit still holds, and Settings, which reports its own read, tells this
@@ -97,6 +130,10 @@ export function App(): ReactNode {
       current = false;
     };
   }, [reached, keepSettings]);
+
+  useEffect(() => {
+    if (reached) learnConnected();
+  }, [reached, learnConnected]);
 
   // From the field, a refusal of what was sent is the field's to say; anything else, and any
   // failure of links pasted on the page, is a notice. Links and magnets are sent apart: when one
@@ -216,6 +253,19 @@ export function App(): ReactNode {
         onOpenSettings={() => {
           setSettingsOpen(true);
         }}
+        magnetsToggleRef={panelToggle}
+        {...(connected
+          ? {
+              magnets: {
+                open: panelOpen,
+                panelId: PANEL_ID,
+                onToggle: () => {
+                  if (panelOpen) closePanel();
+                  else setPanelOpen(true);
+                },
+              },
+            }
+          : {})}
         beside={
           shell === undefined ? undefined : (
             <UpdateOffer
@@ -229,48 +279,55 @@ export function App(): ReactNode {
           )
         }
       />
-      <main className="flex min-h-0 flex-1 flex-col">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 pt-4 pb-4">
-          <AddBar onAdd={(pasted) => add(pasted, true)} inputRef={field} />
-          <div className="flex items-center justify-between gap-2">
-            <FilterTabs
-              ref={filterTabs}
-              filter={filter}
-              counts={countByFilter(live.downloads, live.magnets.length)}
-              onChange={setFilter}
-            />
-            {hasReady && (
-              <button
-                type="button"
-                className={TEXT_BUTTON}
-                onClick={() => {
-                  api.startReady().catch(report);
-                }}
-              >
-                Start all
-              </button>
-            )}
-          </div>
-        </div>
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-6 pb-8">
-            {live.connection !== Connection.Connecting && (
-              <DownloadList
-                downloads={visible}
-                magnets={live.magnets}
+      <div className="relative flex min-h-0 flex-1">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 pt-4 pb-4">
+            <AddBar onAdd={(pasted) => add(pasted, true)} inputRef={field} />
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <FilterTabs
+                ref={filterTabs}
                 filter={filter}
-                actions={actions}
-                magnetActions={magnetActions}
+                counts={countByFilter(live.downloads, live.magnets.length)}
+                onChange={setFilter}
               />
-            )}
+              {hasReady && (
+                <button
+                  type="button"
+                  className={TEXT_BUTTON}
+                  onClick={() => {
+                    api.startReady().catch(report);
+                  }}
+                >
+                  Start all
+                </button>
+              )}
+            </div>
           </div>
-        </div>
-      </main>
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <div className="mx-auto w-full max-w-3xl px-6 pb-8">
+              {live.connection !== Connection.Connecting && (
+                <DownloadList
+                  downloads={visible}
+                  magnets={live.magnets}
+                  filter={filter}
+                  actions={actions}
+                  magnetActions={magnetActions}
+                />
+              )}
+            </div>
+          </div>
+        </main>
+        {panelOpen && (
+          <AccountMagnets id={PANEL_ID} again={settingsClosed} onClose={closePanel} tell={tell} />
+        )}
+      </div>
       <SettingsDialog
         ref={setSettingsLayer}
         open={settingsOpen}
         onClose={() => {
           setSettingsOpen(false);
+          setSettingsClosed((times) => times + 1);
+          learnConnected();
         }}
         onError={report}
         onSettings={keepSettings}

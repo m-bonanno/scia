@@ -693,10 +693,22 @@ describe('AllDebrid', () => {
           size: 119,
           downloaded: 59,
           bytesPerSecond: 1_048_576,
+          addedAt: 1_700_000_000,
           stage: 'fetching',
         },
       ]);
       expect((await client.magnetStates(KEY))[0]?.stage).toBe('ready');
+    });
+
+    it('says no date for a magnet the service writes none for', async () => {
+      const client = clientOf(
+        await serviceWith({
+          magnets: { [HASH]: { name: 'Ubuntu', size: 119, files: tree, uploadDate: 0 } },
+        }),
+      );
+      await client.uploadMagnets(KEY, [MAGNET]);
+
+      expect((await client.magnetStates(KEY))[0]).toMatchObject({ addedAt: null });
     });
 
     it('lists the files of ready magnets in one request, each with its folders and its link', async () => {
