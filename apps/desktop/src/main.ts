@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
-import { BridgeChannel } from '@scia/contracts/bridge';
+import { BridgeChannel, UpdateRestart } from '@scia/contracts/bridge';
 import { DEFAULT_API_PORT, type Download, EVENTS_KEEP_ALIVE_MS } from '@scia/contracts';
 import { app, clipboard, dialog, Notification, shell } from 'electron';
 import log from 'electron-log/main';
@@ -315,6 +315,10 @@ async function boot(): Promise<void> {
       return new Updates({
         betas: () => betasOfEngine(engine(), ENGINE_ANSWER_LIMIT_MS),
         ...createUpdater(log.scope('updater')),
+        // The page asks what it may offer; main only says that it changed.
+        onOffer: () => {
+          window.tell(BridgeChannel.UpdateChanged);
+        },
         wait: (ms, run) => {
           const timer = setTimeout(run, ms);
           return () => {
@@ -414,6 +418,17 @@ async function boot(): Promise<void> {
   );
 
   window.answer(BridgeChannel.ThemeChanged, wearTheme);
+
+  // The version a quit would install, for the page to offer beside the name (#133).
+  window.answer(BridgeChannel.UpdateOffered, async () => (await updates?.offered()) ?? null);
+  // A restart the person asked for goes the way of any quit they ask for: the engine stops and
+  // writes its state, then the installer starts — and starts Scia again after it.
+  window.answer(BridgeChannel.RestartToUpdate, async () => {
+    if (updates === undefined || isQuitting()) return UpdateRestart.Nothing;
+    const answer = await updates.restart(async () => unfinished(await activity()));
+    if (answer === UpdateRestart.Restarting) quitAsAsked();
+    return answer;
+  });
 
   try {
     port = await supervisor.start();

@@ -102,6 +102,16 @@ export class MainWindow {
     });
   }
 
+  // A named notice to the page, with nothing in it: the page asks what it needs to know. Sent only
+  // to the app's own page, and to none while the window has no page of the app.
+  tell(channel: string): void {
+    if (this.#window.isDestroyed()) return;
+    const contents = this.#window.webContents;
+    const url = contents.getURL();
+    if (url === '' || new URL(url).origin !== appOrigin(this.#port)) return;
+    contents.send(channel);
+  }
+
   // The engine is ready, or came back after a restart, perhaps on another port.
   followServer(port: number): void {
     this.#port = port;

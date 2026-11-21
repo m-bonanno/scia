@@ -11,13 +11,25 @@ export const TEXT_BUTTON = cn(
   FOCUS_RING,
 );
 
-// The way back from what a text button beside it would do: the same size, without its fill.
-export const QUIET_BUTTON = cn(
+const QUIET_BUTTON_SHAPE = cn(
   'inline-flex h-8 shrink-0 items-center rounded-lg px-3 text-sm font-medium text-muted-foreground transition-colors',
-  'hover:bg-tonal hover:text-foreground',
+  'hover:text-foreground',
   // It can be reached while it does nothing — `aria-disabled` — so the focus is never left on
   // a control that is gone from the order.
   'aria-disabled:opacity-40 aria-disabled:hover:bg-transparent aria-disabled:hover:text-muted-foreground',
+  FOCUS_RING,
+);
+
+// The way back from what a text button beside it would do: the same size, without its fill.
+export const QUIET_BUTTON = cn(QUIET_BUTTON_SHAPE, 'hover:bg-tonal');
+
+// The same on a `tonal` ground (the question of an update): under the pointer, the next tone.
+export const QUIET_BUTTON_ON_TONAL = cn(QUIET_BUTTON_SHAPE, 'hover:bg-border');
+
+// The one action a question leads to, in the accent, as the field's "Download".
+export const PRIMARY_BUTTON = cn(
+  'inline-flex h-8 shrink-0 items-center rounded-lg bg-accent px-3 text-sm font-semibold text-accent-foreground transition-opacity',
+  'aria-disabled:opacity-40',
   FOCUS_RING,
 );
 

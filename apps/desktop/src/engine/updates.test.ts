@@ -1,5 +1,7 @@
+import { UpdateRestart } from '@scia/contracts/bridge';
 import { describe, expect, it } from 'vitest';
 import {
+  INSTALL_AND_RESTART,
   INSTALL_AT_QUIT,
   isBeta,
   isNothingPublished,
@@ -607,6 +609,174 @@ describe('Updates', () => {
         level: 'info',
         event: 'update_installing',
         data: { version: '1.1.0', asked: true },
+      });
+    });
+  });
+});
+
+describe('INSTALL_AND_RESTART', () => {
+  it('starts the installer silent, and Scia again after it: the person asked for a restart', () => {
+    expect(INSTALL_AND_RESTART).toEqual({ silent: true, runAfter: true });
+  });
+});
+
+describe('Updates, offered to the person', () => {
+  async function downloaded(overrides: Partial<UpdatesOptions> = {}, version = '1.1.0') {
+    const run = updating(overrides);
+    run.answering(version);
+    run.updates.engineSays({ idle: true });
+    run.updates.start();
+    await settle();
+    run.fetches[0]!.finish();
+    await settle();
+    return run;
+  }
+
+  describe('what it offers', () => {
+    it('offers nothing before an update is downloaded', async () => {
+      const { updates } = updating();
+      updates.engineSays({ idle: true });
+      updates.start();
+      await settle();
+
+      expect(await updates.offered()).toBeUndefined();
+    });
+
+    it('offers the version downloaded and checked', async () => {
+      const { updates } = await downloaded();
+
+      expect(await updates.offered()).toBe('1.1.0');
+    });
+
+    it('offers a beta only while the switch is on, as the quit would install it', async () => {
+      let betas = true;
+      const { updates } = await downloaded({ betas: async () => betas }, '1.1.0-beta.2');
+      expect(await updates.offered()).toBe('1.1.0-beta.2');
+
+      betas = false;
+      expect(await updates.offered()).toBeUndefined();
+    });
+
+    it('offers no beta when the engine does not say the setting', async () => {
+      let asked = 0;
+      const { updates } = await downloaded(
+        {
+          betas: async () => {
+            asked += 1;
+            if (asked > 1) throw new Error('no answer in time');
+            return true;
+          },
+        },
+        '1.1.0-beta.2',
+      );
+
+      expect(await updates.offered()).toBeUndefined();
+    });
+
+    it('offers nothing while a newer version replaces the one downloaded', async () => {
+      const { updates, timers, answering } = await downloaded();
+      answering('1.2.0');
+      await elapse(timers);
+
+      expect(await updates.offered()).toBeUndefined();
+    });
+
+    it('says when what it may offer changes: downloaded, then replaced', async () => {
+      let told = 0;
+      const { updates, timers, answering } = await downloaded({
+        onOffer: () => {
+          told += 1;
+        },
+      });
+      expect(told).toBe(1);
+
+      answering('1.2.0');
+      await elapse(timers);
+      expect(told).toBe(2);
+      expect(await updates.offered()).toBeUndefined();
+    });
+
+    it('offers nothing once the quit has begun', async () => {
+      const { updates } = await downloaded();
+
+      await updates.atQuit({ askedByPerson: true });
+
+      expect(await updates.offered()).toBeUndefined();
+    });
+  });
+
+  describe('when the person asks to restart', () => {
+    it('restarts when nothing is running or waiting, and installs with Scia started after', async () => {
+      const restarts: boolean[] = [];
+      const { updates } = await downloaded({
+        install: (restart) => {
+          restarts.push(restart);
+          return true;
+        },
+      });
+
+      expect(await updates.restart(async () => 0)).toBe(UpdateRestart.Restarting);
+      expect(await updates.atQuit({ askedByPerson: true })).toBe(true);
+      updates.install();
+
+      expect(restarts).toEqual([true]);
+    });
+
+    it('refuses while a download runs or waits, as the engine says it when asked', async () => {
+      const { updates } = await downloaded();
+
+      expect(await updates.restart(async () => 2)).toBe(UpdateRestart.Busy);
+    });
+
+    it('refuses when the engine does not say what it is doing', async () => {
+      const { updates } = await downloaded();
+
+      expect(
+        await updates.restart(async () => {
+          throw new Error('no answer in time');
+        }),
+      ).toBe(UpdateRestart.Busy);
+    });
+
+    it('has nothing to restart for when nothing is offered', async () => {
+      let betas = true;
+      const { updates } = await downloaded({ betas: async () => betas }, '1.1.0-beta.2');
+      betas = false;
+
+      expect(await updates.restart(async () => 0)).toBe(UpdateRestart.Nothing);
+    });
+
+    it('installs at a later quit with no start after it, once a restart was refused', async () => {
+      const restarts: boolean[] = [];
+      const { updates } = await downloaded({
+        install: (restart) => {
+          restarts.push(restart);
+          return true;
+        },
+      });
+      await updates.restart(async () => 1);
+
+      expect(await updates.atQuit({ askedByPerson: true })).toBe(true);
+      updates.install();
+
+      expect(restarts).toEqual([false]);
+    });
+
+    it('says in the log that the person asked, and why it was refused', async () => {
+      const { updates, lines } = await downloaded();
+
+      await updates.restart(async () => 1);
+      await updates.restart(async () => 0);
+
+      expect(lines).toContainEqual({
+        level: 'info',
+        event: 'update_restart_refused',
+        data: { version: '1.1.0', reason: 'busy' },
+      });
+      expect(lines).toContainEqual({
+        level: 'info',
+        event: 'update_restart',
+        data: { version: '1.1.0' },
       });
     });
   });
