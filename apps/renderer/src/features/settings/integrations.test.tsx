@@ -1,5 +1,5 @@
 import { ApiErrorCode, type Integration, type IntegrationCode } from '@scia/contracts';
-import { act, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '@/lib/api.ts';
@@ -1134,6 +1134,74 @@ describe('IntegrationsSection', () => {
 
       await service.findByText('EFGH', { selector: 'p' });
       expect(service.getByText(/The code works for 5\smin\.$/)).toBeInTheDocument();
+    });
+    it('asks for one code, and opens no page, while Enter is held on "Connect with a code"', async () => {
+      withMain();
+      listing([notConnected]);
+      const start = vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      service.getByRole('button', { name: 'Connect with a code' }).focus();
+
+      await userEvent.keyboard('{Enter>8/}');
+
+      expect(await service.findByText('ABCD', { selector: 'p' })).toBeInTheDocument();
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(openCodePage).not.toHaveBeenCalled();
+      expect(cancel).not.toHaveBeenCalled();
+    });
+
+    it('cancels nothing while Enter is held on "Connect with a code" where Cancel takes the focus', async () => {
+      listing([notConnected]);
+      const start = vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      service.getByRole('button', { name: 'Connect with a code' }).focus();
+
+      await userEvent.keyboard('{Enter>8/}');
+
+      expect(await service.findByText('ABCD', { selector: 'p' })).toBeInTheDocument();
+      expect(service.getByRole('button', { name: 'Cancel' })).toHaveFocus();
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(cancel).not.toHaveBeenCalled();
+    });
+
+    it('asks for one new code, and opens no page, while Enter is held on "Get a new code"', async () => {
+      withMain();
+      listing([notConnected]);
+      const start = vi
+        .spyOn(api, 'startIntegrationCode')
+        .mockResolvedValueOnce({ ...given, status: 'failed', failure: 'CODE_EXPIRED' })
+        .mockResolvedValue({ ...given, code: 'EFGH' });
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await userEvent.click(service.getByRole('button', { name: 'Connect with a code' }));
+      (await service.findByRole('button', { name: 'Get a new code' })).focus();
+
+      await userEvent.keyboard('{Enter>8/}');
+
+      expect(await service.findByText('EFGH', { selector: 'p' })).toBeInTheDocument();
+      expect(start).toHaveBeenCalledTimes(2);
+      expect(openCodePage).not.toHaveBeenCalled();
+    });
+
+    it('opens the page once for a double click, also one whose first click asked for the code', async () => {
+      withMain();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await userEvent.click(service.getByRole('button', { name: 'Connect with a code' }));
+      const open = await service.findByRole('button', { name: 'Open AllDebrid' });
+
+      // The second click of a double click that began on the button the code replaced.
+      fireEvent.click(open, { detail: 2 });
+      expect(openCodePage).not.toHaveBeenCalled();
+      fireEvent.click(open, { detail: 1 });
+      fireEvent.click(open, { detail: 2 });
+      expect(openCodePage).toHaveBeenCalledTimes(1);
     });
   });
 });

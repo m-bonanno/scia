@@ -181,6 +181,7 @@ describe('App', () => {
       }),
       chooseDownloadFolder: vi.fn(async () => 'kept'),
       themeChanged: vi.fn(async () => undefined),
+      openCodePage: vi.fn(async () => undefined),
     };
     const add = vi.spyOn(api, 'addDownloads').mockResolvedValue([]);
     render(<App />);

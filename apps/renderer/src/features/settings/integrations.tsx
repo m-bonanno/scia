@@ -16,6 +16,7 @@ import {
 } from 'react';
 import { FOCUS_RING, QUIET_BUTTON, TEXT_BUTTON } from '@/components/button-styles.ts';
 import { ConfirmButton } from '@/components/confirm-button.tsx';
+import { swallowHeldEnter } from '@/components/held-enter.ts';
 import { api, ApiError } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { cn } from '@/lib/cn.ts';
@@ -312,7 +313,15 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
   );
 
   return (
-    <li ref={row} className="flex flex-col gap-3">
+    // Most presses here move the focus — to the code's buttons, to Cancel, back to the row:
+    // Enter held on one would press the next (#136).
+    <li
+      ref={row}
+      className="flex flex-col gap-3"
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
+      }}
+    >
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-medium">{name}</p>
@@ -551,7 +560,12 @@ function CodePanel({
               ref={actionRef}
               aria-describedby={whereId}
               className={TEXT_BUTTON}
-              onClick={onOpen}
+              // The second click of a double click opens no second page — also when its first
+              // click asked for the code, on the button this one replaced.
+              onClick={(event) => {
+                if (event.detail > 1) return;
+                onOpen();
+              }}
             >
               Open {name}
             </button>
