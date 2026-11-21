@@ -1,5 +1,5 @@
-import { ArrowDown, Settings } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { ArrowDown, Magnet, Settings } from 'lucide-react';
+import type { ReactNode, Ref } from 'react';
 import { IconButton } from '@/components/icon-button.tsx';
 import { formatSpeed, SEPARATOR } from '@/lib/format.ts';
 import { Logo } from './logo.tsx';
@@ -10,6 +10,13 @@ interface TitleBarProps {
   // Shown beside the speed while it is on: why the downloads go no faster.
   readonly speedLimitBytesPerSecond: number | null;
   readonly onOpenSettings: () => void;
+  // The panel of the account's magnets: offered only while AllDebrid is connected (#138).
+  readonly magnets?: {
+    readonly open: boolean;
+    readonly panelId: string;
+    readonly onToggle: () => void;
+  };
+  readonly magnetsToggleRef?: Ref<HTMLButtonElement> | undefined;
 }
 
 // The window's title bar, drawn by the page beside the window's own buttons. It moves the
@@ -18,6 +25,8 @@ export function TitleBar({
   bytesPerSecond,
   speedLimitBytesPerSecond,
   onOpenSettings,
+  magnets,
+  magnetsToggleRef,
 }: TitleBarProps): ReactNode {
   return (
     <header className="title-bar flex h-10 shrink-0 items-center gap-2 pr-1 pl-4">
@@ -35,6 +44,18 @@ export function TitleBar({
                 `${SEPARATOR}limit ${formatSpeed(speedLimitBytesPerSecond)}`}
             </span>
           </span>
+        )}
+        {magnets !== undefined && (
+          <IconButton
+            {...(magnetsToggleRef === undefined ? {} : { ref: magnetsToggleRef })}
+            label="AllDebrid magnets"
+            className="no-drag aria-expanded:bg-tonal"
+            aria-expanded={magnets.open}
+            aria-controls={magnets.open ? magnets.panelId : undefined}
+            onClick={magnets.onToggle}
+          >
+            <Magnet size={16} aria-hidden="true" />
+          </IconButton>
         )}
         <IconButton label="Settings" className="no-drag" onClick={onOpenSettings}>
           <Settings size={16} aria-hidden="true" />

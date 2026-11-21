@@ -68,7 +68,9 @@ export type DownloadRecord = z.infer<typeof recordSchema>;
 // ready; until then this is all Scia knows of it.
 export const magnetRecordSchema = z.object({
   id: z.string(),
-  magnet: z.string(),
+  // None for a magnet taken from the service's account (#138): the service has it, Scia never
+  // sends it.
+  magnet: z.string().nullable(),
   name: z.string(),
   // The service's id of it, once the service took it.
   serviceId: z.number().int().positive().nullable(),

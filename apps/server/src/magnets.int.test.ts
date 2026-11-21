@@ -2,10 +2,16 @@ import { randomBytes } from 'node:crypto';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { IntegrationId } from '@scia/contracts';
-import { DownloadStatus, MagnetFailure, MagnetStatus } from '@scia/core';
+import {
+  DownloadStatus,
+  MagnetFailure,
+  MagnetStage,
+  MagnetStatus,
+  UnlockFailure,
+} from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
-import { DownloadManager } from './download-manager.ts';
+import { DownloadManager, ManagerRefusal } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
 import { Integrations } from './integrations.ts';
 import { MemoryVault } from './key-vault.ts';
@@ -587,6 +593,141 @@ describe('a magnet that goes through a service', () => {
         alldebrid.requests.filter((request) => request.url === '/v4/magnet/upload').length === 2,
       3000,
     );
+  });
+
+  describe('of the account (#138)', () => {
+    const CONCERT = 'c'.repeat(40);
+    const uploads = (of: AllDebridServer) =>
+      of.requests.filter((request) => request.url === '/v4/magnet/upload');
+
+    it('lists every magnet of the account, also one added elsewhere, and says which Scia has', async () => {
+      const alldebrid = await serviceWith({
+        magnets: {
+          [HASH]: holiday({ fetchingPolls: 0 }),
+          [CONCERT]: holiday({ name: 'Concert', fetchingPolls: 1000 }),
+        },
+        onTheAccount: [HASH],
+      });
+      const scia = await open(await connected(alldebrid));
+      scia.addMagnets([`magnet:?xt=urn:btih:${CONCERT}`]);
+      await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Fetching);
+
+      const listed = await scia.accountMagnets();
+
+      const size = holiday().size;
+      expect(listed).toEqual([
+        {
+          id: expect.any(Number) as unknown,
+          name: 'Holiday films',
+          stage: MagnetStage.Ready,
+          totalBytes: size,
+          downloadedBytes: size,
+          bytesPerSecond: 0,
+          addedAt: '2023-11-14T22:13:20.000Z',
+          inScia: false,
+        },
+        {
+          id: expect.any(Number) as unknown,
+          name: 'Concert',
+          stage: MagnetStage.Fetching,
+          totalBytes: size,
+          downloadedBytes: Math.floor(size / 2),
+          bytesPerSecond: 1_048_576,
+          addedAt: '2023-11-14T22:13:20.000Z',
+          inScia: true,
+        },
+      ]);
+    });
+
+    it('downloads the files of a ready magnet of the account into its folder, and sends it nowhere', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: holiday({ fetchingPolls: 0 }) },
+        onTheAccount: [HASH],
+      });
+      const scia = await open(await connected(alldebrid));
+      const [listed] = await scia.accountMagnets();
+
+      const added = await scia.addAccountMagnet(listed?.id ?? 0);
+
+      expect(added).toMatchObject({ name: 'Holiday films', status: MagnetStatus.Fetching });
+      await until(() => allDone(scia));
+      const root = join(downloads(), 'Holiday films');
+      expect(Buffer.compare(await readFile(join(root, 'Day 1', 'beach.mkv')), film)).toBe(0);
+      expect(scia.snapshot().magnets).toEqual([]);
+      expect(uploads(alldebrid)).toEqual([]);
+    });
+
+    it('refuses a magnet the account does not have, and one the service is still fetching', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: holiday({ fetchingPolls: 1000 }) },
+        onTheAccount: [HASH],
+      });
+      const scia = await open(await connected(alldebrid));
+      const [fetching] = await scia.accountMagnets();
+
+      await expect(scia.addAccountMagnet(424_242)).rejects.toMatchObject({
+        refusal: ManagerRefusal.NotFound,
+      });
+      await expect(scia.addAccountMagnet(fetching?.id ?? 0)).rejects.toMatchObject({
+        refusal: ManagerRefusal.Conflict,
+      });
+      expect(scia.snapshot().magnets).toEqual([]);
+    });
+
+    it('takes a magnet of the account once, however often it is asked for at once', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: holiday({ fetchingPolls: 0 }) },
+        onTheAccount: [HASH],
+      });
+      const scia = await open(await connected(alldebrid));
+      const [listed] = await scia.accountMagnets();
+
+      const both = await Promise.allSettled([
+        scia.addAccountMagnet(listed?.id ?? 0),
+        scia.addAccountMagnet(listed?.id ?? 0),
+      ]);
+
+      expect(both.map((each) => each.status).sort()).toEqual(['fulfilled', 'rejected']);
+      await until(() => allDone(scia));
+      expect(scia.snapshot().downloads).toHaveLength(3);
+    });
+
+    it('asks again about a magnet of the account that failed, at Retry, and never sends it', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: holiday({ fetchingPolls: 0, leftOutOfFiles: true }) },
+        onTheAccount: [HASH],
+      });
+      const scia = await open(await connected(alldebrid));
+      const [listed] = await scia.accountMagnets();
+      const added = await scia.addAccountMagnet(listed?.id ?? 0);
+      await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+
+      scia.retryMagnet(added.id);
+
+      const filesAsked = () =>
+        alldebrid.requests.filter((request) => request.url === '/v4/magnet/files').length;
+      await until(() => filesAsked() === 2);
+      await until(() => scia.snapshot().magnets[0]?.status === MagnetStatus.Failed);
+      expect(uploads(alldebrid)).toEqual([]);
+    });
+
+    it('says a service is needed when none is connected', async () => {
+      const alldebrid = await serviceWith({ onTheAccount: [HASH] });
+      const integrations = await Integrations.open({
+        vault: new MemoryVault(),
+        alldebrid: new AllDebrid({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+        logger,
+      });
+      const scia = await open(integrations);
+
+      await expect(scia.accountMagnets()).rejects.toMatchObject({
+        failure: UnlockFailure.NeedsService,
+      });
+      await expect(scia.addAccountMagnet(1001)).rejects.toMatchObject({
+        failure: UnlockFailure.NeedsService,
+      });
+      expect(alldebrid.requests).toEqual([]);
+    });
   });
 
   it('logs how many magnets, never which', async () => {

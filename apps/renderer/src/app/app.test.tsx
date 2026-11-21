@@ -1,6 +1,6 @@
 import { ApiErrorCode, type Download, type Magnet } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app.tsx';
@@ -53,7 +53,12 @@ beforeEach(() => {
   live.magnets = [];
   vi.spyOn(api, 'settings').mockResolvedValue(settings);
   vi.spyOn(api, 'pairing').mockResolvedValue({ token: 'pairing-code', port: 47821 });
+  vi.spyOn(api, 'integrations').mockResolvedValue([alldebrid(false)]);
 });
+
+function alldebrid(connected: boolean) {
+  return { id: 'alldebrid' as const, connected, account: null, failure: null };
+}
 afterEach(() => {
   vi.restoreAllMocks();
   delete window.scia;
@@ -707,6 +712,128 @@ describe('App', () => {
         expect(notices).toHaveTextContent('This magnet is no longer in the list.');
       });
       expect(notices).toHaveTextContent('This magnet is already being sent again.');
+    });
+  });
+
+  describe('the magnets of the account (#138)', () => {
+    beforeEach(() => {
+      vi.spyOn(api, 'accountMagnets').mockResolvedValue([]);
+    });
+    const toggle = () => screen.queryByRole('button', { name: 'AllDebrid magnets' });
+
+    it('offers them only while AllDebrid is connected, in a panel closed at first', async () => {
+      vi.spyOn(api, 'integrations').mockResolvedValue([alldebrid(true)]);
+      render(<App />);
+
+      await vi.waitFor(() => {
+        expect(toggle()).toBeInTheDocument();
+      });
+      expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+      expect(api.accountMagnets).not.toHaveBeenCalled();
+    });
+
+    it('offers nothing while AllDebrid is not connected', async () => {
+      render(<App />);
+
+      await vi.waitFor(() => {
+        expect(api.integrations).toHaveBeenCalled();
+      });
+      expect(toggle()).not.toBeInTheDocument();
+    });
+
+    it('opens the panel at its button, and closes it there or at Escape, the focus back on the button', async () => {
+      vi.spyOn(api, 'integrations').mockResolvedValue([alldebrid(true)]);
+      render(<App />);
+      const button = await vi.waitFor(() => toggle() ?? Promise.reject(new Error('no button')));
+
+      await userEvent.click(button);
+      const panel = screen.getByRole('complementary', { name: 'AllDebrid magnets' });
+      expect(button).toHaveAttribute('aria-expanded', 'true');
+      expect(button).toHaveAttribute('aria-controls', panel.id);
+      await userEvent.keyboard('{Escape}');
+
+      expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+      expect(button).toHaveFocus();
+      await userEvent.click(button);
+      await userEvent.click(button);
+      expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    });
+
+    it('learns again whether AllDebrid is connected when Settings closes, and folds the panel away when it is not', async () => {
+      const integrations = vi.spyOn(api, 'integrations').mockResolvedValue([alldebrid(false)]);
+      render(<App />);
+      await vi.waitFor(() => {
+        expect(integrations).toHaveBeenCalled();
+      });
+
+      integrations.mockResolvedValue([alldebrid(true)]);
+      await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      await userEvent.click(
+        within(await screen.findByRole('dialog', { name: 'Settings' })).getByRole('button', {
+          name: 'Close',
+        }),
+      );
+      const button = await vi.waitFor(() => toggle() ?? Promise.reject(new Error('no button')));
+      await userEvent.click(button);
+      expect(screen.getByRole('complementary')).toBeInTheDocument();
+
+      integrations.mockResolvedValue([alldebrid(false)]);
+      await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      await userEvent.click(
+        within(await screen.findByRole('dialog', { name: 'Settings' })).getByRole('button', {
+          name: 'Close',
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(toggle()).not.toBeInTheDocument();
+      });
+      expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+
+      // Connected again: the panel is closed, as at first.
+      integrations.mockResolvedValue([alldebrid(true)]);
+      await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      await userEvent.click(
+        within(await screen.findByRole('dialog', { name: 'Settings' })).getByRole('button', {
+          name: 'Close',
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+      });
+      expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    });
+
+    it('keeps what the last ask learned, not an older answer that came after it', async () => {
+      let late: (integrations: ReturnType<typeof alldebrid>[]) => void = () => undefined;
+      const integrations = vi.spyOn(api, 'integrations').mockReturnValueOnce(
+        new Promise((resolve) => {
+          late = resolve;
+        }),
+      );
+      render(<App />);
+      await vi.waitFor(() => {
+        expect(integrations).toHaveBeenCalledOnce();
+      });
+
+      // Disconnected in Settings while the first ask was on its way.
+      integrations.mockResolvedValue([alldebrid(false)]);
+      await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      await userEvent.click(
+        within(await screen.findByRole('dialog', { name: 'Settings' })).getByRole('button', {
+          name: 'Close',
+        }),
+      );
+      // Asked by Settings as it opened, and by the page once it closed.
+      await vi.waitFor(() => {
+        expect(integrations.mock.calls.length).toBeGreaterThanOrEqual(3);
+      });
+      await act(async () => {
+        late([alldebrid(true)]);
+        await Promise.resolve();
+      });
+
+      expect(toggle()).not.toBeInTheDocument();
     });
   });
 });
