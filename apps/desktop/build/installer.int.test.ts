@@ -126,7 +126,7 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
       });
     };
     await compile('deciding.nsi', deciding(INCLUDE));
-    await compile('installing.nsi', installing(INCLUDE, '1.0.0-beta.17', key));
+    await compile('installing.nsi', installing(INCLUDE, '1.0.0', key));
   }, 120_000);
 
   afterAll(async () => {
@@ -263,7 +263,8 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
     });
   });
 
-  // The installer is the one of 1.0.0-beta.17; the version installed is written in the spec's key.
+  // The installer is the one of 1.0.0: a stable, whose first install reads no prerelease, and so
+  // nothing else in the include touches the error flag the read of a missing value set.
   describe('stops before it installs, as electron-builder runs it', () => {
     beforeEach(async () => {
       await rm(join(folder.path, 'installed.txt'), { force: true });
@@ -275,14 +276,14 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
       run('reg', ['add', `HKCU\\${key}`, '/v', 'DisplayVersion', '/d', version, '/f']);
 
     it('ends a silent install over a newer version with 1638, having installed nothing', async () => {
-      await setInstalled('1.0.0-beta.20');
+      await setInstalled('1.0.1');
 
       expect(await install()).toBe(REFUSED);
       expect(await exists(join(folder.path, 'installed.txt'))).toBe(false);
     });
 
     it('installs over the same version', async () => {
-      await setInstalled('1.0.0-beta.17');
+      await setInstalled('1.0.0');
 
       expect(await install()).toBe(0);
       expect(await readFile(join(folder.path, 'installed.txt'), 'utf8')).toBe('stack');
