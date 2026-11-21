@@ -10,7 +10,7 @@ import { HttpSource } from './http-source.ts';
 import { Integrations } from './integrations.ts';
 import { MemoryVault } from './key-vault.ts';
 import type { Logger } from './logger.ts';
-import { JsonStateStore } from './state-store.ts';
+import { JsonStateStore, type PersistedState, type StateStore } from './state-store.ts';
 import {
   type AllDebridServer,
   type AllDebridServerOptions,
@@ -116,10 +116,13 @@ describe('a magnet that goes through a service', () => {
 
   const statePath = () => join(folder.path, 'data', 'state.json');
   const downloads = () => join(folder.path, 'downloads');
-  async function open(integrations: Integrations | undefined): Promise<DownloadManager> {
+  async function open(
+    integrations: Integrations | undefined,
+    store: StateStore = new JsonStateStore(statePath()),
+  ): Promise<DownloadManager> {
     manager = await DownloadManager.open({
       source,
-      store: new JsonStateStore(statePath()),
+      store,
       defaultDirectory: downloads(),
       logger,
       retryDelayMs: () => 1,
@@ -485,22 +488,26 @@ describe('a magnet that goes through a service', () => {
     expect(scia.snapshot().magnets[0]?.totalBytes).toBeNull();
   });
 
-  it("keeps the service's id on disk once it is given, and says no size, before the service says where the magnet is", async () => {
+  it("keeps the service's id once it is given, and says no size, before the service says where the magnet is", async () => {
     const alldebrid = await serviceWith({ magnets: { [HASH]: holiday({ size: 0 }) } });
     alldebrid.misbehave({ silent: true, route: 'POST /v4.1/magnet/status' });
-    const scia = await open(await connected(alldebrid));
+    // What the engine asks its store to keep, read where it is asked: reading state.json while
+    // the store renames a new one onto it makes the rename fail on Windows.
+    const saved: PersistedState[] = [];
+    const store = new JsonStateStore(statePath());
+    const scia = await open(await connected(alldebrid), {
+      load: () => store.load(),
+      save: (state) => {
+        saved.push(structuredClone(state));
+        return store.save(state);
+      },
+    });
 
     scia.addMagnets([MAGNET]);
 
     // The engine may stop at any moment while the service is asked: what it has kept says the
     // magnet was sent, and a restart waits for it instead of sending it again.
-    const kept = async () => {
-      const state = JSON.parse(await readFile(statePath(), 'utf8').catch(() => '{}')) as {
-        magnets?: { serviceId: number | null }[];
-      };
-      return typeof state.magnets?.[0]?.serviceId === 'number';
-    };
-    await until(kept, 5000);
+    await until(() => typeof saved.at(-1)?.magnets[0]?.serviceId === 'number', 5000);
     expect(scia.snapshot().magnets[0]).toMatchObject({
       status: MagnetStatus.Fetching,
       totalBytes: null,
