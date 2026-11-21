@@ -107,8 +107,8 @@ export class MainWindow {
   tell(channel: string): void {
     if (this.#window.isDestroyed()) return;
     const contents = this.#window.webContents;
-    const url = contents.getURL();
-    if (url === '' || new URL(url).origin !== appOrigin(this.#port)) return;
+    if (!URL.canParse(contents.getURL())) return;
+    if (new URL(contents.getURL()).origin !== appOrigin(this.#port)) return;
     contents.send(channel);
   }
 

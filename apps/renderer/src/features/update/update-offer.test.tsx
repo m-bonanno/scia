@@ -1,5 +1,5 @@
 import { UpdateRestart } from '@scia/contracts/bridge';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { UpdateOffer } from './update-offer.tsx';
@@ -11,9 +11,19 @@ function offer(overrides: Partial<Parameters<typeof UpdateOffer>[0]> = {}) {
     downloading: false,
     onRestart: vi.fn(async (): Promise<unknown> => UpdateRestart.Restarting),
     onGone: vi.fn(),
+    home: () => screen.queryByRole('textbox', { name: 'Links to download' }),
     ...overrides,
   };
-  return { props, ...render(<UpdateOffer {...props} />) };
+  return {
+    props,
+    ...render(
+      <>
+        <input aria-label="Links to download" />
+        <UpdateOffer {...props} />
+        <p>Something that takes no focus</p>
+      </>,
+    ),
+  };
 }
 
 describe('UpdateOffer', () => {
@@ -42,7 +52,7 @@ describe('UpdateOffer', () => {
       'aria-expanded',
       'true',
     );
-    expect(screen.getByRole('button', { name: 'Restart now' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Later' })).toHaveFocus();
     expect(props.onRestart).not.toHaveBeenCalled();
 
     await userEvent.click(screen.getByRole('button', { name: 'Restart now' }));
@@ -81,6 +91,7 @@ describe('UpdateOffer', () => {
           downloading={false}
           onRestart={vi.fn(async () => UpdateRestart.Restarting)}
           onGone={vi.fn()}
+          home={() => null}
         />
         <button type="button">Elsewhere</button>
       </>,
@@ -109,9 +120,15 @@ describe('UpdateOffer', () => {
   it('becomes the note, with the focus on Close, when a download starts while it asks', async () => {
     const { props, rerender } = offer();
     await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
-    expect(screen.getByRole('button', { name: 'Restart now' })).toHaveFocus();
+    expect(screen.getByRole('button', { name: 'Later' })).toHaveFocus();
 
-    rerender(<UpdateOffer {...props} downloading />);
+    rerender(
+      <>
+        <input aria-label="Links to download" />
+        <UpdateOffer {...props} downloading />
+        <p>Something that takes no focus</p>
+      </>,
+    );
 
     expect(screen.getByRole('dialog')).toHaveTextContent('Scia is downloading.');
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
@@ -171,5 +188,175 @@ describe('UpdateOffer', () => {
     await userEvent.dblClick(screen.getByRole('button', { name: 'Restart now' }));
 
     expect(props.onRestart).toHaveBeenCalledOnce();
+  });
+
+  describe('a key held, and a restart on its way', () => {
+    it.each(['Update to 1.0.0-beta.18', 'Later'])(
+      'does not restart for Enter held on %s',
+      async (name) => {
+        const { props } = offer();
+        if (name === 'Later') {
+          await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+        }
+        screen.getByRole('button', { name }).focus();
+
+        await userEvent.keyboard('{Enter>6/}');
+
+        expect(props.onRestart).not.toHaveBeenCalled();
+      },
+    );
+
+    it('does not open the question again for Enter held on Close', async () => {
+      offer({ downloading: true });
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+      screen.getByRole('button', { name: 'Close' }).focus();
+
+      await userEvent.keyboard('{Enter>6/}');
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    async function restarting() {
+      const run = offer({ onRestart: vi.fn(() => new Promise<unknown>(() => undefined)) });
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Restart now' }));
+      return run;
+    }
+
+    it('stays while it restarts: Escape', async () => {
+      await restarting();
+      await userEvent.keyboard('{Escape}');
+      expect(screen.getByRole('dialog')).toHaveTextContent('Restarting…');
+    });
+
+    it('stays while it restarts: a press elsewhere', async () => {
+      await restarting();
+      await userEvent.click(screen.getByText('Something that takes no focus'));
+      expect(screen.getByRole('dialog')).toHaveTextContent('Restarting…');
+    });
+
+    it('stays while it restarts: the focus going elsewhere', async () => {
+      await restarting();
+      act(() => {
+        screen.getByRole('textbox', { name: 'Links to download' }).focus();
+      });
+      expect(screen.getByRole('dialog')).toHaveTextContent('Restarting…');
+    });
+
+    it('stays while it restarts: a press of the button it hangs from', async () => {
+      await restarting();
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+      expect(screen.getByRole('dialog')).toHaveTextContent('Restarting…');
+    });
+  });
+
+  describe('going away', () => {
+    const page = (props: Parameters<typeof UpdateOffer>[0]) => (
+      <>
+        <input aria-label="Links to download" />
+        <UpdateOffer {...props} />
+        <p>Something that takes no focus</p>
+      </>
+    );
+
+    it('goes for a press on something that takes no focus', async () => {
+      offer();
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+
+      await userEvent.click(screen.getByText('Something that takes no focus'));
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('goes when the focus leaves for elsewhere', async () => {
+      offer();
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+
+      act(() => {
+        screen.getByRole('textbox', { name: 'Links to download' }).focus();
+      });
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('closes with Escape from the button it hangs from', async () => {
+      offer();
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+      screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }).focus();
+
+      await userEvent.keyboard('{Escape}');
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('gives the focus back to the button with Close', async () => {
+      offer({ downloading: true });
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Close' }));
+
+      expect(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' })).toHaveFocus();
+    });
+
+    it('stays the note when the download ends: Close does not become Restart now', async () => {
+      const { props, rerender } = offer({ downloading: true });
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+
+      rerender(page({ ...props, downloading: false }));
+
+      expect(screen.getByRole('dialog')).toHaveTextContent('Scia is downloading.');
+      expect(screen.queryByRole('button', { name: 'Restart now' })).not.toBeInTheDocument();
+    });
+
+    it('hands the focus to the field when main has nothing to restart for and the offer goes', async () => {
+      const { props, rerender } = offer({ onRestart: vi.fn(async () => UpdateRestart.Nothing) });
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Restart now' }));
+      expect(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' })).toHaveFocus();
+
+      rerender(page({ ...props, offered: null }));
+
+      expect(screen.getByRole('textbox', { name: 'Links to download' })).toHaveFocus();
+    });
+
+    it('leaves a focus that went elsewhere where it is when the offer goes', async () => {
+      const props = {
+        version: '1.0.0-beta.17',
+        offered: '1.0.0-beta.18',
+        downloading: false,
+        onRestart: vi.fn(async () => UpdateRestart.Restarting),
+        onGone: vi.fn(),
+        home: () => screen.queryByRole('textbox', { name: 'Links to download' }),
+      };
+      const page = (offered: string | null) => (
+        <>
+          <input aria-label="Links to download" />
+          <UpdateOffer {...props} offered={offered} />
+          <button type="button">Elsewhere</button>
+        </>
+      );
+      const { rerender } = render(page('1.0.0-beta.18'));
+      act(() => {
+        screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }).focus();
+      });
+      act(() => {
+        screen.getByRole('button', { name: 'Elsewhere' }).focus();
+      });
+
+      rerender(page(null));
+
+      expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus();
+    });
+
+    it('closes with the offer, hands the focus on, and does not come back open with the next', async () => {
+      const { props, rerender } = offer();
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+
+      rerender(page({ ...props, offered: null }));
+      expect(screen.getByRole('textbox', { name: 'Links to download' })).toHaveFocus();
+
+      rerender(page({ ...props, offered: '1.0.0-beta.19' }));
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
   });
 });

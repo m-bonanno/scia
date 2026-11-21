@@ -382,7 +382,8 @@ async function boot(): Promise<void> {
       .catch(() => false)
       .then(async (install) => {
         await supervisor.stop();
-        if (install) updates?.install();
+        // A restart the person was granted starts Scia again, by the installer or by itself.
+        if (updates?.finish(install) === true) app.relaunch();
       })
       .finally(() => {
         log.info('quit');

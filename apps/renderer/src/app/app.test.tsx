@@ -816,6 +816,16 @@ describe('App, its version and an update', () => {
     expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
   });
 
+  it('stops listening to main when the page goes', () => {
+    const stop = vi.fn();
+    aShell({ onUpdateChanged: vi.fn(() => stop) });
+    const { unmount } = render(<App />);
+
+    unmount();
+
+    expect(stop).toHaveBeenCalledOnce();
+  });
+
   it('asks main to restart when the person says so', async () => {
     const { shell } = aShell({ updateOffered: vi.fn(async () => '1.0.0-beta.18') });
     render(<App />);
@@ -837,14 +847,21 @@ describe('App, its version and an update', () => {
     expect(shell.restartToUpdate).not.toHaveBeenCalled();
   });
 
-  it('offers nothing from an answer of main that is not a version', async () => {
-    const offered = vi.fn(async (): Promise<unknown> => ({ version: '9' }));
-    aShell({ updateOffered: offered });
-    render(<App />);
-    await vi.waitFor(() => {
-      expect(offered).toHaveBeenCalled();
-    });
+  it.each([{ version: '9' }, '', 18])(
+    'offers nothing for an answer of main that is not a version: %j',
+    async (notAVersion) => {
+      const offered = vi.fn(async (): Promise<unknown> => '1.0.0-beta.18');
+      const { change } = aShell({ updateOffered: offered });
+      render(<App />);
+      expect(await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' })).toBeVisible();
 
-    expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
-  });
+      offered.mockResolvedValue(notAVersion);
+      change();
+
+      await vi.waitFor(() => {
+        expect(screen.queryByRole('button', { name: /^Update to/ })).not.toBeInTheDocument();
+      });
+      expect(within(screen.getByRole('banner')).getByText('1.0.0-beta.17')).toBeVisible();
+    },
+  );
 });

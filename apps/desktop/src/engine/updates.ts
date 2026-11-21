@@ -93,8 +93,10 @@ export class Updates {
   // What the last check that answered offered: nothing is downloaded that it no longer offers —
   // a beta, once the switch is off.
   #offered: string | undefined;
-  // The person asked to restart to install: the installer starts Scia again after it.
-  #restart = false;
+  // The version the person was granted a restart for: the quit installs it — the betas switch
+  // was asked when it was offered — and the installer starts Scia again after it. Nothing
+  // downloaded later replaces it.
+  #restartFor: string | undefined;
 
   constructor(options: UpdatesOptions) {
     this.#options = options;
@@ -125,7 +127,7 @@ export class Updates {
       this.#options.log.info('update_not_installed', { version: ready, reason: 'system_quit' });
       return false;
     }
-    if (!isBeta(ready)) return true;
+    if (!isBeta(ready) || ready === this.#restartFor) return true;
     try {
       const betas = await this.#options.betas();
       if (!betas) {
@@ -142,13 +144,23 @@ export class Updates {
     }
   }
 
-  install(): void {
-    const asked = this.#options.install(this.#restart);
+  // The quit's last step, once the engine has stopped: starts the installer when the quit installs,
+  // and answers whether Scia still has to be started again — a restart was granted and no
+  // installer was asked to run it.
+  finish(install: boolean): boolean {
+    const restart = this.#restartFor !== undefined;
+    if (!install) {
+      if (restart)
+        this.#options.log.warn('update_restart_without_install', { version: this.#ready });
+      return restart;
+    }
+    const asked = this.#options.install(restart);
     this.#options.log.info('update_installing', {
       version: this.#ready,
       asked,
-      ...(this.#restart ? { restart: true } : {}),
+      ...(restart ? { restart: true } : {}),
     });
+    return restart && !asked;
   }
 
   // The version the next quit the person asks for would install: downloaded and checked, and a
@@ -186,11 +198,21 @@ export class Updates {
       this.#options.log.info('update_restart_refused', { version, reason: 'busy' });
       return UpdateRestart.Busy;
     }
-    // A quit that began while the engine was asked is the quit; it installs at no restart.
-    if (this.#isStopped()) return UpdateRestart.Nothing;
-    this.#restart = true;
+    // A quit that began while the engine was asked is the quit; it installs at no restart. And
+    // what was offered may have been replaced meanwhile by a newer version on its way.
+    if (this.#isStopped() || this.#ready !== version) return UpdateRestart.Nothing;
+    this.#restartFor = version;
     this.#options.log.info('update_restart', { version });
     return UpdateRestart.Restarting;
+  }
+
+  // What may be offered changed. Whoever listens cannot stop the updater by failing.
+  #told(): void {
+    try {
+      this.#options.onOffer?.();
+    } catch (error) {
+      this.#options.log.warn('update_offer_not_told', { error: firstLine(error) });
+    }
   }
 
   #isStopped(): boolean {
@@ -235,14 +257,15 @@ export class Updates {
   }
 
   #fetchIfIdle(): void {
-    if (this.#isStopped() || !this.#idle || this.#fetching !== undefined) return;
+    if (this.#isStopped() || this.#restartFor !== undefined) return;
+    if (!this.#idle || this.#fetching !== undefined) return;
     const version = this.#found;
     if (version === undefined) return;
     this.#found = undefined;
     // Whatever was downloaded before is replaced by this one, and is no longer to install.
     if (this.#ready !== undefined) {
       this.#ready = undefined;
-      this.#options.onOffer?.();
+      this.#told();
     }
     const controller = new AbortController();
     this.#fetching = { version, controller };
@@ -256,7 +279,7 @@ export class Updates {
         }
         this.#ready = version;
         this.#options.log.info('update_ready', { version });
-        this.#options.onOffer?.();
+        this.#told();
       },
       (error: unknown) => {
         this.#fetching = undefined;

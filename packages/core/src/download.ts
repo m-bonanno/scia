@@ -43,7 +43,8 @@ export function canResume(status: DownloadStatus): boolean {
   return status === DownloadStatus.Paused || status === DownloadStatus.Failed;
 }
 
-// Running, or waiting in the queue for its turn: what an update never restarts over (#133).
+// Running, or waiting in the queue for its turn: what keeps Scia from quitting at a close and an
+// update from restarting over it (#133). Main counts the same (apps/desktop/src/engine/download-activity.ts).
 export function isUnderWay(status: DownloadStatus): boolean {
   return status === DownloadStatus.Downloading || status === DownloadStatus.Queued;
 }

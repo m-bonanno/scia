@@ -602,7 +602,7 @@ describe('Updates', () => {
       const { updates, lines, installs } = await ready();
       await updates.atQuit({ askedByPerson: true });
 
-      updates.install();
+      updates.finish(true);
 
       expect(installs()).toBe(1);
       expect(lines).toContainEqual({
@@ -696,6 +696,21 @@ describe('Updates, offered to the person', () => {
       expect(await updates.offered()).toBeUndefined();
     });
 
+    it('keeps what it downloaded when whoever listens fails', async () => {
+      const { updates, lines } = await downloaded({
+        onOffer: () => {
+          throw new Error('the window is gone');
+        },
+      });
+
+      expect(await updates.offered()).toBe('1.1.0');
+      expect(lines).toContainEqual({
+        level: 'warn',
+        event: 'update_offer_not_told',
+        data: { error: 'Error: the window is gone' },
+      });
+    });
+
     it('offers nothing once the quit has begun', async () => {
       const { updates } = await downloaded();
 
@@ -717,7 +732,7 @@ describe('Updates, offered to the person', () => {
 
       expect(await updates.restart(async () => 0)).toBe(UpdateRestart.Restarting);
       expect(await updates.atQuit({ askedByPerson: true })).toBe(true);
-      updates.install();
+      updates.finish(true);
 
       expect(restarts).toEqual([true]);
     });
@@ -757,7 +772,7 @@ describe('Updates, offered to the person', () => {
       await updates.restart(async () => 1);
 
       expect(await updates.atQuit({ askedByPerson: true })).toBe(true);
-      updates.install();
+      updates.finish(true);
 
       expect(restarts).toEqual([false]);
     });
@@ -775,7 +790,7 @@ describe('Updates, offered to the person', () => {
         await updates.atQuit({ askedByPerson: true });
         return 0;
       });
-      updates.install();
+      updates.finish(true);
 
       expect(answer).toBe(UpdateRestart.Nothing);
       expect(restarts).toEqual([false]);
@@ -798,5 +813,120 @@ describe('Updates, offered to the person', () => {
         data: { version: '1.1.0' },
       });
     });
+  });
+});
+
+describe('Updates, a restart granted', () => {
+  async function downloaded(overrides: Partial<UpdatesOptions> = {}, version = '1.1.0') {
+    const run = updating(overrides);
+    run.answering(version);
+    run.updates.engineSays({ idle: true });
+    run.updates.start();
+    await settle();
+    run.fetches[0]!.finish();
+    await settle();
+    return run;
+  }
+
+  it('is not granted when a check replaced what was offered while the engine was asked', async () => {
+    const restarts: boolean[] = [];
+    const { updates, timers, answering } = await downloaded({
+      install: (restart) => {
+        restarts.push(restart);
+        return true;
+      },
+    });
+    answering('1.2.0');
+
+    const answer = await updates.restart(async () => {
+      await elapse(timers);
+      return 0;
+    });
+
+    expect(answer).toBe(UpdateRestart.Nothing);
+    expect(await updates.atQuit({ askedByPerson: true })).toBe(false);
+  });
+
+  it('installs what it was granted for, with Scia started after, though a check finds newer since', async () => {
+    const restarts: boolean[] = [];
+    const { updates, timers, fetches, answering } = await downloaded({
+      install: (restart) => {
+        restarts.push(restart);
+        return true;
+      },
+    });
+    expect(await updates.restart(async () => 0)).toBe(UpdateRestart.Restarting);
+
+    answering('1.2.0');
+    await elapse(timers);
+
+    expect(fetches).toHaveLength(1);
+    expect(await updates.atQuit({ askedByPerson: true })).toBe(true);
+    updates.finish(true);
+    expect(restarts).toEqual([true]);
+  });
+
+  it('installs a beta it was granted for without asking the switch again at the quit', async () => {
+    let asked = 0;
+    const { updates } = await downloaded(
+      {
+        betas: async () => {
+          asked += 1;
+          if (asked > 2) throw new Error('no answer in time');
+          return true;
+        },
+      },
+      '1.1.0-beta.2',
+    );
+
+    expect(await updates.restart(async () => 0)).toBe(UpdateRestart.Restarting);
+
+    expect(await updates.atQuit({ askedByPerson: true })).toBe(true);
+  });
+});
+
+describe('Updates, the end of the quit', () => {
+  async function granted(overrides: Partial<UpdatesOptions> = {}) {
+    const run = updating(overrides);
+    run.answering('1.1.0');
+    run.updates.engineSays({ idle: true });
+    run.updates.start();
+    await settle();
+    run.fetches[0]!.finish();
+    await settle();
+    return run;
+  }
+
+  it('owes no start of Scia when the installer was asked to start it', async () => {
+    const { updates } = await granted();
+    await updates.restart(async () => 0);
+
+    expect(updates.finish(true)).toBe(false);
+  });
+
+  it('owes a start of Scia when a restart was granted and the installer could not be asked', async () => {
+    const { updates } = await granted({ install: () => false });
+    await updates.restart(async () => 0);
+
+    expect(updates.finish(true)).toBe(true);
+  });
+
+  it('owes a start of Scia when a restart was granted and the quit installs nothing', async () => {
+    const { updates, lines } = await granted();
+    await updates.restart(async () => 0);
+
+    expect(updates.finish(false)).toBe(true);
+    expect(lines).toContainEqual({
+      level: 'warn',
+      event: 'update_restart_without_install',
+      data: { version: '1.1.0' },
+    });
+  });
+
+  it('owes nothing at a quit with no restart asked', async () => {
+    const { updates } = await granted();
+
+    expect(updates.finish(true)).toBe(false);
+    expect(updates.finish(false)).toBe(false);
   });
 });

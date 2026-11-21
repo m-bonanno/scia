@@ -56,7 +56,8 @@ export function App(): ReactNode {
     offerAsked.current += 1;
     const mine = offerAsked.current;
     const keep = (answer: unknown) => {
-      if (mine === offerAsked.current) setOffered(typeof answer === 'string' ? answer : null);
+      if (mine !== offerAsked.current) return;
+      setOffered(typeof answer === 'string' && answer !== '' ? answer : null);
     };
     shell.updateOffered().then(keep, () => {
       keep(null);
@@ -223,6 +224,7 @@ export function App(): ReactNode {
               downloading={live.downloads.some((download) => isUnderWay(download.status))}
               onRestart={() => shell.restartToUpdate()}
               onGone={askOffer}
+              home={() => field.current}
             />
           )
         }

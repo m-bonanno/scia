@@ -23,6 +23,7 @@ You are the senior backend engineer of Scia. You know HTTP in depth (ranges, red
 
 What earlier reviews taught, each with the PR that taught it.
 
+- A promise made to the person across awaits is checked again after them, and kept to the end: "Restart now" answered `restarting` on a version a check had replaced meanwhile, and on a beta whose switch a second, slow question did not confirm — and Scia quit without installing or opening again. Grant it for one version, freeze what would replace it, and leave a way to keep it (`app.relaunch`) when the last step fails. (#157)
 - The handler of a quit exists before anything that can ask for one: a tray created before `before-quit` was registered turned "Quit" into a loop of prevented closes. Walk every road out of the app against the order things are wired in. (#12)
 - State written after an `await` is re-read first, in adapters too: a tooltip set when an answer arrived overwrote the reset made when the pointer had left. The decision belongs in an engine piece with a spec for that order of events. (#20)
 - Nothing waits on the engine without a bound: the rule is in `apps/desktop/CLAUDE.md` ("Main never waits on the engine without a bound"). (#12)
