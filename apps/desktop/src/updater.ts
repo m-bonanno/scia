@@ -2,6 +2,7 @@ import { CancellationToken } from 'builder-util-runtime';
 import { NsisUpdater } from 'electron-updater';
 import {
   firstLine,
+  INSTALL_AND_RESTART,
   INSTALL_AT_QUIT,
   isNothingPublished,
   type UpdatesOptions,
@@ -78,6 +79,9 @@ export function createUpdater(
       });
       await updater.downloadUpdate(token);
     },
-    install: () => updater.install(INSTALL_AT_QUIT.silent, INSTALL_AT_QUIT.runAfter),
+    install: (restart) => {
+      const how = restart ? INSTALL_AND_RESTART : INSTALL_AT_QUIT;
+      return updater.install(how.silent, how.runAfter);
+    },
   };
 }

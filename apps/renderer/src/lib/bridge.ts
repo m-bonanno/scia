@@ -13,6 +13,13 @@ export interface SciaBridge {
   // The window's own colours are main's: the page says that the theme changed, and main asks
   // the engine which it is.
   themeChanged(): Promise<unknown>;
+  // The version of an update the next quit would install, or null: main decides, and says when
+  // that changed — with nothing more, so the page asks again.
+  updateOffered(): Promise<unknown>;
+  onUpdateChanged(listener: () => void): () => void;
+  // Main restarts to install only while nothing is downloading: what it did is an
+  // `UpdateRestart` (@scia/contracts/bridge).
+  restartToUpdate(): Promise<unknown>;
   // Main asks the engine for the page where the code it gave is confirmed, and opens it in the
   // person's browser: the page names the service, never an address.
   openCodePage(id: string): Promise<unknown>;

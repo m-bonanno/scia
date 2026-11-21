@@ -218,3 +218,19 @@ export function errorMessage(error: unknown): string {
   }
   return ENGINE_UNREACHABLE;
 }
+
+// The question an update downloaded asks, and what it says when Scia does not restart for it.
+// Scia installs an update at a quit the person asks for (docs/adr/0007-automatic-updates.md), and
+// restarts for it only while nothing downloads (#133).
+export function updateQuestion(version: string): string {
+  return `Restart now to install ${version}?`;
+}
+
+export function updateWhileDownloading(version: string): string {
+  return `Scia is downloading. ${version} installs when you quit Scia.`;
+}
+
+// Main did not restart: a download began meanwhile, or the engine did not say what it was doing.
+export function updateNotRestarted(version: string): string {
+  return `Scia could not restart now. ${version} installs when you quit Scia.`;
+}
