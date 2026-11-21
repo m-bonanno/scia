@@ -2,13 +2,20 @@ import { MAX_URLS_PER_REQUEST } from '@scia/contracts';
 import { describe, expect, it } from 'vitest';
 import { CLIPBOARD_READ_MS, ClipboardWatch } from './clipboard-watch.ts';
 
-function aWatch(options: { offer?: (links: readonly string[]) => Promise<number> } = {}) {
+function aWatch(
+  options: {
+    offer?: (links: readonly string[]) => Promise<number>;
+    offerMagnets?: (magnets: readonly string[]) => Promise<number>;
+  } = {},
+) {
   // Something is on the clipboard before the reading starts, as it nearly always is.
   let text = 'copied before Scia read it';
   let reads = 0;
   let failing = false;
   const offered: string[][] = [];
   const said: number[] = [];
+  const magnets: string[][] = [];
+  const sent: number[] = [];
   const warnings: string[] = [];
   const timers: { ms: number; run: () => void; cancelled: boolean }[] = [];
   const watch = new ClipboardWatch({
@@ -27,6 +34,16 @@ function aWatch(options: { offer?: (links: readonly string[]) => Promise<number>
     added: (count) => {
       said.push(count);
     },
+    // By default a service is connected, and takes every magnet.
+    offerMagnets:
+      options.offerMagnets ??
+      (async (copied) => {
+        magnets.push([...copied]);
+        return copied.length;
+      }),
+    sent: (count) => {
+      sent.push(count);
+    },
     every: (ms, run) => {
       const timer = { ms, run, cancelled: false };
       timers.push(timer);
@@ -44,6 +61,8 @@ function aWatch(options: { offer?: (links: readonly string[]) => Promise<number>
     watch,
     offered,
     said,
+    magnets,
+    sent,
     warnings,
     timers: live,
     copy: (copied: string) => {
@@ -113,6 +132,54 @@ describe('ClipboardWatch', () => {
     expect(clipboard.offered).toEqual([['https://example.com/a.zip', 'https://example.org/c.mkv']]);
   });
 
+  it('offers the magnets of a copied text apart from its links, and says how many were sent (#139)', async () => {
+    const clipboard = aWatch();
+    const magnet =
+      'magnet:?xt=urn:btih:' + 'a'.repeat(40) + '&dn=films&tr=http://tracker.example/announce';
+    await clipboard.on();
+
+    clipboard.copy(`${magnet} and https://example.com/a.zip`);
+    await clipboard.beat();
+    clipboard.copy(magnet);
+    await clipboard.beat();
+    // A text with no magnet asks the engine nothing about magnets.
+    clipboard.copy('https://example.com/b.zip');
+    await clipboard.beat();
+
+    // The tracker inside the magnet is no link of its own.
+    expect(clipboard.offered).toEqual([
+      ['https://example.com/a.zip'],
+      ['https://example.com/b.zip'],
+    ]);
+    expect(clipboard.magnets).toEqual([[magnet], [magnet]]);
+    expect(clipboard.said).toEqual([1, 1]);
+    expect(clipboard.sent).toEqual([1, 1]);
+  });
+
+  it('says no magnet sent when the engine took none, and warns when it could not be told', async () => {
+    let refuse = false;
+    const clipboard = aWatch({
+      offerMagnets: async () => {
+        if (refuse) throw new Error('The engine said no.');
+        return 0;
+      },
+    });
+    await clipboard.on();
+
+    clipboard.copy(
+      'magnet:?xt=urn:btih:' + 'a'.repeat(40) + '&dn=films&tr=http://tracker.example/announce',
+    );
+    await clipboard.beat();
+    refuse = true;
+    clipboard.copy('magnet:?xt=urn:btih:' + 'b'.repeat(40));
+    await clipboard.beat();
+
+    expect(clipboard.sent).toEqual([]);
+    expect(clipboard.warnings).toEqual([
+      'clipboard_magnets_not_offered {"magnets":1,"error":"The engine said no."}',
+    ]);
+  });
+
   it('offers a link again when it is copied again after something else', async () => {
     const clipboard = aWatch();
     await clipboard.on();
@@ -141,6 +208,70 @@ describe('ClipboardWatch', () => {
 
     expect(clipboard.offered.map((offer) => offer.length)).toEqual([MAX_URLS_PER_REQUEST, 5]);
     expect(clipboard.offered.flat()).toEqual(links);
+  });
+
+  it('offers every magnet of a long list, as many at a time as the engine takes', async () => {
+    const clipboard = aWatch();
+    await clipboard.on();
+    const magnets = Array.from(
+      { length: MAX_URLS_PER_REQUEST + 5 },
+      (_, n) => 'magnet:?xt=urn:btih:' + String(n).padStart(40, 'a'),
+    );
+
+    clipboard.copy(magnets.join(' '));
+    await clipboard.beat();
+
+    expect(clipboard.magnets.map((offer) => offer.length)).toEqual([MAX_URLS_PER_REQUEST, 5]);
+    expect(clipboard.magnets.flat()).toEqual(magnets);
+    expect(clipboard.sent).toEqual([MAX_URLS_PER_REQUEST + 5]);
+  });
+
+  it("sends no magnet of a copy once it is turned off while that copy's links are on their way", async () => {
+    let answer: (added: number) => void = () => undefined;
+    const clipboard = aWatch({
+      offer: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    });
+    await clipboard.on();
+    clipboard.copy('https://example.com/a.zip magnet:?xt=urn:btih:' + 'a'.repeat(40));
+    await clipboard.beat();
+
+    clipboard.watch.watch(false);
+    answer(1);
+    await settle();
+
+    expect(clipboard.magnets).toEqual([]);
+    expect(clipboard.sent).toEqual([]);
+  });
+
+  it('sends no further magnets of a long copy once it is turned off between two requests', async () => {
+    const asked: number[] = [];
+    let answer: (sent: number) => void = () => undefined;
+    const clipboard = aWatch({
+      offerMagnets: (magnets) => {
+        asked.push(magnets.length);
+        return new Promise((resolve) => {
+          answer = resolve;
+        });
+      },
+    });
+    await clipboard.on();
+    clipboard.copy(
+      Array.from(
+        { length: MAX_URLS_PER_REQUEST + 5 },
+        (_, n) => 'magnet:?xt=urn:btih:' + String(n).padStart(40, 'a'),
+      ).join(' '),
+    );
+    await clipboard.beat();
+
+    clipboard.watch.watch(false);
+    answer(MAX_URLS_PER_REQUEST);
+    await settle();
+
+    expect(asked).toEqual([MAX_URLS_PER_REQUEST]);
+    expect(clipboard.sent).toEqual([]);
   });
 
   it('offers one copy at a time: what is copied while the engine is asked is taken afterwards', async () => {
@@ -409,6 +540,8 @@ describe('ClipboardWatch', () => {
           return links.length;
         },
         added: () => undefined,
+        offerMagnets: async (magnets) => Promise.resolve(magnets.length),
+        sent: () => undefined,
         every: (_ms, run) => {
           beats.push(run);
           return () => {

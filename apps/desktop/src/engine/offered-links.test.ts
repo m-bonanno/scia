@@ -1,7 +1,7 @@
 import { API_PREFIX } from '@scia/contracts';
 import { describe, expect, it, vi } from 'vitest';
 import type { EngineAccess } from './engine-access.ts';
-import { offeredNotice, offerToEngine } from './offered-links.ts';
+import { offeredNotice, offerMagnetsToEngine, offerToEngine, sentNotice } from './offered-links.ts';
 
 const aDownload = (id: string) => ({
   id,
@@ -74,6 +74,51 @@ describe('offerToEngine', () => {
     };
 
     await expect(offerToEngine(['https://a.example/a.zip'], engine, 20)).rejects.toThrow();
+  });
+});
+
+describe('offerMagnetsToEngine', () => {
+  it("hands the magnets to the engine with main's token, and answers how many it sent (#139)", async () => {
+    const { engine, fetch } = anEngine(async () =>
+      Response.json({
+        data: [
+          {
+            id: 'm1',
+            name: 'films',
+            status: 'sending',
+            totalBytes: null,
+            downloadedBytes: 0,
+            bytesPerSecond: 0,
+            failure: null,
+            createdAt: '2026-11-21T10:00:00.000Z',
+          },
+        ],
+      }),
+    );
+    const magnet = 'magnet:?xt=urn:btih:' + 'a'.repeat(40);
+
+    expect(await offerMagnetsToEngine([magnet], engine, 5000)).toBe(1);
+    const [url, init] = fetch.mock.calls[0]!;
+    expect(url).toBe(`http://127.0.0.1:47883${API_PREFIX}/magnets/offered`);
+    expect(init.method).toBe('POST');
+    expect(init.headers.authorization).toBe('Bearer main-token');
+    expect(JSON.parse(init.body ?? '')).toEqual({ magnets: [magnet] });
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it('rejects an engine that refuses, or answers something else', async () => {
+    const magnet = 'magnet:?xt=urn:btih:' + 'a'.repeat(40);
+    const refusing = anEngine(async () => new Response(null, { status: 400 }));
+    await expect(offerMagnetsToEngine([magnet], refusing.engine, 5000)).rejects.toThrow();
+    const strange = anEngine(async () => Response.json({ data: 'no' }));
+    await expect(offerMagnetsToEngine([magnet], strange.engine, 5000)).rejects.toThrow();
+  });
+});
+
+describe('sentNotice', () => {
+  it('counts the magnets added, on their way to the service, as their rows say', () => {
+    expect(sentNotice(1)).toEqual({ title: 'Added 1 magnet, sending to AllDebrid', body: '' });
+    expect(sentNotice(3)).toEqual({ title: 'Added 3 magnets, sending to AllDebrid', body: '' });
   });
 });
 

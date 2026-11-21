@@ -22,7 +22,12 @@ import { EngineFailure, engineFailureNotice } from './engine/engine-failure.ts';
 import { betasOfEngine } from './engine/engine-settings.ts';
 import { KeyVault } from './engine/key-vault.ts';
 import { parseLaunchOptions } from './engine/launch-options.ts';
-import { offeredNotice, offerToEngine } from './engine/offered-links.ts';
+import {
+  offeredNotice,
+  offerMagnetsToEngine,
+  offerToEngine,
+  sentNotice,
+} from './engine/offered-links.ts';
 import { RestartPolicy } from './engine/restart-policy.ts';
 import { resolveRuntimeLayout } from './engine/runtime-layout.ts';
 import { buildServerEnv } from './engine/server-env.ts';
@@ -230,7 +235,13 @@ async function boot(): Promise<void> {
   const clipboardWatch = new ClipboardWatch({
     read: () => clipboard.readText(),
     offer: (links) => offerToEngine(links, engine(), OFFER_ANSWER_LIMIT_MS),
-    added: notifyOffered,
+    added: (added) => {
+      notifyOffered('clipboard_links_added', added, offeredNotice);
+    },
+    offerMagnets: (magnets) => offerMagnetsToEngine(magnets, engine(), OFFER_ANSWER_LIMIT_MS),
+    sent: (sent) => {
+      notifyOffered('clipboard_magnets_sent', sent, sentNotice);
+    },
     every: (ms, run) => {
       const timer = setInterval(run, ms);
       return () => {
@@ -240,11 +251,15 @@ async function boot(): Promise<void> {
     log,
   });
 
-  function notifyOffered(added: number): void {
+  function notifyOffered(
+    event: string,
+    added: number,
+    noticeOf: (count: number) => { title: string; body: string },
+  ): void {
     const inFront = window.isInFront();
-    log.info('clipboard_links_added', { added, inFront });
+    log.info(event, { added, inFront });
     if (added === 0 || isQuitting() || inFront || !Notification.isSupported()) return;
-    const text = offeredNotice(added);
+    const text = noticeOf(added);
     const shown = new Notification(text);
     heldNotices.keep(shown);
     shown.on('click', () => {
@@ -255,7 +270,7 @@ async function boot(): Promise<void> {
       heldNotices.release(shown);
       log.warn('offered_notice_failed', { error });
     });
-    // What was handed to the system, for whoever reads the log: a count, no link.
+    // What was handed to the system, for whoever reads the log: a count, no link, no magnet.
     log.info('offered_notice_asked', { title: text.title });
     shown.show();
   }

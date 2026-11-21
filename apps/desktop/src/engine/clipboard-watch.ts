@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { MAX_URLS_PER_REQUEST } from '@scia/contracts';
-import { extractLinks } from '@scia/contracts/links';
+import { extractLinks, extractMagnets } from '@scia/contracts/links';
 
 // How often main reads the clipboard while the switch is on. Electron has no event for a change
 // of the clipboard: it is read on a timer, and a link copied is in the list within a second.
@@ -20,6 +20,11 @@ export interface ClipboardWatchDeps {
   readonly offer: (links: readonly string[]) => Promise<number>;
   // How many links of one copy were added, said once for the copy.
   readonly added: (count: number) => void;
+  // Hands magnets to the engine, which sends them to the connected service, or leaves them out
+  // with none (#139; docs/adr/0017); answers how many it sent.
+  readonly offerMagnets: (magnets: readonly string[]) => Promise<number>;
+  // How many magnets of one copy were sent, said once for the copy.
+  readonly sent: (count: number) => void;
   // A timer that beats every `ms` until it is cancelled.
   readonly every: (ms: number, run: () => void) => () => void;
   readonly log: {
@@ -36,8 +41,8 @@ function digestOf(text: string): string {
 
 // Main's reading of the clipboard, while the switch is on and only then (#128). What is on the
 // clipboard when it is turned on was copied for something else, and is not taken; each text
-// copied afterwards is read once, and its http(s) links — nothing else of it — go to the engine,
-// one copy at a time.
+// copied afterwards is read once, and its http(s) links and its magnets (#139) — nothing else of
+// it — go to the engine, one copy at a time.
 export class ClipboardWatch {
   readonly #deps: ClipboardWatchDeps;
   #cancel: (() => void) | undefined;
@@ -111,6 +116,26 @@ export class ClipboardWatch {
     this.#seen = seen;
     if (known === undefined || seen === known) return;
     await this.#offer(turn, extractLinks(text));
+    // Turned off while the links were on their way: the magnets of the copy are not this turn's.
+    if (turn === this.#turn) await this.#offerMagnets(turn, extractMagnets(text));
+  }
+
+  async #offerMagnets(turn: number, magnets: readonly string[]): Promise<void> {
+    let sent = 0;
+    try {
+      for (let at = 0; at < magnets.length; at += MAX_URLS_PER_REQUEST) {
+        sent += await this.#deps.offerMagnets(magnets.slice(at, at + MAX_URLS_PER_REQUEST));
+        // Turned off meanwhile: the rest of the copy is not sent, and what was is not said.
+        if (turn !== this.#turn) return;
+      }
+    } catch (error) {
+      // How many, never which: a magnet names a person's torrent.
+      this.#deps.log.warn('clipboard_magnets_not_offered', {
+        magnets: magnets.length,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    if (sent > 0) this.#deps.sent(sent);
   }
 
   async #offer(turn: number, links: readonly string[]): Promise<void> {

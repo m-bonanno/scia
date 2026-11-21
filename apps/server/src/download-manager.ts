@@ -406,6 +406,16 @@ export class DownloadManager {
     this.#changed();
   }
 
+  // The magnets main read on the clipboard (#139; docs/adr/0017): sent at once, as pasted ones
+  // are, while a service is connected; with none, left out — a copy is not a request to connect.
+  offerMagnets(magnets: readonly string[]): Magnet[] {
+    if (this.#deps.magnets?.hasService() !== true) {
+      this.#deps.logger.info('clipboard_magnets_left_out', { magnets: magnets.length });
+      return [];
+    }
+    return this.addMagnets(magnets);
+  }
+
   // A magnet that failed is sent again: the service answers for the same torrent what it has.
   retryMagnet(id: string): Magnet {
     const record = this.#magnetRecord(id);

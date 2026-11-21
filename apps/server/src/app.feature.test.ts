@@ -421,6 +421,22 @@ describe('the engine API', () => {
       call('/magnets', { method: 'POST', token, body: JSON.stringify({ magnets }) });
     const dataOf = async <T>(response: Response) => ((await response.json()) as { data: T }).data;
 
+    it('takes the magnets main read on the clipboard from the app alone, and none with no service connected', async () => {
+      const offer = (magnets: unknown, token = APP_TOKEN) =>
+        call('/magnets/offered', { method: 'POST', token, body: JSON.stringify({ magnets }) });
+
+      expect((await offer([MAGNET], EXTENSION_TOKEN)).status).toBe(403);
+      const refused = await offer(['https://example.com/a.zip']);
+      expect(refused.status).toBe(400);
+      expect(await codeOf(refused)).toBe(ApiErrorCode.InvalidRequest);
+      // No service is connected here: a copied magnet is left out, as a page that is no file is.
+      const response = await offer([MAGNET]);
+
+      expect(response.status).toBe(200);
+      expect(await dataOf(response)).toEqual([]);
+      expect(manager.snapshot().magnets).toEqual([]);
+    });
+
     it('takes magnets from the app alone, and says what it has of each, never the magnet', async () => {
       expect((await add([MAGNET], EXTENSION_TOKEN)).status).toBe(403);
 
@@ -508,6 +524,7 @@ describe('the engine API', () => {
           logger: silentLogger,
           magnetPollMs: 60_000,
           magnets: {
+            hasService: () => true,
             send: () => Promise.resolve([]),
             states: read,
             files: () => Promise.resolve(new Map()),

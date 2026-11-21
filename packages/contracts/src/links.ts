@@ -28,8 +28,8 @@ export const magnetUri = z.string().max(MAX_MAGNET_LENGTH).regex(MAGNET);
 
 const MAGNET_IN_TEXT = /magnet:\?[^\s<>"'`]+/gi;
 
-// Every magnet in a pasted text, once each, in the order they appear. Only the page takes them:
-// what main reads on the clipboard is extractLinks' (#139 is to change that).
+// Every magnet in a text, once each, in the order they appear: what the page takes from a paste,
+// and what main takes from a copy (#139; docs/adr/0017).
 export function extractMagnets(text: string): string[] {
   const magnets = new Set<string>();
   for (const match of text.matchAll(MAGNET_IN_TEXT)) {
