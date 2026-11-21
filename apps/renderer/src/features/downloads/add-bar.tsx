@@ -1,30 +1,42 @@
 import { Link } from 'lucide-react';
-import { type ReactNode, type Ref, type SubmitEvent, useId, useState } from 'react';
+import { type ReactNode, type Ref, type SubmitEvent, useId, useRef, useState } from 'react';
 import { extractLinks } from './links.ts';
 
+// What became of the links sent from the field. A refusal of the text itself is the field's to
+// say; any other failure the page says elsewhere.
+export type Added =
+  { readonly taken: true } | { readonly taken: false; readonly refusal: string | null };
+
 interface AddBarProps {
-  // Resolves to whether the links were taken: the field is cleared only then.
-  readonly onAdd: (urls: string[]) => Promise<boolean>;
-  // What the engine refused of the text that was sent: said by the field, until it is edited.
-  readonly error: string | null;
-  readonly onEdit: () => void;
+  readonly onAdd: (urls: string[]) => Promise<Added>;
   readonly inputRef?: Ref<HTMLInputElement>;
 }
 
-export function AddBar({ onAdd, error, onEdit, inputRef }: AddBarProps): ReactNode {
+export function AddBar({ onAdd, inputRef }: AddBarProps): ReactNode {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
-  const errorId = useId();
+  const [refusal, setRefusal] = useState<string | null>(null);
+  // What the field holds now: an answer about text it no longer holds is not said under it.
+  const holds = useRef('');
+  const refusalId = useId();
   const links = extractLinks(text);
+
+  const edit = (value: string) => {
+    holds.current = value;
+    setText(value);
+    setRefusal(null);
+  };
 
   const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (links.length === 0 || busy) return;
     setBusy(true);
+    const sent = text;
     void onAdd(links)
-      .then((taken) => {
+      .then((added) => {
         // A failed add never clears what was typed.
-        if (taken) setText('');
+        if (added.taken) edit('');
+        else if (holds.current === sent) setRefusal(added.refusal);
       })
       .finally(() => {
         setBusy(false);
@@ -43,12 +55,11 @@ export function AddBar({ onAdd, error, onEdit, inputRef }: AddBarProps): ReactNo
           type="text"
           value={text}
           onChange={(event) => {
-            setText(event.target.value);
-            onEdit();
+            edit(event.target.value);
           }}
           aria-label="Links to download"
-          aria-invalid={error === null ? undefined : true}
-          aria-describedby={error === null ? undefined : errorId}
+          aria-invalid={refusal === null ? undefined : true}
+          aria-describedby={refusal === null ? undefined : refusalId}
           placeholder="Paste one or more links"
           autoFocus
           spellCheck={false}
@@ -63,9 +74,9 @@ export function AddBar({ onAdd, error, onEdit, inputRef }: AddBarProps): ReactNo
           {links.length > 1 ? `Download ${String(links.length)} files` : 'Download'}
         </button>
       </form>
-      {error !== null && (
-        <p id={errorId} role="alert" className="px-1 text-sm text-destructive">
-          {error}
+      {refusal !== null && (
+        <p id={refusalId} role="alert" className="px-1 text-sm text-destructive">
+          {refusal}
         </p>
       )}
     </div>

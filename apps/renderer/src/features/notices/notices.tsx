@@ -1,5 +1,12 @@
 import { CircleAlert, X } from 'lucide-react';
-import { type ReactNode, type RefObject, useEffect, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  type RefObject,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 import { IconButton } from '@/components/icon-button.tsx';
 import { cn } from '@/lib/cn.ts';
@@ -35,17 +42,18 @@ export function Notices({
     }
   }, [lasting]);
 
+  // The newest, as many as fit beside what stays true; and never its own text a second time.
   const timed = notices
     .filter((notice) => notice.text !== lasting)
     .slice(-(NOTICES_AT_MOST - (lasting === null ? 0 : 1)));
-  // What is not shown beside what stays true is let go: kept, it would come back after it,
-  // saying the engine is not answering once it answers again.
+  // What is not shown is let go, here and nowhere else: kept, it would come back later — saying
+  // the engine is not answering once it answers again. The stack hands on a focus it held.
   const hidden = notices.filter((notice) => !timed.includes(notice));
   useEffect(() => {
     for (const notice of hidden) onDismiss(notice.id);
   });
-  if (timed.length === 0 && lasting === null) return null;
 
+  // Mounted while empty too: it hands on the focus of the last notice to leave.
   const stack = (
     <Stack
       timed={timed}
@@ -70,19 +78,77 @@ interface StackProps {
 
 function Stack({ timed, lasting, onDismiss, home, announced }: StackProps): ReactNode {
   const list = useRef<HTMLUListElement>(null);
-  const [pointed, setPointed] = useState(false);
-  const [focused, setFocused] = useState(false);
-  // Held while the pointer is on the stack or the focus is in it: a slow reader keeps it all,
-  // and nothing slides from under the pointer.
-  const held = pointed || focused;
+  // The notice whose × has the focus: it holds the stack while it is there.
+  const [focusedId, setFocusedId] = useState<number | null>(null);
+  // The last × the focus was on, and where it stood. However its notice leaves — dismissed, gone
+  // by itself, pushed out by a newer one, put aside for the engine's — the focus goes to the ×
+  // now in its place, else to the one before it, else home. Read after every change rather than
+  // from a blur: the blur the removal causes comes during React's commit, which React does not
+  // hand to its handlers.
+  const lastFocus = useRef<{ readonly id: number; readonly at: number } | null>(null);
 
-  const dismiss = (id: number) => {
+  useLayoutEffect(() => {
+    const last = lastFocus.current;
+    if (last === null || (list.current?.contains(document.activeElement) ?? false)) return;
+    lastFocus.current = null;
+    // Still there: the person took the focus elsewhere.
+    if (timed.some((notice) => notice.id === last.id)) return;
     const buttons = [...(list.current?.querySelectorAll('button') ?? [])];
-    const index = buttons.findIndex((button) => button === document.activeElement);
-    if (index !== -1) (buttons[index + 1] ?? buttons[index - 1] ?? home())?.focus();
-    onDismiss(id);
-  };
+    (buttons[Math.min(last.at, buttons.length - 1)] ?? home())?.focus();
+  });
 
+  if (timed.length === 0 && lasting === null) return null;
+  return (
+    <List
+      list={list}
+      focusHeld={timed.some((notice) => notice.id === focusedId)}
+      onFocus={(target) => {
+        const buttons = [...(list.current?.querySelectorAll('button') ?? [])];
+        const at = buttons.findIndex((button) => button === target);
+        const id = timed[at]?.id;
+        lastFocus.current = id === undefined ? null : { id, at };
+        setFocusedId(id ?? null);
+      }}
+      onBlur={() => {
+        setFocusedId(null);
+      }}
+    >
+      {(held) => (
+        <>
+          {timed.map((notice) => (
+            <TimedNotice
+              key={notice.id}
+              notice={notice}
+              held={held}
+              onDismiss={onDismiss}
+              announced={announced}
+            />
+          ))}
+          {lasting !== null && (
+            <NoticeItem text={lasting} announceAs={`${LASTING}${lasting}`} announced={announced} />
+          )}
+        </>
+      )}
+    </List>
+  );
+}
+
+// Mounted only while there are notices: a list that is gone hears no pointer leave it, and the
+// next one starts unheld.
+function List({
+  list,
+  focusHeld,
+  onFocus,
+  onBlur,
+  children,
+}: {
+  readonly list: RefObject<HTMLUListElement | null>;
+  readonly focusHeld: boolean;
+  readonly onFocus: (target: EventTarget) => void;
+  readonly onBlur: () => void;
+  readonly children: (held: boolean) => ReactNode;
+}): ReactNode {
+  const [pointed, setPointed] = useState(false);
   return (
     <ul
       ref={list}
@@ -94,27 +160,14 @@ function Stack({ timed, lasting, onDismiss, home, announced }: StackProps): Reac
       onPointerLeave={() => {
         setPointed(false);
       }}
-      onFocus={() => {
-        setFocused(true);
+      onFocus={(event) => {
+        onFocus(event.target);
       }}
-      // Between two of its notices the focus leaves one and enters the next, in that order.
-      onBlur={() => {
-        setFocused(false);
-      }}
+      onBlur={onBlur}
     >
-      {timed.map((notice) => (
-        <TimedNotice
-          key={notice.id}
-          notice={notice}
-          held={held}
-          onExpire={onDismiss}
-          onDismiss={dismiss}
-          announced={announced}
-        />
-      ))}
-      {lasting !== null && (
-        <NoticeItem text={lasting} announceAs={`${LASTING}${lasting}`} announced={announced} />
-      )}
+      {/* Held while the pointer is on the stack or the focus is in it: a slow reader keeps it
+          all, and nothing slides from under the pointer. */}
+      {children(pointed || focusHeld)}
     </ul>
   );
 }
@@ -122,14 +175,11 @@ function Stack({ timed, lasting, onDismiss, home, announced }: StackProps): Reac
 function TimedNotice({
   notice,
   held,
-  onExpire,
   onDismiss,
   announced,
 }: {
   readonly notice: Notice;
   readonly held: boolean;
-  // Its time is up: nothing is in it to hand on, since nothing that held it was there.
-  readonly onExpire: (id: number) => void;
   readonly onDismiss: (id: number) => void;
   readonly announced: RefObject<Set<string>>;
 }): ReactNode {
@@ -138,12 +188,12 @@ function TimedNotice({
   useEffect(() => {
     if (held) return undefined;
     const timer = setTimeout(() => {
-      onExpire(id);
+      onDismiss(id);
     }, NOTICE_MS);
     return () => {
       clearTimeout(timer);
     };
-  }, [held, id, round, onExpire]);
+  }, [held, id, round, onDismiss]);
 
   return (
     <NoticeItem text={notice.text} announceAs={String(id)} announced={announced}>

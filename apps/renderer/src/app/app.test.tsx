@@ -102,6 +102,71 @@ describe('App', () => {
     expect(field).not.toHaveAccessibleDescription();
   });
 
+  it('does not say under the field a refusal of text the field no longer holds', async () => {
+    let refuse: (error: unknown) => void = () => undefined;
+    vi.spyOn(api, 'addDownloads').mockReturnValue(
+      new Promise((_, reject) => {
+        refuse = reject;
+      }),
+    );
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+    await userEvent.type(field, 'https://example.com/a.zip');
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+    await userEvent.type(field, '2');
+    refuse(new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'));
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Download' })).toBeEnabled();
+    });
+    expect(field).not.toHaveAttribute('aria-invalid', 'true');
+    expect(
+      screen.queryByText('No http or https links in what you pasted.'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('takes back what the field said once the same text is taken', async () => {
+    vi.spyOn(api, 'addDownloads')
+      .mockRejectedValueOnce(new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'))
+      .mockResolvedValueOnce([]);
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+    await userEvent.type(field, 'https://example.com/a.zip');
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+    await vi.waitFor(() => {
+      expect(field).toHaveAttribute('aria-invalid', 'true');
+    });
+
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+    await vi.waitFor(() => {
+      expect(field).toHaveValue('');
+    });
+    expect(field).not.toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('hands the focus to Close when the last notice over Settings is dismissed', async () => {
+    vi.spyOn(api, 'updateSettings').mockRejectedValue(
+      new ApiError(500, ApiErrorCode.InternalError, 'it broke'),
+    );
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    await userEvent.selectOptions(
+      await within(dialog).findByRole('combobox', { name: 'Theme' }),
+      'Space',
+    );
+    const notices = await within(dialog).findByRole('list', { name: 'Notices' });
+
+    for (const dismiss of within(notices).getAllByRole('button', { name: 'Dismiss' }).reverse()) {
+      await userEvent.click(dismiss);
+    }
+
+    expect(within(dialog).queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
+    expect(within(dialog).getByRole('button', { name: 'Close' })).toHaveFocus();
+  });
+
   it('says in a notice that an add failed for a reason that is not the text, keeping the text', async () => {
     vi.spyOn(api, 'addDownloads').mockRejectedValue(
       new ApiError(401, ApiErrorCode.Unauthorized, 'who are you'),

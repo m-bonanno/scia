@@ -1,6 +1,6 @@
 import { ApiErrorCode, type Settings } from '@scia/contracts';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AddBar } from '@/features/downloads/add-bar.tsx';
+import { type Added, AddBar } from '@/features/downloads/add-bar.tsx';
 import { DownloadList } from '@/features/downloads/download-list.tsx';
 import type { RowActions } from '@/features/downloads/download-row.tsx';
 import { FilterTabs } from '@/features/downloads/filter-tabs.tsx';
@@ -24,7 +24,6 @@ export function App(): ReactNode {
   const live = useLive();
   const [filter, setFilter] = useState<Filter>(Filter.All);
   const { notices, tell, dismiss } = useNotices();
-  const [fieldError, setFieldError] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsLayer, setSettingsLayer] = useState<HTMLDialogElement | null>(null);
@@ -64,18 +63,17 @@ export function App(): ReactNode {
   // From the field, a refusal of what was sent is the field's to say; anything else, and any
   // failure of links pasted on the page, is a notice.
   const add = useCallback(
-    async (urls: string[], fromField: boolean): Promise<boolean> => {
+    async (urls: string[], fromField: boolean): Promise<Added> => {
       try {
         await api.addDownloads(urls);
         setFilter((current) => (current === Filter.Completed ? Filter.All : current));
-        return true;
+        return { taken: true };
       } catch (error) {
         if (fromField && error instanceof ApiError && error.code === ApiErrorCode.InvalidRequest) {
-          setFieldError(errorMessage(error));
-        } else {
-          report(error);
+          return { taken: false, refusal: errorMessage(error) };
         }
-        return false;
+        report(error);
+        return { taken: false, refusal: null };
       }
     },
     [report],
@@ -141,14 +139,7 @@ export function App(): ReactNode {
       />
       <main className="flex min-h-0 flex-1 flex-col">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 pt-4 pb-4">
-          <AddBar
-            onAdd={(urls) => add(urls, true)}
-            error={fieldError}
-            onEdit={() => {
-              setFieldError(null);
-            }}
-            inputRef={field}
-          />
+          <AddBar onAdd={(urls) => add(urls, true)} inputRef={field} />
           <FilterTabs filter={filter} counts={countByFilter(live.downloads)} onChange={setFilter} />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -169,12 +160,14 @@ export function App(): ReactNode {
         onSettings={keepSettings}
       />
       {/* Over Settings while it is open: a modal dialog leaves the rest of the page out of reach.
-          A focus left on nothing there starts again from the top of the dialog. */}
+          A focus whose notices are all gone goes to the field, or to the top of the dialog. */}
       <Notices
         notices={notices}
         lasting={live.connection === Connection.Offline ? ENGINE_UNREACHABLE : null}
         onDismiss={dismiss}
-        home={() => (settingsOpen ? null : field.current)}
+        home={() =>
+          settingsOpen ? (settingsLayer?.querySelector('button') ?? null) : field.current
+        }
         layer={settingsOpen ? settingsLayer : null}
       />
     </div>

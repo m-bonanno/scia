@@ -243,6 +243,108 @@ describe('Notices', () => {
     expect(screen.getByText('Three')).toBeInTheDocument();
   });
 
+  it('hands the focus of the newest notice, dismissed, to the one before it', () => {
+    render(<Page told={['One', 'Two', 'Three']} />);
+    for (const text of ['One', 'Two', 'Three']) {
+      fireEvent.click(screen.getByRole('button', { name: `tell ${text}` }));
+    }
+    const [, middle, newest] = screen.getAllByRole('button', { name: 'Dismiss' });
+    act(() => {
+      newest?.focus();
+    });
+
+    pressFocused();
+
+    expect(screen.queryByText('Three')).not.toBeInTheDocument();
+    expect(middle).toHaveFocus();
+  });
+
+  it('walks past the notices when Tab is held: only Enter held is one press', async () => {
+    vi.useRealTimers();
+    render(<Page told={['One', 'Two', 'Three']} />);
+    for (const text of ['One', 'Two', 'Three']) {
+      fireEvent.click(screen.getByRole('button', { name: `tell ${text}` }));
+    }
+    const [first, , last] = screen.getAllByRole('button', { name: 'Dismiss' });
+    act(() => {
+      first?.focus();
+    });
+
+    await userEvent.keyboard('{Tab>2/}');
+
+    expect(last).toHaveFocus();
+  });
+
+  it('hands on the focus of a notice pushed out by a newer one, and lets the rest go after', () => {
+    const told = Array.from({ length: NOTICES_AT_MOST + 1 }, (_, i) => `N${String(i)}`);
+    render(<Page told={told} />);
+    for (const text of told.slice(0, -1)) {
+      fireEvent.click(screen.getByRole('button', { name: `tell ${text}` }));
+    }
+    act(() => {
+      screen.getAllByRole('button', { name: 'Dismiss' })[0]?.focus();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: `tell ${told.at(-1) ?? ''}` }));
+
+    expect(screen.queryByText('N0')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Dismiss' })[0]).toHaveFocus();
+    act(() => {
+      screen.getByRole('textbox').focus();
+    });
+    wait(NOTICE_MS);
+    expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
+  });
+
+  it('hands on the focus of a notice the engine’s notice takes the place of, and lets the rest go after', () => {
+    const engine = 'The engine is not responding.';
+    const told = Array.from({ length: NOTICES_AT_MOST }, (_, i) => `N${String(i)}`);
+    const { rerender } = render(<Page told={told} />);
+    for (const text of told) fireEvent.click(screen.getByRole('button', { name: `tell ${text}` }));
+    act(() => {
+      screen.getAllByRole('button', { name: 'Dismiss' })[0]?.focus();
+    });
+
+    rerender(<Page told={told} lasting={engine} />);
+
+    expect(screen.queryByText('N0')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Dismiss' })[0]).toHaveFocus();
+    act(() => {
+      screen.getByRole('textbox').focus();
+    });
+    wait(NOTICE_MS);
+    expect(screen.queryAllByRole('button', { name: 'Dismiss' })).toHaveLength(0);
+    expect(screen.getByText(engine)).toBeInTheDocument();
+  });
+
+  it('is no longer held by a focus that went home with its notice', () => {
+    const engine = 'The engine is not responding.';
+    render(<Page told={['One', 'Two']} lasting={engine} />);
+    fireEvent.click(screen.getByRole('button', { name: 'tell One' }));
+    act(() => {
+      screen.getByRole('button', { name: 'Dismiss' }).focus();
+    });
+    pressFocused();
+    expect(screen.getByRole('textbox', { name: 'Links to download' })).toHaveFocus();
+
+    fireEvent.click(screen.getByRole('button', { name: 'tell Two' }));
+    wait(NOTICE_MS);
+
+    expect(screen.queryByText('Two')).not.toBeInTheDocument();
+  });
+
+  it('is no longer held by a pointer that was on a stack now gone', () => {
+    render(<Page told={['One', 'Two']} />);
+    fireEvent.click(screen.getByRole('button', { name: 'tell One' }));
+    fireEvent.pointerOver(screen.getByText('One'));
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'tell Two' }));
+    wait(NOTICE_MS);
+
+    expect(screen.queryByText('Two')).not.toBeInTheDocument();
+  });
+
   it('announces a notice once, not again when it is shown somewhere else', () => {
     const layer = document.createElement('div');
     document.body.append(layer);
