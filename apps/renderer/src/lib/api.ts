@@ -9,8 +9,6 @@ import {
   integrationCodeSchema,
   type IntegrationId,
   integrationSchema,
-  type Pairing,
-  pairingSchema,
   type Settings,
   type SettingsPatch,
   settingsSchema,
@@ -76,7 +74,6 @@ export const api = {
   settings: (): Promise<Settings> => request('/settings', settingsSchema),
   updateSettings: (patch: SettingsPatch): Promise<Settings> =>
     request('/settings', settingsSchema, { method: 'PATCH', body: JSON.stringify(patch) }),
-  pairing: (): Promise<Pairing> => request('/extension/pairing', pairingSchema),
   integrations: (): Promise<Integration[]> => request('/integrations', z.array(integrationSchema)),
   // The key goes to the engine and is never read back: no answer carries it.
   connectIntegration: (id: IntegrationId, apiKey: string): Promise<Integration> =>

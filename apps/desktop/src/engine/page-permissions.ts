@@ -1,7 +1,7 @@
 // A session without these two handlers grants a page whatever it asks: camera, microphone,
-// position, notifications. Scia's page asks one thing, to write text on the clipboard ("Copy the
-// code" of the extension pairing); the rest is refused, whoever asks.
-export const PAGE_PERMISSIONS: ReadonlySet<string> = new Set(['clipboard-sanitized-write']);
+// position, notifications. Scia's page asks for nothing — it wrote the extension's pairing code on
+// the clipboard until Settings stopped offering it (#152) — so everything is refused, whoever asks.
+export const PAGE_PERMISSIONS: ReadonlySet<string> = new Set<string>();
 
 export interface PermissionAsk {
   readonly permission: string;

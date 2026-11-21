@@ -43,7 +43,6 @@ beforeAll(() => {
 beforeEach(() => {
   live.connection = 'live';
   vi.spyOn(api, 'settings').mockResolvedValue(settings);
-  vi.spyOn(api, 'pairing').mockResolvedValue({ token: 'pairing-code', port: 47821 });
 });
 afterEach(() => {
   vi.restoreAllMocks();
