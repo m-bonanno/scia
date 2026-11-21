@@ -277,4 +277,63 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     expect(Date.now() - startedAt).toBeLessThan(5000);
     expect(isRunning(given().pid)).toBe(false);
   });
+
+  describe('a reader whose second process holds its output, as yt-dlp’s Windows build runs (#170)', () => {
+    const holderPid = () => Number(readFileSync(`${givenFile}.holder`, 'utf8'));
+    let holders: number[] = [];
+    afterEach(() => {
+      for (const pid of holders) {
+        if (isRunning(pid)) process.kill(pid);
+      }
+      holders = [];
+    });
+    const started = async () => {
+      await until(() => existsSync(`${givenFile}.holder`));
+      holders.push(holderPid());
+    };
+
+    it('stops when told to, and ends the second process with the first', async () => {
+      const stopped = new AbortController();
+      const reading = reader().read('https://site.example/two-processes', stopped.signal);
+      await started();
+      stopped.abort(new Error('paused'));
+
+      const startedAt = Date.now();
+      await expect(reading).rejects.toThrow('paused');
+      expect(Date.now() - startedAt).toBeLessThan(5000);
+      expect(isRunning(given().pid)).toBe(false);
+      await until(() => !isRunning(holderPid()));
+      expect(await readdir(tempDir)).toEqual([]);
+    });
+
+    it('gives up in time, and ends the second process with the first', async () => {
+      const reading = reader({ timeoutMs: 1000 }).read('https://site.example/two-processes', never);
+      await started();
+
+      const startedAt = Date.now();
+      expect(await failureOf(reading)).toBe(PageFailure.SiteBusy);
+      expect(Date.now() - startedAt).toBeLessThan(5000);
+      await until(() => !isRunning(holderPid()));
+    });
+
+    it('stops when told to also while a process it cannot reach still holds its output', async () => {
+      const stopped = new AbortController();
+      const reading = reader().read('https://site.example/orphaned-holder', stopped.signal);
+      await started();
+      stopped.abort(new Error('paused'));
+
+      const startedAt = Date.now();
+      await expect(reading).rejects.toThrow('paused');
+      expect(Date.now() - startedAt).toBeLessThan(5000);
+      expect(await readdir(tempDir)).toEqual([]);
+    });
+
+    it('gives up in time a reader whose first process ended by itself and left the second holding its output', async () => {
+      const reading = reader({ timeoutMs: 1000 }).read('https://site.example/first-gone', never);
+      await started();
+      await until(() => !isRunning(given().pid));
+
+      expect(await failureOf(reading)).toBe(PageFailure.SiteBusy);
+    });
+  });
 });
