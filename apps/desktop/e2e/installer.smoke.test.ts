@@ -135,7 +135,7 @@ describe('the installer, installed and started', () => {
   });
 
   // The installer reads the version installed from the key every installer writes: a newer one
-  // is made there, rather than installed (docs/adr/0016).
+  // is made there, rather than installed (docs/adr/0018).
   it('refuses, silently and writing nothing, to install over a newer Scia', async () => {
     const key = await uninstallKey();
     await setDisplayVersion(key, NEWER);

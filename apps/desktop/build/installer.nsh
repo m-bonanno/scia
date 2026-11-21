@@ -1,5 +1,5 @@
 ; Included by electron-builder in the installer it packs (electron-builder.yml, `nsis.include`).
-; The installer refuses to install a Scia older than the one installed (docs/adr/0016).
+; The installer refuses to install a Scia older than the one installed (docs/adr/0018).
 !ifndef BUILD_UNINSTALLER
 
 !include LogicLib.nsh

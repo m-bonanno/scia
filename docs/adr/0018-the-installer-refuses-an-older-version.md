@@ -1,4 +1,4 @@
-# ADR 0016 — The installer refuses to install a version older than the one installed
+# ADR 0018 — The installer refuses to install a version older than the one installed
 
 - **Status**: accepted
 - **Date**: 2026-11-21
