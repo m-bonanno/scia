@@ -20,11 +20,18 @@ export async function runGates(run) {
 }
 
 function npmRun(gate) {
-  const args = ['run', gate.script, ...(gate.args.length > 0 ? ['--', ...gate.args] : [])];
+  const command = [
+    'npm',
+    'run',
+    gate.script,
+    ...(gate.args.length > 0 ? ['--', ...gate.args] : []),
+  ];
   console.log(`\n> gate: ${gate.script}`);
   return new Promise((resolve) => {
-    // A shell: npm is a script on Windows, which spawn does not run by itself.
-    const child = spawn('npm', args, {
+    // A shell: npm is a script on Windows, which spawn does not run by itself. One string, which
+    // Node takes from a shell without the warning an argument list gets (DEP0190); every word is
+    // one of GATES, written above.
+    const child = spawn(command.join(' '), {
       stdio: 'inherit',
       shell: true,
       env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },
