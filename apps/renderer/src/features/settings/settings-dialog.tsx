@@ -1,7 +1,16 @@
 import { type Pairing, type Settings, SETTINGS_LIMITS, type SettingsPatch } from '@scia/contracts';
 import { FolderChange, isFolderChange, SELF_UPDATING_PLATFORMS } from '@scia/contracts/bridge';
 import { Check, Copy, FolderPen, Minus, Plus, X } from 'lucide-react';
-import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  type Ref,
+  useCallback,
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from 'react';
 import { IconButton } from '@/components/icon-button.tsx';
 import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
@@ -17,6 +26,8 @@ interface SettingsDialogProps {
   readonly onError: (error: unknown) => void;
   // Told every time the dialog learns what the engine keeps: what it read, what it changed.
   readonly onSettings: (settings: Settings) => void;
+  // The dialog itself, for what has to be drawn over it while it is open: the page's notices.
+  readonly ref?: Ref<HTMLDialogElement | null>;
 }
 
 export function SettingsDialog({
@@ -24,8 +35,14 @@ export function SettingsDialog({
   onClose,
   onError,
   onSettings,
+  ref,
 }: SettingsDialogProps): ReactNode {
   const dialog = useRef<HTMLDialogElement>(null);
+  useImperativeHandle<HTMLDialogElement | null, HTMLDialogElement | null>(
+    ref,
+    () => dialog.current,
+    [],
+  );
   const [settings, setSettings] = useState<Settings | null>(null);
   const keep = useCallback(
     (kept: Settings) => {

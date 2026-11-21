@@ -1,10 +1,10 @@
-import type { Download } from '@scia/contracts';
+import { ApiErrorCode, type Download } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
-import { render, screen } from '@testing-library/react';
+import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app.tsx';
-import { api } from '@/lib/api.ts';
+import { api, ApiError } from '@/lib/api.ts';
 import type * as Live from '@/lib/live.ts';
 import { ENGINE_UNREACHABLE } from '@/lib/messages.ts';
 import { aDownload } from '@/test/a-download.ts';
@@ -69,12 +69,101 @@ describe('App', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Open' }));
 
-    const notice = await screen.findByRole('alert');
-    expect(notice).toHaveTextContent(
+    const notices = await screen.findByRole('list', { name: 'Notices' });
+    expect(within(notices).getByRole('alert')).toHaveTextContent(
       'Scia could not open the file. It may have been moved or deleted.',
     );
-    expect(notice).not.toHaveTextContent(ENGINE_UNREACHABLE);
+    expect(notices).not.toHaveTextContent(ENGINE_UNREACHABLE);
     expect(openDownload).toHaveBeenCalledWith('d1');
+
+    await userEvent.click(within(notices).getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
+  });
+
+  it('keeps what the engine refused of the typed text under the field, not in a notice', async () => {
+    vi.spyOn(api, 'addDownloads').mockRejectedValue(
+      new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'),
+    );
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+    await userEvent.type(field, 'https://example.com/a.zip');
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+    await vi.waitFor(() => {
+      expect(field).toHaveAttribute('aria-invalid', 'true');
+    });
+    expect(field).toHaveAccessibleDescription('No http or https links in what you pasted.');
+    expect(field).toHaveValue('https://example.com/a.zip');
+    expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
+
+    await userEvent.type(field, 'x');
+    expect(field).not.toHaveAttribute('aria-invalid', 'true');
+    expect(field).not.toHaveAccessibleDescription();
+  });
+
+  it('says in a notice that an add failed for a reason that is not the text, keeping the text', async () => {
+    vi.spyOn(api, 'addDownloads').mockRejectedValue(
+      new ApiError(401, ApiErrorCode.Unauthorized, 'who are you'),
+    );
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+    await userEvent.type(field, 'https://example.com/a.zip');
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+    const notices = await screen.findByRole('list', { name: 'Notices' });
+    expect(notices).toHaveTextContent('Scia does not recognize this window.');
+    expect(field).not.toHaveAttribute('aria-invalid', 'true');
+    expect(field).toHaveValue('https://example.com/a.zip');
+  });
+
+  it('says in a notice what the engine refused of links pasted on the page, not in the field', async () => {
+    vi.spyOn(api, 'addDownloads').mockRejectedValue(
+      new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'),
+    );
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+    await userEvent.click(screen.getByRole('button', { name: /^All/ }));
+
+    await userEvent.paste('https://example.com/a.zip');
+
+    const notices = await screen.findByRole('list', { name: 'Notices' });
+    expect(notices).toHaveTextContent('No http or https links in what you pasted.');
+    expect(field).not.toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('says that the engine is not answering for as long as it is not, with nothing to dismiss', () => {
+    live.connection = 'offline';
+    const { rerender } = render(<App />);
+
+    const notices = screen.getByRole('list', { name: 'Notices' });
+    expect(notices).toHaveTextContent(ENGINE_UNREACHABLE);
+    expect(within(notices).queryByRole('button', { name: 'Dismiss' })).not.toBeInTheDocument();
+
+    live.connection = 'live';
+    rerender(<App />);
+    expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
+  });
+
+  it('shows what failed while Settings is open over it, where it can be reached', async () => {
+    vi.spyOn(api, 'updateSettings').mockRejectedValue(
+      new ApiError(500, ApiErrorCode.InternalError, 'it broke'),
+    );
+    render(<App />);
+
+    await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    await userEvent.selectOptions(
+      await within(dialog).findByRole('combobox', { name: 'Theme' }),
+      'Space',
+    );
+
+    const notices = await within(dialog).findByRole('list', { name: 'Notices' });
+    expect(notices).toHaveTextContent('Scia could not complete the operation.');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
+    expect(dialog).not.toContainElement(screen.getByRole('list', { name: 'Notices' }));
   });
 
   it('wears the theme the engine keeps, and the one chosen in Settings as soon as it is kept', async () => {
