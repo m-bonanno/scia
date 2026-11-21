@@ -25,5 +25,8 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.invoke(BridgeChannel.ChooseDownloadFolder) as Promise<unknown>,
     // The page says that the theme changed, not which: main asks the engine.
     themeChanged: () => ipcRenderer.invoke(BridgeChannel.ThemeChanged) as Promise<unknown>,
+    // The page names a service; main asks the engine for its code's page, and opens it.
+    openCodePage: (id: string) =>
+      ipcRenderer.invoke(BridgeChannel.OpenCodePage, id) as Promise<unknown>,
   }),
 );

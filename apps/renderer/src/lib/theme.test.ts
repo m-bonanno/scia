@@ -11,6 +11,7 @@ function aShell() {
     openDownload: vi.fn(async () => undefined),
     chooseDownloadFolder: vi.fn(async () => 'kept'),
     themeChanged,
+    openCodePage: vi.fn(async () => undefined),
   };
   return themeChanged;
 }

@@ -5,6 +5,7 @@ export const BridgeChannel = {
   OpenDownload: 'downloads.open',
   ChooseDownloadFolder: 'settings.chooseDownloadFolder',
   ThemeChanged: 'settings.themeChanged',
+  OpenCodePage: 'integrations.openCodePage',
 } as const;
 export type BridgeChannel = (typeof BridgeChannel)[keyof typeof BridgeChannel];
 

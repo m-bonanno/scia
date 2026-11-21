@@ -1,12 +1,28 @@
-import type { Integration } from '@scia/contracts';
+import {
+  type Integration,
+  type IntegrationCode,
+  IntegrationCodeFailure,
+  IntegrationCodeStatus,
+} from '@scia/contracts';
 import { Unplug } from 'lucide-react';
-import { type ReactNode, type SubmitEvent, useEffect, useId, useRef, useState } from 'react';
+import {
+  type ReactNode,
+  type SubmitEvent,
+  useEffect,
+  useEffectEvent,
+  useId,
+  useRef,
+  useState,
+} from 'react';
 import { FOCUS_RING, QUIET_BUTTON, TEXT_BUTTON } from '@/components/button-styles.ts';
 import { ConfirmButton } from '@/components/confirm-button.tsx';
-import { api } from '@/lib/api.ts';
+import { api, ApiError } from '@/lib/api.ts';
+import { bridge } from '@/lib/bridge.ts';
 import { cn } from '@/lib/cn.ts';
-import { formatDate, SEPARATOR } from '@/lib/format.ts';
+import { formatDate, formatDuration, SEPARATOR } from '@/lib/format.ts';
 import {
+  codeFailedMessage,
+  codeNotGivenMessage,
   connectFailureMessage,
   errorMessage,
   SERVICE_NAME,
@@ -66,6 +82,16 @@ export function IntegrationsSection({ open, onError }: IntegrationsSectionProps)
   );
 }
 
+// While a code waits to be confirmed on the service's site, the engine is asked this often what
+// became of it: the engine itself asks the service every five seconds.
+export const CODE_READ_MS = 2000;
+
+// Where the code is confirmed, as a person would type it: the site and the page, no query.
+function placeOf(code: IntegrationCode): string {
+  const page = URL.parse(code.url);
+  return page === null ? code.url : `${page.host}${page.pathname.replace(/\/$/, '')}`;
+}
+
 // Asked of two ids as text: with one service known, their type alone would say yes.
 function isSameService(one: { readonly id: string }, other: { readonly id: string }): boolean {
   return one.id === other.id;
@@ -94,20 +120,129 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
   const fieldId = useId();
   const hintId = useId();
   const alertId = useId();
-  const [entering, setEntering] = useState(false);
+  // A code to confirm on the service's site is the main way to connect; a key is the other (#136).
+  const [mode, setMode] = useState<'idle' | 'code' | 'key'>('idle');
   const [apiKey, setApiKey] = useState('');
   const [busy, setBusy] = useState(false);
+  const [code, setCode] = useState<IntegrationCode | null>(null);
+  const [asking, setAsking] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
-  // Set when what the focus is on is about to leave the page: the control that takes its
-  // place takes the focus too, as it arrives.
-  const handFocusOn = useRef(false);
+  const entering = mode === 'key';
+  // Set when what the focus is on is about to leave the page: the control named here takes the
+  // focus as it arrives.
+  const handFocusOn = useRef<FocusTarget | null>(null);
+  // The engine holds a code for this row: it is cancelled when the row leaves the page.
+  const holdsCode = useRef(false);
   const row = useRef<HTMLLIElement>(null);
   // Only a focus that is on what leaves is handed on: one that went elsewhere stays there.
   const focusIsHere = () => row.current?.contains(document.activeElement) ?? false;
-  const takeFocus = (control: { focus(): void } | null) => {
-    if (control === null || !handFocusOn.current) return;
-    handFocusOn.current = false;
+  const handFocusTo = (target: FocusTarget) => {
+    handFocusOn.current = focusIsHere() ? target : null;
+  };
+  const takeFocus = (target: FocusTarget) => (control: { focus(): void } | null) => {
+    if (control === null || handFocusOn.current !== target) return;
+    handFocusOn.current = null;
     control.focus();
+  };
+
+  // Settings closed, or the row left: a code nobody can see is not waited for.
+  useEffect(
+    () => () => {
+      if (holdsCode.current) void api.cancelIntegrationCode(id).catch(() => undefined);
+    },
+    [id],
+  );
+
+  // What a reading of the code says, with what the row knows now, not when the wait began.
+  const learnCode = useEffectEvent((now: IntegrationCode, connected: Integration | undefined) => {
+    if (now.status === IntegrationCodeStatus.Connected) {
+      holdsCode.current = false;
+      handFocusTo('disconnect');
+      setMode('idle');
+      setCode(null);
+      if (connected !== undefined) onChange(connected);
+      return;
+    }
+    if (now.status === IntegrationCodeStatus.Failed) handFocusTo('code-action');
+    setCode(now);
+  });
+  // An engine that no longer knows the code — it was started again — has none to wait for.
+  // Anything else is an engine that is restarting: the next reading tells.
+  const codeNotRead = useEffectEvent((error: unknown) => {
+    if (!(error instanceof ApiError && error.status === 404)) return;
+    handFocusTo('code-action');
+    setCode((shown) =>
+      shown === null
+        ? null
+        : {
+            ...shown,
+            status: IntegrationCodeStatus.Failed,
+            failure: IntegrationCodeFailure.Expired,
+          },
+    );
+  });
+
+  const waiting = mode === 'code' && code?.status === IntegrationCodeStatus.Waiting;
+  useEffect(() => {
+    if (!waiting) return undefined;
+    let current = true;
+    // Read through a function: the flag changes in a callback, after an await.
+    const gone = () => !current;
+    const read = async () => {
+      const now = await api.integrationCode(id);
+      const connected =
+        now.status === IntegrationCodeStatus.Connected
+          ? (await api.integrations()).find((other) => isSameService(other, { id }))
+          : undefined;
+      if (!gone()) learnCode(now, connected);
+    };
+    const timer = setInterval(() => {
+      read().catch((error: unknown) => {
+        if (!gone()) codeNotRead(error);
+      });
+    }, CODE_READ_MS);
+    return () => {
+      current = false;
+      clearInterval(timer);
+    };
+  }, [waiting, id]);
+
+  const startCode = () => {
+    if (asking) return;
+    setAsking(true);
+    setRefusal(null);
+    api
+      .startIntegrationCode(id)
+      .then((given) => {
+        holdsCode.current = true;
+        handFocusTo('code-action');
+        setCode(given);
+        setMode('code');
+      })
+      .catch((error: unknown) => {
+        setRefusal(codeNotGivenMessage(error, id));
+      })
+      .finally(() => {
+        setAsking(false);
+      });
+  };
+
+  const cancelCode = () => {
+    holdsCode.current = false;
+    void api.cancelIntegrationCode(id).catch(() => undefined);
+    handFocusOn.current = 'connect-code';
+    setMode('idle');
+    setCode(null);
+    setRefusal(null);
+  };
+
+  const openCodePage = (shown: IntegrationCode) => {
+    setRefusal(null);
+    bridge()
+      ?.openCodePage(id)
+      .catch(() => {
+        setRefusal(`Scia could not open your browser. Go to ${placeOf(shown)} and enter the code.`);
+      });
   };
 
   const connect = (event: SubmitEvent<HTMLFormElement>) => {
@@ -119,8 +254,8 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
     api
       .connectIntegration(id, apiKey)
       .then((connected) => {
-        handFocusOn.current = focusIsHere();
-        setEntering(false);
+        handFocusTo('disconnect');
+        setMode('idle');
         setApiKey('');
         onChange(connected);
       })
@@ -137,7 +272,7 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
     api
       .disconnectIntegration(id)
       .then(() => {
-        handFocusOn.current = focusIsHere();
+        handFocusTo('connect-code');
         onChange({ id, connected: false, account: null, failure: null });
       })
       .catch((error: unknown) => {
@@ -167,7 +302,7 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
         </div>
         {integration.connected ? (
           <ConfirmButton
-            ref={takeFocus}
+            ref={takeFocus('disconnect')}
             label="Disconnect"
             // The key is removed from this computer: it asks once more.
             confirmLabel="Disconnect"
@@ -177,17 +312,30 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
             <Unplug size={16} aria-hidden="true" />
           </ConfirmButton>
         ) : (
-          !entering && (
-            <button
-              type="button"
-              ref={takeFocus}
-              className={TEXT_BUTTON}
-              onClick={() => {
-                setEntering(true);
-              }}
-            >
-              Connect
-            </button>
+          mode === 'idle' && (
+            <div className="flex shrink-0 gap-2">
+              <button
+                type="button"
+                ref={takeFocus('connect-key')}
+                className={QUIET_BUTTON}
+                onClick={() => {
+                  setRefusal(null);
+                  setMode('key');
+                }}
+              >
+                Use an API key
+              </button>
+              {/* While a code is asked for it does nothing, and keeps the focus a press gave it. */}
+              <button
+                type="button"
+                ref={takeFocus('connect-code')}
+                aria-disabled={asking}
+                className={TEXT_BUTTON}
+                onClick={startCode}
+              >
+                {asking ? 'Getting a code…' : 'Connect with a code'}
+              </button>
+            </div>
           )
         )}
       </div>
@@ -230,8 +378,8 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
               className={QUIET_BUTTON}
               onClick={() => {
                 if (busy) return;
-                handFocusOn.current = true;
-                setEntering(false);
+                handFocusOn.current = 'connect-key';
+                setMode('idle');
                 setApiKey('');
                 setRefusal(null);
               }}
@@ -255,7 +403,96 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
           </p>
         </form>
       )}
-      {!entering && alert}
+      {mode === 'code' && code !== null && !integration.connected && (
+        <CodePanel
+          code={code}
+          name={name}
+          alert={alert}
+          failure={code.failure === null ? null : codeFailedMessage(code.failure, id)}
+          canOpen={bridge() !== undefined}
+          actionRef={takeFocus('code-action')}
+          onOpen={() => {
+            openCodePage(code);
+          }}
+          onAgain={startCode}
+          onCancel={cancelCode}
+        />
+      )}
+      {mode === 'idle' && alert}
     </li>
+  );
+}
+
+type FocusTarget = 'disconnect' | 'connect-code' | 'connect-key' | 'code-action';
+
+interface CodePanelProps {
+  readonly code: IntegrationCode;
+  readonly name: string;
+  readonly alert: ReactNode;
+  // What the code said when it connected nothing.
+  readonly failure: string | null;
+  // Main opens the service's page; a page in a plain browser has nobody to ask.
+  readonly canOpen: boolean;
+  readonly actionRef: (control: { focus(): void } | null) => void;
+  readonly onOpen: () => void;
+  readonly onAgain: () => void;
+  readonly onCancel: () => void;
+}
+
+function CodePanel({
+  code,
+  name,
+  alert,
+  failure,
+  canOpen,
+  actionRef,
+  onOpen,
+  onAgain,
+  onCancel,
+}: CodePanelProps): ReactNode {
+  const waiting = code.status === IntegrationCodeStatus.Waiting;
+  // How long it lasts, said once and in whole minutes: a clock that ticks would be read aloud at
+  // every tick, and the code was given a moment ago.
+  const [lasts] = useState(
+    () => Math.round((Date.parse(code.expiresAt) - Date.now()) / 60_000) * 60,
+  );
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm">
+        On <span className="font-medium">{placeOf(code)}</span>, enter this code:
+      </p>
+      <p className="font-mono text-2xl font-medium tracking-widest select-all">{code.code}</p>
+      {failure !== null && (
+        <p role="alert" className="text-sm text-destructive">
+          {failure}
+        </p>
+      )}
+      {alert}
+      {waiting && (
+        <p className="text-sm text-muted-foreground">
+          Scia connects as soon as you confirm it. The code works for {formatDuration(lasts)}.
+        </p>
+      )}
+      <div className="flex justify-end gap-2">
+        <button type="button" className={QUIET_BUTTON} onClick={onCancel}>
+          Cancel
+        </button>
+        {!waiting ? (
+          <button type="button" ref={actionRef} className={TEXT_BUTTON} onClick={onAgain}>
+            Get a new code
+          </button>
+        ) : (
+          canOpen && (
+            <button type="button" ref={actionRef} className={TEXT_BUTTON} onClick={onOpen}>
+              Open {name}
+            </button>
+          )
+        )}
+      </div>
+      {/* Said to who does not see the page change. */}
+      <p role="status" className="sr-only">
+        {waiting ? `Waiting for you to confirm the code on ${name}…` : ''}
+      </p>
+    </div>
   );
 }

@@ -13,6 +13,9 @@ export interface SciaBridge {
   // The window's own colours are main's: the page says that the theme changed, and main asks
   // the engine which it is.
   themeChanged(): Promise<unknown>;
+  // Main asks the engine for the page where the code it gave is confirmed, and opens it in the
+  // person's browser: the page names the service, never an address.
+  openCodePage(id: string): Promise<unknown>;
 }
 
 declare global {

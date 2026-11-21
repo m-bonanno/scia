@@ -3,6 +3,7 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startAllDebridServer } from '@scia/server/testing/alldebrid-server.ts';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
+import type { ElectronApplication } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { allCompleted, paste, rowOf, until, useRun } from './scia.ts';
 
@@ -77,9 +78,9 @@ describe('the real app, with what Settings says', () => {
     const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
     const { page } = scia;
     await page.getByRole('button', { name: 'Settings' }).click();
-    await page.getByRole('button', { name: 'Connect' }).click();
+    await page.getByRole('button', { name: 'Use an API key' }).click();
     await page.getByLabel('AllDebrid API key').fill(KEY);
-    await page.getByRole('button', { name: 'Connect' }).click();
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
     await page.getByRole('button', { name: 'Disconnect' }).waitFor();
     await page.getByRole('button', { name: 'Close' }).click();
 
@@ -92,4 +93,45 @@ describe('the real app, with what Settings says', () => {
     // The key reached the service, and nowhere a person reads.
     expect(await profile.log()).not.toContain(KEY);
   });
+  it('connects AllDebrid with a code confirmed on its site, whose page main opens', async () => {
+    const profile = await run.profile();
+    const service = run.keep(
+      await startAllDebridServer({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+      }),
+    );
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const { page } = scia;
+    // The person's browser is answered in main, as the folder dialog is: what main would open is
+    // written down instead.
+    await scia.app.evaluate(({ shell }) => {
+      const opened: string[] = [];
+      Object.assign(globalThis, { opened });
+      shell.openExternal = (url) => {
+        opened.push(url);
+        return Promise.resolve();
+      };
+    });
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Connect with a code' }).click();
+    await page.getByRole('button', { name: 'Open AllDebrid' }).click();
+
+    const asked = service.requests.find((request) => request.url === '/v4.1/pin/get');
+    expect(asked?.authorization).toBeUndefined();
+    const code = (await page.locator('p.font-mono').textContent()) ?? '';
+    expect(code).toMatch(/^[A-Z0-9]{4}$/);
+    await until(async () => (await openedBy(scia)).length > 0);
+    expect(await openedBy(scia)).toEqual([`https://alldebrid.com/pin/?pin=${code}`]);
+
+    service.confirmCode(code, KEY);
+
+    await page.getByRole('button', { name: 'Disconnect' }).waitFor();
+    await page.getByText(/^Connected as ada/).waitFor();
+    // The key reached Scia from the service alone, and nowhere a person reads.
+    expect(await profile.log()).not.toContain(KEY);
+  });
 });
+
+async function openedBy(scia: { readonly app: ElectronApplication }): Promise<string[]> {
+  return scia.app.evaluate(() => (globalThis as unknown as { opened: string[] }).opened);
+}
