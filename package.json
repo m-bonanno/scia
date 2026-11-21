@@ -33,7 +33,8 @@
     "test:smoke": "vitest run --project smoke",
     "release": "semantic-release",
     "test:quarantine": "node scripts/quarantine.mjs",
-    "gates": "node scripts/gates.mjs"
+    "gates": "node scripts/gates.mjs",
+    "check:adr": "node scripts/adr-numbers.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

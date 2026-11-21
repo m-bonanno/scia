@@ -35,13 +35,13 @@ One list, for the author before opening the PR, for the tech lead during the rev
 npm run gates
 ```
 
-It runs `format:check`, `lint`, `typecheck`, `test` (with a reporter of dots) and `build`, in that order, and stops at the first that fails, naming it (`scripts/gates.mjs`). Each can still be run alone while working. On a machine where other sessions run their suites, `SCIA_TEST_WORKERS=<n>` runs the tests on fewer workers.
+It runs `check:adr` (no two ADRs of one number: [`git-flow.md`](./git-flow.md), "Work in parallel"), `format:check`, `lint`, `typecheck`, `test` (with a reporter of dots) and `build`, in that order, and stops at the first that fails, naming it (`scripts/gates.mjs`). Each can still be run alone while working. On a machine where other sessions run their suites, `SCIA_TEST_WORKERS=<n>` runs the tests on fewer workers.
 
 With untracked files of other work in the tree, check the format of tracked files only: `git ls-files | xargs npx prettier --check --ignore-unknown`.
 
 A PR that touches the app's runtime — `apps/desktop`, `apps/server`, `apps/renderer`, `packages/` — also runs the E2E suite, after the build, on Windows: `npm run test:e2e` ([`testing.md`](./testing.md), "E2E"). It opens Scia's window while it runs.
 
-CI runs them on Ubuntu, and all but format, lint and types again on Windows, the system Scia ships for, with the E2E suite on every PR; it runs them once more on the commit a merge makes, before that commit is released ([`testing.md`](./testing.md), "Where CI runs them"). A gate green here and red on one of CI's systems is red. "Quarantine (report only)" is not a gate ([ADR 0019](../adr/0019-specs-in-quarantine.md)): "CI is green" means every required check.
+CI runs them on Ubuntu, and all but the ADR numbers, format, lint and types again on Windows, the system Scia ships for, with the E2E suite on every PR; it runs them once more on the commit a merge makes, before that commit is released ([`testing.md`](./testing.md), "Where CI runs them"). A gate green here and red on one of CI's systems is red. "Quarantine (report only)" is not a gate ([ADR 0019](../adr/0019-specs-in-quarantine.md)): "CI is green" means every required check.
 
 ## What is blocking
 
@@ -65,7 +65,7 @@ A red check on a spec the PR does not touch, with no cause in its diff, is not a
 - **The team verdict is deterministic**: approved only if no role has a blocking finding, and it holds for one head commit.
 - **Changes requested** → the fix lands on the same branch as new commits, never a force-push. Then: the roles are decided again on the whole diff, size included (a fix can reach a new area, or make a small PR a large one); every role that blocked reviews again, resumed so that it checks its own findings; a role that had approved reviews again if the fix changes its area; a role the fix newly involves reviews for the first time; and the tech lead runs the gates again on the new head — on a fork's PR, reads CI's run on it ("A pull request from outside"). Every round is posted.
 - **Nothing unreviewed is merged.** A commit pushed after the approval — a non-blocking finding taken at the last moment — is reviewed before the merge. The roles are decided again on the whole diff, as after a fix, size included: a late commit can make a small PR a large one. Then the tech lead reviews it; so does every role of that set whose area the commit changes; and a role of that set that had not reviewed the PR yet reviews all of it. The verdict is posted again for the new head.
-- **Non-blocking findings are not lost**: taken in the same PR when they are in its scope and cheap, otherwise collected in a follow-up issue, opened before the approving verdict and linked from it. A verdict that asks for changes names none: its findings are still being fixed.
+- **Non-blocking findings are not lost**: taken in the same PR when they are in its scope and cheap, otherwise collected in a follow-up issue — searched for first, open and closed, as [`git-flow.md`](./git-flow.md) says ("Work in parallel") — opened before the approving verdict and linked from it. A verdict that asks for changes names none: its findings are still being fixed.
 - **A blocking finding the author contests goes to the owner.** The orchestrating session never overrules a reviewer; it fixes, or it asks.
 - **Every review teaches.** A blocking finding that a checklist would have prevented becomes a line under "Lessons" in that role's file, or an entry in `.claude/gotchas.md`, in the PR that fixes it.
 

@@ -12,13 +12,13 @@
 
 The pipeline is [ADR 0008](../adr/0008-the-delivery-pipeline.md). The gates are one workflow, `.github/workflows/gates.yml`: run on every PR; called by `release.yml`, on the commit a merge into `develop` or `main` makes, before it is tagged — the smoke test left out, as the release smokes its own installer; and called by `burn-in.yml`, several times on one commit ("Burn-in", below):
 
-| Job                                 | Runner           | Runs                                                   |
-| ----------------------------------- | ---------------- | ------------------------------------------------------ |
-| `Format, lint, types, tests, build` | `ubuntu-latest`  | format, lint, types, the three layers above, the build |
-| `Windows tests, build`              | `windows-latest` | the three layers above, the build                      |
-| `E2E (Windows)`                     | `windows-latest` | the build, then the E2E suite                          |
-| `Installer smoke (Windows)`         | `windows-latest` | the installer of the commit, then the smoke test       |
-| `Quarantine (report only)`          | both, PRs only   | the specs in quarantine; not a gate (ADR 0019)         |
+| Job                                 | Runner           | Runs                                                                |
+| ----------------------------------- | ---------------- | ------------------------------------------------------------------- |
+| `Format, lint, types, tests, build` | `ubuntu-latest`  | ADR numbers, format, lint, types, the three layers above, the build |
+| `Windows tests, build`              | `windows-latest` | the three layers above, the build                                   |
+| `E2E (Windows)`                     | `windows-latest` | the build, then the E2E suite                                       |
+| `Installer smoke (Windows)`         | `windows-latest` | the installer of the commit, then the smoke test                    |
+| `Quarantine (report only)`          | both, PRs only   | the specs in quarantine; not a gate (ADR 0019)                      |
 
 A spec that holds on one system and not on the other is a bug of the spec or of the app on that system: Windows rounds a timer under 16 ms up to 16, and forgives a path written with the wrong separator, which Linux does not.
 
