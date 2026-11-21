@@ -2,10 +2,14 @@ import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DownloadStatus } from '@scia/core';
+import { startAllDebridServer } from '@scia/server/testing/alldebrid-server.ts';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import type { ElectronApplication, Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { downloadsOf, type Profile, rowOf, until, useRun } from './scia.ts';
+
+// Made up, as every key and every hash of a spec.
+const KEY = 'e2e-made-up-key-0123456789';
 
 interface Copied {
   sciaCopied?: string;
@@ -114,5 +118,51 @@ describe('the real app, with links copied to the clipboard', () => {
     expect(log).toContain('links_offered');
     expect(log).not.toContain('archive.zip');
     expect(log).not.toContain('blog/post');
+  });
+
+  it('sends a copied magnet to a connected AllDebrid at once, and leaves one out with none (#139)', async () => {
+    const profile = await run.profile();
+    const hash = 'c'.repeat(40);
+    const magnet = `magnet:?xt=urn:btih:${hash}&dn=Concert&tr=http://tracker.example/announce`;
+    const service = run.keep(
+      await startAllDebridServer({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: 4_102_444_800 } },
+        hosts: { alldebrid: ['alldebrid.com'] },
+        magnets: { [hash]: { name: 'Concert', size: 1, fetchingPolls: 1_000_000, files: [] } },
+      }),
+    );
+    const uploads = () =>
+      service.requests.filter((request) => request.url === '/v4/magnet/upload').length;
+    const { app, page } = await run.launch(profile, {
+      args: [`--alldebrid-api=${service.api}`],
+    });
+    await answerClipboard(app);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await turn(page, true);
+    await page.getByRole('button', { name: 'Close' }).click();
+    await logged(profile, 'clipboard_watch_on', 0);
+
+    // No service connected: the copy is left out, nothing is sent, and no row is made.
+    await copy(app, magnet);
+    await logged(profile, 'clipboard_magnets_left_out', 0);
+    expect(uploads()).toBe(0);
+    expect(await page.getByRole('listitem').count()).toBe(0);
+
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Use an API key' }).click();
+    await page.getByLabel('AllDebrid API key').fill(KEY);
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.getByRole('button', { name: 'Disconnect' }).waitFor();
+    await page.getByRole('button', { name: 'Close' }).click();
+
+    // Connected: copied again — another text, the same magnet — it is sent at once, not left
+    // ready, and its tracker is no link of its own.
+    await copy(app, `${magnet} `);
+    await page.getByRole('listitem').filter({ hasText: 'Concert' }).waitFor();
+    await until(() => uploads() === 1);
+    expect((await downloadsOf(page)).map((download) => download.url)).toEqual([]);
+    const log = await profile.log();
+    expect(log).toContain('clipboard_magnets_sent');
+    expect(log).not.toContain(hash);
   });
 });

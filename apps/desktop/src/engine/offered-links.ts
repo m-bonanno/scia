@@ -1,4 +1,4 @@
-import { API_PREFIX, downloadSchema } from '@scia/contracts';
+import { API_PREFIX, downloadSchema, magnetSchema } from '@scia/contracts';
 import { z } from 'zod';
 import type { EngineAccess } from './engine-access.ts';
 
@@ -20,6 +20,23 @@ export async function offerToEngine(
   return z.object({ data: z.array(downloadSchema) }).parse(await response.json()).data.length;
 }
 
+// Hands the magnets read on the clipboard to the engine, which sends them to the connected
+// service at once, or leaves them out with none (#139; docs/adr/0017). Answers how many it sent.
+export async function offerMagnetsToEngine(
+  magnets: readonly string[],
+  engine: EngineAccess,
+  limitMs: number,
+): Promise<number> {
+  const response = await engine.fetch(`${engine.origin}${API_PREFIX}/magnets/offered`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${engine.apiToken}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ magnets }),
+    signal: AbortSignal.timeout(limitMs),
+  });
+  if (!response.ok) throw new Error('The engine did not take the magnets.');
+  return z.object({ data: z.array(magnetSchema) }).parse(await response.json()).data.length;
+}
+
 export interface OfferedNotice {
   readonly title: string;
   readonly body: string;
@@ -30,4 +47,11 @@ export interface OfferedNotice {
 export function offeredNotice(added: number): OfferedNotice {
   const links = added === 1 ? 'link' : 'links';
   return { title: `Added ${String(added)} ${links}, ready to start`, body: '' };
+}
+
+// What the system shows when copied magnets were sent while the person is not looking at the list
+// (#139): they do not wait for a Start, the service fetches them.
+export function sentNotice(sent: number): OfferedNotice {
+  const magnets = sent === 1 ? 'magnet' : 'magnets';
+  return { title: `Sent ${String(sent)} ${magnets} to AllDebrid`, body: '' };
 }
