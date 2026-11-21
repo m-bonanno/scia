@@ -41,26 +41,30 @@ AllDebrid's help page on magnet folders (https://faq.alldebrid.com/en/tools/magn
 2. **The engine watches magnets at one pace** (`MagnetWatch`, `apps/server/src/magnet-watch.ts`), through a port, `MagnetService` (`magnet-service.ts`). `Integrations` is its adapter, with the key of the connected service.
    - Magnets pasted together are sent in one request.
    - While any magnet waits, one request every five seconds asks where all of them are. That is far below AllDebrid's limits of 12 requests a second and 600 a minute.
+   - A magnet pasted while a turn runs is sent as soon as that turn ends, not a whole pace later.
    - Nothing is asked while no magnet waits, and nothing at all once the engine stops.
-   - A restart goes on waiting for a magnet it had sent; it never sends that magnet again.
+   - The service's id for a magnet is kept the moment the service gives it. So a restart goes on waiting for a magnet it had sent, and never sends that magnet again.
 3. **A ready magnet becomes downloads.**
-   - Its tree is read from `/v4/magnet/files`, and each file becomes a download:
+   - The trees of every magnet ready in a turn are read in one request to `/v4/magnet/files`, and each file becomes a download:
      - `via: alldebrid` is set from the start, so its link is unlocked through the service like any hoster's link, and is never fetched as it stands;
      - its folder is the download folder of the moment the magnet was pasted, then the magnet's name, then the folders the tree puts it in (`magnetFolders` in `@scia/core`);
+     - when a file, not a folder, already stands under the magnet's name, the magnet's folder is the first free name beside it; a folder of that name is shared, as its files take free names inside it;
      - its name is the tree's (`nameKept`), not the one its link's host gives.
    - Every folder and file name is a name from a host: it goes through `sanitizeFileName`. So `..`, a slash, a drive or a device name cannot climb out of the magnet's folder or name anything else.
    - The magnet then leaves the list.
 4. **Scia reads the tree of `/v4/magnet/files`, not `getMagnet`.** The tree is the API's own answer, documented, and carries each file's folders. `getMagnet` is a page of AllDebrid's site, made for JDownloader, with no documentation. A file that AllDebrid packed into an archive arrives as that archive; unpacking it is M4's.
-   - The tree is held to bounds: 32 folders deep, 10,000 files at most, and every link an http address. A tree beyond them is "no answer".
+   - The tree is held to bounds: 32 folders deep, 100,000 files at most, and every link an http address. A tree beyond them, or one Scia cannot read, fails its magnet `MAGNET_UNREADABLE`; an empty tree fails it `MAGNET_FAILED`.
 5. **A magnet that cannot go anywhere says so.**
    - With no service connected, a magnet fails `SERVICE_NEEDED`, and its sentence names AllDebrid and where to connect it.
    - The service's refusals have codes of their own (`MagnetFailure` in `@scia/core`):
      - a magnet it does not take (`MAGNET_INVALID`);
      - too many magnets for the account (`MAGNET_LIMIT`);
      - too large (`MAGNET_TOO_LARGE`);
-     - one it could not fetch, or no longer has (`MAGNET_FAILED`).
+     - one it could not fetch, or no longer has (`MAGNET_FAILED`);
+     - one whose files it lists in a way Scia cannot read (`MAGNET_UNREADABLE`).
    - It also takes the refusals a key or a network meets, as a link does.
-   - A service that cannot be asked for a moment does not fail a magnet: the row says so, and the next turn asks again.
+   - A service that cannot be asked for a moment does not fail a magnet: the row says Scia could not ask, and the next turn asks again.
+   - A code Scia does not know, said of one magnet — at its upload or of its files — fails that magnet `SERVICE_UNAVAILABLE`: an answer Scia does not understand would be asked again for ever.
    - Retry sends a failed magnet again. Remove stops Scia waiting for it; the service keeps it, as it keeps anything the account added elsewhere.
 6. **The routes are for the app's token alone** (ADR 0002): `POST /magnets` with `{ magnets }`, `POST /magnets/:id/retry` and `DELETE /magnets/:id`.
    - The page finds magnets in what is pasted or typed (`extractMagnets` in `@scia/contracts/links`).
