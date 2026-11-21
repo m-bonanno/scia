@@ -49,6 +49,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   live.connection = 'live';
+  live.downloads = [];
   live.magnets = [];
   vi.spyOn(api, 'settings').mockResolvedValue(settings);
   vi.spyOn(api, 'pairing').mockResolvedValue({ token: 'pairing-code', port: 47821 });
@@ -632,6 +633,68 @@ describe('App', () => {
 
       expect(retry).toHaveBeenCalledExactlyOnceWith('m1');
       expect(remove).toHaveBeenCalledExactlyOnceWith('m1');
+    });
+
+    it('takes the half of the field the engine took, and keeps only the half it refused', async () => {
+      vi.spyOn(api, 'addDownloads').mockRejectedValue(new TypeError('Failed to fetch'));
+      const magnets = vi.spyOn(api, 'addMagnets').mockResolvedValue([]);
+      render(<App />);
+      const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+      await userEvent.click(field);
+      await userEvent.paste(`https://example.com/a.zip ${MAGNET}`);
+      await userEvent.click(screen.getByRole('button', { name: 'Download 2 links' }));
+
+      await vi.waitFor(() => {
+        expect(field).toHaveValue('https://example.com/a.zip');
+      });
+      expect(magnets).toHaveBeenCalledExactlyOnceWith([MAGNET]);
+      expect(screen.getByRole('list', { name: 'Notices' })).toHaveTextContent(ENGINE_UNREACHABLE);
+    });
+
+    it('keeps the whole field when nothing of it was taken', async () => {
+      vi.spyOn(api, 'addDownloads').mockRejectedValue(new TypeError('Failed to fetch'));
+      vi.spyOn(api, 'addMagnets').mockRejectedValue(new TypeError('Failed to fetch'));
+      render(<App />);
+      const field = screen.getByRole('textbox', { name: 'Links to download' });
+      const typed = `https://example.com/a.zip ${MAGNET}`;
+
+      await userEvent.click(field);
+      await userEvent.paste(typed);
+      await userEvent.click(screen.getByRole('button', { name: 'Download 2 links' }));
+
+      await vi.waitFor(() => {
+        expect(screen.getByRole('list', { name: 'Notices' })).toHaveTextContent(ENGINE_UNREACHABLE);
+      });
+      expect(field).toHaveValue(typed);
+    });
+
+    it('counts a magnet the service is fetching among the downloads in progress', () => {
+      live.magnets = [magnet];
+      render(<App />);
+
+      expect(screen.getByRole('button', { name: /^In progress/ })).toHaveTextContent(/1$/);
+      expect(screen.getByRole('button', { name: /^Completed/ })).toHaveTextContent(/0$/);
+    });
+
+    it("says in a magnet's words that one changed before its Retry or Remove reached the engine", async () => {
+      live.magnets = [{ ...magnet, status: 'failed', failure: 'MAGNET_FAILED' }];
+      vi.spyOn(api, 'retryMagnet').mockRejectedValue(
+        new ApiError(409, ApiErrorCode.Conflict, 'not failed'),
+      );
+      vi.spyOn(api, 'removeMagnet').mockRejectedValue(
+        new ApiError(404, ApiErrorCode.NotFound, 'no magnet'),
+      );
+      render(<App />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+      const notices = await screen.findByRole('list', { name: 'Notices' });
+      await vi.waitFor(() => {
+        expect(notices).toHaveTextContent('This magnet is no longer in the list.');
+      });
+      expect(notices).toHaveTextContent('This magnet has already changed. Try again in a moment.');
     });
   });
 });

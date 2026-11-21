@@ -15,7 +15,12 @@ import { SettingsDialog, type SettingsLayer } from '@/features/settings/settings
 import { api, ApiError } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { Connection, useLive } from '@/lib/live.ts';
-import { ENGINE_UNREACHABLE, errorMessage, FILE_NOT_OPENED } from '@/lib/messages.ts';
+import {
+  ENGINE_UNREACHABLE,
+  errorMessage,
+  FILE_NOT_OPENED,
+  magnetActionMessage,
+} from '@/lib/messages.ts';
 import { wearTheme } from '@/lib/theme.ts';
 import { TitleBar } from './title-bar.tsx';
 
@@ -64,23 +69,31 @@ export function App(): ReactNode {
   }, [reached, keepSettings]);
 
   // From the field, a refusal of what was sent is the field's to say; anything else, and any
-  // failure of links pasted on the page, is a notice.
+  // failure of links pasted on the page, is a notice. Links and magnets are sent apart: when one
+  // half is refused, the other is taken, and the field keeps only what was refused.
   const add = useCallback(
     async ({ links, magnets }: Pasted, fromField: boolean): Promise<Added> => {
-      try {
-        await Promise.all([
-          links.length === 0 ? undefined : api.addDownloads(links),
-          magnets.length === 0 ? undefined : api.addMagnets(magnets),
-        ]);
+      const halves = [links, magnets] as const;
+      const answers = await Promise.allSettled([
+        links.length === 0 ? Promise.resolve() : api.addDownloads(links),
+        magnets.length === 0 ? Promise.resolve() : api.addMagnets(magnets),
+      ]);
+      const refused = halves.filter((_, index) => answers[index]?.status === 'rejected').flat();
+      if (refused.length < links.length + magnets.length) {
         setFilter((current) => (current === Filter.Completed ? Filter.All : current));
-        return { taken: true };
-      } catch (error) {
-        if (fromField && error instanceof ApiError && error.code === ApiErrorCode.InvalidRequest) {
-          return { taken: false, refusal: errorMessage(error) };
-        }
-        report(error);
-        return { taken: false, refusal: null };
       }
+      if (refused.length === 0) return { taken: true };
+      let refusal: string | null = null;
+      for (const answer of answers) {
+        if (answer.status === 'fulfilled') continue;
+        const error: unknown = answer.reason;
+        const theFields =
+          fromField && error instanceof ApiError && error.code === ApiErrorCode.InvalidRequest;
+        if (theFields && refusal === null) refusal = errorMessage(error);
+        else report(error);
+      }
+      const partly = refused.length < links.length + magnets.length;
+      return { taken: false, refusal, left: partly ? refused.join(' ') : null };
     },
     [report],
   );
@@ -133,13 +146,17 @@ export function App(): ReactNode {
   const magnetActions = useMemo(
     (): MagnetActions => ({
       retry: (id) => {
-        api.retryMagnet(id).catch(report);
+        api.retryMagnet(id).catch((error: unknown) => {
+          tell(magnetActionMessage(error));
+        });
       },
       remove: (id) => {
-        api.removeMagnet(id).catch(report);
+        api.removeMagnet(id).catch((error: unknown) => {
+          tell(magnetActionMessage(error));
+        });
       },
     }),
-    [report],
+    [tell],
   );
 
   // Newest first: what was just added is what the eye looks for.

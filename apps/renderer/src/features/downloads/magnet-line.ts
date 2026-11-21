@@ -11,13 +11,14 @@ export function magnetLine(magnet: Magnet): string {
   if (magnet.status === MagnetStatus.Failed) {
     return magnetFailureMessage(magnet.failure ?? MagnetFailure.Unavailable);
   }
-  // A service that does not answer for a moment: the magnet still waits, and Scia asks again.
+  // Not answering, under maintenance, answering what Scia does not understand: true of all of
+  // them is that it could not ask, and that it asks again.
   if (magnet.failure === MagnetFailure.Unavailable) {
-    return `${SERVICE} is not answering. Scia keeps asking.`;
+    return `Scia could not ask ${SERVICE} about this magnet just now. It asks again in a moment.`;
   }
-  if (magnet.status === MagnetStatus.Sending || magnet.totalBytes === null) {
-    return `Sending to ${SERVICE}…`;
-  }
+  if (magnet.status === MagnetStatus.Sending) return `Sending to ${SERVICE}…`;
+  // Before the service has read the torrent, it knows no size.
+  if (magnet.totalBytes === null) return `${SERVICE} is fetching it`;
   const { totalBytes, downloadedBytes } = magnet;
   return [
     `${SERVICE} is fetching it`,

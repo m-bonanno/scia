@@ -7,10 +7,10 @@ import { type MagnetActions, MagnetRow } from './magnet-row.tsx';
 
 interface DownloadListProps {
   readonly downloads: readonly Download[];
-  readonly magnets?: readonly Magnet[];
+  readonly magnets: readonly Magnet[];
   readonly filter: Filter;
   readonly actions: RowActions;
-  readonly magnetActions?: MagnetActions;
+  readonly magnetActions: MagnetActions;
 }
 
 const EMPTY: Readonly<Record<Filter, { readonly title: string; readonly hint: string }>> = {
@@ -24,13 +24,13 @@ const EMPTY: Readonly<Record<Filter, { readonly title: string; readonly hint: st
 
 export function DownloadList({
   downloads,
-  magnets = [],
+  magnets,
   filter,
   actions,
   magnetActions,
 }: DownloadListProps): ReactNode {
   // A magnet is not finished: it is in "All" and "In progress", above the downloads.
-  const shownMagnets = filter === Filter.Completed || magnetActions === undefined ? [] : magnets;
+  const shownMagnets = filter === Filter.Completed ? [] : magnets;
   if (downloads.length === 0 && shownMagnets.length === 0) {
     const { title, hint } = EMPTY[filter];
     return (
@@ -45,10 +45,9 @@ export function DownloadList({
   }
   return (
     <ul className="flex flex-col gap-2">
-      {magnetActions !== undefined &&
-        shownMagnets.map((magnet) => (
-          <MagnetRow key={magnet.id} magnet={magnet} actions={magnetActions} />
-        ))}
+      {shownMagnets.map((magnet) => (
+        <MagnetRow key={magnet.id} magnet={magnet} actions={magnetActions} />
+      ))}
       {downloads.map((download) => (
         <DownloadRow key={download.id} download={download} actions={actions} />
       ))}

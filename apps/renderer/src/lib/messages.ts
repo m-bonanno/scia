@@ -102,8 +102,11 @@ const MAGNET_FAILED: Readonly<Record<MagnetFailure, (service: string) => string>
   [MagnetFailure.TooLarge]: (service) => `${service} says this magnet is too large to fetch.`,
   // No peer, too slow, an error of its own, or deleted on its site: true of all of them.
   [MagnetFailure.Failed]: (service) => `${service} could not fetch this magnet. Try again later.`,
+  [MagnetFailure.Unreadable]: (service) =>
+    `Scia cannot take the list of files ${service} gave for this magnet: too many, too deep, or not links.`,
+  // The same sentence as a link's: a refused key is one fact, whatever it was for.
   [MagnetFailure.KeyRefused]: (service) =>
-    `${service} no longer accepts the key. In Settings, disconnect it and connect again, then try again.`,
+    `${service} no longer accepts the key. In Settings, disconnect it and connect a new key, then try again.`,
   [MagnetFailure.KeyBlocked]: (service) =>
     `${service} is blocking the key from here. If ${service} emailed you about a new sign-in, confirm it; otherwise check your network, then try again.`,
   [MagnetFailure.AccountBanned]: (service) => `${service} says the account is banned.`,
@@ -119,6 +122,17 @@ const MAGNET_FAILED: Readonly<Record<MagnetFailure, (service: string) => string>
 
 export function magnetFailureMessage(failure: MagnetFailure): string {
   return MAGNET_FAILED[failure](SERVICE_NAME.alldebrid);
+}
+
+// Said when Retry or Remove of a magnet was refused: its state moved on meanwhile.
+const MAGNET_MOVED: Readonly<Record<string, string>> = {
+  [ApiErrorCode.NotFound]: 'This magnet is no longer in the list.',
+  [ApiErrorCode.Conflict]: 'This magnet has already changed. Try again in a moment.',
+};
+
+export function magnetActionMessage(error: unknown): string {
+  const text = error instanceof ApiError ? MAGNET_MOVED[error.code] : undefined;
+  return text ?? errorMessage(error);
 }
 
 // Said of a service that is connected, when it last answered with a refusal or not at all.

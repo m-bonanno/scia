@@ -37,12 +37,30 @@ describe('MagnetRow', () => {
     expect(item.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
   });
 
-  it('stops waiting for it at Remove, whatever it is doing', async () => {
+  it('stops waiting for it at Remove, once however often it is pressed', async () => {
     const { actions, item } = row(fetching);
 
-    await userEvent.click(item.getByRole('button', { name: 'Remove' }));
+    await userEvent.dblClick(item.getByRole('button', { name: 'Remove' }));
+    item.getByRole('button', { name: 'Remove' }).focus();
+    await userEvent.keyboard('{Enter>4/}');
 
-    expect(actions.remove).toHaveBeenCalledExactlyOnceWith('m1');
+    expect(actions.remove).toHaveBeenCalledTimes(2);
+    expect(actions.remove).toHaveBeenCalledWith('m1');
+  });
+
+  it('says it is sending the magnet, on a bar that does not know how far', () => {
+    const { item } = row({ ...fetching, status: 'sending', totalBytes: null, downloadedBytes: 0 });
+
+    expect(item.getByText('Sending to AllDebrid…')).toBeInTheDocument();
+    expect(item.getByRole('progressbar')).not.toHaveAttribute('aria-valuenow');
+  });
+
+  it('hands the focus to Remove when Retry leaves under its press', async () => {
+    const { item } = row({ ...fetching, status: 'failed', failure: 'MAGNET_FAILED' });
+
+    await userEvent.click(item.getByRole('button', { name: 'Retry' }));
+
+    expect(item.getByRole('button', { name: 'Remove' })).toHaveFocus();
   });
 
   it('offers Retry for a magnet that failed, once however often it is pressed, and shows no bar', async () => {

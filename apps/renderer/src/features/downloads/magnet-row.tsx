@@ -1,7 +1,7 @@
 import type { Magnet as MagnetEntry } from '@scia/contracts';
 import { MagnetStatus } from '@scia/core';
 import { Magnet, RotateCw, X } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useRef } from 'react';
 import { IconButton } from '@/components/icon-button.tsx';
 import { useOnePress } from '@/components/one-press.ts';
 import { cn } from '@/lib/cn.ts';
@@ -26,7 +26,10 @@ const SERVICE = SERVICE_NAME.alldebrid;
 export function MagnetRow({ magnet, actions }: MagnetRowProps): ReactNode {
   const { id } = magnet;
   const failed = magnet.status === MagnetStatus.Failed;
-  const press = useOnePress();
+  const retryPress = useOnePress();
+  const removePress = useOnePress();
+  // Retry leaves the row under its own press: the focus goes to Remove, which stays.
+  const remove = useRef<HTMLButtonElement>(null);
   const total = magnet.totalBytes ?? 0;
   return (
     <li className="animate-row-in rounded-xl bg-surface px-4 py-3 transition-colors hover:bg-surface-hover">
@@ -51,18 +54,22 @@ export function MagnetRow({ magnet, actions }: MagnetRowProps): ReactNode {
           {failed && (
             <IconButton
               label="Retry"
-              onKeyDown={press.onKeyDown}
+              onKeyDown={retryPress.onKeyDown}
               onClick={(event) => {
-                if (!press.sawTheOneBefore(event)) actions.retry(id);
+                if (retryPress.sawTheOneBefore(event)) return;
+                if (event.currentTarget === document.activeElement) remove.current?.focus();
+                actions.retry(id);
               }}
             >
               <RotateCw size={16} aria-hidden="true" />
             </IconButton>
           )}
           <IconButton
+            ref={remove}
             label="Remove"
-            onClick={() => {
-              actions.remove(id);
+            onKeyDown={removePress.onKeyDown}
+            onClick={(event) => {
+              if (!removePress.sawTheOneBefore(event)) actions.remove(id);
             }}
           >
             <X size={16} aria-hidden="true" />

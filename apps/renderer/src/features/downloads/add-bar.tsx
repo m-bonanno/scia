@@ -3,9 +3,11 @@ import { type ReactNode, type Ref, type SubmitEvent, useId, useRef, useState } f
 import { type Pasted, pastedIn } from './pasted.ts';
 
 // What became of the links sent from the field. A refusal of the text itself is the field's to
-// say; any other failure the page says elsewhere.
+// say; any other failure the page says elsewhere. When only part of it was taken, `left` is the
+// part that was not, for the field to keep in place of what was typed.
 export type Added =
-  { readonly taken: true } | { readonly taken: false; readonly refusal: string | null };
+  | { readonly taken: true }
+  | { readonly taken: false; readonly refusal: string | null; readonly left: string | null };
 
 interface AddBarProps {
   readonly onAdd: (pasted: Pasted) => Promise<Added>;
@@ -48,6 +50,7 @@ export function AddBar({ onAdd, inputRef }: AddBarProps): ReactNode {
         if (added.taken) {
           if (same) edit('');
         } else if (same) {
+          if (added.left !== null) edit(added.left);
           setRefusal(added.refusal);
         }
       })

@@ -20,6 +20,12 @@ describe('magnetLine', () => {
     );
   });
 
+  it('says the service is fetching it, and no size, before the service has read the torrent', () => {
+    expect(magnetLine({ ...fetching, totalBytes: null, downloadedBytes: 0 })).toBe(
+      'AllDebrid is fetching it',
+    );
+  });
+
   it('says how far the service is with it, and how fast', () => {
     expect(magnetLine(fetching)).toMatch(
       /^AllDebrid is fetching it · 25\s?% · 1\.0\sMB of 4\.0\sMB · 512\sKB\/s$/,
@@ -28,7 +34,7 @@ describe('magnetLine', () => {
 
   it('says the service is not answering while Scia keeps asking, and why one failed', () => {
     expect(magnetLine({ ...fetching, failure: 'SERVICE_UNAVAILABLE' })).toBe(
-      'AllDebrid is not answering. Scia keeps asking.',
+      'Scia could not ask AllDebrid about this magnet just now. It asks again in a moment.',
     );
     expect(magnetLine({ ...fetching, status: 'failed', failure: 'SERVICE_NEEDED' })).toBe(
       'This is a magnet: Scia downloads magnets through AllDebrid. Connect AllDebrid in Settings, then try again.',
