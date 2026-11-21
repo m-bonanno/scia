@@ -85,6 +85,19 @@ function fail(status: number, code: ApiErrorCode, message: string): Response {
   return Response.json({ error: { code, message } }, { status });
 }
 
+// An account that is not premium, said of the account's magnets alone: about a key, the same word
+// of the service is no answer, and stays SERVICE_UNAVAILABLE.
+class NotPremiumError extends Error {}
+
+async function ofTheAccount<T>(ask: () => Promise<T>): Promise<T> {
+  return ask().catch((error: unknown) => {
+    if (error instanceof ServiceError && error.failure === UnlockFailure.NotPremium) {
+      throw new NotPremiumError(error.message, { cause: error });
+    }
+    throw error;
+  });
+}
+
 export function createApp(deps: AppDeps): Hono {
   const { manager, integrations } = deps;
   const app = new Hono();
@@ -158,7 +171,7 @@ export function createApp(deps: AppDeps): Hono {
 
   // The magnets of the connected service's account, for the panel that shows them (#138).
   app.get(`${API_PREFIX}/magnets/account`, async (c) =>
-    c.json({ data: await manager.accountMagnets() }),
+    c.json({ data: await ofTheAccount(() => manager.accountMagnets()) }),
   );
 
   app.post(`${API_PREFIX}/magnets/account/:id`, async (c) => {
@@ -171,7 +184,7 @@ export function createApp(deps: AppDeps): Hono {
         'A magnet of the account is named by its number.',
       );
     }
-    return c.json({ data: await manager.addAccountMagnet(id) }, 201);
+    return c.json({ data: await ofTheAccount(() => manager.addAccountMagnet(id)) }, 201);
   });
 
   app.post(`${API_PREFIX}/magnets/:id/retry`, (c) =>
@@ -342,14 +355,14 @@ export function createApp(deps: AppDeps): Hono {
       if (error.failure === UnlockFailure.NeedsService) {
         return fail(409, ApiErrorCode.ServiceNeeded, error.message);
       }
-      if (error.failure === UnlockFailure.NotPremium) {
-        return fail(422, ApiErrorCode.NotPremium, error.message);
-      }
       // The service was asked and said no (422), or could not be asked (502).
       // A refusal that is about a link has no place here: only a key is given on this API.
       const failure = isServiceFailure(error.failure) ? error.failure : ServiceFailure.Unavailable;
       const status = failure === ServiceFailure.Unavailable ? 502 : 422;
       return fail(status, failure, error.message);
+    }
+    if (error instanceof NotPremiumError) {
+      return fail(422, ApiErrorCode.NotPremium, error.message);
     }
     if (error instanceof CodeConflictError) {
       return fail(409, ApiErrorCode.Conflict, error.message);
