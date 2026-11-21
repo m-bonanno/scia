@@ -633,9 +633,12 @@ describe('DownloadManager and a link that is a page', () => {
 
     expect(Date.now() - startedAt).toBeLessThan(5000);
     expect(downloads.snapshot().downloads).toEqual([]);
-    await until(
-      async () =>
-        !(await readFile(join(folder.path, 'data', 'state.json'), 'utf8')).includes(added!.id),
+    // Read once the last save has landed: on Windows a read of the file while it is renamed into
+    // place makes the save fail.
+    await downloads.close();
+    manager = undefined;
+    expect(await readFile(join(folder.path, 'data', 'state.json'), 'utf8')).not.toContain(
+      added!.id,
     );
     const holder = Number(await readFile(`${givenFile}.holder`, 'utf8'));
     await until(() => {

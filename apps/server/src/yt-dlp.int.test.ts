@@ -298,6 +298,7 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     const holderPid = () => Number(readFileSync(`${givenFile}.holder`, 'utf8'));
     let holders: number[] = [];
     afterEach(() => {
+      vi.unstubAllEnvs();
       for (const pid of holders) {
         if (isRunning(pid)) process.kill(pid);
       }
@@ -369,21 +370,17 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     it.runIf(process.platform === 'win32')(
       'stops the reader as it can when taskkill cannot be started',
       async () => {
-        const systemRoot = process.env.SystemRoot;
-        process.env.SystemRoot = join(folder.path, 'no-windows-here');
-        try {
-          const stopped = new AbortController();
-          const reading = reader().read('https://site.example/two-processes', stopped.signal);
-          await started();
-          stopped.abort(new Error('paused'));
+        const stopped = new AbortController();
+        const reading = reader().read('https://site.example/two-processes', stopped.signal);
+        await started();
+        // Only now, after yt-dlp started with its own: taskkill is looked for at the stop.
+        vi.stubEnv('SystemRoot', join(folder.path, 'no-windows-here'));
+        stopped.abort(new Error('paused'));
 
-          const startedAt = Date.now();
-          await expect(reading).rejects.toThrow('paused');
-          expect(Date.now() - startedAt).toBeLessThan(5000);
-          expect(isRunning(given().pid)).toBe(false);
-        } finally {
-          process.env.SystemRoot = systemRoot;
-        }
+        const startedAt = Date.now();
+        await expect(reading).rejects.toThrow('paused');
+        expect(Date.now() - startedAt).toBeLessThan(5000);
+        expect(isRunning(given().pid)).toBe(false);
       },
     );
 
