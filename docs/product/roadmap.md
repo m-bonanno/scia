@@ -25,7 +25,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#13), the folder's button (#40), a paused bar's tone (#58), the key's placeholder (#66), the clipboard's first read (#134), room under notices (#143), the popover's note (#159), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
 - [ ] The page's logo and the app's icon drawing the mark in the same proportions (#88).
 - [ ] The two specs in quarantine fixed and back in the gates (#43, #162).
-- [ ] The wait of zero-filling on NTFS, measured (ADR 0001: before M1 closes).
+- [ ] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes).
 - [x] The installer refuses an older version (#172, #177).
 
 ### The owner's hands
@@ -41,7 +41,8 @@ One sitting, from one checklist, on a beta built as a release candidate:
 - [ ] The mark on a real `.exe` and a document (#33).
 - [ ] A hand in the folder dialog (#40) and on the speed menu (#43).
 - [ ] A real site's video, one file and an HLS stream (#89).
-- [ ] A beta updated to the stable, once it is tagged (#82).
+
+Checked after the tag, so not part of the gate: a beta updated to the stable (#82).
 
 ### The owner's decisions
 
@@ -62,31 +63,31 @@ None open: all were settled on 21 November 2026 ([decisions.md](./decisions.md#2
 
 `v1.0.0` waits for this milestone, but for the rows marked "no" ([decisions.md](./decisions.md#21-november-2026)).
 
-| Item                                                                                                    | Issue      | Built | Proven by                           | Not seen                                                    | In v1.0.0 |
-| ------------------------------------------------------------------------------------------------------- | ---------- | ----- | ----------------------------------- | ----------------------------------------------------------- | --------- |
-| [Tray: closing the window keeps downloading](./evidence.md#the-tray-icon)                               | #6, #13    | yes   | Script                              | the icon, its click, menu, tooltip                          | yes       |
-| [The mark of a downloaded file, and a second press to run](./evidence.md#the-mark-of-a-downloaded-file) | #22, #33   | yes   | Script                              | a marked `.exe` or document; a disk without streams; a hand | yes       |
-| [A file that could not be marked says so](./evidence.md#a-file-that-could-not-be-marked)                | #34        | no    | —                                   | —                                                           | no        |
-| [The default folder, in Settings](./evidence.md#the-download-folder)                                    | #37, #40   | yes   | E2E, Script                         | a hand in the dialog; the packaged app                      | yes       |
-| [The folder of one download](./evidence.md#the-download-folder)                                         | #39        | no    | —                                   | —                                                           | no        |
-| [Speed limit for all downloads](./evidence.md#the-speed-limit)                                          | #41, #43   | yes   | E2E, Script; one spec in quarantine | a hand on the menu; HTTPS in the app                        | yes       |
-| [The speed limit of one download](./evidence.md#the-speed-limit)                                        | #42        | no    | —                                   | —                                                           | no        |
-| [A notification when a download ends](./evidence.md#the-notification-when-a-download-ends)              | #45        | yes   | Script (main's log)                 | a notification looked at or clicked                         | yes       |
-| [The window really in use](./evidence.md#the-window-really-in-use)                                      | #62        | no    | —                                   | —                                                           | yes       |
-| [A second failure notified](./evidence.md#a-second-failure-notified)                                    | #55        | no    | —                                   | —                                                           | no        |
-| [A click on a notification leads to the row](./evidence.md#the-notification-when-a-download-ends)       | #57        | no    | —                                   | —                                                           | no        |
-| [Clipboard watching (optional)](./evidence.md#links-taken-from-the-clipboard)                           | #128, #134 | yes   | E2E, Hand                           | a ready row through a service; the packaged app             | yes       |
-| [Themes of the interface](./evidence.md#themes)                                                         | #52, #58   | yes   | E2E, Script                         | a Windows set to light; a hand on the menu                  | yes       |
-| [The app's icon, from the mark](./evidence.md#the-icon-of-the-app)                                      | #81, #85   | yes   | read from the system                | the icon on screen                                          | yes       |
-| [The installer (NSIS), by hand](./evidence.md#the-installer-by-hand)                                    | #70        | yes   | CI install                          | a download by hand through SmartScreen                      | yes       |
-| [The installer installed and started in CI](./evidence.md#the-installer-in-ci)                          | #92, #111  | yes   | CI install, every PR and release    | SmartScreen; a hand                                         | yes       |
-| [The installer refuses an older version](./evidence.md#the-installer-refuses-an-older-version)          | #172       | yes   | Specs (NSIS), Script, Hand          | a person running an older release                           | yes       |
-| [Automatic updates](./evidence.md#automatic-updates)                                                    | #82        | yes   | Script (installed app)              | a stable taken; a quit by the system                        | yes       |
-| [The version, and a downloaded update offered](./evidence.md#the-version-and-a-downloaded-update)       | #133, #159 | yes   | E2E, Script (packaged)              | a stable offered; real keys                                 | yes       |
-| [E2E suite on the real app](./evidence.md#the-e2e-suite)                                                | #91        | yes   | CI, nineteen specs                  | the packaged app; a kill mid-download (#108)                | yes       |
-| The `--inspect` fuse off in the shipped app                                                             | #115       | no    | —                                   | —                                                           | yes       |
-| A save of `state.json` while another process holds it                                                   | #151       | no    | —                                   | —                                                           | yes       |
-| [Zero-filling on NTFS, measured](./evidence.md#zero-filling-on-ntfs)                                    | —          | no    | —                                   | —                                                           | yes       |
+| Item                                                                                                    | Issue      | Built | Proven by                            | Not seen                                                    | In v1.0.0 |
+| ------------------------------------------------------------------------------------------------------- | ---------- | ----- | ------------------------------------ | ----------------------------------------------------------- | --------- |
+| [Tray: closing the window keeps downloading](./evidence.md#the-tray-icon)                               | #6, #13    | yes   | Script                               | the icon, its click, menu, tooltip                          | yes       |
+| [The mark of a downloaded file, and a second press to run](./evidence.md#the-mark-of-a-downloaded-file) | #22, #33   | yes   | Script                               | a marked `.exe` or document; a disk without streams; a hand | yes       |
+| [A file that could not be marked says so](./evidence.md#a-file-that-could-not-be-marked)                | #34        | no    | —                                    | —                                                           | no        |
+| [The default folder, in Settings](./evidence.md#the-download-folder)                                    | #37, #40   | yes   | E2E, Script                          | a hand in the dialog; the packaged app                      | yes       |
+| [The folder of one download](./evidence.md#the-download-folder)                                         | #39        | no    | —                                    | —                                                           | no        |
+| [Speed limit for all downloads](./evidence.md#the-speed-limit)                                          | #41, #43   | yes   | E2E, Script; one spec in quarantine  | a hand on the menu; HTTPS in the app                        | yes       |
+| [The speed limit of one download](./evidence.md#the-speed-limit)                                        | #42        | no    | —                                    | —                                                           | no        |
+| [A notification when a download ends](./evidence.md#the-notification-when-a-download-ends)              | #45        | yes   | Script (main's log)                  | a notification looked at or clicked                         | yes       |
+| [The window really in use](./evidence.md#the-window-really-in-use)                                      | #62        | no    | —                                    | —                                                           | yes       |
+| [A second failure notified](./evidence.md#a-second-failure-notified)                                    | #55        | no    | —                                    | —                                                           | no        |
+| [A click on a notification leads to the row](./evidence.md#the-notification-when-a-download-ends)       | #57        | no    | —                                    | —                                                           | no        |
+| [Clipboard watching (optional)](./evidence.md#links-taken-from-the-clipboard)                           | #128, #134 | yes   | E2E, Hand                            | a ready row through a service; the packaged app             | yes       |
+| [Themes of the interface](./evidence.md#themes)                                                         | #52, #58   | yes   | E2E, Script                          | a Windows set to light; a hand on the menu                  | yes       |
+| [The app's icon, from the mark](./evidence.md#the-icon-of-the-app)                                      | #81, #85   | yes   | read from the system                 | the icon on screen                                          | yes       |
+| [The installer (NSIS), by hand](./evidence.md#the-installer-by-hand)                                    | #70        | yes   | CI install                           | a download by hand through SmartScreen                      | yes       |
+| [The installer installed and started in CI](./evidence.md#the-installer-in-ci)                          | #92, #111  | yes   | CI install, every PR and release     | SmartScreen; a hand                                         | yes       |
+| [The installer refuses an older version](./evidence.md#the-installer-refuses-an-older-version)          | #172       | yes   | Specs (NSIS), CI smoke, Script, Hand | a person running an older release                           | yes       |
+| [Automatic updates](./evidence.md#automatic-updates)                                                    | #82        | yes   | Script (installed app)               | a stable taken; a quit by the system                        | yes       |
+| [The version, and a downloaded update offered](./evidence.md#the-version-and-a-downloaded-update)       | #133, #159 | yes   | E2E, Script (packaged)               | a stable offered; real keys                                 | yes       |
+| [E2E suite on the real app](./evidence.md#the-e2e-suite)                                                | #91        | yes   | CI, nineteen specs                   | the packaged app; a kill mid-download (#108)                | yes       |
+| The `--inspect` fuse off in the shipped app                                                             | #115       | no    | —                                    | —                                                           | yes       |
+| A save of `state.json` while another process holds it                                                   | #151       | no    | —                                    | —                                                           | yes       |
+| [Zero-filling on NTFS, measured](./evidence.md#zero-filling-on-ntfs)                                    | #182       | no    | —                                    | —                                                           | yes       |
 
 ## M2 — The whole extension
 
@@ -119,7 +120,7 @@ M3 does not wait for M2. Integrations arrive one at a time, each visible in Sett
 | ["via AllDebrid" on the row](./evidence.md#via-alldebrid-on-the-row)                           | #48        | yes   | Script                           | paused (specs only)                           | yes       |
 | [A link that expires, unlocked again](./evidence.md#a-link-that-expires)                       | #180       | no    | —                                | —                                             | yes       |
 | [A link into several files](./evidence.md#a-link-into-several-files)                           | #181       | no    | —                                | —                                             | yes       |
-| [A file host's link with no service](./evidence.md#a-file-host-without-a-service)              | #49        | yes   | E2E, Script                      | the real list in the app                      | yes       |
+| [A file host's link with no service](./evidence.md#a-file-host-without-a-service)              | #49        | yes   | Script                           | the real list in the app                      | yes       |
 | [Connected by a code](./evidence.md#connected-by-a-code)                                       | #136, #146 | yes   | E2E, Script                      | AllDebrid's real page                         | yes       |
 | [A pasted magnet](./evidence.md#a-pasted-magnet)                                               | #137, #150 | yes   | E2E, Script                      | the real AllDebrid                            | yes       |
 | [The magnets of the account](./evidence.md#the-magnets-of-the-account)                         | #138       | yes   | Script                           | the real AllDebrid                            | yes       |
@@ -128,13 +129,13 @@ M3 does not wait for M2. Integrations arrive one at a time, each visible in Sett
 
 ## M4 — Organisation
 
-| Item                                                | Issue | Built | Proven by | Not seen | In v1.0.0 |
-| --------------------------------------------------- | ----- | ----- | --------- | -------- | --------- |
-| Categories and rules (a folder per kind or site)    | —     | no    | —         | —        | no        |
-| Scheduling                                          | —     | no    | —         | —        | no        |
-| Integrity checks (checksums) and archive extraction | —     | no    | —         | —        | no        |
-| Proxy                                               | —     | no    | —         | —        | no        |
-| History with search, and a database for state       | —     | no    | —         | —        | no        |
+| Item                                                                    | Issue | Built | Proven by | Not seen | In v1.0.0 |
+| ----------------------------------------------------------------------- | ----- | ----- | --------- | -------- | --------- |
+| Categories and rules (a folder per kind or per site)                    | —     | no    | —         | —        | no        |
+| Scheduling                                                              | —     | no    | —         | —        | no        |
+| Integrity checks (checksums) and archive extraction                     | —     | no    | —         | —        | no        |
+| Proxy                                                                   | —     | no    | —         | —        | no        |
+| History with search: the moment to move from `state.json` to a database | —     | no    | —         | —        | no        |
 
 ## After the first stable release
 

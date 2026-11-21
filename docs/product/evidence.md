@@ -118,7 +118,7 @@ The installer installed silently and started in CI on every PR and in every rele
 
 The installer refuses to install a version older than the one installed (#172). A message naming both versions — "Scia 1.0.0-beta.20 is already installed, and it is newer than this installer's 1.0.0-beta.17. To install 1.0.0-beta.17, uninstall Scia first: your downloads and settings are kept." — and no way to force it; the same version installs again, as a repair; a build made here, at `0.0.0`, is refused like any older one ([ADR 0018](../adr/0018-the-installer-refuses-an-older-version.md)).
 
-**Written, covered by specs that run it in NSIS and by the installer's smoke test, and seen on Windows** with two installers of the branch, `1.0.0-beta.20.local` and `1.0.0-beta.17.local`, over the owner's `v1.0.0-beta.20`: the older one refused by hand — the box read and captured, and closed by a press the script did not make — and with `/S`, exit 1638, the folder and both registry keys as they were, and a Scia running on a scratch profile left running; then uninstalled, the older one installed, and the newer one over it; the same version again. The installers were of the branch at `767fa71`; what changed after it is held by specs. Not seen: the refusal in a release — `v1.0.0-beta.26` is the first release that carries #177; a person who downloads an older release and runs it. An installer released before it has no such check.
+**Written, covered by specs that run it in NSIS and by the installer's smoke test, and seen on Windows** with two installers of the branch, `1.0.0-beta.20.local` and `1.0.0-beta.17.local`, over the owner's `v1.0.0-beta.20`: the older one refused by hand — the box read and captured, and closed by a press the script did not make — and with `/S`, exit 1638, the folder and both registry keys as they were, and a Scia running on a scratch profile left running; then uninstalled, the older one installed, and the newer one over it; the same version again. The installers were of the branch at `767fa71`; what changed after it is held by specs. **Seen by CI's smoke test in a release**: `v1.0.0-beta.26`, the first release that carries #177, passed its smoke test in Release run 44941588978, which includes "refuses, silently and writing nothing, to install over a newer Scia". Not seen: a person who downloads an older release and runs it; an install by hand over a previous version. An installer released before it has no such check.
 
 ### Automatic updates
 
@@ -144,7 +144,7 @@ The first eight were each seen failing with the line they hold taken away, on th
 
 ### Zero-filling on NTFS
 
-To measure: the wait caused by zero-filling on NTFS for very large files (ADR 0001, "to be measured before M1 closes"). Not measured.
+To measure: the wait caused by zero-filling on NTFS for very large files (#182; ADR 0001, "to be measured before M1 closes"). Not measured.
 
 ## M2 — The whole extension
 
@@ -189,9 +189,9 @@ M3 does not wait for M2: a hoster link pasted into Scia needs nothing from it. O
 
 Integrations arrive one at a time. Each is visible in three places: an **Integrations** section in Settings that lists the services and shows which are connected; the Integrations table in the README; the release notes of the version that brings it (`feat(integrations): …`).
 
-AllDebrid (#7), connected once in Settings (API key kept by the operating system). From then on a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically, with nothing else to do — as a direct link would be. It is built and proven against a simulated service; the verification with a real account is the owner's, who pastes their own key into Settings. It is built in small PRs, each with its issue. Of #7's nine points, six are ticked by merged PRs; #180 and #181 are left to build, and the README and ADR point stays open until they land (the audit of #7, 21 November 2026).
+AllDebrid (#7), connected once in Settings (API key kept by the operating system). From then on a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically, with nothing else to do — as a direct link would be. It has to be built and proven against a simulated service; the verification with a real account is the owner's, who pastes their own key into Settings. It is built in small PRs, each with its issue. Of #7's nine points, six are ticked by merged PRs; #180 and #181 are left to build, and the README and ADR point stays open until they land (the audit of #7, 21 November 2026).
 
-As planned, the first stable release waited for every line of M3 but the connection by a code, magnets and a second service: those lines are what #7 lists under "Done when", which has more that has no line here. It does not wait for the link sent by the extension (M2). The code and magnets were built before it all the same, and the owner's checklist of the gate tries them; `v1.0.0` waits for their follow-ups (#146, #150) too ([decisions.md](./decisions.md#21-november-2026)).
+The first stable release waits for every line of M3 but a second service — the connection by a code, magnets and their follow-ups (#146, #150) included ([decisions.md](./decisions.md#21-november-2026)). When they were planned it did not wait for the code and magnets: the lines it waited for were what #7 lists under "Done when", which has more that has no line here. It does not wait for the link sent by the extension (M2).
 
 ### The AllDebrid connection in Settings
 

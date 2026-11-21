@@ -4,7 +4,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 
 ## 19 November 2026
 
-- The first stable release waits for the whole of M1 and for AllDebrid (#7), whole and tried by the owner with their own key.
+- The first stable release waits for the whole of M1 and for AllDebrid (#7), whole and tried by the owner with their own key. Changed on 21 November 2026: M1 whole stays the rule, but for the rows the owner put after `v1.0.0` (#189).
 - Downloads behind a login: the session comes from the extension only — never a cookie pasted by hand, never a default. The ADR on handing cookies over has to record it.
 - Pages, playlists and channels (#8): yes, as JDownloader does, inside the "Respect the hosts" principle as `CLAUDE.md` states it — also where a site's terms forbid downloading what it lets the person play. Sites are read by yt-dlp, shipped with Scia and updated by it, not by a reader per site written here ([ADR 0009](../adr/0009-the-video-of-a-page.md)).
 - A debrid service is lawful under "Respect the hosts", and a hoster's wait or daily cap is not an access control Scia evades: the person pays the service, the service fetches the file with accounts of its own, and Scia downloads the link it is given (#7, #46).
@@ -33,7 +33,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 - The whole version, small, beside "Scia"; a downloaded update offered there with "Restart now", possible only while nothing runs or waits; Scia opens again by itself after it (#133, [ADR 0015](../adr/0015-a-restart-to-install-an-update.md)).
 - "Connect with a code" is the main way to connect AllDebrid in Settings, and pasting a key stays as the other; built before magnets (#136, [ADR 0013](../adr/0013-a-key-that-arrives-by-a-code.md)).
 - Magnets through AllDebrid in three pieces, after the code, in this order: a pasted magnet (#137), the magnets of the account (#138), a copied magnet (#139).
-- The roadmap (#189): the gate of `v1.0.0` on top (build, the owner's hands, the owner's decisions), one table per milestone, the detail of what was seen moved out of it, the dated decisions in this file.
+- The roadmap (#189): the gate of `v1.0.0` on top (build, the owner's hands, the owner's decisions), one table per milestone, the dated decisions in this file. The seen / not seen detail goes to [`docs/product/evidence.md`](./evidence.md) (#189).
 - `v1.0.0` waits for #62 (the window really in use), #115 (the `--inspect` fuse off), #89 with #99 (a video and its sound joined), and #180, #181 (the two parts of #7 left) (#189).
 - `v1.0.0` does not wait for #55, #34, #39, #42 (#189).
 - The extension's icon moves from M1 to M2, with the extension (#189).
@@ -61,7 +61,10 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 - #168: related fixes filed together may share one branch, which closes all their issues; `git-flow.md` names the case.
 - #187: later review rounds are lighter — a fix that touches only specs or the PR body is reviewed by the roles that blocked, and the tech lead reads CI instead of running every gate again after round 1. Not taken for now: the author's self-check, the product manager as the one owner of issue coverage, one suite at a time on the owner's machine.
 - #188: `.claude/gotchas.md` becomes an index (one line per rule, by area, the stories in an archive), and the CLAUDE.md files are shortened to their rules, linking to the ADRs.
-- `v1.0.0` waits for every follow-up settled today on the lines of M1 — #13 (its four decisions), #40, #58, #66, #134, #143, #159 — and M1 whole stays the rule.
+- M1 whole stays the rule, but for the rows the owner put after it (#34, #39, #42, #55, #57) (#189).
+- `v1.0.0` waits for every follow-up settled today on the lines of M1: #13 (its four decisions), #40, #58, #66, #134, #143, #159.
+- `v1.0.0` waits for a save of `state.json` not lost while another process holds the file (#151), and a key sealed just before the app was killed, read back (#69).
+- `v1.0.0` waits for the magnets of the account (#138) and a magnet copied to the clipboard (#139).
 - `v1.0.0` waits for the follow-ups of the code and of magnets (#146, #150).
 - `v1.0.0` waits for the page's logo and the app's icon to draw the mark in the same proportions (#88). Not the recommended option.
 - `v1.0.0` waits for the two specs in quarantine to be fixed and back in the gates (#43, #162).
