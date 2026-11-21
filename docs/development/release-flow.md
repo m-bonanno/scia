@@ -50,7 +50,7 @@ Mending it moves a tag, so it is done **only on the owner's word**:
 1. Delete the unreleased tag on GitHub: `git push origin --delete <tag>`. This is allowed only because nothing was ever released under it: no GitHub release, so no installer and no `latest.yml` that an installed Scia could have read. A tag with a release is never touched (Rules).
 2. Start the Release workflow on the branch whose run pushed the tag, with no `installer_tag`: `gh workflow run release.yml --ref <develop|main>`. semantic-release makes the tag again, on the branch's head, with everything merged since, then its notes and its release. Read that the release carries its installer and `latest.yml`, and that the notes ref is there.
 
-On `main` the case does not show itself. semantic-release keeps a stable tag whatever its notes say (`get-last-release.js` in version 25), so the next run takes the unreleased stable as released and goes on, green: the third sign never appears. A stable tag with no release is mended before the next merge into `main`.
+On `main` the case does not show itself. semantic-release keeps a stable tag whatever its notes say (`get-last-release.js` in version 25), so the next run takes the unreleased stable as released and goes on, green: later runs never fail on `git tag`, and only the first run's failure, the missing release and the missing notes ref show it. A stable tag with no release is mended before the next merge into `main`, and before `main` is merged back into `develop`, whose next beta would otherwise be counted from the unreleased stable.
 
 ## Releasing
 
