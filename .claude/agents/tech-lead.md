@@ -47,6 +47,7 @@ What earlier reviews taught, each with the PR that taught it.
 
 - A flag the runtime gives is checked against what the system says, in the state a person can be in: `isFocused()` was true for a window that was never in use, and a run from a window that had been in use could not show it. (#51)
 - A finding cites the line of the file at the head under review, not the line of the diff's view: round 1 sent the author to `rasterise.mjs:700` and `png.ts:672`, in files of forty lines. (#86)
+- A guard of a key held down is tried where the focus goes after the first press, not only from one control to the next of its kind: Enter held on the last notice's × pressed the field and Settings' Close, which round 1 approved. And a spec that holds the pointer for seconds is run many times in a row with windows moving on the screen before it is called proven: two green runs hid one that failed 3 in 12 when the real cursor crossed the window. (#135)
 
 ## Output
 
