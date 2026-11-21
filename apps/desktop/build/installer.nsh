@@ -19,6 +19,10 @@ Var SciaVersion
 Var SciaCore
 Var SciaPre
 Var SciaHasPre
+Var SciaBuild
+Var SciaHasBuild
+Var SciaSet
+Var SciaAll
 Var SciaReadable
 Var SciaCoreA
 Var SciaPreA
@@ -77,13 +81,39 @@ Function SciaIsNumber
   ${EndIf}
 FunctionEnd
 
+; $SciaAll 1 when $SciaHead is not empty and every character of it is in $SciaSet. The text goes
+; to the System plug-in by the stack, never inside its call: a quote in a value would end it.
+Function SciaAllIn
+  StrCpy $SciaAll 0
+  ${If} $SciaHead == ""
+    Return
+  ${EndIf}
+  Push $SciaSet
+  Push $SciaHead
+  System::Call 'shlwapi::StrSpnW(w s, w s) i .s'
+  Pop $SciaIndex
+  StrLen $SciaChar $SciaHead
+  ${If} $SciaIndex == $SciaChar
+    StrCpy $SciaAll 1
+  ${EndIf}
+FunctionEnd
+
+; $SciaAll 1 when $SciaHead is an identifier semver allows after "-" or "+": [0-9A-Za-z-]+.
+Function SciaIsIdentifier
+  StrCpy $SciaSet "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-"
+  Call SciaAllIn
+FunctionEnd
+
 ; $SciaVersion read as MAJOR.MINOR.PATCH[-PRERELEASE][+BUILD]: $SciaCore, $SciaPre, $SciaHasPre,
-; and $SciaReadable 1 when it is one.
+; and $SciaReadable 1 when it is one. A prerelease identifier of digits only is a number, which
+; SciaIsNumber reads, or the version is unreadable.
 Function SciaRead
   StrCpy $SciaReadable 0
   StrCpy $SciaSeparator "+"
   StrCpy $SciaRest $SciaVersion
   Call SciaSplit
+  StrCpy $SciaBuild $SciaRest
+  StrCpy $SciaHasBuild $SciaFound
   StrCpy $SciaSeparator "-"
   StrCpy $SciaRest $SciaHead
   Call SciaSplit
@@ -112,7 +142,27 @@ Function SciaRead
     StrCpy $SciaRest $SciaPre
     ${Do}
       Call SciaSplit
-      ${If} $SciaHead == ""
+      Call SciaIsIdentifier
+      ${If} $SciaAll == 0
+        Return
+      ${EndIf}
+      StrCpy $SciaSet "0123456789"
+      Call SciaAllIn
+      ${If} $SciaAll == 1
+        Call SciaIsNumber
+        ${If} $SciaNumber == 0
+          Return
+        ${EndIf}
+      ${EndIf}
+    ${LoopUntil} $SciaFound == 0
+  ${EndIf}
+
+  ${If} $SciaHasBuild == 1
+    StrCpy $SciaRest $SciaBuild
+    ${Do}
+      Call SciaSplit
+      Call SciaIsIdentifier
+      ${If} $SciaAll == 0
         Return
       ${EndIf}
     ${LoopUntil} $SciaFound == 0
@@ -165,7 +215,9 @@ Function SciaCompareLists
     ${EndIf}
     ; Two words. Ordinal: by code unit, which for the ASCII that semver allows is ASCII order.
     ; CSTR_LESS_THAN 1, CSTR_EQUAL 2, CSTR_GREATER_THAN 3.
-    System::Call 'kernel32::CompareStringOrdinal(w "$SciaHeadA", i -1, w "$SciaHeadB", i -1, i 0) i .s'
+    Push $SciaHeadB
+    Push $SciaHeadA
+    System::Call 'kernel32::CompareStringOrdinal(w s, i -1, w s, i -1, i 0) i .s'
     Pop $SciaIndex
     IntCmp $SciaIndex 2 same lower higher
     lower:
@@ -240,6 +292,8 @@ FunctionEnd
 ; closes or uninstalls anything. Every installer writes its version as DisplayVersion.
 !macro customInit
   ReadRegStr $SciaInstalled SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" DisplayVersion
+  ; A first install has no value, and the read sets the error flag electron-builder's script reads.
+  ClearErrors
   Push $SciaInstalled
   Push "${VERSION}"
   Call SciaRefusal

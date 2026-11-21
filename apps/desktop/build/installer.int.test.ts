@@ -69,7 +69,8 @@ SectionEnd
 
 // An installer of a given version made of the include's own customInit, run where electron-builder
 // runs it, which reads the version installed from a key of the spec's: when it installs, it writes
-// what it finds on top of NSIS's stack, which electron-builder's .onInit shares.
+// what it finds on top of NSIS's stack, which electron-builder's .onInit shares — or that the
+// error flag, which electron-builder's script reads too, was left set.
 const installing = (include: string, version: string, key: string) => `
 Unicode true
 Name "Scia"
@@ -87,6 +88,8 @@ FunctionEnd
 
 Section
   Pop $1
+  IfErrors 0 +2
+    StrCpy $1 "error flag set"
   FileOpen $0 "$EXEDIR\\installed.txt" w
   FileWrite $0 $1
   FileClose $0
@@ -187,6 +190,12 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
       ['1.0.0', '1.0.0', '0'],
       ['1.0.0+5', '1.0.0+6', '0'],
       ['1.0.0-beta.1+a', '1.0.0-beta.1', '0'],
+      // A build's identifiers may begin with a zero; a prerelease's 0 is a number.
+      ['1.0.0+build.01', '1.0.0', '0'],
+      ['1.0.0-0', '1.0.0-1', '-1'],
+      ['1.0.0-x-y.0', '1.0.0-x-y', '1'],
+      // The ASCII order of words reaches the characters the System plug-in is handed.
+      ['1.0.0-ZZ', '1.0.0-aa', '-1'],
     ])('%s against %s: %s', async (a, b, order) => {
       expect(await orderOf(a, b)).toBe(order);
     });
@@ -204,6 +213,16 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
       '1.0.0-beta..1',
       '1.0.0-beta.',
       '99999999999.0.0',
+      // A number IntOp cannot read back, in the prerelease too: past 32 bits, or a leading zero.
+      '1.0.0-beta.99999999999',
+      '1.0.0-beta.01',
+      // Characters semver does not allow, in the prerelease and in the build.
+      '1.0.0-be_ta',
+      '1.0.0-beta"1',
+      '1.0.0+',
+      '1.0.0+a..b',
+      '1.0.0+a+b',
+      '1.0.0+a_b',
     ])('reads no order from "%s", a version it cannot read', async (unreadable) => {
       expect(await orderOf(unreadable, '1.0.0')).toBe('');
       expect(await orderOf('1.0.0', unreadable)).toBe('');
