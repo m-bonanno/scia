@@ -150,6 +150,9 @@ export interface AllDebridServerOptions {
   // The magnets it knows, by the hash of their torrent, in lower case. One it does not know is
   // taken and never ready, as a torrent with no peer.
   readonly magnets?: Readonly<Record<string, SimulatedMagnet>>;
+  // The hashes of magnets already on the account when the service starts: added on its site, or
+  // by another application (#138). Each must be one of `magnets`.
+  readonly onTheAccount?: readonly string[];
   // It answers the magnets of a request last to first: an answer is matched by the magnet it
   // names, not by its place.
   readonly reverseUploads?: boolean;
@@ -274,6 +277,10 @@ export async function startAllDebridServer(
   // The magnets sent, by the id the service gave each, with the questions left before it is ready.
   const sent = new Map<number, { readonly hash: string; left: number }>();
   let nextMagnet = 1000;
+  for (const hash of options.onTheAccount ?? []) {
+    nextMagnet += 1;
+    sent.set(nextMagnet, { hash, left: options.magnets?.[hash]?.fetchingPolls ?? 0 });
+  }
 
   function misbehaves(response: ServerResponse): boolean {
     if (misbehaviour === undefined) return false;

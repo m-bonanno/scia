@@ -181,6 +181,8 @@ const magnetStateSchema = z.object({
   statusCode: z.coerce.number().int().nonnegative(),
   downloaded: z.coerce.number().int().nonnegative().nullish(),
   downloadSpeed: z.coerce.number().int().nonnegative().nullish(),
+  // Seconds since 1970; 0 or absent when the service does not say.
+  uploadDate: z.coerce.number().int().nonnegative().nullish(),
 });
 const magnetIdSchema = z.object({ id: z.number().int().positive() });
 // A list, or — as some of its answers write it — an object by id. Each entry is read on its own:
@@ -239,6 +241,8 @@ export type MagnetState =
       readonly size: number;
       readonly downloaded: number;
       readonly bytesPerSecond: number;
+      // When it was added to the account, in seconds since 1970, when the service says.
+      readonly addedAt: number | null;
       readonly stage: 'fetching' | 'ready' | 'failed';
     }
   // Listed by its id, the rest of it written in a way Scia cannot read.
@@ -489,6 +493,10 @@ export class AllDebrid {
           size: each.size,
           downloaded: each.downloaded ?? 0,
           bytesPerSecond: each.downloadSpeed ?? 0,
+          addedAt:
+            each.uploadDate === undefined || each.uploadDate === null || each.uploadDate === 0
+              ? null
+              : each.uploadDate,
           stage:
             each.statusCode < MAGNET_READY
               ? 'fetching'

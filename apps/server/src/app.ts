@@ -17,7 +17,7 @@ import {
   SNAPSHOT_EVENT,
 } from '@scia/contracts';
 import type { Theme } from '@scia/contracts/theme';
-import { isServiceFailure, ServiceFailure } from '@scia/core';
+import { isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
 import { Hono } from 'hono';
 import { streamSSE } from 'hono/streaming';
 import { type DownloadManager, ManagerError, ManagerRefusal } from './download-manager.ts';
@@ -154,6 +154,23 @@ export function createApp(deps: AppDeps): Hono {
     const parsed = addMagnetsSchema.safeParse(await c.req.json().catch(() => null));
     if (!parsed.success) return fail(400, ApiErrorCode.InvalidRequest, 'Give one or more magnets.');
     return c.json({ data: manager.addMagnets(parsed.data.magnets) }, 201);
+  });
+
+  // The magnets of the connected service's account, for the panel that shows them (#138).
+  app.get(`${API_PREFIX}/magnets/account`, async (c) =>
+    c.json({ data: await manager.accountMagnets() }),
+  );
+
+  app.post(`${API_PREFIX}/magnets/account/:id`, async (c) => {
+    const id = Number(c.req.param('id'));
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      return fail(
+        400,
+        ApiErrorCode.InvalidRequest,
+        'A magnet of the account is named by its number.',
+      );
+    }
+    return c.json({ data: await manager.addAccountMagnet(id) }, 201);
   });
 
   app.post(`${API_PREFIX}/magnets/:id/retry`, (c) =>
@@ -321,6 +338,9 @@ export function createApp(deps: AppDeps): Hono {
         : fail(409, ApiErrorCode.Conflict, error.message);
     }
     if (error instanceof ServiceError) {
+      if (error.failure === UnlockFailure.NeedsService) {
+        return fail(409, ApiErrorCode.ServiceNeeded, error.message);
+      }
       // The service was asked and said no (422), or could not be asked (502).
       // A refusal that is about a link has no place here: only a key is given on this API.
       const failure = isServiceFailure(error.failure) ? error.failure : ServiceFailure.Unavailable;

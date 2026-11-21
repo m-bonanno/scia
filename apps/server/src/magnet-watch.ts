@@ -136,7 +136,12 @@ export class MagnetWatch {
   }
 
   async #send(service: MagnetService): Promise<void> {
-    const sending = this.#deps.records().filter((record) => record.status === MagnetStatus.Sending);
+    const sending = this.#deps
+      .records()
+      .filter(
+        (record): record is MagnetRecord & { magnet: string } =>
+          record.status === MagnetStatus.Sending && record.magnet !== null,
+      );
     if (sending.length === 0) return;
     try {
       const sent = await service.send(

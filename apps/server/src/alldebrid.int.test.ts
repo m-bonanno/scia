@@ -693,6 +693,7 @@ describe('AllDebrid', () => {
           size: 119,
           downloaded: 59,
           bytesPerSecond: 1_048_576,
+          addedAt: 1_700_000_000,
           stage: 'fetching',
         },
       ]);
