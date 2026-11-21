@@ -42,5 +42,9 @@ describe('magnetLine', () => {
     expect(magnetLine({ ...fetching, status: 'failed', failure: 'MAGNET_FAILED' })).toBe(
       'AllDebrid could not fetch this magnet. Try again later.',
     );
+    // Failed on an answer Scia cannot read: AllDebrid was asked, and answered.
+    expect(magnetLine({ ...fetching, status: 'failed', failure: 'SERVICE_UNAVAILABLE' })).toBe(
+      'Scia cannot read what AllDebrid answered about this magnet. Try again in a moment.',
+    );
   });
 });

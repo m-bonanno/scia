@@ -114,7 +114,7 @@ const MAGNET_FAILED: Readonly<Record<MagnetFailure, (service: string) => string>
   [MagnetFailure.NetworkRefused]: (service) =>
     `${service} does not serve this network: it refuses servers and some VPNs. Try again from another network.`,
   [MagnetFailure.Unavailable]: (service) =>
-    `${service} could not be asked about this magnet. Try again in a moment.`,
+    `Scia cannot read what ${service} answered about this magnet. Try again in a moment.`,
   [MagnetFailure.NotPremium]: (service) => `${service} fetches magnets for premium accounts only.`,
   // Said with no service connected, so it names the one there is to connect.
   [MagnetFailure.NeedsService]: () =>
