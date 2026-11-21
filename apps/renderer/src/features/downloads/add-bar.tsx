@@ -1,6 +1,6 @@
 import { Link } from 'lucide-react';
 import { type ReactNode, type Ref, type SubmitEvent, useId, useRef, useState } from 'react';
-import { extractLinks } from '@scia/contracts/links';
+import { type Pasted, pastedIn } from './pasted.ts';
 
 // What became of the links sent from the field. A refusal of the text itself is the field's to
 // say; any other failure the page says elsewhere.
@@ -8,8 +8,15 @@ export type Added =
   { readonly taken: true } | { readonly taken: false; readonly refusal: string | null };
 
 interface AddBarProps {
-  readonly onAdd: (urls: string[]) => Promise<Added>;
+  readonly onAdd: (pasted: Pasted) => Promise<Added>;
   readonly inputRef?: Ref<HTMLInputElement>;
+}
+
+// How many it sends, when more than one: files, or — with a magnet among them — links.
+function buttonLabel({ links, magnets }: Pasted): string {
+  const count = links.length + magnets.length;
+  if (count <= 1) return 'Download';
+  return `Download ${String(count)} ${magnets.length === 0 ? 'files' : 'links'}`;
 }
 
 export function AddBar({ onAdd, inputRef }: AddBarProps): ReactNode {
@@ -19,7 +26,8 @@ export function AddBar({ onAdd, inputRef }: AddBarProps): ReactNode {
   // What the field holds now: an answer about text it no longer holds is not said under it.
   const holds = useRef('');
   const refusalId = useId();
-  const links = extractLinks(text);
+  const pasted = pastedIn(text);
+  const nothing = pasted.links.length === 0 && pasted.magnets.length === 0;
 
   const edit = (value: string) => {
     holds.current = value;
@@ -29,10 +37,10 @@ export function AddBar({ onAdd, inputRef }: AddBarProps): ReactNode {
 
   const submit = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (links.length === 0 || busy) return;
+    if (nothing || busy) return;
     setBusy(true);
     const sent = text;
-    void onAdd(links)
+    void onAdd(pasted)
       .then((added) => {
         // What was typed while the links were on their way is kept, and a failed add never clears
         // what was typed.
@@ -73,10 +81,10 @@ export function AddBar({ onAdd, inputRef }: AddBarProps): ReactNode {
         />
         <button
           type="submit"
-          disabled={links.length === 0 || busy}
+          disabled={nothing || busy}
           className="h-9 shrink-0 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-foreground transition-opacity focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring disabled:opacity-40"
         >
-          {links.length > 1 ? `Download ${String(links.length)} files` : 'Download'}
+          {buttonLabel(pasted)}
         </button>
       </form>
       {refusal !== null && (

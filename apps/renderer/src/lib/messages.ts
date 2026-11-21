@@ -1,5 +1,5 @@
 import { ApiErrorCode, IntegrationCodeFailure, type IntegrationId } from '@scia/contracts';
-import { PREPARE_LIMIT_SECONDS, ServiceFailure, UnlockFailure } from '@scia/core';
+import { MagnetFailure, PREPARE_LIMIT_SECONDS, ServiceFailure, UnlockFailure } from '@scia/core';
 import { ApiError } from './api.ts';
 import { formatDuration } from './format.ts';
 
@@ -91,6 +91,34 @@ const CODE_FAILED: Readonly<Record<IntegrationCodeFailure, (service: string) => 
 
 export function codeFailedMessage(failure: IntegrationCodeFailure, id: IntegrationId): string {
   return CODE_FAILED[failure](SERVICE_NAME[id]);
+}
+
+// Said on the row of a magnet the service gave no files for (#137). Every sentence of the
+// service's refusal begins with who said so.
+const MAGNET_FAILED: Readonly<Record<MagnetFailure, (service: string) => string>> = {
+  [MagnetFailure.Invalid]: (service) => `${service} does not take this as a magnet.`,
+  [MagnetFailure.Limit]: (service) =>
+    `${service} already has as many magnets for this account as it allows. Remove some on ${service}, then try again.`,
+  [MagnetFailure.TooLarge]: (service) => `${service} says this magnet is too large to fetch.`,
+  // No peer, too slow, an error of its own, or deleted on its site: true of all of them.
+  [MagnetFailure.Failed]: (service) => `${service} could not fetch this magnet. Try again later.`,
+  [MagnetFailure.KeyRefused]: (service) =>
+    `${service} no longer accepts the key. In Settings, disconnect it and connect again, then try again.`,
+  [MagnetFailure.KeyBlocked]: (service) =>
+    `${service} is blocking the key from here. If ${service} emailed you about a new sign-in, confirm it; otherwise check your network, then try again.`,
+  [MagnetFailure.AccountBanned]: (service) => `${service} says the account is banned.`,
+  [MagnetFailure.NetworkRefused]: (service) =>
+    `${service} does not serve this network: it refuses servers and some VPNs. Try again from another network.`,
+  [MagnetFailure.Unavailable]: (service) =>
+    `${service} could not be asked about this magnet. Try again in a moment.`,
+  [MagnetFailure.NotPremium]: (service) => `${service} fetches magnets for premium accounts only.`,
+  // Said with no service connected, so it names the one there is to connect.
+  [MagnetFailure.NeedsService]: () =>
+    `This is a magnet: Scia downloads magnets through ${SERVICE_NAME.alldebrid}. Connect ${SERVICE_NAME.alldebrid} in Settings, then try again.`,
+};
+
+export function magnetFailureMessage(failure: MagnetFailure): string {
+  return MAGNET_FAILED[failure](SERVICE_NAME.alldebrid);
 }
 
 // Said of a service that is connected, when it last answered with a refusal or not at all.
