@@ -1,7 +1,7 @@
 // A session without these two handlers grants a page whatever it asks: camera, microphone,
-// position, notifications. Scia's page asks one thing, to write text on the clipboard ("Copy the
-// code" of the extension pairing); the rest is refused, whoever asks.
-export const PAGE_PERMISSIONS: ReadonlySet<string> = new Set(['clipboard-sanitized-write']);
+// position, notifications. Scia's page asks for nothing — it wrote the extension's pairing code on
+// the clipboard until Settings stopped offering it (#152) — so everything is refused, whoever asks.
+export const PAGE_PERMISSIONS: ReadonlySet<string> = new Set<string>();
 
 export interface PermissionAsk {
   readonly permission: string;
@@ -18,8 +18,13 @@ function originOf(address: string | undefined): string | undefined {
   }
 }
 
-export function grantsPermission(ask: PermissionAsk, appOrigin: string): boolean {
-  return PAGE_PERMISSIONS.has(ask.permission) && originOf(ask.asker) === appOrigin;
+// What is granted is given, so that the rule on the origin is held while nothing is granted.
+export function grantsPermission(
+  ask: PermissionAsk,
+  appOrigin: string,
+  granted: ReadonlySet<string>,
+): boolean {
+  return granted.has(ask.permission) && originOf(ask.asker) === appOrigin;
 }
 
 // The two handlers of an Electron session. Chromium checks a permission and asks for it apart,
@@ -41,9 +46,11 @@ export interface PermissionGate {
 // The origin is read at every ask: the engine may come back on another port.
 export function guardPermissions(session: PermissionGate, appOrigin: () => string): void {
   session.setPermissionRequestHandler((_contents, permission, respond, details) => {
-    respond(grantsPermission({ permission, asker: details.requestingUrl }, appOrigin()));
+    respond(
+      grantsPermission({ permission, asker: details.requestingUrl }, appOrigin(), PAGE_PERMISSIONS),
+    );
   });
   session.setPermissionCheckHandler((_contents, permission, requestingOrigin) =>
-    grantsPermission({ permission, asker: requestingOrigin }, appOrigin()),
+    grantsPermission({ permission, asker: requestingOrigin }, appOrigin(), PAGE_PERMISSIONS),
   );
 }
