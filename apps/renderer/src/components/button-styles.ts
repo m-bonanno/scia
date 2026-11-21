@@ -21,10 +21,16 @@ export const QUIET_BUTTON = cn(
   FOCUS_RING,
 );
 
-// What a button that is only an icon looks like: `IconButton`, and the button that asks once
-// more, which looks like one until it is pressed.
-export const ICON_BUTTON = cn(
+const ICON_BUTTON_SHAPE = cn(
   'inline-flex size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors',
-  'hover:bg-tonal hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent',
+  'hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent',
   FOCUS_RING,
 );
+
+// What a button that is only an icon looks like: `IconButton`, and the button that asks once
+// more, which looks like one until it is pressed.
+export const ICON_BUTTON = cn(ICON_BUTTON_SHAPE, 'hover:bg-tonal');
+
+// The same on a ground that is already `tonal` (a notice): under the pointer it takes the next
+// step of tone, or it would not change at all.
+export const ICON_BUTTON_ON_TONAL = cn(ICON_BUTTON_SHAPE, 'hover:bg-border');

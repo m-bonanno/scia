@@ -185,6 +185,11 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
     const page = await app.firstWindow({ timeout: START_LIMIT_MS });
     // The window exists before it has a page: it follows the engine once the engine is ready.
     await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\//, { timeout: START_LIMIT_MS });
+    // The window takes the spec's pointer only, not the system's: the real cursor crossing it —
+    // a person's hand, another session's window — would end a hover the spec holds.
+    await app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setIgnoreMouseEvents(true);
+    });
     await page.getByRole('textbox', { name: 'Links to download' }).waitFor();
     return {
       app,

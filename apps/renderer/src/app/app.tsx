@@ -1,15 +1,17 @@
-import type { Settings } from '@scia/contracts';
+import { ApiErrorCode, type Settings } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { TEXT_BUTTON } from '@/components/button-styles.ts';
-import { AddBar } from '@/features/downloads/add-bar.tsx';
+import { type Added, AddBar } from '@/features/downloads/add-bar.tsx';
 import { DownloadList } from '@/features/downloads/download-list.tsx';
 import type { RowActions } from '@/features/downloads/download-row.tsx';
 import { FilterTabs, type FilterTabsHandle } from '@/features/downloads/filter-tabs.tsx';
 import { countByFilter, Filter, matchesFilter } from '@/features/downloads/filters.ts';
 import { extractLinks } from '@scia/contracts/links';
-import { SettingsDialog } from '@/features/settings/settings-dialog.tsx';
-import { api } from '@/lib/api.ts';
+import { Notices } from '@/features/notices/notices.tsx';
+import { useNotices } from '@/features/notices/use-notices.ts';
+import { SettingsDialog, type SettingsLayer } from '@/features/settings/settings-dialog.tsx';
+import { api, ApiError } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { Connection, useLive } from '@/lib/live.ts';
 import { ENGINE_UNREACHABLE, errorMessage, FILE_NOT_OPENED } from '@/lib/messages.ts';
@@ -23,13 +25,18 @@ function isTextField(target: EventTarget | null): boolean {
 export function App(): ReactNode {
   const live = useLive();
   const [filter, setFilter] = useState<Filter>(Filter.All);
-  const [notice, setNotice] = useState<string | null>(null);
+  const { notices, tell, dismiss } = useNotices();
+  const field = useRef<HTMLInputElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [settingsLayer, setSettingsLayer] = useState<SettingsLayer | null>(null);
   const [speedLimit, setSpeedLimit] = useState<number | null>(null);
 
-  const report = useCallback((error: unknown) => {
-    setNotice(errorMessage(error));
-  }, []);
+  const report = useCallback(
+    (error: unknown) => {
+      tell(errorMessage(error));
+    },
+    [tell],
+  );
 
   const keepSettings = useCallback((settings: Settings) => {
     setSpeedLimit(settings.speedLimitBytesPerSecond);
@@ -55,16 +62,20 @@ export function App(): ReactNode {
     };
   }, [reached, keepSettings]);
 
+  // From the field, a refusal of what was sent is the field's to say; anything else, and any
+  // failure of links pasted on the page, is a notice.
   const add = useCallback(
-    async (urls: string[]): Promise<boolean> => {
+    async (urls: string[], fromField: boolean): Promise<Added> => {
       try {
         await api.addDownloads(urls);
-        setNotice(null);
         setFilter((current) => (current === Filter.Completed ? Filter.All : current));
-        return true;
+        return { taken: true };
       } catch (error) {
+        if (fromField && error instanceof ApiError && error.code === ApiErrorCode.InvalidRequest) {
+          return { taken: false, refusal: errorMessage(error) };
+        }
         report(error);
-        return false;
+        return { taken: false, refusal: null };
       }
     },
     [report],
@@ -75,7 +86,7 @@ export function App(): ReactNode {
     const onPaste = (event: ClipboardEvent) => {
       if (isTextField(event.target)) return;
       const links = extractLinks(event.clipboardData?.getData('text/plain') ?? '');
-      if (links.length > 0) void add(links);
+      if (links.length > 0) void add(links, false);
     };
     window.addEventListener('paste', onPaste);
     return () => {
@@ -109,11 +120,11 @@ export function App(): ReactNode {
           ? undefined
           : (id) => {
               shell.openDownload(id).catch(() => {
-                setNotice(FILE_NOT_OPENED);
+                tell(FILE_NOT_OPENED);
               });
             },
     };
-  }, [report]);
+  }, [report, tell]);
 
   // Newest first: what was just added is what the eye looks for.
   const visible = useMemo(
@@ -132,7 +143,6 @@ export function App(): ReactNode {
       filterTabs.current?.focus();
     }
   }, [hasReady]);
-  const shownNotice = live.connection === Connection.Offline ? ENGINE_UNREACHABLE : notice;
 
   return (
     <div className="flex h-screen flex-col">
@@ -145,12 +155,7 @@ export function App(): ReactNode {
       />
       <main className="flex min-h-0 flex-1 flex-col">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 pt-4 pb-4">
-          <AddBar onAdd={add} />
-          {shownNotice !== null && (
-            <p role="alert" className="px-1 text-sm text-destructive">
-              {shownNotice}
-            </p>
-          )}
+          <AddBar onAdd={(urls) => add(urls, true)} inputRef={field} />
           <div className="flex items-center justify-between gap-2">
             <FilterTabs
               ref={filterTabs}
@@ -180,12 +185,22 @@ export function App(): ReactNode {
         </div>
       </main>
       <SettingsDialog
+        ref={setSettingsLayer}
         open={settingsOpen}
         onClose={() => {
           setSettingsOpen(false);
         }}
         onError={report}
         onSettings={keepSettings}
+      />
+      {/* Over Settings while it is open: a modal dialog leaves the rest of the page out of reach.
+          A focus whose notices are all gone goes to the field, or to the top of the dialog. */}
+      <Notices
+        notices={notices}
+        lasting={live.connection === Connection.Offline ? ENGINE_UNREACHABLE : null}
+        onDismiss={dismiss}
+        home={() => (settingsOpen ? (settingsLayer?.top() ?? null) : field.current)}
+        layer={settingsOpen ? (settingsLayer?.element ?? null) : null}
       />
     </div>
   );
