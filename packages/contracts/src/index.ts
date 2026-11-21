@@ -7,11 +7,13 @@ import {
 } from '@scia/core';
 import { z } from 'zod';
 import { IntegrationCodeFailure, IntegrationId } from './integrations.ts';
-import { httpUrl } from './links.ts';
+import { httpUrl, magnetUri } from './links.ts';
+import { magnetSchema } from './magnets.ts';
 import { Theme } from './theme.ts';
 
 export { API_PREFIX, DEFAULT_API_PORT } from './endpoint.ts';
 export * from './integrations.ts';
+export * from './magnets.ts';
 
 export const ApiErrorCode = {
   Unauthorized: 'UNAUTHORIZED',
@@ -91,6 +93,12 @@ export const addDownloadsSchema = z.object({
 });
 export type AddDownloads = z.infer<typeof addDownloadsSchema>;
 
+// Magnets pasted into the page, for the connected service to fetch (#137).
+export const addMagnetsSchema = z.object({
+  magnets: z.array(magnetUri).min(1).max(MAX_URLS_PER_REQUEST),
+});
+export type AddMagnets = z.infer<typeof addMagnetsSchema>;
+
 // The links main read on the clipboard (docs/adr/0012-links-taken-from-the-clipboard.md). The
 // engine keeps those that are files or videos it knows, and adds them ready, not started.
 export const offerLinksSchema = z.object({
@@ -100,6 +108,8 @@ export type OfferLinks = z.infer<typeof offerLinksSchema>;
 
 export const snapshotSchema = z.object({
   downloads: z.array(downloadSchema),
+  // The magnets the service is fetching, or could not (#137).
+  magnets: z.array(magnetSchema),
   // Whether main reads the clipboard: main follows the engine's events, and hears the switch
   // there the moment it changes, whoever changed it.
   watchClipboard: z.boolean(),

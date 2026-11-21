@@ -17,7 +17,12 @@ export function matchesFilter(filter: Filter, status: DownloadStatus): boolean {
   return filter === Filter.Completed ? completed : !completed;
 }
 
-export function countByFilter(downloads: readonly Download[]): Record<Filter, number> {
+// A magnet is in the list and not finished, whatever the service does with it (#137).
+export function countByFilter(downloads: readonly Download[], magnets = 0): Record<Filter, number> {
   const completed = downloads.filter((d) => d.status === DownloadStatus.Completed).length;
-  return { all: downloads.length, active: downloads.length - completed, completed };
+  return {
+    all: downloads.length + magnets,
+    active: downloads.length - completed + magnets,
+    completed,
+  };
 }

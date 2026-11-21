@@ -109,6 +109,7 @@ export async function main(
     defaultDirectory: config.downloadDir,
     logger,
     resolver: integrations,
+    magnets: integrations,
     ...(pageReader === undefined ? {} : { pageReader }),
   });
 

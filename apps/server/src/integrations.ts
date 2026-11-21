@@ -9,10 +9,11 @@ import {
   IntegrationCodeStatus,
   IntegrationId,
 } from '@scia/contracts';
-import { isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
+import { type MagnetFailure, isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
 import type { AllDebrid } from './alldebrid.ts';
 import type { KeyVault } from './key-vault.ts';
 import type { LinkResolver, UnlockedLink } from './link-resolver.ts';
+import type { MagnetFile, MagnetService, MagnetState, SentMagnet } from './magnet-service.ts';
 import { describeFailure, type Logger } from './logger.ts';
 import { CodeExpiredError, ServiceError } from './service-error.ts';
 
@@ -131,7 +132,7 @@ function isDomainList(value: unknown): value is { readonly domains: string[] } {
 // and what the service last said of the account behind it. A key is never logged and never
 // given back to whoever calls. It is also what a download asks whether a link is a service's,
 // and for the direct link behind it (link-resolver.ts).
-export class Integrations implements LinkResolver {
+export class Integrations implements LinkResolver, MagnetService {
   readonly #deps: IntegrationsDeps;
   #key: string | undefined;
   #account: IntegrationAccount | null = null;
@@ -377,6 +378,34 @@ export class Integrations implements LinkResolver {
     return domains.some((domain) => host === domain || host.endsWith(`.${domain}`))
       ? IntegrationId.AllDebrid
       : undefined;
+  }
+
+  async send(magnets: readonly string[], signal?: AbortSignal): Promise<SentMagnet[]> {
+    return this.#deps.alldebrid.uploadMagnets(this.#keyForMagnets(), magnets, signal);
+  }
+
+  async states(signal?: AbortSignal): Promise<MagnetState[]> {
+    return this.#deps.alldebrid.magnetStates(this.#keyForMagnets(), signal);
+  }
+
+  async files(
+    ids: readonly number[],
+    signal?: AbortSignal,
+  ): Promise<Map<number, MagnetFile[] | MagnetFailure>> {
+    return this.#deps.alldebrid.magnetFiles(this.#keyForMagnets(), ids, signal);
+  }
+
+  // A magnet goes through a service or nowhere: Scia is not a torrent client.
+  #keyForMagnets(): string {
+    const key = this.#key;
+    if (key === undefined) {
+      throw new ServiceError(
+        IntegrationId.AllDebrid,
+        UnlockFailure.NeedsService,
+        'A magnet, and no service is connected.',
+      );
+    }
+    return key;
   }
 
   async unlock(service: IntegrationId, url: string, signal: AbortSignal): Promise<UnlockedLink> {

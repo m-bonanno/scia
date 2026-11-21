@@ -9,6 +9,8 @@ import {
   integrationCodeSchema,
   type IntegrationId,
   integrationSchema,
+  type Magnet,
+  magnetSchema,
   type Pairing,
   pairingSchema,
   type Settings,
@@ -61,6 +63,16 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ urls }),
     }),
+  // Magnets for the connected service to fetch (#137): the page sends them, and never reads one back.
+  addMagnets: (magnets: readonly string[]): Promise<Magnet[]> =>
+    request('/magnets', z.array(magnetSchema), {
+      method: 'POST',
+      body: JSON.stringify({ magnets }),
+    }),
+  retryMagnet: (id: string): Promise<Magnet> =>
+    request(`/magnets/${encodeURIComponent(id)}/retry`, magnetSchema, { method: 'POST' }),
+  removeMagnet: (id: string): Promise<void> =>
+    request(`/magnets/${encodeURIComponent(id)}`, null, { method: 'DELETE' }),
   start: (id: string): Promise<Download> =>
     request(`/downloads/${encodeURIComponent(id)}/start`, downloadSchema, { method: 'POST' }),
   startReady: (): Promise<Download[]> =>

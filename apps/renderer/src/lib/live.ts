@@ -1,4 +1,10 @@
-import { API_PREFIX, type Download, SNAPSHOT_EVENT, snapshotSchema } from '@scia/contracts';
+import {
+  API_PREFIX,
+  type Download,
+  type Magnet,
+  SNAPSHOT_EVENT,
+  snapshotSchema,
+} from '@scia/contracts';
 import { useSyncExternalStore } from 'react';
 import { authorization } from './api.ts';
 import { readServerSentEvents } from './sse.ts';
@@ -9,12 +15,14 @@ export type Connection = (typeof Connection)[keyof typeof Connection];
 export interface LiveState {
   readonly connection: Connection;
   readonly downloads: readonly Download[];
+  // The magnets the service is fetching, or could not (#137).
+  readonly magnets: readonly Magnet[];
 }
 
 const FIRST_RETRY_MS = 500;
 const LONGEST_RETRY_MS = 5000;
 
-let state: LiveState = { connection: Connection.Connecting, downloads: [] };
+let state: LiveState = { connection: Connection.Connecting, downloads: [], magnets: [] };
 const listeners = new Set<() => void>();
 
 function set(next: LiveState): void {
@@ -29,10 +37,14 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-function snapshotOf(data: string): readonly Download[] | undefined {
+function snapshotOf(
+  data: string,
+): { readonly downloads: readonly Download[]; readonly magnets: readonly Magnet[] } | undefined {
   try {
     const parsed = snapshotSchema.safeParse(JSON.parse(data));
-    return parsed.success ? parsed.data.downloads : undefined;
+    return parsed.success
+      ? { downloads: parsed.data.downloads, magnets: parsed.data.magnets }
+      : undefined;
   } catch {
     return undefined;
   }
@@ -48,8 +60,8 @@ async function listen(signal: AbortSignal): Promise<void> {
       if (response.ok && response.body !== null) {
         retryMs = FIRST_RETRY_MS;
         for await (const event of readServerSentEvents(response.body)) {
-          const downloads = event.event === SNAPSHOT_EVENT ? snapshotOf(event.data) : undefined;
-          if (downloads !== undefined) set({ connection: Connection.Live, downloads });
+          const lists = event.event === SNAPSHOT_EVENT ? snapshotOf(event.data) : undefined;
+          if (lists !== undefined) set({ connection: Connection.Live, ...lists });
         }
       }
     } catch {

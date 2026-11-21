@@ -1,8 +1,15 @@
 import { randomUUID } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
 import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
-import { type Download, type Settings, type SettingsPatch, type Snapshot } from '@scia/contracts';
+import {
+  type Download,
+  IntegrationId,
+  type Magnet,
+  type Settings,
+  type SettingsPatch,
+  type Snapshot,
+} from '@scia/contracts';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
 import {
   canPause,
@@ -11,9 +18,13 @@ import {
   DownloadFailure,
   DownloadStatus,
   etaSeconds,
+  FALLBACK_FILE_NAME,
   fileKindOfName,
   fileNameFromHost,
   fileNameFromUrl,
+  hashOfMagnet,
+  magnetFolders,
+  MagnetStatus,
   nextToStart,
   PageFailure,
   planSegments,
@@ -27,6 +38,8 @@ import { DownloadTask } from './download-task.ts';
 import { HlsTask, piecesOf, type Timeline } from './hls-task.ts';
 import type { LinkResolver } from './link-resolver.ts';
 import { describeFailure, type Logger } from './logger.ts';
+import type { MagnetFile, MagnetService } from './magnet-service.ts';
+import { MagnetWatch, nameOfMagnet } from './magnet-watch.ts';
 import { chooseMedia, type MediaKind, PageError } from './media-choice.ts';
 import { offeredAs } from './offered-links.ts';
 import { type MarkDownloaded, markerFor } from './origin-mark.ts';
@@ -39,7 +52,7 @@ import {
   type RequestHeaders,
 } from './remote-source.ts';
 import { ServiceError } from './service-error.ts';
-import type { DownloadRecord, StateStore } from './state-store.ts';
+import type { DownloadRecord, MagnetRecord, StateStore } from './state-store.ts';
 import { Throttle } from './throttle.ts';
 
 export const PART_SUFFIX = '.scia';
@@ -87,6 +100,10 @@ export interface ManagerDeps {
   // What turns a hoster's link into a direct one, through a connected service. Without it
   // every link is fetched as it stands.
   readonly resolver?: LinkResolver;
+  // What fetches a pasted magnet, through a connected service (#137). Without it every magnet
+  // says that it needs one.
+  readonly magnets?: MagnetService;
+  readonly magnetPollMs?: number;
   // What finds the video a page plays, when a link is a page. Without it every page is fetched
   // as it stands.
   readonly pageReader?: PageReader;
@@ -174,6 +191,15 @@ function addressOf(url: string): string {
   }
 }
 
+// Something that is not a folder stands at this path.
+function isFileThere(path: string): boolean {
+  try {
+    return !statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 function partPathOf(record: DownloadRecord): string {
   return join(record.directory, `${record.fileName}${PART_SUFFIX}`);
 }
@@ -183,6 +209,9 @@ function partPathOf(record: DownloadRecord): string {
 export class DownloadManager {
   readonly #deps: ManagerDeps;
   readonly #records: DownloadRecord[];
+  // The magnets the service is fetching, or could not: theirs is the list's top (#137).
+  #magnets: MagnetRecord[];
+  readonly #magnetWatch: MagnetWatch;
   #settings: Settings;
   readonly #running = new Map<string, Running>();
   #version = 0;
@@ -196,10 +225,28 @@ export class DownloadManager {
   // One for every connection of every download: the limit is for all of them together.
   readonly #throttle: Throttle;
 
-  constructor(deps: ManagerDeps, records: DownloadRecord[], settings: Settings) {
+  constructor(
+    deps: ManagerDeps,
+    records: DownloadRecord[],
+    settings: Settings,
+    magnets: MagnetRecord[] = [],
+  ) {
     this.#deps = deps;
     this.#markDownloaded = deps.markDownloaded ?? markerFor(process.platform);
     this.#records = records;
+    this.#magnets = magnets;
+    this.#magnetWatch = new MagnetWatch({
+      service: deps.magnets,
+      logger: deps.logger,
+      ...(deps.magnetPollMs === undefined ? {} : { pollMs: deps.magnetPollMs }),
+      records: () => this.#magnets,
+      changed: () => {
+        this.#changed();
+      },
+      ready: (record, files) => {
+        this.#magnetReady(record, files);
+      },
+    });
     this.#settings = settings;
     this.#throttle = new Throttle(settings.speedLimitBytesPerSecond);
   }
@@ -216,14 +263,17 @@ export class DownloadManager {
       ...DEFAULT_SETTINGS,
       downloadDirectory: deps.defaultDirectory,
     };
-    const manager = new DownloadManager(deps, records, settings);
+    const manager = new DownloadManager(deps, records, settings, state?.magnets ?? []);
     manager.#schedule();
+    // A magnet waited for when the engine stopped is waited for again, never sent again.
+    manager.#magnetWatch.wake();
     return manager;
   }
 
   snapshot(): Snapshot {
     return {
       downloads: this.#records.map((record) => this.#view(record)),
+      magnets: this.#magnets.map((record) => this.#magnetView(record)),
       watchClipboard: this.#settings.watchClipboard,
     };
   }
@@ -305,6 +355,60 @@ export class DownloadManager {
       this.#changed();
     }
     return added.map((record) => this.#view(record));
+  }
+
+  // Magnets pasted into the page, for the service to fetch (#137): one already in the list —
+  // the same torrent, however it was written — is not added again.
+  addMagnets(magnets: readonly string[]): Magnet[] {
+    const known = new Set(this.#magnets.map((record) => hashOfMagnet(record.magnet)));
+    const added: MagnetRecord[] = [];
+    for (const magnet of magnets) {
+      const hash = hashOfMagnet(magnet);
+      if (known.has(hash)) continue;
+      known.add(hash);
+      added.push({
+        id: (this.#deps.newId ?? randomUUID)(),
+        magnet,
+        name: nameOfMagnet(magnet),
+        serviceId: null,
+        status: MagnetStatus.Sending,
+        totalBytes: null,
+        downloadedBytes: 0,
+        failure: null,
+        directory: this.#settings.downloadDirectory,
+        createdAt: new Date(this.#now()).toISOString(),
+      });
+    }
+    // How many, never which: a magnet names a person's torrent.
+    this.#deps.logger.info('magnets_added', { magnets: magnets.length, added: added.length });
+    if (added.length > 0) {
+      this.#magnets.push(...added);
+      this.#changed();
+      this.#magnetWatch.wake();
+    }
+    return added.map((record) => this.#magnetView(record));
+  }
+
+  // Scia stops waiting for it; the service keeps it, as anything the account added elsewhere.
+  removeMagnet(id: string): void {
+    const record = this.#magnetRecord(id);
+    this.#magnets = this.#magnets.filter((other) => other !== record);
+    this.#magnetWatch.forget(id);
+    this.#changed();
+  }
+
+  // A magnet that failed is sent again: the service answers for the same torrent what it has.
+  retryMagnet(id: string): Magnet {
+    const record = this.#magnetRecord(id);
+    if (record.status !== MagnetStatus.Failed) {
+      throw new ManagerError(ManagerRefusal.Conflict, 'Only a magnet that failed is tried again.');
+    }
+    record.status = MagnetStatus.Sending;
+    record.serviceId = null;
+    record.failure = null;
+    this.#changed();
+    this.#magnetWatch.wake();
+    return this.#magnetView(record);
   }
 
   start(id: string): Download {
@@ -437,7 +541,51 @@ export class DownloadManager {
   }
 
   // Stops every transfer and writes the state. What was running goes on at the next start.
+  #magnetRecord(id: string): MagnetRecord {
+    const record = this.#magnets.find((candidate) => candidate.id === id);
+    if (record === undefined) throw new ManagerError(ManagerRefusal.NotFound, 'No such magnet.');
+    return record;
+  }
+
+  #magnetView(record: MagnetRecord): Magnet {
+    return {
+      id: record.id,
+      name: record.name,
+      status: record.status,
+      totalBytes: record.totalBytes,
+      downloadedBytes: record.downloadedBytes,
+      // Known of a magnet the service is fetching only: one that failed or is sent has none.
+      bytesPerSecond: this.#magnetWatch.bytesPerSecond(record.id),
+      failure: record.failure,
+      createdAt: record.createdAt,
+    };
+  }
+
+  // Its files become downloads through the service — each in the magnet's folder and the folders
+  // the magnet puts it in, under the name the magnet gives it — and the magnet leaves the list.
+  #magnetReady(record: MagnetRecord, files: readonly MagnetFile[]): void {
+    this.#magnets = this.#magnets.filter((other) => other !== record);
+    // Its folder, or the first free one beside it when a file of its name stands there: a folder of
+    // that name is the magnet's to share, as its files take free names inside it.
+    const [own = FALLBACK_FILE_NAME] = magnetFolders(record.name, []);
+    const root = uniqueFileName(own, (candidate) => isFileThere(join(record.directory, candidate)));
+    const added = files.map((file) => {
+      const download = this.#newRecord(file.link, null, DownloadStatus.Queued);
+      download.via = IntegrationId.AllDebrid;
+      const [, ...folders] = magnetFolders(record.name, file.folders);
+      download.directory = join(record.directory, root, ...folders);
+      download.fileName = fileNameFromHost(file.name) ?? FALLBACK_FILE_NAME;
+      download.nameKept = true;
+      return download;
+    });
+    this.#records.push(...added);
+    this.#deps.logger.info('magnet_ready', { files: added.length });
+    this.#changed();
+    this.#schedule();
+  }
+
   async close(): Promise<void> {
+    await this.#magnetWatch.close();
     this.#closed = true;
     clearInterval(this.#checkpoint);
     this.#checkpoint = undefined;
@@ -473,6 +621,7 @@ export class DownloadManager {
       video: null,
       fromPage: false,
       timeline: null,
+      nameKept: false,
       createdAt: new Date(this.#now()).toISOString(),
       completedAt: null,
     };
@@ -550,6 +699,7 @@ export class DownloadManager {
         version: 1,
         settings: this.#settings,
         downloads: this.#records,
+        magnets: this.#magnets,
       });
     } catch (error) {
       this.#deps.logger.error('state_not_saved', { error: describeFailure(error) });
@@ -827,7 +977,7 @@ export class DownloadManager {
     // The host of the direct link names the file when it does (#adopt); the service's name
     // is the one to fall back on, and is a name from a host like any other.
     const named = unlocked.fileName === undefined ? undefined : fileNameFromHost(unlocked.fileName);
-    if (!record.named && named !== undefined) record.fileName = named;
+    if (!record.named && !record.nameKept && named !== undefined) record.fileName = named;
     return unlocked.url;
   }
 
@@ -836,7 +986,10 @@ export class DownloadManager {
   #adopt(record: DownloadRecord, remote: RemoteFile): void {
     if (!record.named) {
       // A page's video is named after what its site calls it, not after its server's file.
-      const wanted = record.video === null ? (remote.fileName ?? record.fileName) : record.fileName;
+      const wanted =
+        record.video === null && !record.nameKept
+          ? (remote.fileName ?? record.fileName)
+          : record.fileName;
       record.fileName = this.#freeName(record, wanted);
       record.named = true;
     }

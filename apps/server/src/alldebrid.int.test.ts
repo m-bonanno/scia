@@ -1,5 +1,5 @@
 import { integrationAccountSchema } from '@scia/contracts';
-import { ServiceFailure, UnlockFailure, PREPARE_LIMIT_SECONDS } from '@scia/core';
+import { MagnetFailure, ServiceFailure, UnlockFailure, PREPARE_LIMIT_SECONDS } from '@scia/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AllDebrid, DELAYED_LIMIT_MS, PUBLIC_ANSWER_LIMIT_MS } from './alldebrid.ts';
 import { CodeExpiredError, ServiceError } from './service-error.ts';
@@ -76,6 +76,7 @@ describe('AllDebrid', () => {
         authorization: `Bearer ${KEY}`,
         userAgent: 'Scia/spec',
         form: {},
+        lists: {},
       },
     ]);
   });
@@ -296,6 +297,7 @@ describe('AllDebrid', () => {
         authorization: `Bearer ${KEY}`,
         userAgent: 'Scia/spec',
         form: { link: LINK },
+        lists: { link: [LINK] },
       },
     ]);
   });
@@ -517,6 +519,7 @@ describe('AllDebrid', () => {
         authorization: undefined,
         userAgent: 'Scia/spec',
         form: {},
+        lists: {},
       },
     ]);
   });
@@ -557,6 +560,7 @@ describe('AllDebrid', () => {
         authorization: undefined,
         userAgent: 'Scia/spec',
         form: { pin: code, check },
+        lists: { pin: [code], check: [check] },
       });
     }
   });
@@ -578,6 +582,245 @@ describe('AllDebrid', () => {
     server.confirmCode(code, 'two words');
 
     expect(await failureOf(client.confirmedKey(code, check))).toBe(ServiceFailure.Unavailable);
+  });
+
+  describe('magnets', () => {
+    const HASH = '842783e3005495d5d1637f5364b59343c7844707';
+    const OTHER = '194257a7bf4eaea978f4b5b7fbd3b4efcdd99e43';
+    const MAGNET = `magnet:?xt=urn:btih:${HASH}&dn=ubuntu`;
+    const tree = [
+      { n: 'readme.txt', s: 12, l: 'https://alldebrid.com/f/readme' },
+      {
+        n: 'Disc 1',
+        e: [
+          { n: 'a.iso', s: 100, l: 'https://alldebrid.com/f/a' },
+          { n: 'Extras', e: [{ n: 'b.nfo', s: 7, l: 'https://alldebrid.com/f/b' }] },
+        ],
+      },
+    ];
+    const magnets = { [HASH]: { name: 'Ubuntu', size: 119, files: tree, fetchingPolls: 1 } };
+
+    it('sends magnets in one form, each one answered on its own: taken with its id, or refused', async () => {
+      const server = await serviceWith({
+        magnets: {
+          ...magnets,
+          [OTHER]: { name: 'x', size: 1, files: [], error: 'MAGNET_TOO_LARGE' },
+        },
+      });
+      const bad = `magnet:?xt=urn:btih:${OTHER}`;
+
+      const sent = await clientOf(server).uploadMagnets(KEY, [MAGNET, bad]);
+
+      expect(sent).toEqual([
+        {
+          magnet: MAGNET,
+          taken: { id: expect.any(Number) as unknown, name: 'Ubuntu', size: 119, ready: false },
+        },
+        { magnet: bad, failure: MagnetFailure.TooLarge },
+      ]);
+      expect(server.requests.at(-1)).toMatchObject({
+        method: 'POST',
+        url: '/v4/magnet/upload',
+        authorization: `Bearer ${KEY}`,
+        lists: { 'magnets[]': [MAGNET, bad] },
+      });
+    });
+
+    it('matches each answer to the magnet it names, in whatever order the service answers', async () => {
+      const client = clientOf(
+        await serviceWith({
+          reverseUploads: true,
+          magnets: { ...magnets, [OTHER]: { name: 'Other', size: 3, files: [] } },
+        }),
+      );
+      const other = `magnet:?xt=urn:btih:${OTHER}`;
+
+      const sent = await client.uploadMagnets(KEY, [MAGNET, other]);
+
+      expect(sent.map((each) => ('taken' in each ? each.taken.name : each.failure))).toEqual([
+        'Ubuntu',
+        'Other',
+      ]);
+    });
+
+    it('matches each answer to its magnet by the hash, when the service writes the magnet its own way', async () => {
+      const client = clientOf(
+        await serviceWith({
+          reverseUploads: true,
+          rewriteUploads: true,
+          magnets: { ...magnets, [OTHER]: { name: 'Other', size: 3, files: [] } },
+        }),
+      );
+      const other = `magnet:?xt=urn:btih:${OTHER}&dn=other`;
+
+      const sent = await client.uploadMagnets(KEY, [MAGNET, other]);
+
+      expect(sent.map((each) => ('taken' in each ? each.taken.name : each.failure))).toEqual([
+        'Ubuntu',
+        'Other',
+      ]);
+    });
+
+    it('says where the magnets of the account are, passing over one it cannot read', async () => {
+      const client = clientOf(await serviceWith({ magnets, unreadableStranger: true }));
+      const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+      const id = sent && 'taken' in sent ? sent.taken.id : 0;
+
+      expect((await client.magnetStates(KEY)).map((each) => each.id)).toEqual([id]);
+    });
+
+    it('says what refuses every magnet of a request, as it says it of a link', async () => {
+      const client = clientOf(await serviceWith({ magnets }));
+
+      expect(await failureOf(client.uploadMagnets('free-key-0000000000000000', [MAGNET]))).toBe(
+        UnlockFailure.NotPremium,
+      );
+      expect(await failureOf(client.uploadMagnets('nobody-key-00000000000000', [MAGNET]))).toBe(
+        ServiceFailure.KeyRefused,
+      );
+    });
+
+    it('says where each magnet of the account is: what the service has of it, how fast, and whether it is ready', async () => {
+      const server = await serviceWith({ magnets });
+      const client = clientOf(server);
+      const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+      const id = sent && 'taken' in sent ? sent.taken.id : 0;
+
+      expect(await client.magnetStates(KEY)).toEqual([
+        {
+          id,
+          name: 'Ubuntu',
+          size: 119,
+          downloaded: 59,
+          bytesPerSecond: 1_048_576,
+          stage: 'fetching',
+        },
+      ]);
+      expect((await client.magnetStates(KEY))[0]?.stage).toBe('ready');
+    });
+
+    it('lists the files of ready magnets in one request, each with its folders and its link', async () => {
+      const server = await serviceWith({
+        magnets: {
+          [HASH]: { ...magnets[HASH], fetchingPolls: 0 },
+          [OTHER]: {
+            name: 'Other',
+            size: 1,
+            files: [{ n: 'o.txt', s: 1, l: 'https://alldebrid.com/f/o' }],
+          },
+        },
+      });
+      const client = clientOf(server);
+      const sent = await client.uploadMagnets(KEY, [MAGNET, `magnet:?xt=urn:btih:${OTHER}`]);
+      const [id, other] = sent.map((each) => ('taken' in each ? each.taken.id : 0));
+
+      const files = await client.magnetFiles(KEY, [id ?? 0, other ?? 0]);
+
+      expect(files.get(id ?? 0)).toEqual([
+        { folders: [], name: 'readme.txt', size: 12, link: 'https://alldebrid.com/f/readme' },
+        { folders: ['Disc 1'], name: 'a.iso', size: 100, link: 'https://alldebrid.com/f/a' },
+        {
+          folders: ['Disc 1', 'Extras'],
+          name: 'b.nfo',
+          size: 7,
+          link: 'https://alldebrid.com/f/b',
+        },
+      ]);
+      expect(files.get(other ?? 0)).toEqual([
+        { folders: [], name: 'o.txt', size: 1, link: 'https://alldebrid.com/f/o' },
+      ]);
+      const asked = server.requests.filter((request) => request.url === '/v4/magnet/files');
+      expect(asked.map((request) => request.lists['id[]'])).toEqual([[String(id), String(other)]]);
+    });
+
+    it('says the service could not be asked about the files of a magnet it answers with a code Scia does not know', async () => {
+      const client = clientOf(
+        await serviceWith({
+          magnets: { [HASH]: { name: 'Ubuntu', size: 119, files: tree, unknownFilesAnswers: 1 } },
+        }),
+      );
+      const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+      const id = sent && 'taken' in sent ? sent.taken.id : 0;
+
+      expect((await client.magnetFiles(KEY, [id])).get(id)).toBe(MagnetFailure.Unavailable);
+    });
+
+    it('says it cannot take a list of more files than any torrent has', async () => {
+      const files = Array.from({ length: 100_001 }, (_, index) => ({
+        n: `f${String(index)}`,
+        s: 1,
+        l: 'https://alldebrid.com/f/x',
+      }));
+      const client = clientOf(
+        await serviceWith({ magnets: { [HASH]: { name: 'Many', size: files.length, files } } }),
+      );
+      const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+      const id = sent && 'taken' in sent ? sent.taken.id : 0;
+
+      expect((await client.magnetFiles(KEY, [id])).get(id)).toBe(MagnetFailure.Unreadable);
+    });
+
+    it('says a magnet failed for each code the service ends one with', async () => {
+      const codes = [
+        'MAGNET_CANT_BOOTSTRAP',
+        'MAGNET_TOOK_TOO_LONG',
+        'MAGNET_LINKS_REMOVED',
+        'MAGNET_PROCESSING_FAILED',
+        'MAGNET_UPLOAD_FAILED',
+        'MAGNET_FILE_UPLOAD_FAILED',
+        'MAGNET_INTERNAL_ERROR',
+      ];
+      const hashes = codes.map((_, index) => String(index).padStart(40, 'c'));
+      const client = clientOf(
+        await serviceWith({
+          magnets: Object.fromEntries(
+            codes.map((code, index) => [
+              hashes[index] ?? '',
+              { name: code, size: 1, files: [], error: code },
+            ]),
+          ),
+        }),
+      );
+
+      const sent = await client.uploadMagnets(
+        KEY,
+        hashes.map((hash) => `magnet:?xt=urn:btih:${hash}`),
+      );
+
+      expect(sent.map((each) => ('failure' in each ? each.failure : 'taken'))).toEqual(
+        codes.map(() => MagnetFailure.Failed),
+      );
+    });
+
+    it('says a magnet failed when the service lists no file of it', async () => {
+      const client = clientOf(
+        await serviceWith({ magnets: { [HASH]: { name: 'Empty', size: 0, files: [] } } }),
+      );
+      const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+      const id = sent && 'taken' in sent ? sent.taken.id : 0;
+
+      expect((await client.magnetFiles(KEY, [id])).get(id)).toBe(MagnetFailure.Failed);
+    });
+
+    it('says a magnet failed when the service no longer has its files', async () => {
+      const client = clientOf(await serviceWith({ magnets }));
+
+      expect((await client.magnetFiles(KEY, [4242])).get(4242)).toBe(MagnetFailure.Failed);
+    });
+
+    it('says it cannot take a list of files whose link is not an http address, or deeper than any torrent', async () => {
+      let deep: unknown = { n: 'x.bin', s: 1, l: 'https://alldebrid.com/f/x' };
+      for (let level = 0; level < 100; level += 1) deep = { n: `d${String(level)}`, e: [deep] };
+      for (const files of [[{ n: 'x', s: 1, l: 'javascript:alert(1)' }], [deep]]) {
+        const client = clientOf(
+          await serviceWith({ magnets: { [HASH]: { name: 'x', size: 1, files: files as never } } }),
+        );
+        const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+        const id = sent && 'taken' in sent ? sent.taken.id : 0;
+        expect((await client.magnetFiles(KEY, [id])).get(id)).toBe(MagnetFailure.Unreadable);
+        await service?.close();
+      }
+    });
   });
 
   it('never puts the key in what it says of a failure', async () => {
