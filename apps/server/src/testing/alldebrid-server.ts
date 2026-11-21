@@ -147,6 +147,11 @@ export interface AllDebridServerOptions {
   // It answers the magnets of a request last to first: an answer is matched by the magnet it
   // names, not by its place.
   readonly reverseUploads?: boolean;
+  // It writes each magnet of its answer its own way — the hash alone, in upper case — so that
+  // only the hash it gives beside it says which magnet it is.
+  readonly rewriteUploads?: boolean;
+  // Its list of the account's magnets has one, added elsewhere, written in a way Scia cannot read.
+  readonly unreadableStranger?: boolean;
   // The page it names for a code, when it is not the service's own.
   readonly codePage?: string;
   // The code it gives, when it is not one of its own four letters and digits.
@@ -436,7 +441,8 @@ export async function startAllDebridServer(
           })();
         const left = sent.get(id)?.left ?? 0;
         return {
-          magnet,
+          magnet:
+            options.rewriteUploads === true ? `magnet:?xt=urn:btih:${hash.toUpperCase()}` : magnet,
           hash,
           name: known?.nameAtUpload ?? known?.name ?? 'noname',
           size: known?.size ?? 0,
@@ -448,33 +454,37 @@ export async function startAllDebridServer(
   }
 
   function magnetStatuses(response: ServerResponse): void {
+    const stranger = options.unreadableStranger === true ? [{ id: 'x', statusCode: 'ready' }] : [];
     succeed(response, {
-      magnets: [...sent].map(([id, each]) => {
-        const known = options.magnets?.[each.hash];
-        const fetching = known === undefined || each.left > 0;
-        if (known !== undefined && each.left > 0) each.left -= 1;
-        const statusCode = fetching ? 1 : known.fails === true ? 15 : 4;
-        const size = known?.size ?? 0;
-        return {
-          id,
-          filename: known?.name ?? 'noname',
-          size,
-          status:
-            statusCode === 1
-              ? 'Downloading'
-              : statusCode === 4
-                ? 'Ready'
-                : 'File not available - no peer',
-          statusCode,
-          downloaded: statusCode === 4 ? size : Math.floor(size / 2),
-          uploaded: 0,
-          seeders: 3,
-          downloadSpeed: statusCode === 1 ? 1_048_576 : 0,
-          uploadSpeed: 0,
-          uploadDate: 1_700_000_000,
-          completionDate: statusCode === 4 ? 1_700_000_100 : 0,
-        };
-      }),
+      magnets: [
+        ...stranger,
+        ...[...sent].map(([id, each]) => {
+          const known = options.magnets?.[each.hash];
+          const fetching = known === undefined || each.left > 0;
+          if (known !== undefined && each.left > 0) each.left -= 1;
+          const statusCode = fetching ? 1 : known.fails === true ? 15 : 4;
+          const size = known?.size ?? 0;
+          return {
+            id,
+            filename: known?.name ?? 'noname',
+            size,
+            status:
+              statusCode === 1
+                ? 'Downloading'
+                : statusCode === 4
+                  ? 'Ready'
+                  : 'File not available - no peer',
+            statusCode,
+            downloaded: statusCode === 4 ? size : Math.floor(size / 2),
+            uploaded: 0,
+            seeders: 3,
+            downloadSpeed: statusCode === 1 ? 1_048_576 : 0,
+            uploadSpeed: 0,
+            uploadDate: 1_700_000_000,
+            completionDate: statusCode === 4 ? 1_700_000_100 : 0,
+          };
+        }),
+      ],
     });
   }
 

@@ -643,6 +643,32 @@ describe('AllDebrid', () => {
       ]);
     });
 
+    it('matches each answer to its magnet by the hash, when the service writes the magnet its own way', async () => {
+      const client = clientOf(
+        await serviceWith({
+          reverseUploads: true,
+          rewriteUploads: true,
+          magnets: { ...magnets, [OTHER]: { name: 'Other', size: 3, files: [] } },
+        }),
+      );
+      const other = `magnet:?xt=urn:btih:${OTHER}&dn=other`;
+
+      const sent = await client.uploadMagnets(KEY, [MAGNET, other]);
+
+      expect(sent.map((each) => ('taken' in each ? each.taken.name : each.failure))).toEqual([
+        'Ubuntu',
+        'Other',
+      ]);
+    });
+
+    it('says where the magnets of the account are, passing over one it cannot read', async () => {
+      const client = clientOf(await serviceWith({ magnets, unreadableStranger: true }));
+      const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+      const id = sent && 'taken' in sent ? sent.taken.id : 0;
+
+      expect((await client.magnetStates(KEY)).map((each) => each.id)).toEqual([id]);
+    });
+
     it('says what refuses every magnet of a request, as it says it of a link', async () => {
       const client = clientOf(await serviceWith({ magnets }));
 
@@ -717,6 +743,16 @@ describe('AllDebrid', () => {
       const id = sent && 'taken' in sent ? sent.taken.id : 0;
 
       expect((await client.magnetFiles(KEY, [id])).get(id)).toBe(MagnetFailure.Unavailable);
+    });
+
+    it('says a magnet failed when the service lists no file of it', async () => {
+      const client = clientOf(
+        await serviceWith({ magnets: { [HASH]: { name: 'Empty', size: 0, files: [] } } }),
+      );
+      const [sent] = await client.uploadMagnets(KEY, [MAGNET]);
+      const id = sent && 'taken' in sent ? sent.taken.id : 0;
+
+      expect((await client.magnetFiles(KEY, [id])).get(id)).toBe(MagnetFailure.Failed);
     });
 
     it('says a magnet failed when the service no longer has its files', async () => {
