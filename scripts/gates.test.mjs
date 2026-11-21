@@ -9,7 +9,7 @@ describe('runGates', () => {
       return 0;
     });
 
-    expect(ran).toEqual(['format:check', 'lint', 'typecheck', 'test', 'build']);
+    expect(ran).toEqual(['check:adr', 'format:check', 'lint', 'typecheck', 'test', 'build']);
     expect(outcome).toEqual({ ok: true, failed: undefined });
   });
 
@@ -20,7 +20,7 @@ describe('runGates', () => {
       return gate.script === 'typecheck' ? 2 : 0;
     });
 
-    expect(ran).toEqual(['format:check', 'lint', 'typecheck']);
+    expect(ran).toEqual(['check:adr', 'format:check', 'lint', 'typecheck']);
     expect(outcome).toEqual({ ok: false, failed: 'typecheck' });
   });
 

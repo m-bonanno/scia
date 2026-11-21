@@ -49,7 +49,7 @@ jobs:
         run: npm ci
       # Parallel branches each take the next ADR number, and git merges two names (#183).
       - name: ADR numbers
-        run: node scripts/adr-numbers.mjs
+        run: npm run check:adr
       - name: Format
         run: npm run format:check
       - name: Lint

@@ -26,7 +26,7 @@ The title of a PR becomes the commit on `develop`, and semantic-release reads it
 
 Several sessions work at once, each on its own branch, and each sees only `develop` as it was when it began.
 
-- **An ADR takes the next number free on `origin/develop` and in every open PR**: `git fetch` and `ls docs/adr`, then `gh pr list --json number,files --jq '.[] | select(.files[].path | startswith("docs/adr/"))'`. Read it again before the merge: a PR merged meanwhile may have taken it. The gates refuse two records of one number (`scripts/adr-numbers.mjs`, #183): #158 and #177 both took 0016, and git, seeing two file names, merged both.
+- **An ADR takes the next number free on `origin/develop` and in every open PR**: `git fetch` and `ls docs/adr`, then `gh pr list --json number,files --jq '.[] | .number as $n | .files[].path | select(startswith("docs/adr/")) | "#\($n) \(.)"'`. Read it again before the merge: a PR merged meanwhile may have taken it. The gates refuse two records of one number (`npm run check:adr`, #183) — on a PR's head, which can be older than another PR's merge (`develop` does not ask a branch to be up to date), and again on the merged commit before it is released: #158 and #177 both took 0016, and git, seeing two file names, merged both.
 - **A follow-up issue is searched for before it is opened**, open and closed: `gh issue list --state all --search "<its key words>"`. #151 and #176 were the same issue, opened by two sessions an hour apart.
 
 ## Repository settings
