@@ -878,6 +878,39 @@ describe('a magnet that goes through a service', () => {
     });
   });
 
+  describe('copied to the clipboard (#139)', () => {
+    it('sends a magnet main read on the clipboard to the service at once, once however often it is copied', async () => {
+      const alldebrid = await serviceWith();
+      const scia = await open(await connected(alldebrid));
+
+      const added = scia.offerMagnets([MAGNET]);
+      const again = scia.offerMagnets([`magnet:?xt=urn:btih:${HASH.toUpperCase()}`]);
+
+      expect(added).toMatchObject([{ name: 'Holiday films', status: MagnetStatus.Sending }]);
+      expect(again).toEqual([]);
+      await until(() => allDone(scia));
+      expect(
+        alldebrid.requests.filter((request) => request.url === '/v4/magnet/upload'),
+      ).toHaveLength(1);
+    });
+
+    it('leaves out a copied magnet while no service is connected, and asks nobody', async () => {
+      const alldebrid = await serviceWith();
+      const integrations = await Integrations.open({
+        vault: new MemoryVault(),
+        alldebrid: new AllDebrid({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+        logger,
+      });
+      const scia = await open(integrations);
+
+      expect(scia.offerMagnets([MAGNET])).toEqual([]);
+      expect(scia.snapshot().magnets).toEqual([]);
+      expect(alldebrid.requests).toEqual([]);
+      await scia.close();
+      expect((await open(undefined)).offerMagnets([MAGNET])).toEqual([]);
+    });
+  });
+
   it('logs how many magnets, never which', async () => {
     const scia = await open(await connected(await serviceWith()));
 

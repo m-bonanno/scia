@@ -7,6 +7,8 @@ export type { MagnetFile, MagnetState, SentMagnet };
 // adapter, with the key of the service connected. Each rejects with a ServiceError —
 // `SERVICE_NEEDED` when no service is connected; what the service says of one magnet is an answer.
 export interface MagnetService {
+  // A service is connected: what is sent goes somewhere. Asked before taking a copied magnet.
+  hasService(): boolean;
   // The magnets for the service to fetch, each answered on its own.
   send(magnets: readonly string[], signal?: AbortSignal): Promise<SentMagnet[]>;
   // Where every magnet of the account is, in one question.

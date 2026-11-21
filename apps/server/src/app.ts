@@ -187,6 +187,13 @@ export function createApp(deps: AppDeps): Hono {
     return c.json({ data: await ofTheAccount(() => manager.addAccountMagnet(id)) }, 201);
   });
 
+  // The magnets main read on the clipboard (#139; docs/adr/0017): the app's token only.
+  app.post(`${API_PREFIX}/magnets/offered`, async (c) => {
+    const parsed = addMagnetsSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) return fail(400, ApiErrorCode.InvalidRequest, 'Give one or more magnets.');
+    return c.json({ data: manager.offerMagnets(parsed.data.magnets) });
+  });
+
   app.post(`${API_PREFIX}/magnets/:id/retry`, (c) =>
     c.json({ data: manager.retryMagnet(c.req.param('id')) }),
   );
