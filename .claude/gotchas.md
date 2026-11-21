@@ -52,6 +52,7 @@ Read the groups your change touches before a push. Add a `→` entry in the same
 
 - → A way back is not offered beside something that cannot be taken back: "Cancel" stayed pressable while a key was being checked, the key was kept all the same, and a refusal that came back was drawn under a row with no field (#53). Try every control of a form while its request is on its way.
 
+- → Whether to hand on a focus is decided when the control leaves, from where the focus is then, never from a flag set at the press: "Start all" set one at its press and kept it through a refused request, or a new ready row arriving with it, and a later, unrelated leave pulled the focus from a row's own button to the filters (#131).
 - → A reading that marks a baseline — "what was there when it started" — is tried with that reading refused, answered empty, and answered late by a turn before an off and on. The clipboard's reading took a link copied before the switch was turned on in all three ways, with every spec green; and Electron 44 answers `''`, not a rejection, for a clipboard it cannot open (#131). The baseline belongs to its turn, and nothing is offered until a read of that turn has found it.
 
 ## Docs and runbooks

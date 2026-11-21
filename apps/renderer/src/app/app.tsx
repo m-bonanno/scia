@@ -5,7 +5,7 @@ import { TEXT_BUTTON } from '@/components/button-styles.ts';
 import { AddBar } from '@/features/downloads/add-bar.tsx';
 import { DownloadList } from '@/features/downloads/download-list.tsx';
 import type { RowActions } from '@/features/downloads/download-row.tsx';
-import { FilterTabs } from '@/features/downloads/filter-tabs.tsx';
+import { FilterTabs, type FilterTabsHandle } from '@/features/downloads/filter-tabs.tsx';
 import { countByFilter, Filter, matchesFilter } from '@/features/downloads/filters.ts';
 import { extractLinks } from '@scia/contracts/links';
 import { SettingsDialog } from '@/features/settings/settings-dialog.tsx';
@@ -122,14 +122,15 @@ export function App(): ReactNode {
   );
   const bytesPerSecond = live.downloads.reduce((sum, download) => sum + download.bytesPerSecond, 0);
   const hasReady = live.downloads.some((download) => download.status === DownloadStatus.Ready);
-  // "Start all" leaves the page under its own press: the focus it held goes to the filter in use,
-  // beside it, rather than to nothing.
-  const filterBar = useRef<HTMLDivElement>(null);
-  const startAllHadFocus = useRef(false);
+  // "Start all" leaves the page under its own press. Decided when it leaves, from where the focus
+  // is then: a focus left on nothing goes to the filter in use, beside it; one that went anywhere
+  // else stays where it is.
+  const filterTabs = useRef<FilterTabsHandle>(null);
   useEffect(() => {
-    if (hasReady || !startAllHadFocus.current) return;
-    startAllHadFocus.current = false;
-    filterBar.current?.querySelector<HTMLButtonElement>('[aria-pressed="true"]')?.focus();
+    if (hasReady) return;
+    if (document.activeElement === null || document.activeElement === document.body) {
+      filterTabs.current?.focus();
+    }
   }, [hasReady]);
   const shownNotice = live.connection === Connection.Offline ? ENGINE_UNREACHABLE : notice;
 
@@ -150,8 +151,9 @@ export function App(): ReactNode {
               {shownNotice}
             </p>
           )}
-          <div ref={filterBar} className="flex items-center justify-between gap-2">
+          <div className="flex items-center justify-between gap-2">
             <FilterTabs
+              ref={filterTabs}
               filter={filter}
               counts={countByFilter(live.downloads)}
               onChange={setFilter}
@@ -160,8 +162,7 @@ export function App(): ReactNode {
               <button
                 type="button"
                 className={TEXT_BUTTON}
-                onClick={(event) => {
-                  startAllHadFocus.current = event.currentTarget === document.activeElement;
+                onClick={() => {
                   api.startReady().catch(report);
                 }}
               >

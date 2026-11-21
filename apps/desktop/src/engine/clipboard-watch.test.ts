@@ -338,7 +338,7 @@ describe('ClipboardWatch', () => {
     expect(asked).toEqual([['https://example.com/a.zip'], ['https://example.com/b.zip']]);
   });
 
-  it('never asks the engine twice at once, also when an offer of before a turn off and on answers late', async () => {
+  it('never asks the engine twice at once within a turn, also when an offer of before a turn off and on answers late', async () => {
     const answers: ((added: number) => void)[] = [];
     const asked: string[][] = [];
     const clipboard = aWatch({
@@ -462,7 +462,7 @@ describe('ClipboardWatch', () => {
       reads.pop()?.(link);
       await settle();
       // The old one answers last, with what was on the clipboard long before.
-      reads.shift()?.('');
+      reads.shift()?.('https://example.com/copied-long-before.zip');
       await settle();
       await beat();
       reads.shift()?.(link);

@@ -1,19 +1,32 @@
-import type { ReactNode } from 'react';
+import { type ReactNode, type Ref, useImperativeHandle, useRef } from 'react';
 import { cn } from '@/lib/cn.ts';
 import { Filter, FILTER_LABELS } from './filters.ts';
+
+export interface FilterTabsHandle {
+  // The focus, on the filter in use: for a control beside the tabs that leaves under it.
+  focus(): void;
+}
 
 interface FilterTabsProps {
   readonly filter: Filter;
   readonly counts: Readonly<Record<Filter, number>>;
   readonly onChange: (filter: Filter) => void;
+  readonly ref?: Ref<FilterTabsHandle>;
 }
 
-export function FilterTabs({ filter, counts, onChange }: FilterTabsProps): ReactNode {
+export function FilterTabs({ filter, counts, onChange, ref }: FilterTabsProps): ReactNode {
+  const selected = useRef<HTMLButtonElement>(null);
+  useImperativeHandle(ref, () => ({
+    focus: () => {
+      selected.current?.focus();
+    },
+  }));
   return (
     <div className="flex items-center gap-1" role="group" aria-label="Filter downloads">
       {Object.values(Filter).map((option) => (
         <button
           key={option}
+          ref={option === filter ? selected : undefined}
           type="button"
           aria-pressed={option === filter}
           onClick={() => {

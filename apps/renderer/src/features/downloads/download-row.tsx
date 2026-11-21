@@ -74,7 +74,13 @@ const MAIN: Readonly<Record<DownloadStatus, Main | undefined>> = {
 
 // One element whatever it says, so that the focus stays on it and the second click of a double
 // click — which may land after the state, and the button, changed — is not a press of its own.
-function MainAction({ action, onPress }: { readonly action: Main; readonly onPress: () => void }) {
+function MainAction({
+  action,
+  onPress,
+}: {
+  readonly action: Main;
+  readonly onPress: () => void;
+}): ReactNode {
   const press = useOnePress();
   return (
     <IconButton
