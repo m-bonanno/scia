@@ -2,6 +2,7 @@ import { type AccountMagnet, ApiErrorCode } from '@scia/contracts';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ZodError } from 'zod';
 import { ACCOUNT_POLL_MS, AccountMagnets } from './account-magnets.tsx';
 import { api, ApiError } from '@/lib/api.ts';
 
@@ -235,11 +236,16 @@ describe('AccountMagnets', () => {
   });
 
   describe('what went wrong, each cause in its own words', () => {
-    const refusals: [ApiErrorCode, string][] = [
+    // Mended in Settings: asked about again when Settings closes.
+    const mendedInSettings: [ApiErrorCode, string][] = [
       [
         ApiErrorCode.KeyRefused,
-        'AllDebrid no longer accepts the key. In Settings, disconnect it and connect again.',
+        'AllDebrid no longer accepts the key. Disconnect, then connect with a new one.',
       ],
+      [ApiErrorCode.ServiceNeeded, 'AllDebrid is no longer connected. Connect it in Settings.'],
+    ];
+    // Mended outside Scia: only a new read can see it.
+    const mendedElsewhere: [ApiErrorCode, string][] = [
       [
         ApiErrorCode.KeyBlocked,
         'AllDebrid is blocking the key from here. If AllDebrid emailed you about a new sign-in, confirm it; otherwise check your network.',
@@ -250,28 +256,62 @@ describe('AccountMagnets', () => {
         'AllDebrid does not serve this network: it refuses servers and some VPNs. Use it from another network.',
       ],
       [ApiErrorCode.NotPremium, 'AllDebrid fetches magnets for premium accounts only.'],
-      [ApiErrorCode.ServiceNeeded, 'AllDebrid is no longer connected. Connect it in Settings.'],
     ];
+    const refusals = [...mendedInSettings, ...mendedElsewhere];
 
-    it.each(refusals)('says %s, and asks no more until Settings closes', async (code, sentence) => {
-      vi.useFakeTimers({ shouldAdvanceTime: true });
-      const asked = vi
-        .spyOn(api, 'accountMagnets')
-        .mockRejectedValue(new ApiError(422, code, 'refused'));
-      const { rerender } = render(
-        <AccountMagnets id="account-magnets" again={0} onClose={vi.fn()} tell={vi.fn()} />,
-      );
+    it.each(mendedInSettings)(
+      'says %s, and asks no more until Settings closes, also when the window is shown again',
+      async (code, sentence) => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        const asked = vi
+          .spyOn(api, 'accountMagnets')
+          .mockRejectedValue(new ApiError(422, code, 'refused'));
+        const { rerender } = render(
+          <AccountMagnets id="account-magnets" again={0} onClose={vi.fn()} tell={vi.fn()} />,
+        );
 
-      await vi.waitFor(() => {
-        expect(screen.getByRole('status')).toHaveTextContent(sentence);
-      });
-      await act(() => vi.advanceTimersByTimeAsync(ACCOUNT_POLL_MS * 3));
-      expect(asked).toHaveBeenCalledTimes(1);
-      rerender(<AccountMagnets id="account-magnets" again={1} onClose={vi.fn()} tell={vi.fn()} />);
-      await vi.waitFor(() => {
-        expect(asked).toHaveBeenCalledTimes(2);
-      });
-    });
+        await vi.waitFor(() => {
+          expect(screen.getByRole('status')).toHaveTextContent(sentence);
+        });
+        await act(() => vi.advanceTimersByTimeAsync(ACCOUNT_POLL_MS * 3));
+        act(() => {
+          visibility('hidden');
+          visibility('visible');
+        });
+        await act(() => vi.advanceTimersByTimeAsync(ACCOUNT_POLL_MS * 2));
+        expect(asked).toHaveBeenCalledTimes(1);
+        rerender(
+          <AccountMagnets id="account-magnets" again={1} onClose={vi.fn()} tell={vi.fn()} />,
+        );
+        await vi.waitFor(() => {
+          expect(asked).toHaveBeenCalledTimes(2);
+        });
+      },
+    );
+
+    it.each(mendedElsewhere)(
+      'says %s, keeps asking at its pace, and shows the list once the account answers again',
+      async (code, sentence) => {
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        vi.spyOn(api, 'accountMagnets')
+          .mockResolvedValueOnce([holiday])
+          .mockRejectedValueOnce(new ApiError(422, code, 'refused'))
+          .mockResolvedValue([holiday, concert]);
+        const { region } = panel();
+        await within(region()).findByText('Holiday films');
+
+        await act(() => vi.advanceTimersByTimeAsync(ACCOUNT_POLL_MS));
+        await vi.waitFor(() => {
+          expect(screen.getByRole('status')).toHaveTextContent(
+            `${sentence} This is the list from before.`,
+          );
+        });
+        await act(() => vi.advanceTimersByTimeAsync(ACCOUNT_POLL_MS));
+
+        expect(await within(region()).findByText('Concert')).toBeVisible();
+        expect(screen.getByRole('status')).toHaveTextContent('');
+      },
+    );
 
     it.each(refusals)('says %s when Download meets it', async (code, sentence) => {
       vi.spyOn(api, 'accountMagnets').mockResolvedValue([holiday]);
@@ -317,6 +357,113 @@ describe('AccountMagnets', () => {
       });
       await act(() => vi.advanceTimersByTimeAsync(ACCOUNT_POLL_MS));
       expect(asked).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('when Settings closes while an ask is on its way', () => {
+    function held() {
+      let answer: (outcome: AccountMagnet[] | Error) => void = () => undefined;
+      return {
+        promise: new Promise<AccountMagnet[]>((resolve, reject) => {
+          answer = (outcome) => {
+            if (outcome instanceof Error) reject(outcome);
+            else resolve(outcome);
+          };
+        }),
+        answer: (outcome: AccountMagnet[] | Error) => {
+          answer(outcome);
+        },
+      };
+    }
+    const refused = () => new ApiError(422, ApiErrorCode.KeyRefused, 'refused');
+
+    it.each([
+      ['a list, and the newer a refusal', [holiday], refused(), /no longer accepts the key/],
+      ['a refusal, and the newer a list', refused(), [holiday], /^$/],
+    ] as const)(
+      'asks once more after it, and keeps only the newer answer: the older %s',
+      async (_, older, newer, status) => {
+        const first = held();
+        const second = held();
+        const asked = vi
+          .spyOn(api, 'accountMagnets')
+          .mockReturnValueOnce(first.promise)
+          .mockReturnValueOnce(second.promise);
+        const { rerender } = render(
+          <AccountMagnets id="account-magnets" again={0} onClose={vi.fn()} tell={vi.fn()} />,
+        );
+        rerender(
+          <AccountMagnets id="account-magnets" again={1} onClose={vi.fn()} tell={vi.fn()} />,
+        );
+        expect(asked).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          first.answer(older instanceof Error ? older : [...older]);
+          await Promise.resolve();
+        });
+        await vi.waitFor(() => {
+          expect(asked).toHaveBeenCalledTimes(2);
+        });
+        await act(async () => {
+          second.answer(newer instanceof Error ? newer : [...newer]);
+          await Promise.resolve();
+        });
+
+        await vi.waitFor(() => {
+          expect(screen.getByRole('status')).toHaveTextContent(status);
+        });
+        expect(screen.queryAllByRole('listitem')).toHaveLength(newer instanceof Error ? 0 : 1);
+      },
+    );
+  });
+
+  it('asks nothing more when the window is hidden while an ask is on its way', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let answer: (magnets: AccountMagnet[]) => void = () => undefined;
+    const asked = vi
+      .spyOn(api, 'accountMagnets')
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      )
+      .mockResolvedValue([holiday]);
+    panel();
+
+    act(() => {
+      visibility('hidden');
+    });
+    await act(async () => {
+      answer([holiday]);
+      await Promise.resolve();
+    });
+    await act(() => vi.advanceTimersByTimeAsync(ACCOUNT_POLL_MS * 3));
+
+    expect(asked).toHaveBeenCalledTimes(1);
+  });
+
+  it('says AllDebrid could not be asked when Download meets it, and that Scia could not read an answer', async () => {
+    vi.spyOn(api, 'accountMagnets')
+      .mockResolvedValueOnce([holiday])
+      .mockRejectedValue(new ZodError([]));
+    vi.spyOn(api, 'addAccountMagnet').mockRejectedValue(unavailable());
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const { region, tell } = panel();
+
+    await userEvent.click(
+      await within(region()).findByRole('button', { name: 'Download Holiday films' }),
+    );
+    await vi.waitFor(() => {
+      expect(tell).toHaveBeenCalledWith(
+        'AllDebrid could not be asked just now. Try again in a moment.',
+      );
+    });
+    await act(() => vi.advanceTimersByTimeAsync(ACCOUNT_POLL_MS));
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Scia could not read the magnets of the account just now. This is the list from before.',
+      );
     });
   });
 

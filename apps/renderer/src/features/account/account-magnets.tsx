@@ -59,12 +59,19 @@ export function AccountMagnets({ id, again, onClose, tell }: AccountMagnetsProps
     heading.current?.focus();
   }, []);
 
+  // An ask on its way, across the asks of a Settings closed meanwhile: one at a time, and the
+  // newer one waits for it.
+  const asking = useRef(false);
+  const waiting = useRef<(() => void) | null>(null);
+
   useEffect(() => {
     let stopped = false;
-    let busy = false;
+    // Waiting for Settings: what asking again cannot mend, asked about again only when it closes.
+    let paused = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let answeredAt = -Infinity;
-    // Changed by the cleanup: a timer or an answer that comes after it does nothing more.
+    // Changed by the cleanup: an answer to this turn's ask that comes after it is not this
+    // panel's any more, and is neither drawn nor followed by another ask.
     const isStopped = () => stopped;
     const after = (delay: number) => {
       clearTimeout(timer);
@@ -72,30 +79,43 @@ export function AccountMagnets({ id, again, onClose, tell }: AccountMagnetsProps
         void turn();
       }, delay);
     };
-    const turn = async () => {
-      // Hidden, it asks nothing until it is shown again; one ask at a time.
-      if (isStopped() || busy || document.visibilityState !== 'visible') return;
-      busy = true;
+    // `first`: the ask of a panel just opened or of Settings just closed, which waits for one on its
+    // way; any other leaves it to the one on its way, which sets the next.
+    const turn = async (first = false) => {
+      // Hidden, it asks nothing until it is shown again.
+      if (isStopped() || document.visibilityState !== 'visible') return;
+      if (asking.current) {
+        if (first) {
+          waiting.current = () => {
+            void turn();
+          };
+        }
+        return;
+      }
+      asking.current = true;
       asks.current += 1;
       const ask = asks.current;
-      let heals = true;
       try {
         const magnets = await api.accountMagnets();
+        if (isStopped()) return;
         setRead({ magnets, trouble: null });
         setTaken(
           (before) =>
             new Map([...before].filter(([, settledAt]) => settledAt === null || settledAt >= ask)),
         );
       } catch (error) {
+        if (isStopped()) return;
         const trouble = accountTrouble(error);
-        heals = trouble.heals;
+        paused = !trouble.heals;
         setRead((before) => ({ magnets: before.magnets, trouble }));
       } finally {
-        busy = false;
+        asking.current = false;
         answeredAt = performance.now();
+        const next = waiting.current;
+        waiting.current = null;
+        next?.();
       }
-      // What asking again cannot mend waits for Settings to close, or for the panel to open again.
-      if (heals) after(ACCOUNT_POLL_MS);
+      if (!paused) after(ACCOUNT_POLL_MS);
     };
     const onVisibility = () => {
       if (document.visibilityState !== 'visible') {
@@ -103,23 +123,21 @@ export function AccountMagnets({ id, again, onClose, tell }: AccountMagnetsProps
         return;
       }
       // Shown again: at once when the last answer is a pace old, else when it will be.
-      after(Math.max(0, answeredAt + ACCOUNT_POLL_MS - performance.now()));
+      if (!paused) after(Math.max(0, answeredAt + ACCOUNT_POLL_MS - performance.now()));
     };
-    void turn();
+    void turn(true);
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       stopped = true;
+      clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }, [again]);
 
   // A row that left the panel under the focus — the magnet gone from the account — hands the
-  // focus to the heading; a focus that went elsewhere meanwhile stays there.
+  // focus to the heading; a focus that went elsewhere meanwhile has let go of the row already.
   useLayoutEffect(() => {
-    if (held.current !== null && !held.current.isConnected) {
-      held.current = null;
-      if (document.activeElement === document.body) heading.current?.focus();
-    }
+    if (held.current !== null && !held.current.isConnected) heading.current?.focus();
   });
 
   const take = (magnet: AccountMagnet) => {
@@ -177,7 +195,7 @@ export function AccountMagnets({ id, again, onClose, tell }: AccountMagnetsProps
         </IconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
-        <p role="status" className="px-1 py-2 text-sm text-muted-foreground empty:hidden">
+        <p role="status" className="px-1 py-2 text-sm text-muted-foreground empty:py-0">
           {stateOf(read)}
         </p>
         {read.magnets !== null && read.magnets.length > 0 && (
@@ -200,10 +218,8 @@ export function AccountMagnets({ id, again, onClose, tell }: AccountMagnetsProps
 // beside a list from before when the last ask gave none.
 function stateOf({ magnets, trouble }: Read): string {
   if (trouble !== null && trouble.text !== null) {
-    if (!trouble.heals) return trouble.text;
-    return magnets === null
-      ? `${trouble.text} Scia asks again soon.`
-      : `${trouble.text} This is the list from before.`;
+    if (magnets !== null) return `${trouble.text} This is the list from before.`;
+    return trouble.heals ? `${trouble.text} Scia asks again soon.` : trouble.text;
   }
   if (magnets?.length === 0) {
     return `No magnets on the ${SERVICE} account. A magnet pasted above is added to it.`;
