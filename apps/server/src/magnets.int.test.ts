@@ -906,6 +906,9 @@ describe('a magnet that goes through a service', () => {
       expect(scia.offerMagnets([MAGNET])).toEqual([]);
       expect(scia.snapshot().magnets).toEqual([]);
       expect(alldebrid.requests).toEqual([]);
+      // Said in the log with a count, never the magnet.
+      expect(logged).toContain(JSON.stringify({ event: 'clipboard_magnets_left_out', magnets: 1 }));
+      expect(logged.join(' ')).not.toContain(HASH);
       await scia.close();
       expect((await open(undefined)).offerMagnets([MAGNET])).toEqual([]);
     });

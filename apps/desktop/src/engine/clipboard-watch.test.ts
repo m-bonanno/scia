@@ -210,6 +210,70 @@ describe('ClipboardWatch', () => {
     expect(clipboard.offered.flat()).toEqual(links);
   });
 
+  it('offers every magnet of a long list, as many at a time as the engine takes', async () => {
+    const clipboard = aWatch();
+    await clipboard.on();
+    const magnets = Array.from(
+      { length: MAX_URLS_PER_REQUEST + 5 },
+      (_, n) => 'magnet:?xt=urn:btih:' + String(n).padStart(40, 'a'),
+    );
+
+    clipboard.copy(magnets.join(' '));
+    await clipboard.beat();
+
+    expect(clipboard.magnets.map((offer) => offer.length)).toEqual([MAX_URLS_PER_REQUEST, 5]);
+    expect(clipboard.magnets.flat()).toEqual(magnets);
+    expect(clipboard.sent).toEqual([MAX_URLS_PER_REQUEST + 5]);
+  });
+
+  it("sends no magnet of a copy once it is turned off while that copy's links are on their way", async () => {
+    let answer: (added: number) => void = () => undefined;
+    const clipboard = aWatch({
+      offer: () =>
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+    });
+    await clipboard.on();
+    clipboard.copy('https://example.com/a.zip magnet:?xt=urn:btih:' + 'a'.repeat(40));
+    await clipboard.beat();
+
+    clipboard.watch.watch(false);
+    answer(1);
+    await settle();
+
+    expect(clipboard.magnets).toEqual([]);
+    expect(clipboard.sent).toEqual([]);
+  });
+
+  it('sends no further magnets of a long copy once it is turned off between two requests', async () => {
+    const asked: number[] = [];
+    let answer: (sent: number) => void = () => undefined;
+    const clipboard = aWatch({
+      offerMagnets: (magnets) => {
+        asked.push(magnets.length);
+        return new Promise((resolve) => {
+          answer = resolve;
+        });
+      },
+    });
+    await clipboard.on();
+    clipboard.copy(
+      Array.from(
+        { length: MAX_URLS_PER_REQUEST + 5 },
+        (_, n) => 'magnet:?xt=urn:btih:' + String(n).padStart(40, 'a'),
+      ).join(' '),
+    );
+    await clipboard.beat();
+
+    clipboard.watch.watch(false);
+    answer(MAX_URLS_PER_REQUEST);
+    await settle();
+
+    expect(asked).toEqual([MAX_URLS_PER_REQUEST]);
+    expect(clipboard.sent).toEqual([]);
+  });
+
   it('offers one copy at a time: what is copied while the engine is asked is taken afterwards', async () => {
     let answer: (added: number) => void = () => undefined;
     const asked: string[][] = [];

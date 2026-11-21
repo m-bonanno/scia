@@ -1,6 +1,6 @@
 # ADR 0012 — Links taken from the clipboard: main reads, the engine keeps what it knows
 
-- **Status**: accepted
+- **Status**: accepted; point 4 amended by [ADR 0017](./0017-a-magnet-taken-from-the-clipboard.md)
 - **Date**: 2026-11-21
 
 ## Context

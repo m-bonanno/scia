@@ -49,9 +49,10 @@ export function offeredNotice(added: number): OfferedNotice {
   return { title: `Added ${String(added)} ${links}, ready to start`, body: '' };
 }
 
-// What the system shows when copied magnets were sent while the person is not looking at the list
-// (#139): they do not wait for a Start, the service fetches them.
+// What the system shows when copied magnets were added while the person is not looking at the list
+// (#139): they do not wait for a Start; their rows say "Sending to AllDebrid…", and the upload can
+// still be refused, so the notice says they are on their way, not that they arrived.
 export function sentNotice(sent: number): OfferedNotice {
   const magnets = sent === 1 ? 'magnet' : 'magnets';
-  return { title: `Sent ${String(sent)} ${magnets} to AllDebrid`, body: '' };
+  return { title: `Added ${String(sent)} ${magnets}, sending to AllDebrid`, body: '' };
 }

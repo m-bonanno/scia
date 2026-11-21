@@ -16,11 +16,11 @@ On 21 November 2026 the owner asked that a magnet copied to the clipboard be add
 ## Decision
 
 1. **Of a copied text, its http(s) links and its magnets leave main — nothing else of it.** Main finds the magnets as the page does (`extractMagnets` in `@scia/contracts/links`, a magnet of the contract's shape); a tracker's address inside a magnet is no link of its own (`extractLinks` reads the text without its magnets). A password copied still goes nowhere.
-2. **The engine decides, as for links.** Main hands the magnets of a copy, in one request, to `POST /api/v1/magnets/offered`, with main's token (the extension's does not open it, ADR 0002), after the copy's links:
+2. **The engine decides, as for links.** Main hands the magnets of a copy, 200 at a time (`MAX_URLS_PER_REQUEST`, as the links), to `POST /api/v1/magnets/offered`, with main's token (the extension's does not open it, ADR 0002), after the copy's links:
    - with a service connected, the engine adds them as pasted ones (`DownloadManager.offerMagnets` → `addMagnets`): sent at once, their files downloaded in their folders (ADR 0014);
    - with none connected, it leaves them out and says so in its log (`clipboard_magnets_left_out`, a count): a copy is not a request to connect a service, and a failed row for every magnet copied would be noise. `MagnetService.hasService()` says it;
    - a magnet already in the list — the same torrent, however written — is not added twice; one AllDebrid already holds is one row of the list, as ADR 0016 point 5 has it.
-3. **The answer is a count**: main says, when the window is not in front, "Sent N magnets to AllDebrid" — a notification of its own beside the links' "Added N links, ready to start", because a magnet does not wait for a Start. Main's log has counts, never a magnet.
+3. **The answer is a count**: main says, when the window is not in front, "Added N magnets, sending to AllDebrid" — a notification of its own beside the links' "Added N links, ready to start", because a magnet does not wait for a Start; "sending", as the rows say, because the upload is still to come and can be refused. Turned off while a copy is on its way, main sends no further magnet of it and says nothing of it. Main's log has counts, never a magnet.
 
 ## Alternatives considered
 

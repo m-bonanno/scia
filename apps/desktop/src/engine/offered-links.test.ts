@@ -116,9 +116,9 @@ describe('offerMagnetsToEngine', () => {
 });
 
 describe('sentNotice', () => {
-  it('counts the magnets sent, and names the service that fetches them', () => {
-    expect(sentNotice(1)).toEqual({ title: 'Sent 1 magnet to AllDebrid', body: '' });
-    expect(sentNotice(3)).toEqual({ title: 'Sent 3 magnets to AllDebrid', body: '' });
+  it('counts the magnets added, on their way to the service, as their rows say', () => {
+    expect(sentNotice(1)).toEqual({ title: 'Added 1 magnet, sending to AllDebrid', body: '' });
+    expect(sentNotice(3)).toEqual({ title: 'Added 3 magnets, sending to AllDebrid', body: '' });
   });
 });
 

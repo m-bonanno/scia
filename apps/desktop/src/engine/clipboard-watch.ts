@@ -116,14 +116,18 @@ export class ClipboardWatch {
     this.#seen = seen;
     if (known === undefined || seen === known) return;
     await this.#offer(turn, extractLinks(text));
-    if (turn === this.#turn) await this.#offerMagnets(extractMagnets(text));
+    // Turned off while the links were on their way: the magnets of the copy are not this turn's.
+    if (turn === this.#turn) await this.#offerMagnets(turn, extractMagnets(text));
   }
 
-  async #offerMagnets(magnets: readonly string[]): Promise<void> {
-    if (magnets.length === 0) return;
+  async #offerMagnets(turn: number, magnets: readonly string[]): Promise<void> {
     let sent = 0;
     try {
-      sent = await this.#deps.offerMagnets(magnets);
+      for (let at = 0; at < magnets.length; at += MAX_URLS_PER_REQUEST) {
+        sent += await this.#deps.offerMagnets(magnets.slice(at, at + MAX_URLS_PER_REQUEST));
+        // Turned off meanwhile: the rest of the copy is not sent, and what was is not said.
+        if (turn !== this.#turn) return;
+      }
     } catch (error) {
       // How many, never which: a magnet names a person's torrent.
       this.#deps.log.warn('clipboard_magnets_not_offered', {
