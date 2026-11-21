@@ -176,7 +176,7 @@ export function App(): ReactNode {
             <FilterTabs
               ref={filterTabs}
               filter={filter}
-              counts={countByFilter(live.downloads)}
+              counts={countByFilter(live.downloads, live.magnets.length)}
               onChange={setFilter}
             />
             {hasReady && (
