@@ -31,7 +31,6 @@ describe('SettingsDialog', () => {
 
   beforeEach(() => {
     vi.spyOn(api, 'settings').mockResolvedValue(settings);
-    vi.spyOn(api, 'pairing').mockResolvedValue({ token: 'pairing-code', port: 47821 });
     vi.spyOn(api, 'integrations').mockResolvedValue([
       { id: 'alldebrid', connected: false, account: null, failure: null },
     ]);
@@ -57,7 +56,7 @@ describe('SettingsDialog', () => {
     };
   }
 
-  it('shows the limits, the folder and how to pair the extension', async () => {
+  it('shows the limits and the folder', async () => {
     const onSettings = vi.fn();
     render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
 
@@ -65,8 +64,6 @@ describe('SettingsDialog', () => {
     expect(await screen.findByText('Simultaneous downloads')).toBeInTheDocument();
     expect(screen.getByText('Connections per download')).toBeInTheDocument();
     expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
-    expect(screen.getByText('pairing-code')).toBeInTheDocument();
-    expect(screen.getByText(/Paste this code into the extension’s options/)).toBeInTheDocument();
     // Whoever opened it learns what was read, not only what is changed here.
     expect(onSettings).toHaveBeenCalledExactlyOnceWith(settings);
   });
@@ -168,15 +165,13 @@ describe('SettingsDialog', () => {
     });
   });
 
-  it('lists the services Scia connects to, between the settings and the extension', async () => {
+  it('lists the services Scia connects to, after the settings', async () => {
     render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
 
     const integrations = await screen.findByRole('region', { name: 'Integrations' });
     expect(within(integrations).getByText('AllDebrid')).toBeInTheDocument();
     const folder = screen.getByText('Download folder');
-    const extension = screen.getByText('Browser extension');
     expect(folder.compareDocumentPosition(integrations)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-    expect(integrations.compareDocumentPosition(extension)).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
   });
 
   it('changes the folder through the desktop shell, naming no path itself, and shows what the engine kept', async () => {
@@ -493,13 +488,14 @@ describe('SettingsDialog', () => {
     expect(within(simultaneous).getByRole('button', { name: 'Increase' })).toBeEnabled();
   });
 
-  it('says so when the pairing code was copied', async () => {
-    const user = userEvent.setup();
+  // The extension is not published: a code to paste into it asks for a step nobody can take (the
+  // owner, #152). The engine keeps the code; the section comes back with the extension.
+  it('offers no code for a browser extension that cannot be installed yet', async () => {
     render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    await screen.findByText('Simultaneous downloads');
 
-    await user.click(await screen.findByRole('button', { name: 'Copy the code' }));
-
-    expect(await screen.findByRole('button', { name: 'Copied' })).toBeInTheDocument();
+    expect(screen.queryByText(/extension/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Copy the code' })).not.toBeInTheDocument();
   });
 
   it('reports a failure to load instead of showing empty settings', async () => {

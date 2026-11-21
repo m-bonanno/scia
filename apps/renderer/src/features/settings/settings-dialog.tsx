@@ -1,6 +1,6 @@
-import { type Pairing, type Settings, SETTINGS_LIMITS, type SettingsPatch } from '@scia/contracts';
+import { type Settings, SETTINGS_LIMITS, type SettingsPatch } from '@scia/contracts';
 import { FolderChange, isFolderChange, SELF_UPDATING_PLATFORMS } from '@scia/contracts/bridge';
-import { Check, Copy, FolderPen, Minus, Plus, X } from 'lucide-react';
+import { FolderPen, Minus, Plus, X } from 'lucide-react';
 import {
   type ReactNode,
   type Ref,
@@ -72,7 +72,6 @@ export function SettingsDialog({
     },
     [keep],
   );
-  const [pairing, setPairing] = useState<Pairing | null>(null);
   const [folderRefused, setFolderRefused] = useState(false);
   const shell = bridge();
   // The betas are offered where Scia updates itself: in the app, on a system with an installer.
@@ -89,16 +88,7 @@ export function SettingsDialog({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return undefined;
-    let current = true;
-    Promise.all([learn(api.settings()), api.pairing()])
-      .then(([, loadedPairing]) => {
-        if (current) setPairing(loadedPairing);
-      })
-      .catch(onError);
-    return () => {
-      current = false;
-    };
+    if (open) learn(api.settings()).catch(onError);
   }, [open, onError, learn]);
 
   // The page names no folder: main shows the system's dialog and tells the engine, and the
@@ -206,7 +196,6 @@ export function SettingsDialog({
           </section>
         )}
         <IntegrationsSection open={open} onError={onError} />
-        {pairing !== null && <PairingSection pairing={pairing} onError={onError} />}
         {settings !== null && updatesItself && (
           <SettingSwitch
             label="Beta versions"
@@ -266,59 +255,5 @@ function Stepper({ label, hint, value, min, max, onChange }: StepperProps): Reac
         </IconButton>
       </div>
     </div>
-  );
-}
-
-const COPIED_FOR_MS = 2000;
-
-function PairingSection({
-  pairing,
-  onError,
-}: {
-  readonly pairing: Pairing;
-  readonly onError: (error: unknown) => void;
-}): ReactNode {
-  const [copied, setCopied] = useState(false);
-
-  useEffect(() => {
-    if (!copied) return undefined;
-    const timer = setTimeout(() => {
-      setCopied(false);
-    }, COPIED_FOR_MS);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [copied]);
-
-  return (
-    <section className="flex flex-col gap-2">
-      <div>
-        <h3 className="text-sm font-medium">Browser extension</h3>
-        <p className="text-sm text-muted-foreground">
-          Paste this code into the extension’s options. From then on, the extension sends Scia the
-          links and the media of your pages.
-        </p>
-      </div>
-      <div className="flex h-10 items-center gap-1 rounded-xl bg-tonal pr-1 pl-3">
-        <code className="min-w-0 flex-1 truncate text-sm">{pairing.token}</code>
-        <IconButton
-          label={copied ? 'Copied' : 'Copy the code'}
-          onClick={() => {
-            navigator.clipboard
-              .writeText(pairing.token)
-              .then(() => {
-                setCopied(true);
-              })
-              .catch(onError);
-          }}
-        >
-          {copied ? (
-            <Check size={16} aria-hidden="true" className="text-accent" />
-          ) : (
-            <Copy size={16} aria-hidden="true" />
-          )}
-        </IconButton>
-      </div>
-    </section>
   );
 }

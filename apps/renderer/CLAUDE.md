@@ -23,7 +23,8 @@ Anyone who downloads files: they paste a link and want to forget about it. The w
 - **Two levels told apart by tone**: the background and the surface on it. No shadows, no decorative borders. A line survives only where it carries meaning: the focus outline, a field's boundary.
 - **The segment bar is the signature**: each connection fills its own stretch of the file where that stretch is. Do not replace it with a plain bar.
 - **Numbers are `tabular-nums`** and go through `lib/format.ts` (the one `LOCALE` of `@scia/contracts/locale`, a non-breaking space before the unit). Never `toFixed`, never string concatenation of amounts.
-- **Icons: `lucide-react` only.** No emoji. Icon-only buttons are `IconButton`, which requires a label — or `ConfirmButton`, which is one until it asks (both wear `components/button-styles.ts`).
+- **Icons: `lucide-react` only.** No emoji, and no arrow the system draws: a menu wears lucide's chevron (`features/settings/setting-select.tsx`). Icon-only buttons are `IconButton`, which requires a label — or `ConfirmButton`, which is one until it asks (both wear `components/button-styles.ts`).
+- **Scrollbars are the page's own** (`styles.css`; the owner, #154): 8 px, always there where an area scrolls, no arrow buttons, the thumb `muted-foreground` and `foreground` under the pointer, on the area's own ground. Chromium's `::-webkit-scrollbar`, never `scrollbar-width` or `scrollbar-color`: Chromium lets those win and keeps the system's arrows with them.
 - **Visible focus always**: `focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring`. Never a box-shadow ring, never `outline-none` without a replacement.
 - **Motion says something or is not there**: a row arriving, a bar filling. `prefers-reduced-motion` turns it off.
 

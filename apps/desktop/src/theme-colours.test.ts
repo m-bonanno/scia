@@ -2,11 +2,16 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ColourScheme, DEFAULT_THEME, THEMES, WINDOW_COLOURS } from '@scia/contracts/theme';
 import { describe, expect, it } from 'vitest';
+import { titleBarOverlay } from './engine/title-bar.ts';
 
 type Tokens = Record<string, string | undefined>;
 
 const styles = readFileSync(
   join(import.meta.dirname, '..', '..', 'renderer', 'src', 'themes.css'),
+  'utf8',
+);
+const pageRules = readFileSync(
+  join(import.meta.dirname, '..', '..', 'renderer', 'src', 'styles.css'),
   'utf8',
 );
 
@@ -85,9 +90,15 @@ const PAIRS: readonly (readonly [string, string, number])[] = [
   ['destructive', 'tonal', NOT_TEXT],
   ['ring', 'background', NOT_TEXT],
   ['ring', 'surface', NOT_TEXT],
-  // A focused button of a row under the pointer; the one inside the pairing code's box.
+  // A focused button of a row under the pointer; the × inside a notice.
   ['ring', 'surface-hover', NOT_TEXT],
   ['ring', 'tonal', NOT_TEXT],
+  // The scrollbar's thumb, at rest and under the pointer, on the grounds of the areas that
+  // scroll: the list on the page, Settings on its surface (#154).
+  ['muted-foreground', 'background', NOT_TEXT],
+  ['muted-foreground', 'surface', NOT_TEXT],
+  ['foreground', 'background', NOT_TEXT],
+  ['foreground', 'surface', NOT_TEXT],
 ];
 
 describe('the themes of the page', () => {
@@ -122,16 +133,38 @@ describe('the themes of the page', () => {
 // A state of the page is a pair too: selected text is written on the selection's own ground,
 // whatever was under it.
 describe('selected text', () => {
-  const rule =
-    /::selection\s*\{([^}]*)\}/.exec(
-      readFileSync(join(import.meta.dirname, '..', '..', 'renderer', 'src', 'styles.css'), 'utf8'),
-    )?.[1] ?? '';
+  const rule = /::selection\s*\{([^}]*)\}/.exec(pageRules)?.[1] ?? '';
 
   it('is two tokens that every theme holds to the contrast of text', () => {
     const ground = /background:\s*var\(--([\w-]+)\);/.exec(rule)?.[1];
     const text = /(?:^|\s)color:\s*var\(--([\w-]+)\);/.exec(rule)?.[1];
 
     expect(PAIRS).toContainEqual([text, ground, TEXT]);
+  });
+});
+
+// The scrollbar is the page's own, in its tokens: the system's has arrow buttons and no theme.
+describe('the scrollbar', () => {
+  const groundOf = (selector: string) => {
+    const at = pageRules.indexOf(`${selector} {`);
+    const rule = at < 0 ? '' : pageRules.slice(at, pageRules.indexOf('}', at));
+    return /background:\s*var\(--([\w-]+)\)/.exec(rule)?.[1];
+  };
+
+  it.each([
+    ['at rest', '::-webkit-scrollbar-thumb'],
+    ['under the pointer', '::-webkit-scrollbar-thumb:hover'],
+  ])('wears a thumb %s that every theme holds to 3:1 on every ground that scrolls', (_, rule) => {
+    const thumb = groundOf(rule);
+
+    expect(PAIRS).toContainEqual([thumb, 'background', NOT_TEXT]);
+    expect(PAIRS).toContainEqual([thumb, 'surface', NOT_TEXT]);
+  });
+
+  // Chromium lets the standard properties win over its own pseudo-elements, and with them it
+  // draws its arrow buttons again.
+  it('is not handed back to the system by the standard properties', () => {
+    expect(pageRules).not.toMatch(/scrollbar-(width|color)\s*:/);
   });
 });
 
@@ -149,6 +182,17 @@ describe('the extension’s pages', () => {
       expect(tokensOf(DEFAULT_THEME, scheme)).toMatchObject(own);
     },
   );
+});
+
+// The window's own buttons, focused and not, are an icon on the title bar's ground (#155).
+describe('the window’s own buttons', () => {
+  it.each(variants)('are seen on their ground in $theme, $scheme', ({ theme, scheme }) => {
+    for (const focused of [true, false]) {
+      const { color, symbolColor } = titleBarOverlay(theme, scheme, focused);
+
+      expect(contrast(symbolColor, color)).toBeGreaterThanOrEqual(NOT_TEXT);
+    }
+  });
 });
 
 // Main paints the window before the page loads, so the two must agree on the colours.

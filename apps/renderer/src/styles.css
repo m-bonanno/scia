@@ -65,9 +65,29 @@
     margin: 0;
     overflow: hidden;
   }
-  * {
-    scrollbar-width: thin;
-    scrollbar-color: var(--tonal) transparent;
+  /* The scrollbar is the page's own (#154): 8 px, always there where an area scrolls, no arrow
+     buttons, the thumb in the secondary text's colour, which every theme holds above the 3:1 a
+     bar needs on each ground that scrolls. Chromium's pseudo-elements, not `scrollbar-width` and
+     `scrollbar-color`: with those Chromium keeps the system's arrows, and they win over these. */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--muted-foreground);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--foreground);
+  }
+  /* Chromium does not clip a scrollbar to its area's rounding: the track of Settings starts and
+     ends where its corners do (`rounded-2xl`), or the thumb is drawn on the veil beyond them. */
+  dialog::-webkit-scrollbar-track {
+    margin-block: var(--radius-2xl);
   }
   /* A button that does nothing for now — disabled, or `aria-disabled` to keep the focus — does
      not offer itself to the pointer. */

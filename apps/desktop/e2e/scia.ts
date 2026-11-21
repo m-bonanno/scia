@@ -152,6 +152,9 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
         ...args,
       ],
       timeout: START_LIMIT_MS,
+      // playwright-core tells the page that the system asks for light unless told otherwise,
+      // while main reads the system: a light page under the dark buttons main painted (#155).
+      colorScheme: null,
     })
     .catch(async (error: unknown) => {
       await hosts();

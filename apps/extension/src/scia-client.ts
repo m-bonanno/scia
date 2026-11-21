@@ -78,7 +78,7 @@ export const OUTCOME_TEXT: Readonly<Record<SendOutcome, string>> = {
   sent: 'Sent to Scia.',
   'not-paired': 'Pair the extension with Scia first.',
   unreachable: 'Scia is not running. Open it and try again.',
-  'wrong-code': 'Scia does not recognize the pairing code. Copy it again from Scia’s settings.',
+  'wrong-code': 'Scia does not recognize the pairing code. Paste it again.',
   unsupported: 'Scia downloads http and https links only.',
   refused: 'Scia refused the request.',
 };
