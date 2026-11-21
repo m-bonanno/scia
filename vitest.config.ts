@@ -2,8 +2,12 @@ import { defineConfig } from 'vitest/config';
 
 const slowerLayers = ['**/*.int.test.ts', '**/*.feature.test.ts'];
 
+// A machine shared by several sessions can run fewer suites' workers at once (#184).
+const workers = Number(process.env.SCIA_TEST_WORKERS);
+
 export default defineConfig({
   test: {
+    ...(Number.isInteger(workers) && workers > 0 ? { maxWorkers: workers } : {}),
     projects: [
       {
         test: {
@@ -30,6 +34,9 @@ export default defineConfig({
             'apps/desktop/src/**/*.int.test.ts',
             'apps/desktop/build/**/*.int.test.ts',
           ],
+          // Real hosts, real processes and real disks wait on a busy machine: what a spec asserts of
+          // time it bounds itself, so this room hides no slowness it tests for (#165, #184).
+          testTimeout: 15_000,
         },
       },
       {
