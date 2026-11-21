@@ -17,3 +17,23 @@ export function extractLinks(text: string): string[] {
   }
   return [...links];
 }
+
+// A magnet Scia can hand to a service (#137): the hash of its torrent — 40 hexadecimal digits, or
+// 32 of base 32 — among its parameters, and nothing that is not part of a link. Long enough for
+// many trackers, not for a text.
+const MAGNET = /^magnet:\?(?:[^\s&]*&)*xt=urn:btih:(?:[0-9a-f]{40}|[a-z2-7]{32})(?:&\S*)?$/i;
+export const MAX_MAGNET_LENGTH = 8192;
+export const magnetUri = z.string().max(MAX_MAGNET_LENGTH).regex(MAGNET);
+
+const MAGNET_IN_TEXT = /magnet:\?[^\s<>"'`]+/gi;
+
+// Every magnet in a pasted text, once each, in the order they appear. Only the page takes them:
+// what main reads on the clipboard is extractLinks' (#139 is to change that).
+export function extractMagnets(text: string): string[] {
+  const magnets = new Set<string>();
+  for (const match of text.matchAll(MAGNET_IN_TEXT)) {
+    const magnet = match[0].replace(TRAILING, '');
+    if (magnetUri.safeParse(magnet).success) magnets.add(magnet);
+  }
+  return [...magnets];
+}
