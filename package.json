@@ -32,7 +32,8 @@
     "test:e2e": "vitest run --project e2e",
     "test:smoke": "vitest run --project smoke",
     "release": "semantic-release",
-    "gates": "node scripts/gates.mjs"
+    "gates": "node scripts/gates.mjs",
+    "check:adr": "node scripts/adr-numbers.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

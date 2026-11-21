@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 // The gates of docs/development/review-flow.md, in their order: the first that fails ends the run,
 // so a session reads one failure, not five. Quiet: the tests print a dot per spec.
 export const GATES = [
+  { script: 'check:adr', args: [] },
   { script: 'format:check', args: [] },
   { script: 'lint', args: [] },
   { script: 'typecheck', args: [] },
