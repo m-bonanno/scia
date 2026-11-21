@@ -60,11 +60,11 @@ AllDebrid's help page on magnet folders (https://faq.alldebrid.com/en/tools/magn
      - a magnet it does not take (`MAGNET_INVALID`);
      - too many magnets for the account (`MAGNET_LIMIT`);
      - too large (`MAGNET_TOO_LARGE`);
-     - one it could not fetch, or no longer has (`MAGNET_FAILED`);
+     - one it could not fetch, or no longer has (`MAGNET_FAILED`) — also each end the documentation lists for a magnet it took and could not finish: not started in 20 minutes, more than 72 hours, removed from the hoster, processing or upload failed, an internal error;
      - one whose files it lists in a way Scia cannot read (`MAGNET_UNREADABLE`).
    - It also takes the refusals a key or a network meets, as a link does.
    - A service that cannot be asked for a moment does not fail a magnet: the row says Scia could not ask, and the next turn asks again.
-   - A code Scia does not know, said of one magnet — at its upload or of its files — fails that magnet `SERVICE_UNAVAILABLE`: an answer Scia does not understand would be asked again for ever.
+   - A code Scia does not know, said of one magnet — at its upload or of its files — fails that magnet `SERVICE_UNAVAILABLE`, and so does a magnet the service leaves out of its answer, or whose state it writes in a way Scia cannot read: an answer Scia does not understand would be asked again for ever.
    - Retry sends a failed magnet again. Remove stops Scia waiting for it; the service keeps it, as it keeps anything the account added elsewhere.
 6. **The routes are for the app's token alone** (ADR 0002): `POST /magnets` with `{ magnets }`, `POST /magnets/:id/retry` and `DELETE /magnets/:id`.
    - The page finds magnets in what is pasted or typed (`extractMagnets` in `@scia/contracts/links`).
