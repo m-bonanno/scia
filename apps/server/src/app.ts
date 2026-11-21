@@ -10,6 +10,7 @@ import {
   EVENTS_KEEP_ALIVE_MS,
   type Health,
   isIntegrationId,
+  offerLinksSchema,
   type Pairing,
   settingsPatchSchema,
   SNAPSHOT_EVENT,
@@ -135,7 +136,23 @@ export function createApp(deps: AppDeps): Hono {
     return c.json({ data: manager.add(parsed.data) }, 201);
   });
 
+  // The links main read on the clipboard (docs/adr/0012): the app's token only, as every route
+  // the extension's does not name.
+  app.post(`${API_PREFIX}/downloads/offered`, async (c) => {
+    const parsed = offerLinksSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(400, ApiErrorCode.InvalidRequest, 'Give one or more http(s) addresses.');
+    }
+    return c.json({ data: await manager.offer(parsed.data.urls) });
+  });
+
+  app.post(`${API_PREFIX}/downloads/start-ready`, (c) => c.json({ data: manager.startReady() }));
+
   app.get(`${API_PREFIX}/downloads/:id`, (c) => c.json({ data: manager.find(c.req.param('id')) }));
+
+  app.post(`${API_PREFIX}/downloads/:id/start`, (c) =>
+    c.json({ data: manager.start(c.req.param('id')) }),
+  );
 
   app.post(`${API_PREFIX}/downloads/:id/pause`, async (c) =>
     c.json({ data: await manager.pause(c.req.param('id')) }),

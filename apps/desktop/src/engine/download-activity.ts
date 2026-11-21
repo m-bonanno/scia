@@ -8,8 +8,8 @@ export interface DownloadActivity {
   readonly queued: number;
 }
 
-// What still needs Scia to be running. A paused or failed download waits for the person, not
-// for the app.
+// What still needs Scia to be running. A paused, failed or ready download waits for the person,
+// not for the app.
 export function unfinished(activity: DownloadActivity): number {
   return activity.downloading + activity.queued;
 }

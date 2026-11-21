@@ -7,6 +7,7 @@ import {
 } from '@scia/core';
 import { z } from 'zod';
 import { IntegrationId } from './integrations.ts';
+import { httpUrl } from './links.ts';
 import { Theme } from './theme.ts';
 
 export { API_PREFIX, DEFAULT_API_PORT } from './endpoint.ts';
@@ -32,7 +33,6 @@ export const errorEnvelopeSchema = z.object({
 export type ErrorEnvelope = z.infer<typeof errorEnvelopeSchema>;
 
 const byteCount = z.number().int().nonnegative();
-const httpUrl = z.url({ protocol: /^https?$/ });
 
 export const segmentSchema = z.object({ start: byteCount, end: byteCount, downloaded: byteCount });
 
@@ -91,7 +91,19 @@ export const addDownloadsSchema = z.object({
 });
 export type AddDownloads = z.infer<typeof addDownloadsSchema>;
 
-export const snapshotSchema = z.object({ downloads: z.array(downloadSchema) });
+// The links main read on the clipboard (docs/adr/0012-links-taken-from-the-clipboard.md). The
+// engine keeps those that are files or videos it knows, and adds them ready, not started.
+export const offerLinksSchema = z.object({
+  urls: z.array(httpUrl).min(1).max(MAX_URLS_PER_REQUEST),
+});
+export type OfferLinks = z.infer<typeof offerLinksSchema>;
+
+export const snapshotSchema = z.object({
+  downloads: z.array(downloadSchema),
+  // Whether main reads the clipboard: main follows the engine's events, and hears the switch
+  // there the moment it changes, whoever changed it.
+  watchClipboard: z.boolean(),
+});
 export type Snapshot = z.infer<typeof snapshotSchema>;
 
 // The event the engine sends on GET /events, its data a Snapshot.
@@ -133,6 +145,8 @@ export const settingsSchema = z.object({
   // Whether an installed Scia updates itself to the betas too, not only to the stables (#82). Main
   // reads it; the page switches it.
   betaUpdates: z.boolean(),
+  // Whether main takes the links copied to the clipboard (#128). Off by default.
+  watchClipboard: z.boolean(),
 });
 export type Settings = z.infer<typeof settingsSchema>;
 
@@ -143,6 +157,7 @@ export const settingsPatchSchema = settingsSchema
     speedLimitBytesPerSecond: true,
     theme: true,
     betaUpdates: true,
+    watchClipboard: true,
   })
   .partial();
 export type SettingsPatch = z.infer<typeof settingsPatchSchema>;

@@ -7,6 +7,7 @@ import { DEFAULT_THEME } from '@scia/contracts/theme';
 import {
   canPause,
   canResume,
+  canStart,
   DownloadFailure,
   DownloadStatus,
   etaSeconds,
@@ -20,12 +21,14 @@ import {
   type Segment,
   SpeedMeter,
   uniqueFileName,
+  UnlockFailure,
 } from '@scia/core';
 import { DownloadTask } from './download-task.ts';
 import { HlsTask, piecesOf, type Timeline } from './hls-task.ts';
 import type { LinkResolver } from './link-resolver.ts';
 import { describeFailure, type Logger } from './logger.ts';
 import { chooseMedia, type MediaKind, PageError } from './media-choice.ts';
+import { offeredAs } from './offered-links.ts';
 import { type MarkDownloaded, markerFor } from './origin-mark.ts';
 import type { PageReader } from './page-reader.ts';
 import {
@@ -48,12 +51,16 @@ const DEFAULT_SETTINGS = {
   theme: DEFAULT_THEME,
   // The stables only: the betas are for whoever turns them on (the owner, #82).
   betaUpdates: false,
+  watchClipboard: false,
 } as const;
 // A connection is not opened for less than this.
 const MIN_SEGMENT_BYTES = 1024 * 1024;
 const CHECKPOINT_MS = 5000;
 // The name of a page's video whose site does not say what it is called.
 const UNTITLED = 'video';
+// How long a link copied to the clipboard waits for the service to say whether it is a file
+// host's. One it has not said of by then is not taken: no link is offered on a guess.
+const OFFER_HOST_LIMIT_MS = 5000;
 
 export const ManagerRefusal = {
   NotFound: 'NOT_FOUND',
@@ -158,6 +165,15 @@ function bytesLeft(
   return Math.round((downloadedBytes * (timeline.totalMs - doneMs)) / doneMs);
 }
 
+// One address however it was written: the case of its scheme and host, an empty path.
+function addressOf(url: string): string {
+  try {
+    return new URL(url).href;
+  } catch {
+    return url;
+  }
+}
+
 function partPathOf(record: DownloadRecord): string {
   return join(record.directory, `${record.fileName}${PART_SUFFIX}`);
 }
@@ -206,7 +222,10 @@ export class DownloadManager {
   }
 
   snapshot(): Snapshot {
-    return { downloads: this.#records.map((record) => this.#view(record)) };
+    return {
+      downloads: this.#records.map((record) => this.#view(record)),
+      watchClipboard: this.#settings.watchClipboard,
+    };
   }
 
   find(id: string): Download {
@@ -235,7 +254,7 @@ export class DownloadManager {
   }
 
   // Whether a download of the person's runs or waits its turn: what the engine's own fetches wait
-  // for (docs/adr/0011). A paused or failed download waits for the person, not for the engine.
+  // for (docs/adr/0011). A paused, failed or ready download waits for the person, not for the engine.
   isBusy(): boolean {
     return this.#records.some(
       ({ status }) => status === DownloadStatus.Downloading || status === DownloadStatus.Queued,
@@ -255,36 +274,58 @@ export class DownloadManager {
     readonly urls: readonly string[];
     readonly referrer?: string | undefined;
   }): Download[] {
-    const added = input.urls.map((url): DownloadRecord => {
-      const record: DownloadRecord = {
-        id: (this.#deps.newId ?? randomUUID)(),
-        url,
-        referrer: input.referrer ?? null,
-        directory: this.#settings.downloadDirectory,
-        fileName: fileNameFromUrl(url),
-        named: false,
-        status: DownloadStatus.Queued,
-        totalBytes: null,
-        resumable: false,
-        validator: null,
-        segments: [],
-        downloadedBytes: 0,
-        failure: null,
-        failureStatus: null,
-        via: null,
-        unlockedUrl: null,
-        video: null,
-        fromPage: false,
-        timeline: null,
-        createdAt: new Date(this.#now()).toISOString(),
-        completedAt: null,
-      };
-      this.#records.push(record);
-      return record;
-    });
+    const added = input.urls.map((url) =>
+      this.#newRecord(url, input.referrer ?? null, DownloadStatus.Queued),
+    );
+    this.#records.push(...added);
     this.#changed();
     this.#schedule();
     return added.map((record) => this.#view(record));
+  }
+
+  // The links main read on the clipboard (#128): those that are files or videos Scia knows are
+  // added ready, in the order they were copied, and none starts. A link already in the list —
+  // whatever its state — is not added again.
+  async offer(urls: readonly string[]): Promise<Download[]> {
+    const taken = await Promise.all(
+      urls.map(async (url) => ((await this.#isOffered(url)) ? url : undefined)),
+    );
+    // Read after the wait: another offer may have added some of them meanwhile.
+    const known = new Set(this.#records.map((record) => addressOf(record.url)));
+    const added: DownloadRecord[] = [];
+    for (const url of taken) {
+      if (url === undefined || known.has(addressOf(url))) continue;
+      known.add(addressOf(url));
+      added.push(this.#newRecord(url, null, DownloadStatus.Ready));
+    }
+    // How many, never which: what a person copies is theirs.
+    this.#deps.logger.info('links_offered', { links: urls.length, added: added.length });
+    if (added.length > 0) {
+      this.#records.push(...added);
+      this.#changed();
+    }
+    return added.map((record) => this.#view(record));
+  }
+
+  start(id: string): Download {
+    const record = this.#record(id);
+    if (!canStart(record.status)) {
+      throw new ManagerError(ManagerRefusal.Conflict, 'Only a ready download starts.');
+    }
+    record.status = DownloadStatus.Queued;
+    this.#changed();
+    this.#schedule();
+    return this.#view(record);
+  }
+
+  // Every ready download joins the queue, in its order: the queue's limit still holds.
+  startReady(): Download[] {
+    const ready = this.#records.filter((record) => canStart(record.status));
+    if (ready.length === 0) return [];
+    for (const record of ready) record.status = DownloadStatus.Queued;
+    this.#changed();
+    this.#schedule();
+    return ready.map((record) => this.#view(record));
   }
 
   async pause(id: string): Promise<Download> {
@@ -358,6 +399,7 @@ export class DownloadManager {
         : { speedLimitBytesPerSecond: patch.speedLimitBytesPerSecond }),
       ...(patch.theme === undefined ? {} : { theme: patch.theme }),
       ...(patch.betaUpdates === undefined ? {} : { betaUpdates: patch.betaUpdates }),
+      ...(patch.watchClipboard === undefined ? {} : { watchClipboard: patch.watchClipboard }),
     };
     // At once, also for what is already running.
     if (patch.speedLimitBytesPerSecond !== undefined) {
@@ -408,6 +450,47 @@ export class DownloadManager {
 
   #now(): number {
     return (this.#deps.now ?? Date.now)();
+  }
+
+  #newRecord(url: string, referrer: string | null, status: DownloadStatus): DownloadRecord {
+    return {
+      id: (this.#deps.newId ?? randomUUID)(),
+      url,
+      referrer,
+      directory: this.#settings.downloadDirectory,
+      fileName: fileNameFromUrl(url),
+      named: false,
+      status,
+      totalBytes: null,
+      resumable: false,
+      validator: null,
+      segments: [],
+      downloadedBytes: 0,
+      failure: null,
+      failureStatus: null,
+      via: null,
+      unlockedUrl: null,
+      video: null,
+      fromPage: false,
+      timeline: null,
+      createdAt: new Date(this.#now()).toISOString(),
+      completedAt: null,
+    };
+  }
+
+  // A file by its name, a video's page on a site Scia knows, or a file host's link: the service
+  // connected says so, or — none connected — AllDebrid's public list does (docs/adr/0006). What
+  // the service cannot say within its limit is left out.
+  async #isOffered(url: string): Promise<boolean> {
+    if (offeredAs(url) !== undefined) return true;
+    const { resolver } = this.#deps;
+    if (resolver === undefined) return false;
+    try {
+      const signal = AbortSignal.timeout(OFFER_HOST_LIMIT_MS);
+      return (await resolver.serviceFor(url, signal)) !== undefined;
+    } catch (error) {
+      return error instanceof ServiceError && error.failure === UnlockFailure.NeedsService;
+    }
   }
 
   #record(id: string): DownloadRecord {

@@ -1,10 +1,9 @@
 import { type ReactNode, type Ref, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { cn } from '@/lib/cn.ts';
 import { FOCUS_RING, ICON_BUTTON } from './button-styles.ts';
+import { useOnePress } from './one-press.ts';
 
 const CONFIRM_FOR_MS = 3000;
-// Longer than the longest time a system counts two clicks as one double click.
-const BURST_MS = 1000;
 
 export interface ConfirmButtonHandle {
   // One press from elsewhere — a double click on the row the button is in. It takes the focus,
@@ -51,7 +50,7 @@ export function ConfirmButton({
   if (armed && confirmLabel === undefined) setArmed(false);
   const asking = armed && confirmLabel !== undefined;
   const element = useRef<HTMLButtonElement>(null);
-  const lastClick = useRef({ detail: 0, at: 0 });
+  const press = useOnePress();
 
   useImperativeHandle(
     ref,
@@ -94,15 +93,10 @@ export function ConfirmButton({
             )
           : ICON_BUTTON
       }
-      onKeyDown={(event) => {
-        if (event.repeat && event.key === 'Enter') event.preventDefault();
-      }}
+      onKeyDown={press.onKeyDown}
       onClick={(event) => {
-        const now = Date.now();
-        const sawTheOneBefore =
-          lastClick.current.detail === event.detail - 1 && now - lastClick.current.at < BURST_MS;
-        lastClick.current = { detail: event.detail, at: now };
-        if (event.detail > 1 && (asking || sawTheOneBefore)) return;
+        const repeated = press.sawTheOneBefore(event);
+        if (event.detail > 1 && (asking || repeated)) return;
         if (confirmLabel !== undefined && !armed) {
           setArmed(true);
           return;

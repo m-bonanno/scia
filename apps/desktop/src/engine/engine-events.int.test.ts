@@ -28,7 +28,7 @@ function aDownload(id: string, status: string) {
 }
 
 const snapshot = (...downloads: unknown[]) =>
-  `event: snapshot\ndata: ${JSON.stringify({ downloads })}\n\n`;
+  `event: snapshot\ndata: ${JSON.stringify({ downloads, watchClipboard: false })}\n\n`;
 
 // What the follower logged, with the reason it gave.
 function aLog() {
@@ -74,7 +74,7 @@ describe('followDownloads against a real host, with the real fetch', () => {
 
     const done = followDownloads({
       engine: () => ({ origin: `http://127.0.0.1:${String(port)}`, apiToken: 'token', fetch }),
-      onDownloads: (downloads) => {
+      onSnapshot: ({ downloads }) => {
         names.push(...downloads.map((download) => download.fileName));
       },
       signal: stopped.signal,
@@ -128,7 +128,7 @@ describe('followDownloads against a real host, with the real fetch', () => {
 
     const done = followDownloads({
       engine: () => ({ origin: `http://127.0.0.1:${String(port)}`, apiToken: 'token', fetch }),
-      onDownloads: (downloads) => {
+      onSnapshot: ({ downloads }) => {
         names.push(...downloads.map((download) => `${download.fileName}:${download.status}`));
       },
       signal: stopped.signal,

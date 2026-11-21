@@ -12,6 +12,7 @@ const settings = {
   speedLimitBytesPerSecond: null,
   theme: 'black-tie',
   betaUpdates: false,
+  watchClipboard: false,
 } as const;
 const MIB = 1024 * 1024;
 
@@ -64,6 +65,38 @@ describe('SettingsDialog', () => {
     expect(screen.getByText(/Paste this code into the extension’s options/)).toBeInTheDocument();
     // Whoever opened it learns what was read, not only what is changed here.
     expect(onSettings).toHaveBeenCalledExactlyOnceWith(settings);
+  });
+
+  describe('the links of the clipboard', () => {
+    it('are not taken until the person turns the switch on, and the engine keeps it', async () => {
+      aShell(async () => 'kept');
+      const updateSettings = vi
+        .spyOn(api, 'updateSettings')
+        .mockResolvedValue({ ...settings, watchClipboard: true });
+      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+
+      const watch = await screen.findByRole('switch', { name: 'Take links from the clipboard' });
+      expect(watch).not.toBeChecked();
+      expect(watch).toHaveAccessibleDescription(
+        'Links to files and videos you copy appear in the list, ready to start.',
+      );
+
+      watch.focus();
+      await userEvent.keyboard(' ');
+
+      expect(updateSettings).toHaveBeenCalledExactlyOnceWith({ watchClipboard: true });
+      expect(
+        await screen.findByRole('switch', { name: 'Take links from the clipboard' }),
+      ).toBeChecked();
+    });
+
+    it('are offered only in the desktop app, which reads the clipboard', async () => {
+      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+      await screen.findByText('Simultaneous downloads');
+      expect(
+        screen.queryByRole('switch', { name: 'Take links from the clipboard' }),
+      ).not.toBeInTheDocument();
+    });
   });
 
   describe('the beta versions', () => {

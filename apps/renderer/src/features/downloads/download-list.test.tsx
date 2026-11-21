@@ -13,6 +13,7 @@ describe('DownloadList', () => {
   it('takes one finished row at each quick press on the same spot, as the rows slide under it', () => {
     const remove = vi.fn();
     const actions: RowActions = {
+      start: vi.fn(),
       pause: vi.fn(),
       resume: vi.fn(),
       remove,

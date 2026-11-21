@@ -22,4 +22,13 @@ describe('nextToStart', () => {
     expect(nextToStart(queue, 1)).toEqual([]);
     expect(nextToStart(queue, 0)).toEqual([]);
   });
+
+  it('never starts a ready download: it waits for its Start', () => {
+    const queue = [
+      { id: 'a', status: DownloadStatus.Ready },
+      { id: 'b', status: DownloadStatus.Queued },
+      { id: 'c', status: DownloadStatus.Ready },
+    ];
+    expect(nextToStart(queue, 3)).toEqual(['b']);
+  });
 });

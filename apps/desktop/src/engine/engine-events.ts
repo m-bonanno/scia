@@ -1,4 +1,4 @@
-import { API_PREFIX, type Download, SNAPSHOT_EVENT, snapshotSchema } from '@scia/contracts';
+import { API_PREFIX, SNAPSHOT_EVENT, type Snapshot, snapshotSchema } from '@scia/contracts';
 import type { EngineAccess } from './engine-access.ts';
 
 export interface SseFrame {
@@ -37,7 +37,8 @@ export interface FollowLog {
 export interface FollowOptions {
   // Read anew at every attempt: an engine that was started again may be on another port.
   readonly engine: () => EngineAccess;
-  readonly onDownloads: (downloads: readonly Download[]) => void;
+  // Each list of downloads, with whether the clipboard is watched.
+  readonly onSnapshot: (snapshot: Snapshot) => void;
   // Ends the following: a quit.
   readonly signal: AbortSignal;
   // How long the engine has to begin its answer.
@@ -121,9 +122,9 @@ async function followOnce(options: FollowOptions, opened: () => void): Promise<v
       opened();
       for (const frame of frames.push(decoder.decode(value, { stream: true }))) {
         if (frame.event !== SNAPSHOT_EVENT) continue;
-        const downloads = downloadsIn(frame.data);
-        if (downloads === undefined) options.log.warn('engine_event_unreadable', {});
-        else options.onDownloads(downloads);
+        const snapshot = snapshotIn(frame.data);
+        if (snapshot === undefined) options.log.warn('engine_event_unreadable', {});
+        else options.onSnapshot(snapshot);
       }
     }
   } catch (error) {
@@ -136,10 +137,10 @@ async function followOnce(options: FollowOptions, opened: () => void): Promise<v
 }
 
 // What the engine sends is checked like any answer from outside main.
-function downloadsIn(data: string): readonly Download[] | undefined {
+function snapshotIn(data: string): Snapshot | undefined {
   try {
     const parsed = snapshotSchema.safeParse(JSON.parse(data));
-    return parsed.success ? parsed.data.downloads : undefined;
+    return parsed.success ? parsed.data : undefined;
   } catch {
     return undefined;
   }
