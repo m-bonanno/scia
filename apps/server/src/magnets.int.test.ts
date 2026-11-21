@@ -304,7 +304,8 @@ describe('a magnet that goes through a service', () => {
     await until(() => scia.snapshot().magnets[0]?.failure === MagnetFailure.Unavailable);
     expect(scia.snapshot().magnets[0]?.status).toBe(MagnetStatus.Sending);
     await until(() => allDone(scia));
-  });
+    // Twelve refusals and three downloads: once more than vitest's five seconds on CI's Windows.
+  }, 20_000);
 
   it('fails a magnet whose files the service answers with a code Scia does not know, as its upload would', async () => {
     const alldebrid = await serviceWith({
