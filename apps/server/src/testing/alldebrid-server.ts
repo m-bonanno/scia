@@ -104,6 +104,8 @@ export interface SimulatedMagnet {
   readonly leftOutOfFiles?: boolean;
   // Where it is, as the service lists it, is written in a way Scia cannot read — but for its id.
   readonly unreadableState?: boolean;
+  // When it was added, in seconds since 1970, as the service writes it: 0 for no date.
+  readonly uploadDate?: number;
 }
 
 // What the service makes of a hoster's link it is asked to unlock: a direct link, or one of
@@ -494,7 +496,7 @@ export async function startAllDebridServer(
             seeders: 3,
             downloadSpeed: statusCode === 1 ? 1_048_576 : 0,
             uploadSpeed: 0,
-            uploadDate: 1_700_000_000,
+            uploadDate: known?.uploadDate ?? 1_700_000_000,
             completionDate: statusCode === 4 ? 1_700_000_100 : 0,
           };
         }),

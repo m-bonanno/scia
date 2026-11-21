@@ -175,6 +175,47 @@ describe('AccountMagnets', () => {
     expect(within(region()).getAllByRole('button', { name: /^Download/ })).toHaveLength(1);
   });
 
+  it('offers Download again once a read made after the press says the magnet left the list', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const asked = vi.spyOn(api, 'accountMagnets').mockResolvedValue([holiday]);
+    vi.spyOn(api, 'addAccountMagnet').mockResolvedValue({
+      id: 'm1',
+      name: 'Holiday films',
+      status: 'fetching',
+      totalBytes: null,
+      downloadedBytes: 0,
+      bytesPerSecond: 0,
+      failure: null,
+      createdAt: '2026-11-21T12:00:00.000Z',
+    });
+    const { region } = panel();
+    const download = await within(region()).findByRole('button', {
+      name: 'Download Holiday films',
+    });
+    await userEvent.click(download);
+    expect(download).toHaveAttribute('aria-disabled', 'true');
+
+    // Its files arrived: the magnet left Scia's list, and the service still has it.
+    await act(() => vi.advanceTimersByTimeAsync(ACCOUNT_POLL_MS));
+
+    await vi.waitFor(() => {
+      expect(asked).toHaveBeenCalledTimes(2);
+    });
+    expect(download).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('hands the focus to its heading when the row that held it leaves', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.spyOn(api, 'accountMagnets').mockResolvedValueOnce([holiday]).mockResolvedValue([]);
+    const { region } = panel();
+    (await within(region()).findByRole('button', { name: 'Download Holiday films' })).focus();
+
+    await act(() => vi.advanceTimersByTimeAsync(ACCOUNT_POLL_MS));
+
+    await within(region()).findByText('No magnets on the AllDebrid account.');
+    expect(within(region()).getByRole('heading', { name: 'AllDebrid magnets' })).toHaveFocus();
+  });
+
   it('offers nothing for a magnet already in the list', async () => {
     vi.spyOn(api, 'accountMagnets').mockResolvedValue([{ ...holiday, inScia: true }]);
     const take = vi.spyOn(api, 'addAccountMagnet');

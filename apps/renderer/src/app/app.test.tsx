@@ -1,6 +1,6 @@
 import { ApiErrorCode, type Download, type Magnet } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './app.tsx';
@@ -789,6 +789,51 @@ describe('App', () => {
         expect(toggle()).not.toBeInTheDocument();
       });
       expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+
+      // Connected again: the panel is closed, as at first.
+      integrations.mockResolvedValue([alldebrid(true)]);
+      await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      await userEvent.click(
+        within(await screen.findByRole('dialog', { name: 'Settings' })).getByRole('button', {
+          name: 'Close',
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+      });
+      expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    });
+
+    it('keeps what the last ask learned, not an older answer that came after it', async () => {
+      let late: (integrations: ReturnType<typeof alldebrid>[]) => void = () => undefined;
+      const integrations = vi.spyOn(api, 'integrations').mockReturnValueOnce(
+        new Promise((resolve) => {
+          late = resolve;
+        }),
+      );
+      render(<App />);
+      await vi.waitFor(() => {
+        expect(integrations).toHaveBeenCalledOnce();
+      });
+
+      // Disconnected in Settings while the first ask was on its way.
+      integrations.mockResolvedValue([alldebrid(false)]);
+      await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      await userEvent.click(
+        within(await screen.findByRole('dialog', { name: 'Settings' })).getByRole('button', {
+          name: 'Close',
+        }),
+      );
+      // Asked by Settings as it opened, and by the page once it closed.
+      await vi.waitFor(() => {
+        expect(integrations.mock.calls.length).toBeGreaterThanOrEqual(3);
+      });
+      await act(async () => {
+        late([alldebrid(true)]);
+        await Promise.resolve();
+      });
+
+      expect(toggle()).not.toBeInTheDocument();
     });
   });
 });
