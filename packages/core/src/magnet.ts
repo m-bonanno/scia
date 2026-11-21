@@ -1,11 +1,11 @@
 import { sanitizeFileName } from './file-name.ts';
 import { ServiceFailure, UnlockFailure } from './service.ts';
 
-// Where a magnet is, from the moment it is pasted to the moment its files are downloads (#137).
 // Where the service is with a magnet of its account: fetching it, ready, or failed (#138).
 export const MagnetStage = { Fetching: 'fetching', Ready: 'ready', Failed: 'failed' } as const;
 export type MagnetStage = (typeof MagnetStage)[keyof typeof MagnetStage];
 
+// Where a magnet is, from the moment it is pasted to the moment its files are downloads (#137).
 export const MagnetStatus = {
   // Not yet given to the service, or being given.
   Sending: 'sending',

@@ -138,12 +138,40 @@ export function magnetActionMessage(error: unknown): string {
   return text ?? errorMessage(error);
 }
 
-// Said when a magnet of the account was not taken into the list (#138): the account moved on
-// since the panel last read it, or the service is no longer connected.
-const ACCOUNT_MAGNET_REFUSED: Readonly<Record<string, string>> = {
-  [ApiErrorCode.NotFound]: `This magnet is no longer on the ${SERVICE_NAME.alldebrid} account.`,
-  [ApiErrorCode.Conflict]: 'This magnet is already in the list, or no longer ready.',
+// What the service said of the account itself when it was asked about its magnets (#138): each
+// true of its cause alone, with its remedy. None of them is mended by asking again.
+const ACCOUNT_REFUSED: Readonly<Record<string, string>> = {
+  [ApiErrorCode.KeyRefused]: `${SERVICE_NAME.alldebrid} no longer accepts the key. In Settings, disconnect it and connect again.`,
+  [ApiErrorCode.KeyBlocked]: `${SERVICE_NAME.alldebrid} is blocking the key from here. If ${SERVICE_NAME.alldebrid} emailed you about a new sign-in, confirm it; otherwise check your network.`,
+  [ApiErrorCode.AccountBanned]: `${SERVICE_NAME.alldebrid} says this account is banned.`,
+  [ApiErrorCode.NetworkRefused]: `${SERVICE_NAME.alldebrid} does not serve this network: it refuses servers and some VPNs. Use it from another network.`,
+  [ApiErrorCode.NotPremium]: `${SERVICE_NAME.alldebrid} fetches magnets for premium accounts only.`,
   [ApiErrorCode.ServiceNeeded]: `${SERVICE_NAME.alldebrid} is no longer connected. Connect it in Settings.`,
+};
+
+// Why the panel's last ask of the account gave no list, and whether asking again may mend it.
+// An engine that did not answer says nothing here: the notice that it is not responding does.
+export interface AccountTrouble {
+  readonly text: string | null;
+  readonly heals: boolean;
+}
+
+export function accountTrouble(error: unknown): AccountTrouble {
+  if (!(error instanceof ApiError)) return { text: null, heals: true };
+  const refused = ACCOUNT_REFUSED[error.code];
+  if (refused !== undefined) return { text: refused, heals: false };
+  return error.code === ApiErrorCode.Unavailable
+    ? { text: `${SERVICE_NAME.alldebrid} could not be asked just now.`, heals: true }
+    : { text: 'Scia could not read the magnets of the account just now.', heals: true };
+}
+
+// Said when a magnet of the account was not taken into the list (#138): the account moved on
+// since the panel last read it, or what the service said of the account.
+const ACCOUNT_MAGNET_REFUSED: Readonly<Record<string, string>> = {
+  ...ACCOUNT_REFUSED,
+  [ApiErrorCode.NotFound]: `This magnet is no longer on the ${SERVICE_NAME.alldebrid} account.`,
+  [ApiErrorCode.Conflict]: 'This magnet is already in Scia’s list, or no longer ready.',
+  [ApiErrorCode.Unavailable]: `${SERVICE_NAME.alldebrid} could not be asked just now. Try again in a moment.`,
 };
 
 export function accountMagnetMessage(error: unknown): string {

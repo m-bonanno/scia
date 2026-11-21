@@ -162,8 +162,9 @@ export function createApp(deps: AppDeps): Hono {
   );
 
   app.post(`${API_PREFIX}/magnets/account/:id`, async (c) => {
-    const id = Number(c.req.param('id'));
-    if (!Number.isSafeInteger(id) || id <= 0) {
+    const given = c.req.param('id');
+    const id = Number(given);
+    if (!/^\d+$/.test(given) || !Number.isSafeInteger(id) || id <= 0) {
       return fail(
         400,
         ApiErrorCode.InvalidRequest,

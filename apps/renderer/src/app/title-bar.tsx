@@ -1,7 +1,9 @@
 import { ArrowDown, Magnet, Settings } from 'lucide-react';
 import type { ReactNode, Ref } from 'react';
+import { swallowHeldEnter } from '@/components/held-enter.ts';
 import { IconButton } from '@/components/icon-button.tsx';
 import { formatSpeed, SEPARATOR } from '@/lib/format.ts';
+import { SERVICE_NAME } from '@/lib/messages.ts';
 import { Logo } from './logo.tsx';
 
 interface TitleBarProps {
@@ -48,10 +50,14 @@ export function TitleBar({
         {magnets !== undefined && (
           <IconButton
             {...(magnetsToggleRef === undefined ? {} : { ref: magnetsToggleRef })}
-            label="AllDebrid magnets"
+            label={`${SERVICE_NAME.alldebrid} magnets`}
             className="no-drag aria-expanded:bg-tonal"
             aria-expanded={magnets.open}
             aria-controls={magnets.open ? magnets.panelId : undefined}
+            onKeyDown={(event) => {
+              // Pressed, it moves the focus into the panel or back: a held Enter would press on.
+              if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
+            }}
             onClick={magnets.onToggle}
           >
             <Magnet size={16} aria-hidden="true" />

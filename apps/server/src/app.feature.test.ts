@@ -593,7 +593,7 @@ describe('the engine API', () => {
         expect((await take('7')).status).toBe(409);
         expect((await take('8')).status).toBe(409);
         expect((await take('9')).status).toBe(404);
-        for (const id of ['abc', '0', '-1', '1.5']) {
+        for (const id of ['abc', '0', '-1', '1.5', '7e0', '0x7', '+7']) {
           const refused = await take(id);
           expect(refused.status, id).toBe(400);
           expect(await codeOf(refused)).toBe(ApiErrorCode.InvalidRequest);

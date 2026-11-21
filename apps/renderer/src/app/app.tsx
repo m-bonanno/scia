@@ -42,6 +42,8 @@ export function App(): ReactNode {
   // Whether AllDebrid is connected, from the last ask: it offers the panel of its magnets.
   const [connected, setConnected] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  // Each close of Settings, where a key may have been mended: the panel asks again at once.
+  const [settingsClosed, setSettingsClosed] = useState(0);
   const panelToggle = useRef<HTMLButtonElement>(null);
   const connectedAsks = useRef(0);
 
@@ -70,13 +72,14 @@ export function App(): ReactNode {
         setConnected(on);
         if (!on) setPanelOpen(false);
       })
+      // An engine that did not answer: what was learned last stands, and the notice that the
+      // engine is not responding says the rest.
       .catch(() => undefined);
   }, []);
 
   const closePanel = useCallback(() => {
-    const inside = document.getElementById(PANEL_ID)?.contains(document.activeElement) ?? false;
     setPanelOpen(false);
-    if (inside) panelToggle.current?.focus();
+    panelToggle.current?.focus();
   }, []);
 
   // The limit the title bar names and the theme the page wears are the engine's: read when the
@@ -271,8 +274,8 @@ export function App(): ReactNode {
             </div>
           </div>
         </main>
-        {connected && panelOpen && (
-          <AccountMagnets id={PANEL_ID} onClose={closePanel} tell={tell} />
+        {panelOpen && (
+          <AccountMagnets id={PANEL_ID} again={settingsClosed} onClose={closePanel} tell={tell} />
         )}
       </div>
       <SettingsDialog
@@ -280,6 +283,7 @@ export function App(): ReactNode {
         open={settingsOpen}
         onClose={() => {
           setSettingsOpen(false);
+          setSettingsClosed((times) => times + 1);
           learnConnected();
         }}
         onError={report}

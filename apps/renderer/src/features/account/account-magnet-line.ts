@@ -14,7 +14,7 @@ export function accountMagnetLine(magnet: AccountMagnet): string {
 function stageOf(magnet: AccountMagnet): string[] {
   const { totalBytes, downloadedBytes } = magnet;
   if (magnet.stage === MagnetStage.Failed) {
-    return [`${SERVICE_NAME.alldebrid} could not fetch it`];
+    return [`${SERVICE_NAME.alldebrid} gave no files for it`];
   }
   if (magnet.stage === MagnetStage.Ready) {
     return ['Ready', ...(totalBytes === null ? [] : [formatBytes(totalBytes)])];

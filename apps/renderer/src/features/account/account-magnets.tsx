@@ -1,12 +1,18 @@
-import { type AccountMagnet, ApiErrorCode } from '@scia/contracts';
+import type { AccountMagnet } from '@scia/contracts';
 import { MagnetStage } from '@scia/core';
 import { Magnet, X } from 'lucide-react';
 import { type ReactNode, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { FOCUS_RING, TEXT_BUTTON } from '@/components/button-styles.ts';
+import { swallowHeldEnter } from '@/components/held-enter.ts';
 import { IconButton } from '@/components/icon-button.tsx';
-import { api, ApiError } from '@/lib/api.ts';
+import { api } from '@/lib/api.ts';
 import { cn } from '@/lib/cn.ts';
-import { accountMagnetMessage, SERVICE_NAME } from '@/lib/messages.ts';
+import {
+  type AccountTrouble,
+  accountMagnetMessage,
+  accountTrouble,
+  SERVICE_NAME,
+} from '@/lib/messages.ts';
 import { accountMagnetLine } from './account-magnet-line.ts';
 
 // How often the panel asks the service while it is shown: far below AllDebrid's limits.
@@ -16,6 +22,8 @@ const SERVICE = SERVICE_NAME.alldebrid;
 
 interface AccountMagnetsProps {
   readonly id: string;
+  // Changes when the panel should ask again at once, also after a refusal: Settings closed.
+  readonly again: number;
   readonly onClose: () => void;
   readonly tell: (text: string) => void;
 }
@@ -23,10 +31,13 @@ interface AccountMagnetsProps {
 interface Read {
   // Null before the first answer.
   readonly magnets: readonly AccountMagnet[] | null;
-  // The last ask failed: what is shown is from before.
-  readonly failed: boolean;
-  readonly needsService: boolean;
+  // Why the last ask gave no list; null when it gave one.
+  readonly trouble: AccountTrouble | null;
 }
+
+// A press of Download, by the number of the last ask begun when its request settled: null while
+// it is on its way. A read begun after it settled says what became of it.
+type Taken = ReadonlyMap<number, number | null>;
 
 // Newest first, as the downloads are; one the service gives no date for, last.
 function newestFirst(magnets: readonly AccountMagnet[]): AccountMagnet[] {
@@ -35,15 +46,13 @@ function newestFirst(magnets: readonly AccountMagnet[]): AccountMagnet[] {
 
 // The magnets of the connected AllDebrid account, in a panel beside the list (#138; the owner's
 // decision). It asks the service only while it is shown and the window is visible.
-export function AccountMagnets({ id, onClose, tell }: AccountMagnetsProps): ReactNode {
-  const [read, setRead] = useState<Read>({ magnets: null, failed: false, needsService: false });
-  // Magnets taken at a press, by the number of the ask that was the last when it was pressed:
-  // a read started before the press does not know of it yet.
-  const [taken, setTaken] = useState<ReadonlyMap<number, number>>(new Map());
+export function AccountMagnets({ id, again, onClose, tell }: AccountMagnetsProps): ReactNode {
+  const [read, setRead] = useState<Read>({ magnets: null, trouble: null });
+  const [taken, setTaken] = useState<Taken>(new Map());
   const asks = useRef(0);
-  const aside = useRef<HTMLElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const focusedHere = useRef(false);
+  // What held the focus in the panel, as long as the focus has gone nowhere else since.
+  const held = useRef<Element | null>(null);
   const headingId = useId();
 
   useEffect(() => {
@@ -52,141 +61,154 @@ export function AccountMagnets({ id, onClose, tell }: AccountMagnetsProps): Reac
 
   useEffect(() => {
     let stopped = false;
-    // Changed by the cleanup, between two awaits.
-    const isStopped = () => stopped;
     let busy = false;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const turn = async () => {
+    let answeredAt = -Infinity;
+    // Changed by the cleanup: a timer or an answer that comes after it does nothing more.
+    const isStopped = () => stopped;
+    const after = (delay: number) => {
       clearTimeout(timer);
-      // Hidden, it asks nothing until it is shown again.
-      if (busy || stopped || document.visibilityState !== 'visible') return;
+      timer = setTimeout(() => {
+        void turn();
+      }, delay);
+    };
+    const turn = async () => {
+      // Hidden, it asks nothing until it is shown again; one ask at a time.
+      if (isStopped() || busy || document.visibilityState !== 'visible') return;
       busy = true;
       asks.current += 1;
       const ask = asks.current;
+      let heals = true;
       try {
         const magnets = await api.accountMagnets();
-        if (isStopped()) return;
-        setRead({ magnets, failed: false, needsService: false });
-        setTaken((before) => new Map([...before].filter(([, pressedAt]) => pressedAt >= ask)));
+        setRead({ magnets, trouble: null });
+        setTaken(
+          (before) =>
+            new Map([...before].filter(([, settledAt]) => settledAt === null || settledAt >= ask)),
+        );
       } catch (error) {
-        if (isStopped()) return;
-        const needsService = error instanceof ApiError && error.code === ApiErrorCode.ServiceNeeded;
-        setRead((before) => ({ magnets: before.magnets, failed: true, needsService }));
+        const trouble = accountTrouble(error);
+        heals = trouble.heals;
+        setRead((before) => ({ magnets: before.magnets, trouble }));
       } finally {
         busy = false;
+        answeredAt = performance.now();
       }
-      timer = setTimeout(() => {
-        void turn();
-      }, ACCOUNT_POLL_MS);
+      // What asking again cannot mend waits for Settings to close, or for the panel to open again.
+      if (heals) after(ACCOUNT_POLL_MS);
     };
     const onVisibility = () => {
-      void turn();
+      if (document.visibilityState !== 'visible') {
+        clearTimeout(timer);
+        return;
+      }
+      // Shown again: at once when the last answer is a pace old, else when it will be.
+      after(Math.max(0, answeredAt + ACCOUNT_POLL_MS - performance.now()));
     };
     void turn();
     document.addEventListener('visibilitychange', onVisibility);
     return () => {
       stopped = true;
-      clearTimeout(timer);
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, []);
+  }, [again]);
 
-  // A row that left the panel under the focus — the magnet gone from the account — hands it to
-  // the heading, never to nothing.
+  // A row that left the panel under the focus — the magnet gone from the account — hands the
+  // focus to the heading; a focus that went elsewhere meanwhile stays there.
   useLayoutEffect(() => {
-    if (focusedHere.current && document.activeElement === document.body) heading.current?.focus();
+    if (held.current !== null && !held.current.isConnected) {
+      held.current = null;
+      if (document.activeElement === document.body) heading.current?.focus();
+    }
   });
 
   const take = (magnet: AccountMagnet) => {
-    setTaken((before) => new Map(before).set(magnet.id, asks.current));
-    api.addAccountMagnet(magnet.id).catch((error: unknown) => {
-      setTaken((before) => {
-        const after = new Map(before);
-        after.delete(magnet.id);
-        return after;
+    setTaken((before) => new Map(before).set(magnet.id, null));
+    api
+      .addAccountMagnet(magnet.id)
+      .then(() => {
+        setTaken((before) => new Map(before).set(magnet.id, asks.current));
+      })
+      .catch((error: unknown) => {
+        setTaken((before) => {
+          const left = new Map(before);
+          left.delete(magnet.id);
+          return left;
+        });
+        tell(accountMagnetMessage(error));
       });
-      tell(accountMagnetMessage(error));
-    });
   };
 
   return (
     <aside
       id={id}
-      ref={aside}
       aria-labelledby={headingId}
-      onFocus={() => {
-        focusedHere.current = true;
+      onFocus={(event) => {
+        held.current = event.target;
       }}
       onBlur={(event) => {
-        if (event.relatedTarget !== null && !aside.current?.contains(event.relatedTarget)) {
-          focusedHere.current = false;
-        }
+        const to = event.relatedTarget;
+        if (to === null || !event.currentTarget.contains(to)) held.current = null;
       }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') onClose();
       }}
-      className="absolute inset-y-0 right-0 z-10 flex w-80 max-w-full flex-col bg-surface lg:static"
+      className="flex w-80 shrink-0 flex-col bg-surface"
     >
       <div className="flex h-12 shrink-0 items-center gap-2 pr-2 pl-4">
         <h2
           ref={heading}
           id={headingId}
           tabIndex={-1}
-          className={cn('min-w-0 flex-1 truncate text-sm font-semibold', FOCUS_RING)}
+          className={cn('min-w-0 truncate text-sm font-semibold', FOCUS_RING)}
         >
           {SERVICE} magnets
         </h2>
-        <IconButton label="Close" onClick={onClose}>
+        <IconButton
+          label="Close"
+          className="ml-auto"
+          onKeyDown={(event) => {
+            // Close hands the focus to the button that opens the panel: a held Enter would open it.
+            if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
+          }}
+          onClick={onClose}
+        >
           <X size={16} aria-hidden="true" />
         </IconButton>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
-        <Contents read={read} taken={taken} onTake={take} />
+        <p role="status" className="px-1 py-2 text-sm text-muted-foreground empty:hidden">
+          {stateOf(read)}
+        </p>
+        {read.magnets !== null && read.magnets.length > 0 && (
+          <ul className="flex flex-col gap-1">
+            {newestFirst(read.magnets).map((magnet) => (
+              <Row
+                key={magnet.id}
+                magnet={{ ...magnet, inScia: magnet.inScia || taken.has(magnet.id) }}
+                onTake={take}
+              />
+            ))}
+          </ul>
+        )}
       </div>
     </aside>
   );
 }
 
-interface ContentsProps {
-  readonly read: Read;
-  readonly taken: ReadonlyMap<number, number>;
-  readonly onTake: (magnet: AccountMagnet) => void;
-}
-
-function Contents({ read, taken, onTake }: ContentsProps): ReactNode {
-  if (read.needsService) {
-    return <Said>{`${SERVICE} is no longer connected. Connect it in Settings.`}</Said>;
+// The sentence of the panel's state, said in its status region: empty while it connects, and
+// beside a list from before when the last ask gave none.
+function stateOf({ magnets, trouble }: Read): string {
+  if (trouble !== null && trouble.text !== null) {
+    if (!trouble.heals) return trouble.text;
+    return magnets === null
+      ? `${trouble.text} Scia asks again soon.`
+      : `${trouble.text} This is the list from before.`;
   }
-  // Connecting: nothing is drawn, so nothing flashes.
-  if (read.magnets === null) {
-    return read.failed ? (
-      <Said>{`${SERVICE} could not be asked just now. Scia asks again soon.`}</Said>
-    ) : null;
+  if (magnets?.length === 0) {
+    return `No magnets on the ${SERVICE} account. A magnet pasted above is added to it.`;
   }
-  return (
-    <>
-      {read.failed && (
-        <Said>{`${SERVICE} could not be asked just now. This is the list from before.`}</Said>
-      )}
-      {read.magnets.length === 0 ? (
-        <Said>{`No magnets on the ${SERVICE} account.`}</Said>
-      ) : (
-        <ul className="flex flex-col gap-1">
-          {newestFirst(read.magnets).map((magnet) => (
-            <Row
-              key={magnet.id}
-              magnet={{ ...magnet, inScia: magnet.inScia || taken.has(magnet.id) }}
-              onTake={onTake}
-            />
-          ))}
-        </ul>
-      )}
-    </>
-  );
-}
-
-function Said({ children }: { readonly children: string }): ReactNode {
-  return <p className="px-1 py-2 text-sm text-muted-foreground">{children}</p>;
+  return '';
 }
 
 interface RowProps {
@@ -197,6 +219,7 @@ interface RowProps {
 function Row({ magnet, onTake }: RowProps): ReactNode {
   const ready = magnet.stage === MagnetStage.Ready;
   const failed = magnet.stage === MagnetStage.Failed;
+  const line = accountMagnetLine(magnet);
   return (
     <li className="flex items-center gap-3 rounded-lg px-1 py-2">
       <Magnet size={16} aria-hidden="true" className="shrink-0 text-muted-foreground" />
@@ -205,12 +228,13 @@ function Row({ magnet, onTake }: RowProps): ReactNode {
           {magnet.name}
         </p>
         <p
+          title={line}
           className={cn(
             'truncate text-xs tabular-nums',
             failed ? 'text-destructive' : 'text-muted-foreground',
           )}
         >
-          {accountMagnetLine(magnet)}
+          {line}
         </p>
       </div>
       {/* One element whatever the press made of it: the focus stays where it was. */}

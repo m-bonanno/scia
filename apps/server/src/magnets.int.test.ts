@@ -867,4 +867,21 @@ describe('a magnet that goes through a service', () => {
     expect(logged.join('\n')).not.toContain(HASH);
     expect(logged.join('\n')).not.toContain('Holiday');
   });
+
+  it('logs a magnet taken from the account, never which', async () => {
+    const alldebrid = await serviceWith({
+      magnets: { [HASH]: holiday({ fetchingPolls: 0 }) },
+      onTheAccount: [HASH],
+    });
+    const scia = await open(await connected(alldebrid));
+    const [listed] = await scia.accountMagnets();
+
+    await scia.addAccountMagnet(listed?.id ?? 0);
+
+    expect(logged.filter((line) => line.includes('account_magnet_added'))).toEqual([
+      JSON.stringify({ event: 'account_magnet_added' }),
+    ]);
+    await until(() => allDone(scia));
+    expect(logged.join('\n')).not.toContain('Holiday');
+  });
 });

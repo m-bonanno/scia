@@ -555,7 +555,6 @@ export class DownloadManager {
     return this.#settings;
   }
 
-  // Stops every transfer and writes the state. What was running goes on at the next start.
   // The magnets of the connected service's account, as it lists them (#138; docs/adr/0015): also
   // those added on its site or by other applications. Asked only while the page shows them.
   async accountMagnets(): Promise<AccountMagnet[]> {
@@ -665,6 +664,7 @@ export class DownloadManager {
     this.#schedule();
   }
 
+  // Stops every transfer and writes the state. What was running goes on at the next start.
   async close(): Promise<void> {
     await this.#magnetWatch.close();
     this.#closed = true;

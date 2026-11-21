@@ -33,8 +33,8 @@ describe('accountMagnetLine', () => {
     ).toBe('Fetching');
   });
 
-  it('says AllDebrid could not fetch one that failed there', () => {
-    expect(accountMagnetLine({ ...ready, stage: 'failed' })).toBe('AllDebrid could not fetch it');
+  it('says AllDebrid gave no files for one that failed there, as a failed pasted magnet says', () => {
+    expect(accountMagnetLine({ ...ready, stage: 'failed' })).toBe('AllDebrid gave no files for it');
   });
 
   it("says one is in Scia's list, on its way to being downloads", () => {

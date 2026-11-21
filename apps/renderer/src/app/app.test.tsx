@@ -804,6 +804,53 @@ describe('App', () => {
       expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
     });
 
+    it('opens the panel once, and closes it once, however long Enter is held', async () => {
+      vi.spyOn(api, 'integrations').mockResolvedValue([alldebrid(true)]);
+      render(<App />);
+      const button = await vi.waitFor(() => toggle() ?? Promise.reject(new Error('no button')));
+
+      button.focus();
+      await userEvent.keyboard('{Enter>4/}');
+      const panel = screen.getByRole('complementary', { name: 'AllDebrid magnets' });
+      expect(button).toHaveAttribute('aria-expanded', 'true');
+
+      within(panel).getByRole('button', { name: 'Close' }).focus();
+      await userEvent.keyboard('{Enter>4/}');
+
+      expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+      expect(button).toHaveAttribute('aria-expanded', 'false');
+      expect(button).toHaveFocus();
+
+      // Closed at its own button, which keeps the focus: the repeats do not open it again.
+      await userEvent.click(button);
+      button.focus();
+      await userEvent.keyboard('{Enter>4/}');
+      expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    });
+
+    it('asks the account again when Settings closes, also after a refused key', async () => {
+      vi.spyOn(api, 'integrations').mockResolvedValue([alldebrid(true)]);
+      const asked = vi
+        .spyOn(api, 'accountMagnets')
+        .mockRejectedValue(new ApiError(422, ApiErrorCode.KeyRefused, 'refused'));
+      render(<App />);
+      await userEvent.click(await vi.waitFor(() => toggle() ?? Promise.reject(new Error('none'))));
+      await vi.waitFor(() => {
+        expect(asked).toHaveBeenCalledTimes(1);
+      });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      await userEvent.click(
+        within(await screen.findByRole('dialog', { name: 'Settings' })).getByRole('button', {
+          name: 'Close',
+        }),
+      );
+
+      await vi.waitFor(() => {
+        expect(asked).toHaveBeenCalledTimes(2);
+      });
+    });
+
     it('keeps what the last ask learned, not an older answer that came after it', async () => {
       let late: (integrations: ReturnType<typeof alldebrid>[]) => void = () => undefined;
       const integrations = vi.spyOn(api, 'integrations').mockReturnValueOnce(
