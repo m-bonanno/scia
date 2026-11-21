@@ -31,7 +31,8 @@
     "test:feature": "vitest run --project feature",
     "test:e2e": "vitest run --project e2e",
     "test:smoke": "vitest run --project smoke",
-    "release": "semantic-release"
+    "release": "semantic-release",
+    "test:quarantine": "node scripts/quarantine.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

@@ -58,6 +58,8 @@ This is the one definition; role files and `CLAUDE.md` point here. A finding is 
 
 Everything else is non-blocking: a suggestion, a question, something to track. Blocking is a fact, never a taste.
 
+A red check on a spec the PR does not touch, with no cause in its diff, is not a round of review: it is filed with its log (or added to its issue, when one exists) and put in quarantine in a PR of its own ([`testing.md`](./testing.md), "No retries"); the run is started again once, and the verdict holds for the head when it is green. #173 spent its third round on the speed limit's spec (#43).
+
 ## Rules
 
 - **Independent.** A reviewer gets its role file, the PR and the issue it closes, never the author's reasoning: an agent handed a conclusion returns it confirmed. What the owner asked for belongs in the issue, where every reviewer reads it.

@@ -347,7 +347,7 @@ describe('DownloadManager', () => {
     expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
   });
 
-  it('reaches a high limit on one connection: a wait that ends late is made up', async () => {
+  it('reaches a high limit on one connection: a wait that ends late is made up [flaky #43]', async () => {
     const large = randomBytes(32 * MIB);
     const { url } = await host({ body: large, fileName: 'Film.mkv' });
     const downloads = await open();

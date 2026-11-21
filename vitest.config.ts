@@ -2,8 +2,14 @@ import { defineConfig } from 'vitest/config';
 
 const slowerLayers = ['**/*.int.test.ts', '**/*.feature.test.ts'];
 
+// A spec found flaky carries `[flaky #N]` in its name, N its issue (docs/development/testing.md,
+// "No retries"): the gates pass it over, and `npm run test:quarantine` runs only those (#186).
+const FLAKY = /\[flaky #\d+\]/;
+const quarantine = process.env.SCIA_QUARANTINE === '1';
+
 export default defineConfig({
   test: {
+    testNamePattern: quarantine ? FLAKY : new RegExp(`^(?!.*${FLAKY.source})`),
     projects: [
       {
         test: {

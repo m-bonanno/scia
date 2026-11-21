@@ -18,10 +18,15 @@ The pipeline is [ADR 0008](../adr/0008-the-delivery-pipeline.md). The gates are 
 | `Windows tests, build`              | `windows-latest` | the three layers above, the build                      |
 | `E2E (Windows)`                     | `windows-latest` | the build, then the E2E suite                          |
 | `Installer smoke (Windows)`         | `windows-latest` | the installer of the commit, then the smoke test       |
+| `Quarantine (report only)`          | both             | the specs in quarantine; never blocks                  |
 
 A spec that holds on one system and not on the other is a bug of the spec or of the app on that system: Windows rounds a timer under 16 ms up to 16, and forgives a path written with the wrong separator, which Linux does not.
 
-**No retries.** A spec that fails in CI without a cause in the change is not run again until it passes: it is filed as an issue with its log, then fixed, or skipped with that issue's number beside it until it is.
+**No retries.** A spec that fails in CI without a cause in the change is not run again until it passes: it is filed as an issue with its log, then fixed, or put in quarantine until it is (#186).
+
+- **Quarantine** is `[flaky #N]` at the end of the spec's name, `N` its issue. The gates and `npm test` pass it over (`testNamePattern` in `vitest.config.ts`); `npm run test:quarantine` runs those specs alone; CI runs them in "Quarantine (report only)", on both systems, which reports and never blocks a merge.
+- A spec leaves the quarantine only with its fix, in the PR that closes its issue.
+- Run `npm run test:quarantine` before closing such an issue, and read the job on the PR.
 
 ### Burn-in
 
