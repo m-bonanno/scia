@@ -57,7 +57,7 @@ A new job of the gates becomes a required check of `develop` and `main` only onc
 - **Every wait is for a state** (`until`, on `performance.now()`), with bounds set for a cold start on a CI runner. A bound on a time is set against what the app does without the thing held, and counted from where the thing begins — the speed limit's spec is owed eight seconds from the host's first range, waits for more than six, and the file arrives in milliseconds without the limit, also when AllDebrid's public list never answers; at twice the limit it would take four.
 - Each spec was seen failing with the line it holds taken away; a new one is too (`.claude/gotchas.md`, "Specs").
 
-Run locally, its windows open on the screen, and a first close into the tray shows the system's notification, every profile being new. What it does not reach, and stays with a person or with a harness: the system's notifications and the tray as they are drawn, a hand on the mouse or the keys, the packaged app (the installer's smoke test, below), Linux.
+Run locally, its windows open on the screen, and a first close into the tray shows the system's notification, every profile being new. What it does not reach, and stays with a person or with a harness: the system's notifications and the tray as they are drawn, a hand on the mouse or the keys, a page's `visibilityState` — playwright-core keeps the page `visible` when the window is minimised or hidden; a harness that starts Electron itself and reads the page over DevTools sees it (#138) — the packaged app (the installer's smoke test, below), Linux.
 
 ## The installer's smoke test
 

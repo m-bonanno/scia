@@ -24,10 +24,10 @@ The issue asked that ADR 0014 gain these reads. An ADR is never rewritten, and t
    - whether it is in Scia's list (`inScia`).
    - A magnet whose entry Scia cannot read is left out. The magnet link itself is in no answer, as in ADR 0014.
 2. **Asked while the panel is shown, and only then.** The panel asks when it opens and every five seconds after (`ACCOUNT_POLL_MS`, in `apps/renderer`):
-   - one request at a time;
+   - one request at a time, also across the ask a Settings closing makes: it waits for the one on its way, and only the newer answer is drawn;
    - none while the window is hidden (`document.visibilityState`); shown again, it asks at once only when the last answer is five seconds old, else when it will be;
    - nothing once it is closed;
-   - after a refusal that asking again cannot mend — the key refused or blocked, the account banned or not premium, the network refused, no service connected — nothing more until Settings closes or the panel opens again; Settings closing makes it ask at once.
+   - after a refusal mended in Settings — the key refused, no service connected — nothing more until Settings closes, which makes it ask at once, or the panel opens again; one mended outside Scia — the key blocked until a sign-in is confirmed, the account banned or not premium, the network refused — keeps the pace, so that the next answer shows it mended.
    - The engine keeps nothing of these answers: it has no timer of its own for the account. ADR 0014's watch goes on asking about Scia's own magnets as before.
 3. **A plain read, not the live mode.** One request answers the whole account, and the panel is open only while a person looks at it. The live mode would keep a session and a counter for each panel, for an answer of a few kilobytes every five seconds.
 4. **A ready magnet of the account becomes a magnet of Scia's list.** `POST /magnets/account/:id` (digits only):
@@ -51,4 +51,4 @@ The issue asked that ADR 0014 gain these reads. An ADR is never rewritten, and t
 - With the panel open, the page asks AllDebrid about the account once every five seconds, and once more each time Settings closes; beside it, ADR 0014's watch asks once every five seconds while a magnet of Scia's waits. Both are far below AllDebrid's limits.
 - A magnet of the account taken into Scia's list is a row of the main list until its files are downloads, like a pasted one.
 - A magnet taken from the account a second time, after its files arrived, downloads them again under free names, as a pasted one does (#150).
-- Untried against the real AllDebrid: the order and the dates it lists magnets with, and an account with many magnets. Untried in the real app: a hidden window — under the test harness on this machine, Electron kept the page `visible` when its window was minimised or hidden, so the page's side is held by specs alone. These are the owner's to try.
+- Untried against the real AllDebrid: the order and the dates it lists magnets with, and an account with many magnets. These are the owner's to try. A hidden window was tried in the real app started by Electron itself (playwright-core keeps a page `visible`): minimised or hidden, the page was `hidden` and asked nothing for twelve seconds, and asked once within two seconds of being shown.
