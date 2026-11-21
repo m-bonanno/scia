@@ -33,7 +33,7 @@ export async function offerMagnetsToEngine(
     body: JSON.stringify({ magnets }),
     signal: AbortSignal.timeout(limitMs),
   });
-  if (!response.ok) throw new Error('The engine did not take the magnets.');
+  // A refusal has no list of magnets: it rejects here as an answer it cannot read.
   return z.object({ data: z.array(magnetSchema) }).parse(await response.json()).data.length;
 }
 

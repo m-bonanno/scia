@@ -142,11 +142,17 @@ describe('ClipboardWatch', () => {
     await clipboard.beat();
     clipboard.copy(magnet);
     await clipboard.beat();
+    // A text with no magnet asks the engine nothing about magnets.
+    clipboard.copy('https://example.com/b.zip');
+    await clipboard.beat();
 
     // The tracker inside the magnet is no link of its own.
-    expect(clipboard.offered).toEqual([['https://example.com/a.zip']]);
+    expect(clipboard.offered).toEqual([
+      ['https://example.com/a.zip'],
+      ['https://example.com/b.zip'],
+    ]);
     expect(clipboard.magnets).toEqual([[magnet], [magnet]]);
-    expect(clipboard.said).toEqual([1]);
+    expect(clipboard.said).toEqual([1, 1]);
     expect(clipboard.sent).toEqual([1, 1]);
   });
 
