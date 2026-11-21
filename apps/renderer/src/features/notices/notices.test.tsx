@@ -261,6 +261,30 @@ describe('Notices', () => {
     expect(last).not.toHaveFocus();
   });
 
+  it('keeps swallowing a held Enter when another key is let go meanwhile', async () => {
+    vi.useRealTimers();
+    render(
+      <>
+        <Page told={['One']} />
+        <button type="button">Press</button>
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'tell One' }));
+    act(() => {
+      screen.getByRole('button', { name: 'Dismiss' }).focus();
+    });
+    // Shift+Tab to the ×, Enter pressed before Shift is up: then Shift comes up, Enter still held.
+    await userEvent.keyboard('{Shift>}{Enter>}{/Shift}');
+
+    const repeat = fireEvent.keyDown(screen.getByRole('button', { name: 'Press' }), {
+      key: 'Enter',
+      repeat: true,
+    });
+
+    expect(repeat).toBe(false);
+    await userEvent.keyboard('{/Enter}');
+  });
+
   it('swallows nothing once the Enter that dismissed a notice is let go', async () => {
     vi.useRealTimers();
     const pressed = vi.fn();
