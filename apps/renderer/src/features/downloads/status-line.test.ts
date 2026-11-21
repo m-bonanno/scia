@@ -88,7 +88,7 @@ describe('statusLine', () => {
   it.each([
     [
       ServiceFailure.KeyRefused,
-      'AllDebrid no longer accepts the key. In Settings, disconnect it and connect a new key, then try again.',
+      'AllDebrid no longer accepts the key. In Settings, disconnect it and connect again, then try again.',
     ],
     [
       ServiceFailure.KeyBlocked,

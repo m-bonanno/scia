@@ -104,9 +104,10 @@ const MAGNET_FAILED: Readonly<Record<MagnetFailure, (service: string) => string>
   [MagnetFailure.Failed]: (service) => `${service} could not fetch this magnet. Try again later.`,
   [MagnetFailure.Unreadable]: (service) =>
     `Scia cannot take the list of files ${service} gave for this magnet: too many, too deep, or not links.`,
-  // The same sentence as a link's: a refused key is one fact, whatever it was for.
+  // The same sentence as a link's: a refused key is one fact, whatever it was for. "Connect
+  // again", not "a new key": a code is the main way to connect (#136).
   [MagnetFailure.KeyRefused]: (service) =>
-    `${service} no longer accepts the key. In Settings, disconnect it and connect a new key, then try again.`,
+    `${service} no longer accepts the key. In Settings, disconnect it and connect again, then try again.`,
   [MagnetFailure.KeyBlocked]: (service) =>
     `${service} is blocking the key from here. If ${service} emailed you about a new sign-in, confirm it; otherwise check your network, then try again.`,
   [MagnetFailure.AccountBanned]: (service) => `${service} says the account is banned.`,
@@ -159,7 +160,7 @@ const LINK_NOT_UNLOCKED: Readonly<
   Record<ServiceFailure | UnlockFailure, (service: string) => string>
 > = {
   [ServiceFailure.KeyRefused]: (service) =>
-    `${service} no longer accepts the key. In Settings, disconnect it and connect a new key, then try again.`,
+    `${service} no longer accepts the key. In Settings, disconnect it and connect again, then try again.`,
   [ServiceFailure.KeyBlocked]: (service) =>
     `${service} is blocking the key from here. If ${service} emailed you about a new sign-in, confirm it; otherwise check your network, then try again.`,
   [ServiceFailure.AccountBanned]: (service) => `${service} says the account is banned.`,
