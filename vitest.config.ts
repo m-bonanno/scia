@@ -1,9 +1,7 @@
 import { defineConfig } from 'vitest/config';
+import { workerCap } from './vitest.workers.ts';
 
 const slowerLayers = ['**/*.int.test.ts', '**/*.feature.test.ts'];
-
-// A machine shared by several sessions can run fewer suites' workers at once (#184).
-const workers = Number(process.env.SCIA_TEST_WORKERS);
 
 // A spec found flaky carries `[flaky #N]` in its name, N its issue (docs/development/testing.md,
 // "No retries"): the gates pass it over, and `npm run test:quarantine` runs only those (#186). The
@@ -14,7 +12,7 @@ const quarantined = { testNamePattern: quarantine ? FLAKY : new RegExp(`^(?!.*${
 
 export default defineConfig({
   test: {
-    ...(Number.isInteger(workers) && workers > 0 ? { maxWorkers: workers } : {}),
+    ...workerCap,
     projects: [
       {
         test: {

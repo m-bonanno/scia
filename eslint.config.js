@@ -40,6 +40,7 @@ export default tseslint.config(
         projectService: {
           allowDefaultProject: [
             'vitest.config.ts',
+            'vitest.workers.ts',
             'apps/renderer/vite.config.ts',
             'apps/renderer/vitest.config.ts',
           ],

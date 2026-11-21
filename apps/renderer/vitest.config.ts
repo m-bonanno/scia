@@ -1,11 +1,13 @@
 import { defineProject, mergeConfig } from 'vitest/config';
 import viteConfig from './vite.config.ts';
+import { workerCap } from '../../vitest.workers.ts';
 
 export default mergeConfig(
   viteConfig,
   defineProject({
     test: {
       name: 'unit-renderer',
+      ...workerCap,
       environment: 'jsdom',
       include: ['src/**/*.test.{ts,tsx}'],
       exclude: ['**/node_modules/**'],
