@@ -1,4 +1,4 @@
-import { ApiErrorCode, type IntegrationId } from '@scia/contracts';
+import { ApiErrorCode, IntegrationCodeFailure, type IntegrationId } from '@scia/contracts';
 import { PREPARE_LIMIT_SECONDS, ServiceFailure, UnlockFailure } from '@scia/core';
 import { ApiError } from './api.ts';
 import { formatDuration } from './format.ts';
@@ -51,6 +51,46 @@ const KEY_NOT_TAKEN: Readonly<Record<string, (service: string) => string>> = {
 export function connectFailureMessage(error: unknown, id: IntegrationId): string {
   const text = error instanceof ApiError ? KEY_NOT_TAKEN[error.code] : undefined;
   return text === undefined ? errorMessage(error) : text(SERVICE_NAME[id]);
+}
+
+// Said when Settings asked for a code to confirm on the service's site and got none.
+const CODE_NOT_GIVEN: Readonly<Record<string, (service: string) => string>> = {
+  // A service connected meanwhile, or another code asked for: whatever it was, none came.
+  [ApiErrorCode.Conflict]: (service) =>
+    `Scia could not get a code from ${service}. Try again in a moment.`,
+  // Not answering, under maintenance, or answering what Scia does not understand.
+  [ApiErrorCode.Unavailable]: (service) =>
+    `Scia could not get a code from ${service}. Try again in a moment.`,
+  [ApiErrorCode.NetworkRefused]: (service) =>
+    `${service} does not serve this network: it refuses servers and some VPNs. Connect from another network, then try again.`,
+};
+
+export function codeNotGivenMessage(error: unknown, id: IntegrationId): string {
+  const text = error instanceof ApiError ? CODE_NOT_GIVEN[error.code] : undefined;
+  return text === undefined ? errorMessage(error) : text(SERVICE_NAME[id]);
+}
+
+// Said by a code that connected nothing. "Get a new code" is the button beside it.
+const CODE_FAILED: Readonly<Record<IntegrationCodeFailure, (service: string) => string>> = {
+  // Its time ran out, or the service, or the engine, no longer knows it.
+  [IntegrationCodeFailure.Expired]: () => 'This code is no longer valid. Get a new one.',
+  [IntegrationCodeFailure.KeyRefused]: (service) =>
+    `${service} did not accept the key it gave for this code. Get a new code.`,
+  [IntegrationCodeFailure.KeyBlocked]: (service) =>
+    `${service} is blocking the key from here. If ${service} emailed you about a new sign-in, confirm it; otherwise check your network. Then get a new code.`,
+  [IntegrationCodeFailure.AccountBanned]: (service) => `${service} says this account is banned.`,
+  [IntegrationCodeFailure.NetworkRefused]: (service) =>
+    `${service} does not serve this network: it refuses servers and some VPNs. Connect from another network, then get a new code.`,
+  // The account could not be asked about once the code was confirmed, or something Scia does
+  // not understand: what is true of all of them is that nothing was connected.
+  [IntegrationCodeFailure.Unavailable]: (service) =>
+    `Scia could not finish connecting with ${service}. Get a new code.`,
+  [IntegrationCodeFailure.KeyNotKept]: () =>
+    'Scia could not keep the key safely on this computer. Nothing was connected.',
+};
+
+export function codeFailedMessage(failure: IntegrationCodeFailure, id: IntegrationId): string {
+  return CODE_FAILED[failure](SERVICE_NAME[id]);
 }
 
 // Said of a service that is connected, when it last answered with a refusal or not at all.

@@ -50,6 +50,7 @@ describe('SettingsDialog', () => {
       openDownload: vi.fn(async () => undefined),
       chooseDownloadFolder,
       themeChanged: vi.fn(async () => undefined),
+      openCodePage: vi.fn(async () => undefined),
     };
   }
 

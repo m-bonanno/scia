@@ -5,6 +5,8 @@ import {
   downloadSchema,
   errorEnvelopeSchema,
   type Integration,
+  type IntegrationCode,
+  integrationCodeSchema,
   type IntegrationId,
   integrationSchema,
   type Pairing,
@@ -84,4 +86,19 @@ export const api = {
     }),
   disconnectIntegration: (id: IntegrationId): Promise<void> =>
     request(`/integrations/${encodeURIComponent(id)}`, null, { method: 'DELETE' }),
+  // A code to confirm on the service's site: the engine waits for it, and connects the key the
+  // service gives — which never reaches the page.
+  startIntegrationCode: (id: IntegrationId): Promise<IntegrationCode> =>
+    request(`/integrations/${encodeURIComponent(id)}/code`, integrationCodeSchema, {
+      method: 'POST',
+    }),
+  integrationCode: (id: IntegrationId): Promise<IntegrationCode> =>
+    request(`/integrations/${encodeURIComponent(id)}/code`, integrationCodeSchema),
+  // With a code named, the engine forgets that one only.
+  cancelIntegrationCode: (id: IntegrationId, code?: string): Promise<void> =>
+    request(
+      `/integrations/${encodeURIComponent(id)}/code${code === undefined ? '' : `?code=${encodeURIComponent(code)}`}`,
+      null,
+      { method: 'DELETE' },
+    ),
 };

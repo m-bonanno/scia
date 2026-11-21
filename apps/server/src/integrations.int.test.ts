@@ -1,12 +1,16 @@
-import { IntegrationId } from '@scia/contracts';
-import { ServiceFailure } from '@scia/core';
+import { IntegrationCodeStatus, IntegrationId } from '@scia/contracts';
+import { CodeFailure, ServiceFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
-import { Integrations, KeyNotKeptError } from './integrations.ts';
+import { CodeConflictError, Integrations, KeyNotKeptError } from './integrations.ts';
 import { type KeyVault, MemoryVault } from './key-vault.ts';
 import type { Logger } from './logger.ts';
 import { ServiceError } from './service-error.ts';
-import { type AllDebridServer, startAllDebridServer } from './testing/alldebrid-server.ts';
+import {
+  type AllDebridServer,
+  type SimulatedRequest,
+  startAllDebridServer,
+} from './testing/alldebrid-server.ts';
 import { until } from './testing/scratch.ts';
 
 // Made up: no account anywhere has these keys.
@@ -65,7 +69,28 @@ describe('Integrations', () => {
       }),
       logger,
       now: () => clock,
+      codePollMs: 5,
     });
+  }
+
+  function checksOf(check: string) {
+    return service.requests.filter((request) => request.form.check === check);
+  }
+  // The check of the code the service gave last: the spec reads it at the service, as the engine
+  // never says it.
+  function lastCheck(): string {
+    const asked = service.requests.filter((request) => request.form.check !== undefined);
+    return asked.at(-1)?.form.check ?? '';
+  }
+  // Whether the service heard of an earlier code after it first heard the check of a later one.
+  // A question sent just before a wait ended may still arrive after a spec looked — the service
+  // records a request once its body is in — but never after the next code's first question.
+  function heardAfter(earlier: (request: SimulatedRequest) => boolean, later: string): boolean {
+    const first = service.requests.findIndex((request) => request.form.check === later);
+    return first >= 0 && service.requests.slice(first + 1).some(earlier);
+  }
+  function statusOf(integrations: Integrations) {
+    return integrations.code(IntegrationId.AllDebrid)?.status;
   }
 
   it('lists the services Scia knows, not connected, without asking them anything', async () => {
@@ -396,5 +421,294 @@ describe('Integrations', () => {
     expect(logged.length).toBeGreaterThan(0);
     expect(logged.join('\n')).not.toContain(KEY);
     expect(logged.join('\n')).not.toContain(REVOKED);
+  });
+  describe("a code confirmed on the service's site", () => {
+    it('gives a code and its page, keeps nothing until it is confirmed, then connects with the key it gives', async () => {
+      const vault = new MemoryVault();
+      const integrations = await open(vault);
+
+      const given = await integrations.startCode(IntegrationId.AllDebrid);
+
+      expect(given).toEqual({
+        code: expect.any(String) as unknown,
+        url: `https://alldebrid.com/pin/?pin=${given.code}`,
+        expiresAt: expect.any(String) as unknown,
+        status: IntegrationCodeStatus.Waiting,
+        failure: null,
+      });
+      expect(Date.parse(given.expiresAt) - Date.now()).toBeGreaterThan(590_000);
+      await until(() => lastCheck() !== '');
+      expect(await vault.read(IntegrationId.AllDebrid)).toBeUndefined();
+      expect(statusOf(integrations)).toBe(IntegrationCodeStatus.Waiting);
+
+      service.confirmCode(given.code, KEY);
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Connected);
+
+      expect(await vault.read(IntegrationId.AllDebrid)).toBe(KEY);
+      expect(await integrations.list()).toEqual([
+        { id: 'alldebrid', connected: true, account: ada, failure: null },
+      ]);
+      expect(JSON.stringify(integrations.code(IntegrationId.AllDebrid))).not.toContain(lastCheck());
+      expect(logged.join('\n')).not.toContain(KEY);
+      expect(logged.join('\n')).not.toContain(lastCheck());
+    });
+
+    it('says the code expired when its time ran out, and stops asking about it', async () => {
+      const integrations = await open();
+      await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => lastCheck() !== '');
+      const check = lastCheck();
+
+      clock += 600_000;
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Failed);
+
+      expect(integrations.code(IntegrationId.AllDebrid)?.failure).toBe(CodeFailure.Expired);
+      // A code of another engine, asked about at the same pace: a new code here would end the
+      // old wait itself, and hold nothing of whether expiring did.
+      const other = await open();
+      await other.startCode(IntegrationId.AllDebrid);
+      // Its own questions, not the last one heard of the code before.
+      await until(() => lastCheck() !== check && checksOf(lastCheck()).length >= 3);
+      expect(heardAfter((request) => request.form.check === check, lastCheck())).toBe(false);
+      other.cancelCode(IntegrationId.AllDebrid);
+    });
+
+    it('says the code expired when the service says so', async () => {
+      await service.close();
+      service = await startAllDebridServer({ accounts: {}, codeLifetimeSeconds: 0 });
+      const integrations = await open();
+
+      await integrations.startCode(IntegrationId.AllDebrid);
+
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Failed);
+      expect(integrations.code(IntegrationId.AllDebrid)?.failure).toBe(CodeFailure.Expired);
+    });
+
+    it('says why a confirmed code connected nothing, and keeps nothing: a key the service refuses', async () => {
+      const vault = new MemoryVault();
+      const integrations = await open(vault);
+      const { code } = await integrations.startCode(IntegrationId.AllDebrid);
+
+      service.confirmCode(code, 'nobody-key-00000000000000');
+
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Failed);
+      expect(integrations.code(IntegrationId.AllDebrid)?.failure).toBe(ServiceFailure.KeyRefused);
+      expect(await vault.read(IntegrationId.AllDebrid)).toBeUndefined();
+    });
+
+    it('says the key was not kept when the system will not keep it', async () => {
+      const integrations = await open(refusing('write'));
+      const { code } = await integrations.startCode(IntegrationId.AllDebrid);
+
+      service.confirmCode(code, KEY);
+
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Failed);
+      expect(integrations.code(IntegrationId.AllDebrid)?.failure).toBe('KEY_NOT_KEPT');
+      expect(await integrations.list()).toEqual([notConnected]);
+    });
+
+    it('waits on when the service cannot be asked for a while', async () => {
+      const integrations = await open();
+      const { code } = await integrations.startCode(IntegrationId.AllDebrid);
+      service.misbehave({ status: 503, times: 4 });
+      await until(
+        () => service.requests.filter((request) => request.url === '/v4/pin/check').length >= 5,
+      );
+
+      service.confirmCode(code, KEY);
+
+      await until(() => statusOf(integrations) === IntegrationCodeStatus.Connected);
+    });
+
+    it('gives no code when the service cannot be asked for one', async () => {
+      const integrations = await open();
+      service.misbehave({ status: 503 });
+
+      await expect(integrations.startCode(IntegrationId.AllDebrid)).rejects.toMatchObject({
+        failure: ServiceFailure.Unavailable,
+      });
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+    });
+
+    it('stops waiting when the code is cancelled: confirmed afterwards, it connects nothing', async () => {
+      const integrations = await open();
+      const { code } = await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => lastCheck() !== '');
+      const check = lastCheck();
+
+      integrations.cancelCode(IntegrationId.AllDebrid);
+      service.confirmCode(code, KEY);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+      await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => lastCheck() !== check && checksOf(lastCheck()).length >= 2);
+
+      expect(heardAfter((request) => request.form.check === check, lastCheck())).toBe(false);
+      expect(await integrations.list()).toEqual([notConnected]);
+      // A wait that was ended did not fail: nothing is said of it.
+      expect(logged.join('\n')).not.toContain('service_code_failed');
+    });
+
+    it('waits only for the last of two codes asked for together: the first is given up', async () => {
+      const integrations = await open();
+
+      const first = integrations
+        .startCode(IntegrationId.AllDebrid)
+        .catch((error: unknown) => error);
+      const second = await integrations.startCode(IntegrationId.AllDebrid);
+
+      expect(await first).toBeInstanceOf(CodeConflictError);
+      expect(service.requests.filter((request) => request.url === '/v4.1/pin/get')).toHaveLength(2);
+      await until(() => checksOf(lastCheck()).length >= 2);
+      expect(integrations.code(IntegrationId.AllDebrid)?.code).toBe(second.code);
+      const checks = new Set(service.requests.map((request) => request.form.check));
+      checks.delete(undefined);
+      expect(checks.size).toBe(1);
+    });
+
+    it('waits for no code whose wait was cancelled while the service gave it', async () => {
+      const integrations = await open();
+      service.misbehave({ slowMs: 200, times: 1 });
+
+      const asked = integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => service.requests.length > 0);
+      integrations.cancelCode(IntegrationId.AllDebrid);
+
+      await expect(asked).rejects.toBeInstanceOf(CodeConflictError);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+      // Another code, asked for afterwards, is the only one asked about.
+      await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => checksOf(lastCheck()).length >= 2);
+      const checks = new Set(service.requests.map((request) => request.form.check));
+      checks.delete(undefined);
+      expect(checks.size).toBe(1);
+    });
+
+    it('keeps a key pasted while the service gave a code, and waits for no code', async () => {
+      const integrations = await open();
+      service.misbehave({ slowMs: 200, times: 1 });
+
+      const asked = integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => service.requests.length > 0);
+      await integrations.connect(IntegrationId.AllDebrid, KEY);
+
+      await expect(asked).rejects.toBeInstanceOf(CodeConflictError);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+      expect(await integrations.list()).toEqual([
+        { id: 'alldebrid', connected: true, account: ada, failure: null },
+      ]);
+    });
+
+    it('connects nothing for a code whose wait ended while its key waited its turn', async () => {
+      const kept = new MemoryVault();
+      let release = () => undefined as unknown;
+      // A disconnection whose system is slow: the changes after it wait their turn.
+      const slow: KeyVault = {
+        read: (name) => kept.read(name),
+        write: (name, key) => kept.write(name, key),
+        remove: (name) =>
+          new Promise((done) => {
+            release = () => {
+              done(kept.remove(name));
+            };
+          }),
+      };
+      const integrations = await open(slow);
+      const { code } = await integrations.startCode(IntegrationId.AllDebrid);
+      const busy = integrations.disconnect(IntegrationId.AllDebrid);
+      service.confirmCode(code, KEY);
+      await until(() => service.keysGiven > 0);
+      // The answer with the key reaches the engine, which then waits behind the disconnection.
+      await until(() => service.requests.at(-1)?.url === '/v4/pin/check');
+
+      integrations.cancelCode(IntegrationId.AllDebrid);
+      release();
+      await busy;
+      // A key the service refuses, sent after: once it is answered, what waited before it has run.
+      await expect(
+        integrations.connect(IntegrationId.AllDebrid, 'nobody-key-00000000000000'),
+      ).rejects.toBeInstanceOf(ServiceError);
+
+      expect(await kept.read(IntegrationId.AllDebrid)).toBeUndefined();
+      expect(await integrations.list()).toEqual([notConnected]);
+    });
+
+    it('forgets a code given while a key was being connected: confirmed later, it connects nothing', async () => {
+      await service.close();
+      service = await startAllDebridServer({
+        accounts: {
+          [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL },
+          [REVOKED]: { username: 'bob', premiumUntil: PREMIUM_UNTIL },
+        },
+      });
+      const integrations = await open();
+      // The account is slow to say whose key it is: the code is given meanwhile.
+      service.misbehave({ slowMs: 300, times: 1 });
+      const connecting = integrations.connect(IntegrationId.AllDebrid, KEY);
+      await until(() => service.requests.length > 0);
+      const given = await integrations.startCode(IntegrationId.AllDebrid);
+
+      await connecting;
+      const before = lastCheck();
+
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+      await integrations.disconnect(IntegrationId.AllDebrid);
+      service.confirmCode(given.code, REVOKED);
+      await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => lastCheck() !== before && checksOf(lastCheck()).length >= 2);
+      expect(heardAfter((request) => request.form.pin === given.code, lastCheck())).toBe(false);
+      expect(await integrations.list()).toEqual([notConnected]);
+    });
+
+    it('gives no code that the service gave once a key it began to check had been kept', async () => {
+      const integrations = await open();
+      const connecting = integrations.connect(IntegrationId.AllDebrid, KEY);
+      await until(() => service.requests.length > 0);
+      // The code is slow to come: the key is kept meanwhile.
+      service.misbehave({ slowMs: 300, times: 1 });
+
+      const asked = integrations
+        .startCode(IntegrationId.AllDebrid)
+        .catch((error: unknown) => error);
+      await connecting;
+
+      expect(await asked).toBeInstanceOf(CodeConflictError);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+    });
+
+    it('forgets a code only when the one named is the one it waits for', async () => {
+      const integrations = await open();
+      const waiting = await integrations.startCode(IntegrationId.AllDebrid);
+
+      integrations.cancelCode(IntegrationId.AllDebrid, 'ZZZZ');
+      expect(integrations.code(IntegrationId.AllDebrid)?.code).toBe(waiting.code);
+      integrations.cancelCode(IntegrationId.AllDebrid, waiting.code);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+    });
+
+    it('gives no code while a service is connected: a confirmed code would replace its key', async () => {
+      const integrations = await open();
+      await integrations.connect(IntegrationId.AllDebrid, KEY);
+
+      await expect(integrations.startCode(IntegrationId.AllDebrid)).rejects.toBeInstanceOf(
+        CodeConflictError,
+      );
+      expect(service.requests.some((request) => request.url === '/v4.1/pin/get')).toBe(false);
+    });
+
+    it('stops waiting for a code when another is asked for, or a key is pasted', async () => {
+      const integrations = await open();
+      const first = await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => lastCheck() !== '');
+      const firstCheck = lastCheck();
+
+      const second = await integrations.startCode(IntegrationId.AllDebrid);
+      expect(integrations.code(IntegrationId.AllDebrid)?.code).toBe(second.code);
+      service.confirmCode(first.code, KEY);
+      await until(() => lastCheck() !== firstCheck && checksOf(lastCheck()).length >= 2);
+      expect(await integrations.list()).toEqual([notConnected]);
+
+      await integrations.connect(IntegrationId.AllDebrid, KEY);
+      expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
+    });
   });
 });

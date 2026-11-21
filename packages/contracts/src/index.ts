@@ -6,7 +6,7 @@ import {
   VIDEO_CONTAINERS,
 } from '@scia/core';
 import { z } from 'zod';
-import { IntegrationId } from './integrations.ts';
+import { IntegrationCodeFailure, IntegrationId } from './integrations.ts';
 import { httpUrl } from './links.ts';
 import { Theme } from './theme.ts';
 
@@ -23,7 +23,7 @@ export const ApiErrorCode = {
   // A service refused the key it was given, or did not answer.
   ...ServiceFailure,
   // The system would not keep the key of a service: nothing was connected.
-  KeyNotKept: 'KEY_NOT_KEPT',
+  KeyNotKept: IntegrationCodeFailure.KeyNotKept,
 } as const;
 export type ApiErrorCode = (typeof ApiErrorCode)[keyof typeof ApiErrorCode];
 

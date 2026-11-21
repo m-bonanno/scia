@@ -37,6 +37,14 @@ export const UnlockFailure = {
 } as const;
 export type UnlockFailure = (typeof UnlockFailure)[keyof typeof UnlockFailure];
 
+// Why a code to confirm on the service's site gave no key (#136), when it is not one of the
+// service's refusals above.
+export const CodeFailure = {
+  // Its time ran out, or the service no longer knows it: a new code is asked for.
+  Expired: 'CODE_EXPIRED',
+} as const;
+export type CodeFailure = (typeof CodeFailure)[keyof typeof CodeFailure];
+
 // The longest Scia waits for a link the service is still preparing: the owner's decision (#7).
 // The engine gives up after it, and the page says how long it waited.
 export const PREPARE_LIMIT_SECONDS = 30 * 60;
