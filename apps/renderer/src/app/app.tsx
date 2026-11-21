@@ -237,10 +237,10 @@ export function App(): ReactNode {
           : {})}
       />
       <div className="relative flex min-h-0 flex-1">
-        <main className="flex min-h-0 flex-1 flex-col">
+        <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 pt-4 pb-4">
             <AddBar onAdd={(pasted) => add(pasted, true)} inputRef={field} />
-            <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <FilterTabs
                 ref={filterTabs}
                 filter={filter}
