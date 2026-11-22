@@ -17,7 +17,7 @@
 4. Before opening it, run the gates locally: the list is in [`review-flow.md`](./review-flow.md#the-gates).
 5. The team reviews it. When it is merged, how, and on whose word depends on the kind of PR: the "Merging" table of [`review-flow.md`](./review-flow.md).
 6. No AI attribution anywhere.
-7. **Labelled and assigned when it is opened** (the owner, #225): `gh pr create … --assignee m-bonanno --label <type>`, the type label of its title — `feat` `enhancement`, `fix` or `hotfix` `bug`, `docs` `docs`, `test` `test`, any other `chore` — and an `area:*` label for each area it touches. An issue the team opens gets the same: `gh issue create … --assignee m-bonanno --label <type>,<area>,status:accepted`. 64 closed PRs had neither and were mended by hand on 22 November 2026.
+7. **Labelled and assigned when it is opened** (the owner, #225): `gh pr create … --assignee @me --label <type>` (assigned to whoever opens it: the owner's account for the team, the author for a PR the owner asked of someone outside), the type label of its title — `feat` `enhancement`, `fix` or `hotfix` `bug`, `docs` `docs`, `test` `test`, any other `chore` — and an `area:*` label for each area it touches. An issue the team opens gets the same: `gh issue create … --label <type>,<area>,status:accepted`, assigned to whoever will build it (`--assignee @me` when that is the team). 64 closed PRs had neither and were mended by hand on 22 November 2026.
 
 ## What the type of a commit decides
 
