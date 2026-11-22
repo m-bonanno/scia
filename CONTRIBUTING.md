@@ -4,7 +4,12 @@ Thank you for wanting to help. Scia is kept small on purpose, and one person dec
 
 ## An issue first
 
-Every change starts as an issue. Open one with a template — **Bug** for something that does not work, **Proposal** for a feature or an improvement — and say what the problem is before how to solve it.
+Every change starts as an issue. Open one with a form, and say what the problem is before how to solve it:
+
+- [**Bug**](https://github.com/m-bonanno/scia/issues/new?template=bug.yml): something that does not work. For an example, see [#205](https://github.com/m-bonanno/scia/issues/205): what was seen, in which version, and what is likely behind it.
+- [**Proposal**](https://github.com/m-bonanno/scia/issues/new?template=feature.yml): a feature or an improvement. For an example, see [#215](https://github.com/m-bonanno/scia/issues/215): the need first, then what to settle and when it is done.
+
+[All the forms](https://github.com/m-bonanno/scia/issues/new/choose). Looking for a first thing to do? The issues labelled [`good first issue`](https://github.com/m-bonanno/scia/labels/good%20first%20issue) are written for someone new to Scia.
 
 The owner reads the issues and chooses by hand which ones are taken up, and says so on the issue. Wait for that before you write code: a pull request for an issue nobody took up may wait, or be closed.
 
