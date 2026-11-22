@@ -74,7 +74,7 @@ npm run format:check       # what CI runs
 npm run typecheck
 npm test                   # unit + integration + feature
 npm run test:unit | test:integration | test:feature
-npm run test:e2e           # the built app, by Electron: after npm run build
+npm run test:e2e           # the built app, by Electron: in CI only (#218)
 npm run test:smoke         # the installer, installed: on a Windows CI runner only
 npm run build
 npm run dist               # installer for the current OS

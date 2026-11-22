@@ -39,7 +39,7 @@ It runs `check:adr` (no two ADRs of one number: [`git-flow.md`](./git-flow.md), 
 
 With untracked files of other work in the tree, check the format of tracked files only: `git ls-files | xargs npx prettier --check --ignore-unknown`.
 
-A PR that touches the app's runtime — `apps/desktop`, `apps/server`, `apps/renderer`, `packages/` — also runs the E2E suite, after the build, on Windows: `npm run test:e2e` ([`testing.md`](./testing.md), "E2E"). It opens Scia's window while it runs.
+A PR that touches the app's runtime — `apps/desktop`, `apps/server`, `apps/renderer`, `packages/` — is also held by the E2E suite, which runs in CI's `E2E (Windows)` job, not on the owner's machine: it starts Electron, whose windows take the screen ([`testing.md`](./testing.md), #218). Read that job on the PR.
 
 CI runs them on Ubuntu, and all but the ADR numbers, format, lint and types again on Windows, the system Scia ships for, with the E2E suite on every PR; it runs them once more on the commit a merge makes, before that commit is released ([`testing.md`](./testing.md), "Where CI runs them"). A gate green here and red on one of CI's systems is red. "Quarantine (report only)" is not a gate ([ADR 0019](../adr/0019-specs-in-quarantine.md)): "CI is green" means every required check.
 
