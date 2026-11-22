@@ -8,6 +8,8 @@
 | All         | `npm test`                 | The three above                                                                                                                                                                                                                                                    |
 | E2E         | `npm run test:e2e`         | The built app, started by Electron: what a person does, against hosts on this computer (`npm run build` first)                                                                                                                                                     |
 
+**The E2E suite and the smoke test start Electron, and run in CI only** (#171, #218): the owner works on this machine, and the app's windows take the screen. `npm run test:e2e` and `test:smoke` refuse to start outside CI unless `SCIA_E2E_LOCAL=1` is set by hand, and a bare `vitest run` does not list either project (they exist only when `SCIA_E2E=1`, which those two scripts set). An agent never sets `SCIA_E2E_LOCAL`.
+
 ## Where CI runs them
 
 The pipeline is [ADR 0008](../adr/0008-the-delivery-pipeline.md). The gates are one workflow, `.github/workflows/gates.yml`: run on every PR; called by `release.yml`, on the commit a merge into `develop` or `main` makes, before it is tagged — the smoke test left out, as the release smokes its own installer; and called by `burn-in.yml`, several times on one commit ("Burn-in", below):

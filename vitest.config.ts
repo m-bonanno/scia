@@ -10,6 +10,8 @@ const FLAKY = /\[flaky #\d+\]/;
 const quarantine = process.env.SCIA_QUARANTINE === '1';
 const quarantined = { testNamePattern: quarantine ? FLAKY : new RegExp(`^(?!.*${FLAKY.source})`) };
 
+const electronProjects = <T>(projects: T[]): T[] => (process.env.SCIA_E2E === '1' ? projects : []);
+
 export default defineConfig({
   test: {
     ...workerCap,
@@ -54,28 +56,32 @@ export default defineConfig({
           include: ['apps/server/src/**/*.feature.test.ts'],
         },
       },
-      // The built app, started by Electron: `npm run build` first. One app at a time, each with
-      // its own profile and port; a first start on a CI runner is slow.
-      {
-        test: {
-          name: 'e2e',
-          environment: 'node',
-          include: ['apps/desktop/e2e/**/*.e2e.test.ts'],
-          fileParallelism: false,
-          testTimeout: 120_000,
-          hookTimeout: 60_000,
+      // Listed only when asked for (`npm run test:e2e`, `test:smoke`): a bare `vitest run` starts no
+      // Electron (#218).
+      ...electronProjects([
+        // The built app, started by Electron: `npm run build` first. One app at a time, each with
+        // its own profile and port; a first start on a CI runner is slow.
+        {
+          test: {
+            name: 'e2e',
+            environment: 'node',
+            include: ['apps/desktop/e2e/**/*.e2e.test.ts'],
+            fileParallelism: false,
+            testTimeout: 120_000,
+            hookTimeout: 60_000,
+          },
         },
-      },
-      // The installer, installed, started and removed: on a Windows CI runner only (ADR 0008).
-      {
-        test: {
-          name: 'smoke',
-          environment: 'node',
-          include: ['apps/desktop/e2e/**/*.smoke.test.ts'],
-          testTimeout: 180_000,
-          hookTimeout: 60_000,
+        // The installer, installed, started and removed: on a Windows CI runner only (ADR 0008).
+        {
+          test: {
+            name: 'smoke',
+            environment: 'node',
+            include: ['apps/desktop/e2e/**/*.smoke.test.ts'],
+            testTimeout: 180_000,
+            hookTimeout: 60_000,
+          },
         },
-      },
+      ]),
     ],
   },
 });
