@@ -25,13 +25,18 @@ describe('workerCapOf', () => {
 describe('the Vitest configurations', () => {
   afterEach(() => vi.unstubAllEnvs());
 
-  it('take the same worker cap in the root and in the renderer', async () => {
+  it('take the same worker cap in the root and in every project with a file of its own', async () => {
     vi.stubEnv('SCIA_TEST_WORKERS', '2');
 
     const rootTest = await testConfigOf('vitest.config.ts');
-    const rendererTest = await testConfigOf('apps/renderer/vitest.config.ts');
+    // An inline project takes the root's cap; a project with a file of its own takes only what
+    // its file gives it (#201), so every such file is read from the root's list, none written here.
+    const files = (rootTest?.projects ?? []).filter((project) => typeof project === 'string');
 
+    expect(files.length).toBeGreaterThan(0);
     expect(rootTest?.maxWorkers).toBe(2);
-    expect(rendererTest?.maxWorkers).toBe(2);
+    for (const file of files) {
+      expect((await testConfigOf(file))?.maxWorkers, file).toBe(2);
+    }
   });
 });
