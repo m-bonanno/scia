@@ -103,7 +103,7 @@ The two merge commits are what lets semantic-release count the next version from
 
 ## A pull request from outside
 
-A PR from a fork, by someone without write access. The flow for its author is [`CONTRIBUTING.md`](../../CONTRIBUTING.md); this is the team's side of it.
+**The team opens every PR** (the owner, 22 November 2026, #221): a PR from a fork is closed, kindly, pointing to an issue (`CONTRIBUTING.md`, "Pull requests come from the team"), and nothing of it is run. What follows stays the rule for the one case the owner may still make: a PR from outside the owner asked for on an accepted issue.
 
 - **An issue first.** The PR closes an issue that explains the problem or the feature, and the `Linked issue` check fails it otherwise. **The owner chooses by hand** which issues and which PRs are taken up; a PR nobody took up waits, or is closed with a sentence on why.
 - **CI waits for the owner.** Its workflows run only once the owner approves the run on the PR. Before approving it, the owner reads what the PR changes in `.github/`, `scripts/`, `.husky/`, the configs at the root and `package.json`/`package-lock.json`: those run on GitHub's runner.
