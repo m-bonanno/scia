@@ -17,6 +17,7 @@
 4. Before opening it, run the gates locally: the list is in [`review-flow.md`](./review-flow.md#the-gates).
 5. The team reviews it. When it is merged, how, and on whose word depends on the kind of PR: the "Merging" table of [`review-flow.md`](./review-flow.md).
 6. No AI attribution anywhere.
+7. **Labelled and assigned when it is opened** (the owner, #225): `gh pr create … --assignee @me --label <type>` (assigned to whoever opens it: the owner's account for the team, the author for a PR the owner asked of someone outside), the type label of its title — `feat` `enhancement`, `fix` or `hotfix` `bug`, `docs` `docs`, `test` `test`, any other `chore` — and an `area:*` label for each area it touches. An issue the team opens gets the same: `gh issue create … --label <type>,status:accepted`, plus an `area:*` label for each area it touches, assigned to whoever will build it (`--assignee @me` when that is the team). 64 closed PRs had neither and were mended by hand on 22 November 2026.
 
 ## What the type of a commit decides
 
@@ -27,7 +28,7 @@ The title of a PR becomes the commit on `develop`, and semantic-release reads it
 Several sessions work at once, each on its own branch, and each sees only `develop` as it was when it began.
 
 - **An ADR takes the next number free on `origin/develop` and in every open PR**: `git fetch` and `ls docs/adr`, then `gh pr list --json number,files --jq '.[] | .number as $n | .files[].path | select(startswith("docs/adr/")) | "#\($n) \(.)"'`. Read it again before the merge: a PR merged meanwhile may have taken it. The gates refuse two records of one number (`npm run check:adr`, #183) — on a PR's head, which can be older than another PR's merge (`develop` does not ask a branch to be up to date), and again on the merged commit before it is released: #158 and #177 both took 0016, and git, seeing two file names, merged both.
-- **A follow-up issue is searched for before it is opened**, open and closed: `gh issue list --state all --search "<its key words>"`. #151 and #176 were the same issue, opened by two sessions an hour apart. An issue the team opens carries its status from the start: `gh issue create … --label status:accepted` (CONTRIBUTING, "What happens to your issue").
+- **A follow-up issue is searched for before it is opened**, open and closed: `gh issue list --state all --search "<its key words>"`. #151 and #176 were the same issue, opened by two sessions an hour apart. An issue the team opens carries its labels from the start: "A pull request", point 7.
 
 ## Repository settings
 
