@@ -49,7 +49,7 @@ How the project is built and how to work on it: [`CLAUDE.md`](CLAUDE.md). The ar
 
 ### Contributing
 
-An issue first, then a pull request that closes it: [`CONTRIBUTING.md`](CONTRIBUTING.md). Work happens on a `<type>/<issue>-<description>` branch cut from `develop`, with conventional commits, and lands through a PR into `develop`: [`docs/development/git-flow.md`](docs/development/git-flow.md). Versions are decided by semantic-release from the commits: [`docs/development/release-flow.md`](docs/development/release-flow.md).
+Anyone opens an issue; the team opens the pull request that closes it: [`CONTRIBUTING.md`](CONTRIBUTING.md). The team's work happens on a `<type>/<issue>-<description>` branch cut from `develop`, with conventional commits, and lands through a PR into `develop`: [`docs/development/git-flow.md`](docs/development/git-flow.md). Versions are decided by semantic-release from the commits: [`docs/development/release-flow.md`](docs/development/release-flow.md).
 
 ## Licence
 

@@ -30,6 +30,27 @@ Every issue carries a status:
 
 The team opens every pull request, for an issue the owner accepted, and reviews it as [`docs/development/review-flow.md`](./docs/development/review-flow.md) says. A pull request from outside the team is closed, kindly, pointing to an issue: open one, or add what you know to the one that exists. Your help counts as an issue: a clear report or a well-argued proposal is what moves Scia.
 
+## If the owner asks you for a pull request
+
+The owner may ask someone outside the team for a pull request, on an accepted issue, and says so on the issue. Then:
+
+1. Fork the repository and cut a branch from `develop`, named `<type>/<issue>-<description>`: `fix/42-resume-after-sleep`, `feat/57-schedule-downloads`. The types are those of [`commitlint.config.js`](./commitlint.config.js).
+2. Write the test first, then the code ([`CLAUDE.md`](./CLAUDE.md), "Test-Driven Development"). Commits follow [Conventional Commits](https://www.conventionalcommits.org/) with a lower-case subject.
+3. Run the gates before you open the PR:
+
+   ```bash
+   npm ci
+   npm run gates
+   ```
+
+   It runs the ADR numbers check, format check, lint, typecheck, tests and build, and stops at the first that fails.
+
+4. Open the PR into `develop`. Its title is a conventional commit too; its body follows the template and says **`Closes #N`**, with the number of the issue. A PR that closes no issue fails the `Linked issue` check.
+
+Everything is written in English: code, comments, commits, the PR. Changes that work around a site's access controls or a DRM are not taken ([`CLAUDE.md`](./CLAUDE.md), "Respect the hosts").
+
+The team reviews it as [`docs/development/review-flow.md`](./docs/development/review-flow.md) says. Nothing of it runs on the owner's machine: its checks run in CI once the owner approves them. You fix what is blocking with new commits on the same branch, never a force-push.
+
 ## Licence
 
-Scia is released under the [MIT licence](./LICENSE). What the team builds from your issue is released under it too.
+Scia is released under the [MIT licence](./LICENSE). What the team builds from your issue is released under it too, and so is a pull request you open: by opening one you agree to that.
