@@ -1,7 +1,7 @@
 name: 🐛 Bug
 description: Something does not work as it should.
 title: 'fix: '
-labels: ['bug']
+labels: ['bug', 'status:triage']
 body:
   - type: markdown
     attributes:
