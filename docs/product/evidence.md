@@ -165,7 +165,7 @@ The first eight were each seen failing with the line they hold taken away, on th
 
 ### A save of `state.json` while another process holds it
 
-#151, #229. On Windows a rename onto a file another process holds open fails with `EPERM`. The store now tries the rename again for two seconds, then gives the save up and logs it as before. **Seen**: a spec that holds `state.json` open for 300 ms while a save renames onto it fails on `develop`'s store with `EPERM` and passes with the retry; a second spec holds the file throughout and sees the save given up and the next one land. Both run on Windows only, where a rename onto an open file is refused; CI's Windows job runs them. **Not seen**: the real app with `state.json` held by another program.
+#151, #229. On Windows a rename onto a file another process holds open fails with `EPERM`. The store now tries the rename again for two seconds, then gives the save up and logs it as before. **Seen**: a spec that holds `state.json` open for 300 ms while a save renames onto it fails on `develop`'s store with `EPERM` and passes with the retry; a second spec holds the file throughout and sees the save given up and the next one land. Both run on Windows only, where a rename onto an open file is refused; CI's Windows job runs them. **Not seen**: the real app with `state.json` held by another program. The owner decided that the specs are enough (23 November 2026, on the review of #297): the gate line of `v1.0.0` is ticked on them, and the real app is not part of the owner's sitting.
 
 ### Zero-filling on NTFS
 

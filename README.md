@@ -9,27 +9,26 @@ A download manager for Windows: paste a link, and Scia fetches it over several c
 
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="docs/design/downloads-in-progress-light.png">
-  <img alt="Scia's list of downloads: one queued, three running over several connections, one failed and one finished" src="docs/design/downloads-in-progress.png">
+  <img alt="Scia's list of downloads: one queued, three running, two of them over several connections, one failed and one finished" src="docs/design/downloads-in-progress.png">
 </picture>
 
 ## What it does
 
-- ⚡ **Several connections at once** for any http or https link, handing work over when one finishes early; a large file starts at once.
-- ⏯️ **Pause and resume** from the bytes already on disk, also after Scia was closed and opened again.
-- 🚦 **A queue with limits**: downloads at once, connections per download, the folder, and one speed limit for them all.
-- 🗂️ **The system tray**: close the window and the downloads go on; with nothing left to download, closing quits.
-- 🔔 **Notifications** when a download completes or fails, while Scia is not the window you are using.
-- 🎨 **Nine colour themes**, each with a light and a dark variant that follows the system.
-- 🔄 **Updates itself** from this repository's releases, fetched only while nothing else downloads; installed when you quit, or at "Restart now".
-- 📋 **Links from the clipboard**, if you turn it on: what you copy waits as "Ready", a video's page named by its title, until you start it.
-- 🎬 **The video a page plays**, on a site yt-dlp has a reader for: one file, an HLS stream, or picture and sound joined into one mp4, with no ffmpeg.
-- 🔓 **AllDebrid**, connected by a code or your key: file hosts' links and folders, magnets pasted or copied, and your account's magnets.
-- 🖼️ **Bunkr albums**: every file of a public album into a folder named after it, each file a resumable download.
-- 🛡️ **Downloads marked as from the network**, as a browser marks them, and a downloaded program asks for a second press before it runs.
-- 💜 **"Support Scia"** in Settings, which opens its Ko-fi page in your browser.
-- 🧩 **A browser extension** that hands links and a page's media to Scia: written and tested, not yet tried in a real browser, nor published.
+- ⚡ **Several connections at once** for any http or https link.
+- ⏯️ **Pause and resume**, also after Scia was closed and opened again.
+- 🚦 **A queue**: simultaneous downloads, connections per download, a speed limit.
+- 🖥️ **The system tray**: close the window, and the downloads go on.
+- 🔔 **Notifications** when a download completes or fails.
+- 🎨 **Nine colour themes**, each light and dark, following the system.
+- 🔄 **Updates itself** from this repository's releases, without stopping a download.
+- 📋 **Links you copy**, if you turn it on, wait as "Ready"; a video's by its title.
+- 🎬 **The video a page plays**, via yt-dlp: one file, an HLS stream, or picture and sound.
+- 🔗 **AllDebrid**, by a code or a key: file hosts' links, folders, magnets, your account's too.
+- 🖼️ **Bunkr albums**, every file into a folder named after the album.
+- 🛡️ **Downloads marked as from the network**, and a second press to run a program.
+- 🧩 **A browser extension** to hand Scia links: not yet tried in a browser, nor published.
 
-All of it is built and held by tests; much of it is still to be seen by a person in the installed app before the first stable release, and none of it has been tried on Linux. What was seen of each feature, and how: [`docs/product/evidence.md`](docs/product/evidence.md). What is left and what comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
+All of it is built and held by tests. Much of it is still to be seen by a person in the installed app, and against the real services and sites it reaches — a download through AllDebrid to its end, the real Bunkr, a real site's stream, picture and sound, and title — before the first stable release; none of it has been tried on Linux. What was seen of each feature, and how: [`docs/product/evidence.md`](docs/product/evidence.md). What is left and what comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
 
 ## Get it
 
@@ -38,9 +37,9 @@ All of it is built and held by tests; much of it is still to be seen by a person
 > [!WARNING]
 > The installer is not signed, so Windows warns before running it. Download it only from this repository's Releases page, and run it only if you trust it.
 
+- **Installed a pre-release?** Turn on "Beta versions" in Settings to keep getting updates. It is off by default, and until the first stable release there is nothing else to take.
 - **Windows only, for now.** Linux is to follow: until after the first stable release it is untried, and no package of it is built.
-- **Updates.** Scia takes the stable releases by itself. To keep taking the pre-releases too, turn on "Beta versions" in Settings (off by default): until the first stable release, there is nothing else to take.
-- **Going back.** An installer older than the Scia installed refuses to run over it. Uninstall Scia first: your downloads and settings stay.
+- **Going back.** From `v1.0.0-beta.26` on, an installer older than the Scia installed refuses to run over it; one released before has no such check. Uninstall Scia first: your downloads and settings stay.
 
 ### Build from source
 
@@ -56,7 +55,14 @@ npm run dist    # build the installer for this system
 
 ## Integrations
 
-Beyond the hosts of the links you give it, Scia reaches only these: AllDebrid, once you connect it in Settings, its key kept where the system protects it — and, with no service connected, for AllDebrid's public list of file hosts, with no key and nothing of your links; yt-dlp, shipped with Scia, which reads a video's page on its site, and whatever that site's reader asks in turn; Bunkr — its pages, its API and the file servers it names — through a reader of Scia's own; and GitHub, for Scia's updates and yt-dlp's. Each one — what it adds, what it is sent, and how far it was seen — is recorded in [`docs/product/integrations.md`](docs/product/integrations.md). Scia collects nothing.
+Scia downloads from the hosts of the links you give it, and from the servers those lead to for the files themselves. Beyond them, it reaches only these:
+
+- **AllDebrid**, once you connect it in Settings. Its key is kept where the system protects it, and the files of the links it unlocks come from its servers. With no service connected, Scia asks it only for its public list of file hosts, with no key and nothing of your links.
+- **yt-dlp**, shipped with Scia, reads a video's page on its site, and whatever that site's reader asks in turn. Scia downloads the video from the servers its answer names. With the clipboard on, a video's page you copy is read for its title at once, also when you never start it.
+- **Bunkr**, read by a reader of Scia's own: its pages, its API, and the file servers it names.
+- **GitHub**, for Scia's updates and yt-dlp's.
+
+What each one adds, what it is sent, and how far it was seen: [`docs/product/integrations.md`](docs/product/integrations.md). Scia collects nothing.
 
 ## Support
 
