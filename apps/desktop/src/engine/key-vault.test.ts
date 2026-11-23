@@ -1,5 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isProtectedStorage, type KeyCipher, type KeyFiles, KeyVault } from './key-vault.ts';
+import {
+  holdsSealingKey,
+  isProtectedStorage,
+  type KeyCipher,
+  type KeyFiles,
+  KeyVault,
+  type KeyVaultDeps,
+} from './key-vault.ts';
 
 // Made up: no account anywhere has this key.
 const KEY = 'spec-key-0000000000000000';
@@ -17,6 +24,7 @@ function aCipher(overrides: Partial<KeyCipher> = {}): KeyCipher {
       if (!text.startsWith('sealed:')) throw new Error('Not something this system sealed.');
       return Buffer.from(text.slice('sealed:'.length), 'base64').toString();
     },
+    sealKept: () => Promise.resolve(true),
     ...overrides,
   };
 }
@@ -38,10 +46,34 @@ function someFiles(overrides: Partial<KeyFiles> = {}) {
   return { files, kept };
 }
 
-function aVault(cipher: KeyCipher = aCipher(), store = someFiles()) {
+function aVault(
+  cipher: KeyCipher = aCipher(),
+  store = someFiles(),
+  seal: Pick<KeyVaultDeps, 'sealLimitMs' | 'sealPollMs'> = {},
+) {
+  const info = vi.fn<(message: string, details: object) => void>();
   const warn = vi.fn<(message: string, details: object) => void>();
-  return { vault: new KeyVault({ cipher, files: store.files, log: { warn } }), ...store, warn };
+  return {
+    vault: new KeyVault({ cipher, files: store.files, log: { info, warn }, ...seal }),
+    ...store,
+    info,
+    warn,
+  };
 }
+
+// What opens a sealed key reaches the disk at the look after this many.
+function sealOnDiskAfter(looks: number) {
+  let looked = 0;
+  return {
+    sealKept: () => {
+      looked += 1;
+      return Promise.resolve(looked > looks);
+    },
+    looks: () => looked,
+  };
+}
+
+const WRITE = { type: 'key', id: 1, action: 'write', name: 'alldebrid', key: KEY } as const;
 
 describe('KeyVault', () => {
   it('keeps a key sealed by the system: what is on disk is not the key', async () => {
@@ -227,6 +259,181 @@ describe('KeyVault', () => {
 
     expect(warn).toHaveBeenCalledTimes(2);
     expect(JSON.stringify(warn.mock.calls)).not.toContain(KEY);
+  });
+
+  describe('what opens a key, on disk (#69)', () => {
+    it('says a key is kept only once what opens it is on disk', async () => {
+      const seal = sealOnDiskAfter(3);
+      const { vault, kept } = aVault(aCipher({ sealKept: seal.sealKept }), someFiles(), {
+        sealPollMs: 1,
+      });
+
+      const answer = await vault.answer(WRITE);
+
+      expect(answer).toEqual({ type: 'key', id: 1, ok: true });
+      expect(seal.looks()).toBe(4);
+      expect(kept.has('alldebrid')).toBe(true);
+    });
+
+    it('refuses the key when what opens it does not reach the disk in time', async () => {
+      const { vault, warn } = aVault(
+        aCipher({ sealKept: () => Promise.resolve(false) }),
+        someFiles(),
+        { sealPollMs: 1, sealLimitMs: 30 },
+      );
+
+      expect(await vault.answer(WRITE)).toEqual({ type: 'key', id: 1, ok: false });
+      expect(warn).toHaveBeenCalledWith(
+        'key_refused',
+        expect.objectContaining({ action: 'write', service: 'alldebrid' }),
+      );
+    });
+
+    it('says in the log whether it was on disk at the write, and how long the write waited', async () => {
+      const late = aVault(aCipher({ sealKept: sealOnDiskAfter(2).sealKept }), someFiles(), {
+        sealPollMs: 5,
+      });
+      const there = aVault();
+
+      await late.vault.answer(WRITE);
+      await there.vault.answer(WRITE);
+
+      expect(late.info).toHaveBeenCalledWith('key_kept', {
+        service: 'alldebrid',
+        sealOnDisk: false,
+        waitedMs: expect.any(Number) as number,
+      });
+      expect((late.info.mock.calls[0]?.[1] as { waitedMs: number }).waitedMs).toBeGreaterThan(0);
+      expect(there.info).toHaveBeenCalledWith('key_kept', {
+        service: 'alldebrid',
+        sealOnDisk: true,
+        waitedMs: 0,
+      });
+      expect(JSON.stringify([late.info.mock.calls, there.info.mock.calls])).not.toContain(KEY);
+    });
+
+    it('looks for it no more once it was on disk: it stays there', async () => {
+      const seal = sealOnDiskAfter(1);
+      const { vault } = aVault(aCipher({ sealKept: seal.sealKept }), someFiles(), {
+        sealPollMs: 1,
+      });
+
+      await vault.answer(WRITE);
+      await vault.answer({ ...WRITE, id: 2 });
+
+      expect(seal.looks()).toBe(2);
+    });
+
+    it('keeps what it saw on disk, also when an older look answers after it', async () => {
+      // The start's look is held while a write's look finds it on disk; the start's then says
+      // it was not there yet, which it was not when it looked.
+      let release: (onDisk: boolean) => void = () => undefined;
+      let looks = 0;
+      const sealKept = () => {
+        looks += 1;
+        if (looks === 1) {
+          return new Promise<boolean>((resolve) => {
+            release = resolve;
+          });
+        }
+        return Promise.resolve(true);
+      };
+      const { vault } = aVault(aCipher({ sealKept }), someFiles(), { sealPollMs: 1 });
+
+      const preparing = vault.prepare();
+      await vault.answer(WRITE);
+      release(false);
+      await preparing;
+      await vault.answer({ ...WRITE, id: 2 });
+
+      expect(looks).toBe(2);
+    });
+
+    it('does not wait for it to read or to remove a key', async () => {
+      const sealKept = vi.fn(() => Promise.resolve(false));
+      const { vault, kept } = aVault(aCipher({ sealKept }), someFiles(), { sealLimitMs: 60_000 });
+      kept.set('alldebrid', aCipher().encrypt(KEY));
+
+      expect(await vault.answer({ ...WRITE, action: 'read' })).toEqual({
+        type: 'key',
+        id: 1,
+        ok: true,
+        key: KEY,
+      });
+      expect(await vault.answer({ ...WRITE, action: 'remove' })).toEqual({
+        type: 'key',
+        id: 1,
+        ok: true,
+      });
+      expect(sealKept).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('prepare', () => {
+    it('has the system make what opens a key at the start, when it is not on disk yet', async () => {
+      const encrypt = vi.fn(aCipher().encrypt);
+      const { vault, kept, info } = aVault(
+        aCipher({ encrypt, sealKept: () => Promise.resolve(false) }),
+      );
+
+      await vault.prepare();
+
+      expect(encrypt).toHaveBeenCalledOnce();
+      expect(kept.size).toBe(0);
+      expect(info).toHaveBeenCalledWith('key_seal_prepared', {});
+    });
+
+    it('asks nothing of the system when it is on disk already, or where nothing can seal', async () => {
+      const encrypt = vi.fn(aCipher().encrypt);
+      const onDisk = aVault(aCipher({ encrypt }));
+      const unprotected = aVault(
+        aCipher({ encrypt, available: () => false, sealKept: () => Promise.resolve(false) }),
+      );
+
+      await onDisk.vault.prepare();
+      await unprotected.vault.prepare();
+
+      expect(encrypt).not.toHaveBeenCalled();
+    });
+
+    it('never fails the start: a system that refuses, or a look that fails, is a line in the log', async () => {
+      const refusing = aVault(
+        aCipher({
+          sealKept: () => Promise.resolve(false),
+          encrypt: () => {
+            throw new Error('The system said no.');
+          },
+        }),
+      );
+      const blind = aVault(aCipher({ sealKept: () => Promise.reject(new Error('EACCES')) }));
+
+      await refusing.vault.prepare();
+      await blind.vault.prepare();
+
+      expect(refusing.warn).toHaveBeenCalledWith('key_seal_not_prepared', expect.any(Object));
+      expect(blind.warn).toHaveBeenCalledWith('key_seal_not_prepared', expect.any(Object));
+    });
+  });
+});
+
+describe('holdsSealingKey', () => {
+  it('finds the key Chromium seals with in the profile’s Local State', () => {
+    expect(holdsSealingKey('{"os_crypt":{"encrypted_key":"RFBBUEkBAAAA0Iyd3wEV0RG"}}')).toBe(true);
+  });
+
+  it('finds none in a Local State without it, with an empty one, or that does not parse', () => {
+    for (const text of [
+      '{}',
+      '{"os_crypt":null}',
+      '{"os_crypt":{}}',
+      '{"os_crypt":{"encrypted_key":""}}',
+      '{"os_crypt":{"encrypted_key":7}}',
+      '{"os_crypt":{"encrypted_key":"RFBBUEk',
+      'null',
+      '',
+    ]) {
+      expect(holdsSealingKey(text), text).toBe(false);
+    }
   });
 });
 

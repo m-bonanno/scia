@@ -56,7 +56,7 @@ beforeEach(() => {
 });
 
 function alldebrid(connected: boolean) {
-  return { id: 'alldebrid' as const, connected, account: null, failure: null };
+  return { id: 'alldebrid' as const, connected, account: null, failure: null, keyNotRead: false };
 }
 afterEach(() => {
   vi.restoreAllMocks();

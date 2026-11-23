@@ -20,7 +20,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [ ] A link that expires during a long download, unlocked again keeping the bytes (#180).
 - [ ] A link that unlocks into several files, shown as a list to tick (#181).
 - [ ] #7's README and ADR point, once #180 and #181 land.
-- [ ] A key sealed just before the app was killed, read back (#69).
+- [x] A key sealed just before the app was killed, read back (#69): built ([ADR 0023](../adr/0023-a-key-said-kept-once-it-can-be-read-back.md)), and proven by the E2E suite in CI — the built app killed right after a connection on three new profiles, each key read back.
 - [ ] A save of `state.json` not lost while another process has the file open (#151).
 - [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#13), the folder's button (#40), a paused bar's tone (#58), the key's placeholder (#66), the clipboard's first read (#134), room under notices (#143), the popover's note (#159), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
 - [ ] The page's logo and the app's icon drawing the mark in the same proportions (#88).
@@ -115,7 +115,7 @@ M3 does not wait for M2. Integrations arrive one at a time, each visible in Sett
 | Item                                                                                           | Issue      | Built | Proven by                        | Not seen                                      | In v1.0.0 |
 | ---------------------------------------------------------------------------------------------- | ---------- | ----- | -------------------------------- | --------------------------------------------- | --------- |
 | [AllDebrid connected by a key](./evidence.md#the-alldebrid-connection-in-settings)             | #47, #66   | yes   | Script, by keys too              | a real key; a hand                            | yes       |
-| [A key read back after the app was killed](./evidence.md#the-alldebrid-connection-in-settings) | #69        | no    | —                                | —                                             | yes       |
+| [A key read back after the app was killed](./evidence.md#the-alldebrid-connection-in-settings) | #69        | yes   | E2E                              | a hand; the packaged app                      | yes       |
 | [A pasted hoster link unlocked](./evidence.md#the-unlocking-of-a-pasted-link)                  | #48        | yes   | Script; one real try, unfinished | a download through the real service that ends | yes       |
 | ["via AllDebrid" on the row](./evidence.md#via-alldebrid-on-the-row)                           | #48        | yes   | Script                           | paused (specs only)                           | yes       |
 | [A link that expires, unlocked again](./evidence.md#a-link-that-expires)                       | #180       | no    | —                                | —                                             | yes       |

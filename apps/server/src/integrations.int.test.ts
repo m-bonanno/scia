@@ -22,7 +22,13 @@ const ada = {
   premium: true,
   premiumUntil: new Date(PREMIUM_UNTIL * 1000).toISOString(),
 };
-const notConnected = { id: 'alldebrid', connected: false, account: null, failure: null };
+const notConnected = {
+  id: 'alldebrid',
+  connected: false,
+  account: null,
+  failure: null,
+  keyNotRead: false,
+};
 
 // A vault whose system says no to one of the things asked of it.
 function refusing(action: keyof KeyVault): KeyVault {
@@ -106,7 +112,13 @@ describe('Integrations', () => {
 
     const connected = await integrations.connect(IntegrationId.AllDebrid, KEY);
 
-    expect(connected).toEqual({ id: 'alldebrid', connected: true, account: ada, failure: null });
+    expect(connected).toEqual({
+      id: 'alldebrid',
+      connected: true,
+      account: ada,
+      failure: null,
+      keyNotRead: false,
+    });
     expect(await integrations.list()).toEqual([connected]);
     expect(await vault.read(IntegrationId.AllDebrid)).toBe(KEY);
   });
@@ -154,7 +166,7 @@ describe('Integrations', () => {
     const restarted = await open(vault);
 
     expect(await restarted.list()).toEqual([
-      { id: 'alldebrid', connected: true, account: ada, failure: null },
+      { id: 'alldebrid', connected: true, account: ada, failure: null, keyNotRead: false },
     ]);
     // Once: what it then knows is believed for a minute, as after connecting.
     clock += 59_000;
@@ -169,7 +181,13 @@ describe('Integrations', () => {
     const integrations = await open(vault);
 
     expect(await integrations.list()).toEqual([
-      { id: 'alldebrid', connected: true, account: null, failure: ServiceFailure.KeyRefused },
+      {
+        id: 'alldebrid',
+        connected: true,
+        account: null,
+        failure: ServiceFailure.KeyRefused,
+        keyNotRead: false,
+      },
     ]);
     expect(await vault.read(IntegrationId.AllDebrid)).toBe(REVOKED);
   });
@@ -206,7 +224,9 @@ describe('Integrations', () => {
     const listed = await integrations.list();
 
     expect(performance.now() - started).toBeLessThan(300);
-    expect(listed).toEqual([{ id: 'alldebrid', connected: true, account: null, failure: null }]);
+    expect(listed).toEqual([
+      { id: 'alldebrid', connected: true, account: null, failure: null, keyNotRead: false },
+    ]);
     // The question is still out: its answer is there for a later listing, and not asked twice.
     // The service is let speak only once it has the question, or it would answer it in time.
     await until(() => service.requests.length === 1);
@@ -220,6 +240,7 @@ describe('Integrations', () => {
       connected: true,
       account: ada,
       failure: null,
+      keyNotRead: false,
     });
   });
 
@@ -317,7 +338,13 @@ describe('Integrations', () => {
     clock += 10 * 60_000;
 
     expect(await integrations.list()).toEqual([
-      { id: 'alldebrid', connected: true, account: ada, failure: ServiceFailure.Unavailable },
+      {
+        id: 'alldebrid',
+        connected: true,
+        account: ada,
+        failure: ServiceFailure.Unavailable,
+        keyNotRead: false,
+      },
     ]);
   });
 
@@ -348,11 +375,37 @@ describe('Integrations', () => {
     expect(await listed).toEqual([notConnected]);
   });
 
-  it('starts not connected when the kept key cannot be read, and says so in the log', async () => {
+  it('starts not connected when the kept key cannot be read, and says so in the list and the log', async () => {
     const integrations = await open(refusing('read'));
 
-    expect(await integrations.list()).toEqual([notConnected]);
+    expect(await integrations.list()).toEqual([{ ...notConnected, keyNotRead: true }]);
     expect(logged.join('\n')).toContain('key_not_read');
+    expect(service.requests).toEqual([]);
+  });
+
+  it('no longer says the key was not read once a key is connected again', async () => {
+    const integrations = await open(refusing('read'));
+
+    const connected = await integrations.connect(IntegrationId.AllDebrid, KEY);
+
+    expect(connected.keyNotRead).toBe(false);
+    expect((await integrations.list())[0]?.keyNotRead).toBe(false);
+  });
+
+  it('no longer says the key was not read once it is disconnected: nothing is kept', async () => {
+    const integrations = await open(refusing('read'));
+
+    await integrations.disconnect(IntegrationId.AllDebrid);
+
+    expect(await integrations.list()).toEqual([notConnected]);
+  });
+
+  it('still says the key was not read when a key to connect again is refused', async () => {
+    const integrations = await open(refusing('read'));
+
+    await expect(integrations.connect(IntegrationId.AllDebrid, REVOKED)).rejects.toThrow();
+
+    expect((await integrations.list())[0]?.keyNotRead).toBe(true);
   });
 
   it('removes the key from the vault when it is disconnected', async () => {
@@ -446,7 +499,7 @@ describe('Integrations', () => {
 
       expect(await vault.read(IntegrationId.AllDebrid)).toBe(KEY);
       expect(await integrations.list()).toEqual([
-        { id: 'alldebrid', connected: true, account: ada, failure: null },
+        { id: 'alldebrid', connected: true, account: ada, failure: null, keyNotRead: false },
       ]);
       expect(JSON.stringify(integrations.code(IntegrationId.AllDebrid))).not.toContain(lastCheck());
       expect(logged.join('\n')).not.toContain(KEY);
@@ -594,7 +647,7 @@ describe('Integrations', () => {
       await expect(asked).rejects.toBeInstanceOf(CodeConflictError);
       expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
       expect(await integrations.list()).toEqual([
-        { id: 'alldebrid', connected: true, account: ada, failure: null },
+        { id: 'alldebrid', connected: true, account: ada, failure: null, keyNotRead: false },
       ]);
     });
 

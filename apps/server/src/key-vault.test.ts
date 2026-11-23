@@ -99,6 +99,27 @@ describe('ParentVault', () => {
     await expect(vault.read(IntegrationId.AllDebrid)).rejects.toThrow('Main did not');
   });
 
+  it('waits longer for a write: main answers it once what opens the key is on disk (#69)', async () => {
+    const parent = aParent();
+    const vault = new ParentVault(parent.port, 20, 2000);
+
+    const written = vault.write(IntegrationId.AllDebrid, KEY);
+    const asked = performance.now();
+    const read = vault.read(IntegrationId.AllDebrid);
+    await expect(read).rejects.toThrow('Main did not read');
+    // A read is not given the write's time.
+    expect(performance.now() - asked).toBeLessThan(1000);
+    parent.say({ type: 'key', id: parent.sent[0]!.id, ok: true } satisfies KeyAnswer);
+
+    await expect(written).resolves.toBeUndefined();
+  });
+
+  it('does not wait for ever for a write either', async () => {
+    const vault = new ParentVault(aParent().port, 10, 10);
+
+    await expect(vault.write(IntegrationId.AllDebrid, KEY)).rejects.toThrow('Main did not write');
+  });
+
   it('stops counting the time once main has answered', async () => {
     vi.useFakeTimers();
     const parent = aParent();
