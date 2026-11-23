@@ -1,10 +1,27 @@
 import { randomBytes } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { DEFAULT_THEME, Theme, WINDOW_COLOURS } from '@scia/contracts/theme';
 import { DownloadStatus } from '@scia/core';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
+import type { ElectronApplication } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
+import { STARTING_LINE } from '../src/engine/starting-page.ts';
 import { allCompleted, downloadsOf, paste, until, useRun } from './scia.ts';
+import { EndSession, endSessionOf, sessionMayEnd } from './session-end.ts';
+
+const STARTING_PAGE = 'data:text/html;charset=utf-8,';
+
+// The first page the window loaded, as its history keeps it: what it showed before the engine's.
+async function firstPageOf(app: ElectronApplication): Promise<string> {
+  const address = await app.evaluate(
+    ({ BrowserWindow }) =>
+      BrowserWindow.getAllWindows()[0]?.webContents.navigationHistory.getEntryAtIndex(0).url ?? '',
+  );
+  return address.startsWith(STARTING_PAGE)
+    ? decodeURIComponent(address.slice(STARTING_PAGE.length))
+    : address;
+}
 
 // The start of every range a host was asked for, but the probe of the first byte that begins
 // every run of a download.
@@ -57,6 +74,96 @@ describe('the real app, from start to quit', () => {
     const written = await readFile(join(profile.downloads, 'sample.bin'));
     expect(Buffer.compare(written, body)).toBe(0);
   });
+
+  // The window shows before the engine is ready, on a page of main's own: a cold start can take a
+  // minute (#13).
+  it('shows its window at once, saying that Scia is starting', async () => {
+    const profile = await run.profile();
+    const scia = await run.launch(profile);
+
+    const log = await profile.log();
+    const starting = /window_starting { theme: '([\w-]+)', visible: (\w+) }/.exec(log);
+    expect(starting?.slice(1)).toEqual([DEFAULT_THEME, 'true']);
+    expect(log.indexOf('window_starting')).toBeLessThan(log.indexOf('engine_ready'));
+    const first = await firstPageOf(scia.app);
+    expect(first).toContain(STARTING_LINE);
+    expect(first).toContain(WINDOW_COLOURS[DEFAULT_THEME].dark.background);
+  });
+
+  it('starts the next time in the theme chosen in Settings', async () => {
+    const profile = await run.profile();
+    const first = await run.launch(profile);
+    await first.page.getByRole('button', { name: 'Settings' }).click();
+    await first.page.getByRole('combobox', { name: 'Theme' }).selectOption(Theme.Ice);
+    await until(async () => {
+      const kept = await readFile(join(profile.path, 'theme.json'), 'utf8').catch(() => '');
+      return kept.includes(Theme.Ice);
+    });
+    await first.quit();
+
+    const again = await run.launch(profile);
+
+    expect(await profile.log()).toContain(`window_starting { theme: '${Theme.Ice}'`);
+    const page = await firstPageOf(again.app);
+    expect(page).toContain(WINDOW_COLOURS[Theme.Ice].light.background);
+    expect(page).toContain(WINDOW_COLOURS[Theme.Ice].dark.background);
+  });
+
+  // Windows tells every top-level window, a hidden one too, that the session ends: at a shutdown
+  // or a sign-out, and when an installer needs Scia's files (#13). Electron's `before-quit` never
+  // comes, and the process may be ended as soon as the message is answered.
+  it.each([
+    { what: 'a shutdown, with Scia in the tray', how: EndSession.Shutdown, hidden: true },
+    { what: 'a sign-out, with Scia in the tray', how: EndSession.Logoff, hidden: true },
+    { what: 'an installer that needs its files', how: EndSession.CloseApp, hidden: false },
+  ])(
+    'writes its state and ends at $what during a download, which goes on at the next start',
+    async ({ how, hidden }) => {
+      const profile = await run.profile();
+      // Slow enough that the download is still running when the session ends: seconds.
+      const body = randomBytes(8 * 1024 * 1024);
+      const host = run.keep(
+        await startRangeServer({ body, chunkBytes: 16 * 1024, chunkDelayMs: 100 }),
+      );
+      const scia = await run.launch(profile);
+      await paste(scia.page, host.url);
+      await until(async () =>
+        (await downloadsOf(scia.page)).some((download) => download.downloadedBytes > 0),
+      );
+      if (hidden) {
+        await scia.closeWindow();
+        await until(async () => (await profile.log()).includes('window_hidden_to_tray'));
+      }
+      const pid = await scia.app.evaluate(() => process.pid);
+
+      // It does not ask Windows to wait.
+      expect(sessionMayEnd(pid, how)).toBe(true);
+      endSessionOf(pid, how);
+
+      await scia.exited;
+      // What the engine wrote as it stopped, read first: a download it was stopping is `queued`,
+      // one it was killed in the middle of stays `downloading` at its last checkpoint.
+      const state = JSON.parse(
+        await readFile(join(profile.path, 'engine', 'state.json'), 'utf8'),
+      ) as { downloads: { status: string; segments: Segment[] }[] };
+      expect(state.downloads[0]?.status).toBe(DownloadStatus.Queued);
+      expect(state.downloads[0]?.segments.some((segment) => segment.downloaded > 0)).toBe(true);
+      const log = await profile.log();
+      expect(log).toMatch(/\bsession_ended\b/);
+      // Quit's own last line, written once the engine's process has ended: Scia ended itself, not
+      // Electron at once. The engine's own `stopped` is not read: main relays it from a pipe that
+      // the engine's exit can outrun, and two runs in three of round 2 lost it with the state
+      // written (#262).
+      expect(log).toMatch(/\squit\s*$/m);
+      expect(log).not.toContain('update_installing');
+
+      const again = await run.launch(profile);
+
+      await until(() => allCompleted(again.page));
+      const written = await readFile(join(profile.downloads, 'sample.bin'));
+      expect(Buffer.compare(written, body)).toBe(0);
+    },
+  );
 
   it('takes a download up again after a restart, each connection from the bytes it had', async () => {
     const profile = await run.profile();

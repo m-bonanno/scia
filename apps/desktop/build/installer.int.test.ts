@@ -1,10 +1,10 @@
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { access, readFile, rm, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
-import { scratchFolder } from '@scia/server/testing/scratch.ts';
+import { scratchFolder, until } from '@scia/server/testing/scratch.ts';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const run = promisify(execFile);
@@ -96,6 +96,142 @@ Section
 SectionEnd
 `;
 
+// A program made of the include's own SciaEndSessionOf, which tells the program named by /target=
+// that its session ends, as the installer tells a Scia that runs: it writes how many windows it
+// told, how many of their processes had not ended when it stopped waiting, and what is on top of
+// NSIS's stack.
+const ending = (include: string) => `
+Unicode true
+Name "ending"
+OutFile "ending.exe"
+RequestExecutionLevel user
+SilentInstall silent
+!define PRODUCT_NAME "Scia"
+!include FileFunc.nsh
+!include "${include}"
+
+Function .onInit
+  \${GetParameters} $0
+  \${GetOptions} $0 "/target=" $1
+  Push "stack"
+  StrCpy $SciaTarget $1
+  Call SciaEndSessionOf
+  Pop $2
+  FileOpen $3 "$EXEDIR\\ended.txt" w
+  FileWrite $3 "$SciaTold|$SciaLeft|$2"
+  FileClose $3
+  SetErrorLevel 0
+  Quit
+FunctionEnd
+
+Section
+SectionEnd
+`;
+
+// How long the fake lives on once its window is gone, as a Scia whose engine is still stopping.
+const FAKE_LINGER_MS = 3000;
+
+// A program with one hidden top-level window of Chromium's class, as a Scia's window is, which
+// writes what WM_ENDSESSION said to it, destroys its window and ends FAKE_LINGER_MS later — run
+// by Windows PowerShell, whose path the spec names as the program to tell. Never shown.
+const FAKE_WINDOW = `
+using System;
+using System.IO;
+using System.Runtime.InteropServices;
+
+public static class SciaFakeWindow {
+  private delegate IntPtr WindowProc(IntPtr window, uint message, IntPtr wParam, IntPtr lParam);
+
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  private struct WindowClass {
+    public uint style;
+    public WindowProc proc;
+    public int classExtra;
+    public int windowExtra;
+    public IntPtr instance;
+    public IntPtr icon;
+    public IntPtr cursor;
+    public IntPtr background;
+    public string menu;
+    public string name;
+  }
+
+  [StructLayout(LayoutKind.Sequential)]
+  private struct Message {
+    public IntPtr window;
+    public uint message;
+    public IntPtr wParam;
+    public IntPtr lParam;
+    public uint time;
+    public int x;
+    public int y;
+  }
+
+  [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
+  private static extern IntPtr GetModuleHandleW(string name);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  private static extern ushort RegisterClassW(ref WindowClass windowClass);
+  [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+  private static extern IntPtr CreateWindowExW(uint exStyle, string className, string title,
+    uint style, int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance,
+    IntPtr param);
+  [DllImport("user32.dll")]
+  private static extern IntPtr DefWindowProcW(IntPtr window, uint message, IntPtr wParam,
+    IntPtr lParam);
+  [DllImport("user32.dll")]
+  private static extern int GetMessageW(out Message message, IntPtr window, uint first, uint last);
+  [DllImport("user32.dll")]
+  private static extern IntPtr DispatchMessageW(ref Message message);
+  [DllImport("user32.dll")]
+  private static extern bool DestroyWindow(IntPtr window);
+  [DllImport("user32.dll")]
+  private static extern void PostQuitMessage(int code);
+
+  private const int LINGER_MS = ${String(FAKE_LINGER_MS)};
+
+  private static WindowProc kept;
+  private static string answer;
+
+  public static void Run(string answerPath) {
+    answer = answerPath;
+    kept = Receive;
+    IntPtr instance = GetModuleHandleW(null);
+    WindowClass windowClass = new WindowClass();
+    windowClass.proc = kept;
+    windowClass.instance = instance;
+    windowClass.name = "Chrome_WidgetWin_1";
+    if (RegisterClassW(ref windowClass) == 0) throw new Exception("No window class.");
+    IntPtr window = CreateWindowExW(0, "Chrome_WidgetWin_1", "Scia spec", 0, 0, 0, 0, 0,
+      IntPtr.Zero, IntPtr.Zero, instance, IntPtr.Zero);
+    if (window == IntPtr.Zero) throw new Exception("No window.");
+    File.WriteAllText(answerPath + ".ready", "");
+    Message message;
+    while (GetMessageW(out message, IntPtr.Zero, 0, 0) > 0) DispatchMessageW(ref message);
+    // As Scia does since its quit is let stand at the end of a session: the window is gone at
+    // once, the process ends seconds later, once its engine has stopped.
+    System.Threading.Thread.Sleep(LINGER_MS);
+  }
+
+  private static IntPtr Receive(IntPtr window, uint message, IntPtr wParam, IntPtr lParam) {
+    if (message == 0x0016) {
+      File.WriteAllText(answer, wParam.ToString() + " " + lParam.ToString());
+      DestroyWindow(window);
+      PostQuitMessage(0);
+      return IntPtr.Zero;
+    }
+    return DefWindowProcW(window, message, wParam, lParam);
+  }
+}
+`;
+
+const POWERSHELL = join(
+  process.env.SystemRoot ?? 'C:\\Windows',
+  'System32',
+  'WindowsPowerShell',
+  'v1.0',
+  'powershell.exe',
+);
+
 const exitCodeOf = (attempt: Promise<unknown>) =>
   attempt.then(
     () => 0,
@@ -127,6 +263,7 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
     };
     await compile('deciding.nsi', deciding(INCLUDE));
     await compile('installing.nsi', installing(INCLUDE, '1.0.0', key));
+    await compile('ending.nsi', ending(INCLUDE));
   }, 120_000);
 
   afterAll(async () => {
@@ -294,6 +431,73 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
 
       expect(await install()).toBe(0);
       expect(await readFile(join(folder.path, 'installed.txt'), 'utf8')).toBe('stack');
+    });
+  });
+
+  // A Scia that runs is told its session ends before electron-builder's check ends it by force:
+  // told so, it writes its state and ends by itself (#13).
+  describe('tells a program that runs that its session ends', () => {
+    const end = async (target: string) => {
+      await rm(join(folder.path, 'ended.txt'), { force: true });
+      await run(join(folder.path, 'ending.exe'), [`/target=${target}`], { timeout: 60_000 });
+      const [told, left, stack] = (await readFile(join(folder.path, 'ended.txt'), 'utf8')).split(
+        '|',
+      );
+      return { told, left, stack };
+    };
+
+    // Since #262 a Scia told so closes its window at once and ends seconds later, once its
+    // engine has stopped: the include waits for the process, not for its windows.
+    it('tells each window of the program, as an installer that needs its files, and waits for its process to end', async () => {
+      const source = join(folder.path, 'fake-window.cs');
+      const answer = join(folder.path, 'fake-window.txt');
+      await writeFile(source, FAKE_WINDOW);
+      const fake = spawn(
+        POWERSHELL,
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `Add-Type -Path '${source}'; [SciaFakeWindow]::Run($env:SCIA_FAKE_ANSWER)`,
+        ],
+        { env: { ...process.env, SCIA_FAKE_ANSWER: answer }, stdio: 'ignore', windowsHide: true },
+      );
+      const ended = new Promise<void>((done) => {
+        fake.once('exit', () => {
+          done();
+        });
+      });
+      let gone = false;
+      void ended.then(() => {
+        gone = true;
+      });
+      try {
+        await until(() => exists(`${answer}.ready`), 45_000);
+        const started = performance.now();
+
+        const result = await end(POWERSHELL);
+
+        const tookMs = performance.now() - started;
+        // WM_ENDSESSION: the session ends (1), for this program alone (ENDSESSION_CLOSEAPP, 1).
+        expect(await readFile(answer, 'utf8')).toBe('1 1');
+        expect(result).toEqual({ told: '1', left: '0', stack: 'stack' });
+        // The process had ended when the include returned: Node hears of it within moments,
+        // where a wait on the window alone returns FAKE_LINGER_MS before it.
+        await until(() => gone, 500);
+        expect(tookMs).toBeGreaterThan(FAKE_LINGER_MS - 500);
+        // Within the include's bound, SCIA_CLOSE_LIMIT_MS.
+        expect(tookMs).toBeLessThan(15_000);
+      } finally {
+        fake.kill();
+      }
+    }, 90_000);
+
+    it('tells nothing, and waits for nothing, where the program does not run', async () => {
+      expect(await end(join(folder.path, 'Scia.exe'))).toEqual({
+        told: '0',
+        left: '0',
+        stack: 'stack',
+      });
     });
   });
 

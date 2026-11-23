@@ -1,5 +1,5 @@
 import type { Download } from '@scia/contracts';
-import { DownloadFailure, DownloadStatus, PageFailure } from '@scia/core';
+import { AlbumFailure, DownloadFailure, DownloadStatus, PageFailure } from '@scia/core';
 import {
   formatBytes,
   formatDuration,
@@ -32,6 +32,31 @@ const PAGE_NOT_DOWNLOADED: Readonly<Record<PageFailure, string>> = {
   // none is mended by waiting, so no remedy is offered.
   [PageFailure.Unreadable]: 'Scia could not read the video on this page.',
 };
+
+// Said of an album of a file host, and of one of its files' pages (docs/adr/0024): each sentence
+// is true of the album's row and of a file's alike. The link the site gave says its status.
+const ALBUM_NOT_READ: Readonly<
+  Record<Exclude<AlbumFailure, typeof AlbumFailure.LinkFailed>, string>
+> = {
+  [AlbumFailure.Gone]: 'The site no longer has this, or the link is wrong.',
+  // A check Scia does not pass, among them: it gets around none.
+  [AlbumFailure.Refused]: 'The site refuses to show this to Scia.',
+  // Not mended by waiting: the site changed how it writes its pages, and Scia reads them anew.
+  [AlbumFailure.Unrecognised]:
+    'Scia could not read this page of the site. A later version of Scia may read it.',
+  [AlbumFailure.Empty]: 'This album has no files.',
+};
+
+function isAlbumFailure(failure: DownloadFailure): failure is keyof typeof ALBUM_NOT_READ {
+  return Object.hasOwn(ALBUM_NOT_READ, failure);
+}
+
+// The address a site gave a file at this run, not the link that was pasted: a retry asks the site
+// for a new one (docs/adr/0024).
+function siteLinkFailedMessage(status: number | null): string {
+  const code = status === null ? '' : ` (${String(status)})`;
+  return `The link the site gave for this file no longer works${code}. Try again: Scia asks the site for a new one.`;
+}
 
 // The address a page's site gave for its video does not last: trying again reads the page for a
 // new one (docs/adr/0009-the-video-of-a-page.md, point 6).
@@ -81,6 +106,10 @@ function failureText(download: Download): string {
       return 'Connection interrupted. Try again.';
   }
   if (isPageFailure(download.failure)) return PAGE_NOT_DOWNLOADED[download.failure];
+  if (download.failure === AlbumFailure.LinkFailed) {
+    return siteLinkFailedMessage(download.failureStatus);
+  }
+  if (isAlbumFailure(download.failure)) return ALBUM_NOT_READ[download.failure];
   // What is left is a service's: it did not give a link for this one.
   return linkNotUnlockedMessage(download.failure, download.via);
 }

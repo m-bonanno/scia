@@ -22,20 +22,21 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [ ] #7's README and ADR point, once #180 and #181 land.
 - [x] A key sealed just before the app was killed, read back (#69): built ([ADR 0023](../adr/0023-a-key-said-kept-once-it-can-be-read-back.md)), and proven by the E2E suite in CI — the built app killed right after a connection on three new profiles, each key read back.
 - [ ] A save of `state.json` not lost while another process has the file open (#151).
-- [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#13), the folder's button (#40), a paused bar's tone (#260: built, held by specs and read in the built app by CI's E2E, which took its capture; to be seen by a person, in #58), the key's placeholder (#66: built, held by specs and by CI's E2E in both variants; to be seen in the app, with its capture, in #156), the clipboard's first read (#134), room under notices (#143), the popover's note (#159, #257: built, held by specs; to be seen in a packaged build, with its two captures, in the owner's sitting, #156), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
+- [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#256: built; the window at once held by CI's E2E suite, an installer's close by the installer's smoke test, the end of a session by the E2E suite only for a message after which nothing ends Scia; a real shutdown or sign-out, and what a person sees, to be seen by hand in #13), the folder's button (#40), a paused bar's tone (#260: built, held by specs and read in the built app by CI's E2E, which took its capture; to be seen by a person, in #58), the key's placeholder (#66: built, held by specs and by CI's E2E in both variants; to be seen in the app, with its capture, in #156), the clipboard's first read (#134, #277: built, held by specs and by CI's E2E with the clipboard answered in main; the system's own clipboard to be tried by a person, below), room under notices (#143), the popover's note (#159, #257: built, held by specs; to be seen in a packaged build, with its two captures, in the owner's sitting, #156), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
 - [ ] The page's logo and the app's icon drawing the mark in the same proportions (#88).
 - [x] The specs in quarantine fixed and back in the gates: the speed limit's (#43, #232) and HLS's (#162).
 - [x] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes): 32 s with nothing written for a 32 GiB file on an NVMe SSD, over 45 s for 4 GiB on a USB hard disk.
 - [ ] A large download that starts at once: its part file made sparse, its room looked at instead of reserved, the engine given more disk threads (#182; `v1.0.0` waits for it, the owner, 23 November 2026): built, held by specs and by CI's E2E suite in the built app ([ADR 0026](../adr/0026-a-part-file-made-sparse.md)), measured with the engine's own task; a large file in the app, and on a USB hard disk, to be seen (#265).
 - [x] The installer refuses an older version (#172, #177).
+- [ ] Every file of a Bunkr album downloaded into a folder of its own, by a reader of Scia's own (#228): built ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md)) and held by specs, and by CI's E2E suite on the built app, against a local host that answers as Bunkr does; to be seen against the real Bunkr (#266).
 
 ### The owner's hands
 
 One sitting, from one checklist, on a beta built as a release candidate:
 
 - [ ] AllDebrid with the owner's real key: a hoster link downloaded to the end, the connection by a code, a pasted magnet and the account's magnets (#7, #137, #138).
-- [ ] The real clipboard: links and a magnet copied (#128, #139).
-- [ ] The tray by hand: the icon, its click, its menu, its tooltip, a notification looked at and clicked (#13).
+- [ ] The real clipboard: links and a magnet copied, and the start of the reading — a picture on it, a link on it while another program holds it open (#128, #139, #277).
+- [ ] The tray by hand: the icon, its click, its menu, its tooltip, a notification looked at and clicked; the window as Scia starts; a shutdown, and an installer run, during a download (#13).
 - [ ] The installer downloaded by hand through SmartScreen, and run over a previous version with the app started afterwards (#70).
 - [ ] The icon on screen: taskbar, tray, Start menu, desktop, Alt+Tab (#85, #199).
 - [ ] Windows set to light: the page, the window and its buttons (#58).
@@ -43,12 +44,13 @@ One sitting, from one checklist, on a beta built as a release candidate:
 - [ ] A hand in the folder dialog (#40) and on the speed menu (#43).
 - [ ] The update's note seen in a packaged build, and its two captures retaken (#156).
 - [ ] A real site's video, one file and an HLS stream (#89).
+- [ ] A real public Bunkr album, and a Bunkr file pasted by itself (#266).
 
 Checked after the tag, so not part of the gate: a beta updated to the stable (#82).
 
 ### The owner's decisions
 
-None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisions.md#23-november-2026)).
+None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisions.md#23-november-2026)), #228 joining the gate on 23 November.
 
 ## M0 — Foundations
 
@@ -110,6 +112,7 @@ None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisio
 | [Pages, playlists and channels](./evidence.md#pages-playlists-and-channels)                         | #8        | no      | —           | —                                | no        |
 | [A fallback port, found by the extension](./evidence.md#a-fallback-port)                            | —         | no      | —           | —                                | no        |
 | [A reader of sites of Scia's own](./evidence.md#the-video-of-one-page)                              | #102      | no      | —           | —                                | no        |
+| [A Bunkr album into a folder of its own](./evidence.md#a-bunkr-album)                               | #228      | yes     | Specs, E2E  | the real Bunkr (#266)            | yes       |
 
 ## M3 — Integrations: debrid services
 

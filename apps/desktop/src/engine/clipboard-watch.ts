@@ -5,9 +5,6 @@ import { extractLinks, extractMagnets } from '@scia/contracts/links';
 // How often main reads the clipboard while the switch is on. Electron has no event for a change
 // of the clipboard: it is read on a timer, and a link copied is in the list within a second.
 export const CLIPBOARD_READ_MS = 1000;
-// Empty reads in a row, at the start, that make a clipboard empty rather than one the system did
-// not open.
-const EMPTY_READS_FOR_EMPTY = 3;
 // What a turn knows when the clipboard held no text at its start.
 const EMPTY = Symbol('empty');
 
@@ -15,6 +12,9 @@ export interface ClipboardWatchDeps {
   // The text on the system's clipboard; it may reject, or answer '' for a clipboard it could not
   // open.
   readonly read: () => Promise<string>;
+  // Whether the clipboard holds text, from its formats: Windows tells them without opening the
+  // clipboard, so a clipboard another program holds open still says it holds text.
+  readonly holdsText: () => Promise<boolean>;
   // Hands links to the engine, which keeps those it knows (docs/adr/0012); answers how many it
   // added.
   readonly offer: (links: readonly string[]) => Promise<number>;
@@ -47,10 +47,8 @@ export class ClipboardWatch {
   readonly #deps: ClipboardWatchDeps;
   #cancel: (() => void) | undefined;
   // What this turn knows was there: the digest of the last text read, or `EMPTY`. Undefined until
-  // a read of this turn has told it — nothing is offered before.
+  // the clipboard's formats or a read of this turn have told it — nothing is offered before.
   #seen: string | typeof EMPTY | undefined;
-  // Empty reads in a row while nothing is known yet.
-  #emptyReads = 0;
   // A read or an offer under way: one at a time.
   #busy = false;
   // Each turn on or off is a new one: what a read or an offer of an earlier one finds is not
@@ -65,7 +63,6 @@ export class ClipboardWatch {
     if (on === (this.#cancel !== undefined)) return;
     this.#turn += 1;
     this.#seen = undefined;
-    this.#emptyReads = 0;
     // What a read or an offer of the turn before holds is not this turn's to wait for.
     this.#busy = false;
     if (!on) {
@@ -80,13 +77,13 @@ export class ClipboardWatch {
       void this.#oneAtATime(turn, () => this.#beat(turn));
     };
     this.#cancel = this.#deps.every(CLIPBOARD_READ_MS, beat);
-    // The first beat at once: it learns what is there, and offers nothing.
+    // The first beat at once: it learns what is there.
     beat();
   }
 
   // A beat that comes while a read or an offer is under way does nothing: a text copied while the
-  // engine is asked is read at the next beat after its answer. A read the system refuses is passed
-  // over, and read again at the next beat.
+  // engine is asked is read at the next beat after its answer. A read the system refuses — of the
+  // text or of the formats — is passed over, and read again at the next beat.
   async #oneAtATime(turn: number, run: () => Promise<void>): Promise<void> {
     if (this.#busy) return;
     this.#busy = true;
@@ -100,24 +97,37 @@ export class ClipboardWatch {
   }
 
   async #beat(turn: number): Promise<void> {
+    // Electron answers an empty text when the system will not open the clipboard, as for a
+    // clipboard that holds no text: until this turn knows what was there, the clipboard's formats
+    // are asked first. A clipboard with no text then — empty, a picture, files — is known at once,
+    // and a text read after that answer was copied after it; one that holds text is known only
+    // once its text is read, however long the system keeps it closed (#134).
+    if (this.#seen === undefined) {
+      const holdsText = await this.#deps.holdsText();
+      if (turn !== this.#turn) return;
+      if (!holdsText) this.#know(EMPTY);
+    }
     const text = await this.#deps.read();
     if (turn !== this.#turn) return;
-    // Electron answers an empty text when the system will not open the clipboard, as for a
-    // clipboard that holds no text: an empty read tells nothing from the copy before it, and is
-    // passed over — but a few in a row, before anything is known, are a clipboard that is empty.
-    if (text === '') {
-      if (this.#seen === undefined && ++this.#emptyReads >= EMPTY_READS_FOR_EMPTY) {
-        this.#seen = EMPTY;
-      }
-      return;
-    }
+    // An empty read tells nothing from the copy before it, and is passed over.
+    if (text === '') return;
     const seen = digestOf(text);
     const known = this.#seen;
+    if (known === undefined) {
+      this.#know(seen);
+      return;
+    }
     this.#seen = seen;
-    if (known === undefined || seen === known) return;
+    if (seen === known) return;
     await this.#offer(turn, extractLinks(text));
     // Turned off while the links were on their way: the magnets of the copy are not this turn's.
     if (turn === this.#turn) await this.#offerMagnets(turn, extractMagnets(text));
+  }
+
+  // What was on the clipboard when the reading started: whether it held text, never what.
+  #know(seen: string | typeof EMPTY): void {
+    this.#seen = seen;
+    this.#deps.log.info('clipboard_start_known', { text: seen !== EMPTY });
   }
 
   async #offerMagnets(turn: number, magnets: readonly string[]): Promise<void> {

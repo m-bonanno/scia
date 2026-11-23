@@ -7,6 +7,7 @@ import {
   DownloadStatus,
   isUnderWay,
 } from './download.ts';
+import { AlbumFailure } from './album.ts';
 import { PageFailure } from './page.ts';
 import { ServiceFailure, UnlockFailure } from './service.ts';
 
@@ -50,7 +51,7 @@ describe('download status', () => {
 
 describe('DownloadFailure', () => {
   it('keeps every code of every family it gathers: no two families share a name', () => {
-    const families = [ServiceFailure, UnlockFailure, PageFailure];
+    const families = [ServiceFailure, UnlockFailure, PageFailure, AlbumFailure];
     for (const family of families) {
       for (const code of Object.values(family)) {
         expect(Object.values(DownloadFailure), code).toContain(code);

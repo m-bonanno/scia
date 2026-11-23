@@ -18,6 +18,7 @@ import { type Ended, EndedDownloads, Ending } from './engine/ended-downloads.ts'
 import { endedNotice, STILL_IN_TRAY } from './engine/ended-notice.ts';
 import type { EngineAccess } from './engine/engine-access.ts';
 import { Kept } from './engine/kept.ts';
+import { lastAsked } from './engine/last-asked.ts';
 import { followDownloads } from './engine/engine-events.ts';
 import { EngineFailure, engineFailureNotice } from './engine/engine-failure.ts';
 import { betasOfEngine } from './engine/engine-settings.ts';
@@ -29,6 +30,8 @@ import {
   offerToEngine,
   sentNotice,
 } from './engine/offered-links.ts';
+import { Quit } from './engine/quit.ts';
+import { RememberedTheme } from './engine/remembered-theme.ts';
 import { RestartPolicy } from './engine/restart-policy.ts';
 import { resolveRuntimeLayout } from './engine/runtime-layout.ts';
 import { buildServerEnv } from './engine/server-env.ts';
@@ -38,8 +41,8 @@ import { supportPageOpener } from './engine/support-page.ts';
 import { HIDDEN_TO_TRAY_NOTICE, trayTooltip } from './engine/tray-presentation.ts';
 import { Updates, updatesApply } from './engine/updates.ts';
 import { themeOfEngine } from './engine/window-theme.ts';
+import { JsonFile } from './json-file.ts';
 import { KeyFolder, systemCipher } from './key-store.ts';
-import { NoticeFile } from './notice-file.ts';
 import { startServer } from './server-process.ts';
 import { createSystemTray } from './tray.ts';
 import { createUpdater } from './updater.ts';
@@ -113,6 +116,7 @@ async function boot(): Promise<void> {
     tempDir: app.getPath('temp'),
     alldebridApi: launch.alldebridApi,
     ytDlpReleases: launch.ytDlpReleases,
+    bunkr: launch.bunkr,
   });
   // The keys of the services the engine is connected to: the engine asks, main keeps them
   // sealed by the system (engine/key-vault.ts).
@@ -125,8 +129,12 @@ async function boot(): Promise<void> {
   // connected: it is on disk by the time a person connects one (docs/adr/0023).
   void keys.prepare();
 
+  // The theme the engine said last time: the window shows before the engine can say it. Read
+  // before anything exists that could ask for a quit.
+  const theme = new RememberedTheme(new JsonFile(layout.themePath));
+  const startingTheme = await theme.read();
+
   let port = 0;
-  let quitting = false;
   // A quit the person asked for — the tray's Quit, or a close with nothing left to download —
   // is the only one that installs an update (docs/adr/0007-automatic-updates.md).
   let quitAskedByPerson = false;
@@ -135,21 +143,31 @@ async function boot(): Promise<void> {
     app.quit();
   };
   // Read anew after every wait: a quit may have begun meanwhile.
-  const isQuitting = () => quitting;
+  const isQuitting = () => quit.begun();
   const engine = (): EngineAccess => ({ origin: appOrigin(port), apiToken, fetch });
   const activity = () => downloadActivity(engine(), ENGINE_ANSWER_LIMIT_MS);
 
-  // Hidden until it has a page: it follows the engine once there is one.
+  // Shown at once, saying that Scia is starting: it follows the engine once the engine is ready.
   const window = new MainWindow({
     apiToken,
     version: app.getVersion(),
     platform: process.platform,
     devTools: !app.isPackaged,
     log,
+    theme: startingTheme,
     onCloseRequested: () => {
       void closeRequested();
     },
+    // Electron ends the process the moment this returns, the engine with it, unless its own quit
+    // has begun (`TerminateCurrentProcessImmediately` unless `is_quitting()`,
+    // shell/browser/native_window_views_win.cc, v44): begun here, before returning, and let stand.
+    // Windows is not asked to wait.
+    onSessionEnd: (reasons) => {
+      quit.sessionEnded(reasons);
+      app.quit();
+    },
   });
+  log.info('window_starting', { theme: startingTheme, visible: window.isVisible() });
 
   const tray = createSystemTray({
     iconPath: join(__dirname, 'assets', 'tray.png'),
@@ -160,7 +178,7 @@ async function boot(): Promise<void> {
     tooltip: async () => trayTooltip(await activity().catch(() => undefined)),
     log,
   });
-  const notices = new ShownNotices(new NoticeFile(layout.noticesPath));
+  const notices = new ShownNotices(new JsonFile(layout.noticesPath));
 
   // The window goes at once; then Scia stays in the tray while it has downloads to finish, and
   // quits otherwise (engine/close-policy.ts).
@@ -250,6 +268,9 @@ async function boot(): Promise<void> {
   // person is not looking at the list.
   const clipboardWatch = new ClipboardWatch({
     read: () => clipboard.readText(),
+    // Electron 44 lists the standard formats from Windows' `IsClipboardFormatAvailable`, which
+    // answers without opening the clipboard.
+    holdsText: () => clipboard.has('text/plain'),
     offer: (links) => offerToEngine(links, engine(), OFFER_ANSWER_LIMIT_MS),
     added: (added) => {
       notifyOffered('clipboard_links_added', added, offeredNotice);
@@ -308,10 +329,16 @@ async function boot(): Promise<void> {
 
   // The window's own colours are the theme's, which the engine keeps: asked before the page
   // loads, and whenever the page says the theme changed. An engine that does not say leaves
-  // the window as it is.
+  // the window as it is. Main keeps what it said, for the window of the next start.
+  // An answer that comes back after a later ask — a restart, a change in Settings — is dropped.
+  const askTheme = lastAsked(() => themeOfEngine(engine(), ENGINE_ANSWER_LIMIT_MS));
   const wearTheme = async () => {
     try {
-      window.wear(await themeOfEngine(engine(), ENGINE_ANSWER_LIMIT_MS));
+      const chosen = await askTheme();
+      if (chosen === undefined) return;
+      window.wear(chosen);
+      // Never waited for: the page loads without it, and it never rejects.
+      void theme.keep(chosen);
     } catch (error) {
       log.warn('theme_unknown', { error: String(error) });
     }
@@ -323,6 +350,8 @@ async function boot(): Promise<void> {
 
   const giveUp = (failure: EngineFailure, reason: string) => {
     log.error('engine_gave_up', { failure, reason });
+    // A window that says Scia is starting has no place beside a box that says it did not.
+    window.hide();
     tray?.destroy();
     const box = engineFailureNotice(failure, { port: enginePort, logPath });
     dialog.showErrorBox(box.title, box.body);
@@ -389,40 +418,53 @@ async function boot(): Promise<void> {
   });
 
   // Everything that can ask for a quit, or bring the window back, is wired before the first
-  // wait: the tray exists from this moment, and the engine can take a minute to start.
+  // wait once the window exists: the tray exists from this moment, and the engine can take a
+  // minute to start.
 
   // Quitting never hangs and never goes through the window: the window hides at once, the
   // engine is asked to stop and write its state (server-process.ts bounds the wait), then the
-  // process ends. Electron's own quit — closing every window — is refused every time, or the
-  // close handler, which prevents a close, would cancel the quit and be asked again.
+  // process ends (engine/quit.ts). Whether to install is decided while the engine still runs (it
+  // keeps the betas switch), and the installer starts once the engine has stopped and written its
+  // state: the installer ends whatever still runs of Scia. The end of the session takes the same
+  // road, the engine asked at once and nothing installed.
+  const quit = new Quit({
+    settle: () => {
+      listening.abort();
+      endedBatch.stop();
+      clipboardWatch.watch(false);
+      window.hide();
+      tray?.destroy();
+    },
+    installs: (askedByPerson) => updates?.atQuit({ askedByPerson }) ?? Promise.resolve(false),
+    stopEngine: () => supervisor.stop(),
+    // A restart the person was granted starts Scia again, by the installer or by itself.
+    finish: (install) => updates?.finish(install) === true,
+    relaunch: () => {
+      app.relaunch();
+    },
+    exit: () => {
+      app.exit(0);
+    },
+    log,
+  });
+  // Electron's own quit — closing every window — is refused every time, or the close handler,
+  // which prevents a close, would cancel the quit and be asked again. But at the end of the
+  // session: Electron ends the process the moment the window's `session-end` returns unless its
+  // own quit has begun, so the session's end begins it and lets it stand (`onSessionEnd`).
   app.on('before-quit', (event) => {
+    if (quit.sessionHasEnded()) return;
     event.preventDefault();
-    if (quitting) return;
-    quitting = true;
-    listening.abort();
-    endedBatch.stop();
-    clipboardWatch.watch(false);
-    window.hide();
-    tray?.destroy();
-    // Whether to install is decided while the engine still runs (it keeps the betas switch), and
-    // the installer starts once the engine has stopped and written its state: the installer ends
-    // whatever still runs of Scia. Each step has its bound.
-    const installing =
-      updates?.atQuit({ askedByPerson: quitAskedByPerson }) ?? Promise.resolve(false);
-    void installing
-      .catch(() => false)
-      .then(async (install) => {
-        await supervisor.stop();
-        // A restart the person was granted starts Scia again, by the installer or by itself.
-        if (updates?.finish(install) === true) app.relaunch();
-      })
-      .finally(() => {
-        log.info('quit');
-        app.exit(0);
-      });
+    quit.asked(quitAskedByPerson);
+  });
+  // Reached only by the session's end, once the window has closed: held until Quit has seen the
+  // engine stop and ends the process itself, with `app.exit`.
+  app.on('will-quit', (event) => {
+    event.preventDefault();
+    log.info('electron_quit_held');
   });
 
-  // Starting Scia again is how a person whose desktop draws no tray gets the window back.
+  // Starting Scia again is how a person whose desktop draws no tray gets the window back — also
+  // while it starts, when the window says so.
   app.on('second-instance', () => {
     log.info('second_instance');
     // Not while quitting: the window would show, then vanish with the process.

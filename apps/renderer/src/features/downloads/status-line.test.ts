@@ -1,5 +1,6 @@
 import type { Download } from '@scia/contracts';
 import {
+  AlbumFailure,
   DownloadFailure,
   DownloadStatus,
   PageFailure,
@@ -270,6 +271,52 @@ describe('statusLine', () => {
   ] as const)('says why the video of a page was not downloaded when it was %s', (failure, text) => {
     expect(statusLine(aDownload({ status: DownloadStatus.Failed, failure }))).toBe(text);
   });
+
+  it.each([
+    [AlbumFailure.Gone, 'The site no longer has this, or the link is wrong.'],
+    [AlbumFailure.Refused, 'The site refuses to show this to Scia.'],
+    [
+      AlbumFailure.Unrecognised,
+      'Scia could not read this page of the site. A later version of Scia may read it.',
+    ],
+    [AlbumFailure.Empty, 'This album has no files.'],
+  ] as const)(
+    'says why an album, or a file of one, gave no file when it was %s',
+    (failure, text) => {
+      expect(statusLine(aDownload({ status: DownloadStatus.Failed, failure }))).toBe(text);
+    },
+  );
+
+  // The address the site gave at this run, not the link the person pasted: Retry asks the site
+  // for a new one (docs/adr/0024).
+  it.each([
+    [
+      403,
+      'The link the site gave for this file no longer works (403). Try again: Scia asks the site for a new one.',
+    ],
+    [
+      404,
+      'The link the site gave for this file no longer works (404). Try again: Scia asks the site for a new one.',
+    ],
+    // A web page where the file was: no status to name.
+    [
+      null,
+      'The link the site gave for this file no longer works. Try again: Scia asks the site for a new one.',
+    ],
+  ] as const)(
+    'says that the link a site gave for a file stopped working (%s), and that Retry asks for a new one',
+    (failureStatus, text) => {
+      expect(
+        statusLine(
+          aDownload({
+            status: DownloadStatus.Failed,
+            failure: AlbumFailure.LinkFailed,
+            failureStatus,
+          }),
+        ),
+      ).toBe(text);
+    },
+  );
 
   it('names no service for a link that was never known to be one', () => {
     expect(
