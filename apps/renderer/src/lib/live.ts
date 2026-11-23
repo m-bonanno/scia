@@ -2,6 +2,7 @@ import {
   API_PREFIX,
   type Bundle,
   type Download,
+  type IntegrationId,
   type Magnet,
   SNAPSHOT_EVENT,
   snapshotSchema,
@@ -20,6 +21,8 @@ export interface LiveState {
   readonly magnets: readonly Magnet[];
   // The links that open into several files, until their files are chosen (#181).
   readonly bundles: readonly Bundle[];
+  // The services Scia holds a key for: one connected with Settings closed is heard here (#146).
+  readonly connectedServices: readonly IntegrationId[];
 }
 
 const FIRST_RETRY_MS = 500;
@@ -30,6 +33,7 @@ let state: LiveState = {
   downloads: [],
   magnets: [],
   bundles: [],
+  connectedServices: [],
 };
 const listeners = new Set<() => void>();
 
@@ -53,6 +57,7 @@ function snapshotOf(data: string): Omit<LiveState, 'connection'> | undefined {
           downloads: parsed.data.downloads,
           magnets: parsed.data.magnets,
           bundles: parsed.data.bundles,
+          connectedServices: parsed.data.connectedServices,
         }
       : undefined;
   } catch {

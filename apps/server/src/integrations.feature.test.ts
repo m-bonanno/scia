@@ -257,8 +257,17 @@ describe('the engine API, for the services Scia connects to', () => {
     expect(removed.status).toBe(404);
   });
   describe("a code confirmed on the service's site", () => {
-    const code = (method: string, token: string | null = APP_TOKEN, path = 'alldebrid') =>
-      call(`/integrations/${path}/code`, { method, ...(token === null ? {} : { token }) });
+    const code = (
+      method: string,
+      token: string | null = APP_TOKEN,
+      path = 'alldebrid',
+      on?: Hono,
+    ) =>
+      call(`/integrations/${path}/code`, {
+        method,
+        ...(token === null ? {} : { token }),
+        ...(on === undefined ? {} : { on }),
+      });
 
     it('gives a code to the app alone, and none of what the service gives the key for', async () => {
       expect((await code('POST', EXTENSION_TOKEN)).status).toBe(403);
@@ -330,6 +339,67 @@ describe('the engine API, for the services Scia connects to', () => {
 
       expect(response.status).toBe(502);
       expect(await codeOf(response)).toBe(ApiErrorCode.Unavailable);
+    });
+
+    // Settings closed while the code waits (#146): the page reads the code no more, and main hears
+    // the service connected in the engine's events, the code and the key in none of them.
+    it('says in its events that the service connected, once a code nobody reads any more is confirmed', async () => {
+      const integrations = await Integrations.open({
+        vault: new MemoryVault(),
+        alldebrid: new AllDebrid({ api: service.api, userAgent: 'Scia/spec' }),
+        logger: silentLogger,
+        codePollMs: 5,
+      });
+      const heard = await DownloadManager.open({
+        source: silentSource,
+        store: new JsonStateStore(join(folder.path, 'heard', 'state.json')),
+        defaultDirectory: join(folder.path, 'downloads'),
+        logger: silentLogger,
+        services: integrations,
+      });
+      const listening = createApp({
+        manager: heard,
+        integrations,
+        apiToken: APP_TOKEN,
+        extensionToken: EXTENSION_TOKEN,
+        version: '1.2.3',
+        port: () => DEFAULT_API_PORT,
+        staticDir: undefined,
+        logger: silentLogger,
+      });
+      const events = await listening.request(`${ORIGIN}${API_PREFIX}/events`, {
+        headers: { authorization: `Bearer ${APP_TOKEN}` },
+      });
+      const reader = (events.body as ReadableStream<Uint8Array>).getReader();
+      const decoder = new TextDecoder();
+      let heardSoFar = '';
+      const snapshots = () =>
+        [...heardSoFar.matchAll(/^data: (.*)$/gm)].map(
+          (match) => JSON.parse(match[1] ?? '') as { connectedServices: string[] },
+        );
+      const readUntil = async (done: () => boolean) => {
+        while (!done()) {
+          const { value, done: ended } = await reader.read();
+          if (ended) break;
+          heardSoFar += decoder.decode(value, { stream: true });
+        }
+      };
+      try {
+        await readUntil(() => snapshots().length > 0);
+        expect(snapshots()[0]?.connectedServices).toEqual([]);
+        const given = await code('POST', APP_TOKEN, 'alldebrid', listening);
+        const { code: pin } = ((await given.json()) as { data: { code: string } }).data;
+
+        service.confirmCode(pin, KEY);
+        await readUntil(() => snapshots().some((each) => each.connectedServices.length > 0));
+
+        expect(snapshots().at(-1)?.connectedServices).toEqual(['alldebrid']);
+        expect(heardSoFar).not.toContain(KEY);
+        expect(heardSoFar).not.toContain(pin);
+      } finally {
+        await reader.cancel();
+        await heard.close();
+      }
     });
 
     it('answers 404 for a service it does not know', async () => {

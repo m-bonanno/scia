@@ -1,4 +1,9 @@
-import { ApiErrorCode, IntegrationCodeFailure, type IntegrationId } from '@scia/contracts';
+import {
+  ApiErrorCode,
+  IntegrationCodeFailure,
+  type IntegrationId,
+  SERVICE_NAME,
+} from '@scia/contracts';
 import { SUPPORT_PAGE } from '@scia/contracts/bridge';
 import {
   BundleFailure,
@@ -35,8 +40,8 @@ export const SUPPORT_PAGE_NOT_OPENED = `Scia could not open the page. Go to ${su
 export const FOLDER_REFUSED =
   'Scia could not use the folder you chose. Choose one it can write to.';
 
-// What each service is called, wherever it is named.
-export const SERVICE_NAME: Readonly<Record<IntegrationId, string>> = { alldebrid: 'AllDebrid' };
+// What each service is called, wherever it is named: the contract's, which main names it by too.
+export { SERVICE_NAME };
 
 // Said by the field a key was typed in, each for the one answer it names. Any other failure
 // of that attempt is not about the key, and is told as any failure is.

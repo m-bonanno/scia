@@ -3,12 +3,24 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { BridgeChannel, UpdateRestart } from '@scia/contracts/bridge';
-import { DEFAULT_API_PORT, type Download, EVENTS_KEEP_ALIVE_MS } from '@scia/contracts';
+import {
+  DEFAULT_API_PORT,
+  type Download,
+  EVENTS_KEEP_ALIVE_MS,
+  type CodeConnectFailed,
+  type IntegrationId,
+} from '@scia/contracts';
 import { app, clipboard, dialog, Notification, shell } from 'electron';
 import log from 'electron-log/main';
 import { APP_ID } from './engine/app-identity.ts';
 import { ClipboardWatch } from './engine/clipboard-watch.ts';
 import { CloseOutcome, WindowCloser } from './engine/close-policy.ts';
+import {
+  codeFailedNotice,
+  connectedNotice,
+  NewCodeFailure,
+  NewlyConnected,
+} from './engine/connected-services.ts';
 import { activityOf, downloadActivity, unfinished } from './engine/download-activity.ts';
 import { chooseDownloadFolder, oneAtATime } from './engine/download-folder.ts';
 import { completedDownloadPath } from './engine/download-location.ts';
@@ -59,9 +71,9 @@ const EVENTS_RETRY_MS = 1000;
 // The engine says it is still there every EVENTS_KEEP_ALIVE_MS: three of them missed are an
 // engine that stopped talking.
 const EVENTS_SILENCE_LIMIT_MS = 3 * EVENTS_KEEP_ALIVE_MS;
-// How many notifications — of ended downloads, of links taken from the clipboard — are held so that
-// a click on them still opens the window: the ones on screen and the last ones in the system's list
-// of notifications.
+// How many notifications — of ended downloads, of links taken from the clipboard, of a service
+// connected — are held so that a click on them still opens the window: the ones on screen and the
+// last ones in the system's list of notifications.
 const HELD_NOTICES = 20;
 
 const launch = parseLaunchOptions(process.argv, process.cwd());
@@ -209,6 +221,35 @@ async function boot(): Promise<void> {
   // says it closed — it says so as soon as it has shown it, while the person can still click.
   const heldNotices = new Kept<Notification>(HELD_NOTICES);
 
+  // Every notification but the one a window put away shows once: only while nobody looks at the
+  // window and no quit has begun, held while it can still be clicked, and a click opens the window.
+  // `name` names its lines in the log; `asked` is what the log says of what was handed to the
+  // system — never a file, a link or a key.
+  function showNotice(
+    text: { readonly title: string; readonly body: string },
+    inFront: boolean,
+    name: string,
+    asked: Record<string, unknown> = { title: text.title },
+  ): void {
+    if (isQuitting() || inFront || !Notification.isSupported()) return;
+    const shown = new Notification(text);
+    heldNotices.keep(shown);
+    shown.on('click', () => {
+      log.info(`${name}_notice_clicked`, {});
+      heldNotices.release(shown);
+      openFromNotice();
+    });
+    shown.on('show', () => {
+      log.info(`${name}_notice_shown`, {});
+    });
+    shown.on('failed', (_event, error) => {
+      heldNotices.release(shown);
+      log.warn(`${name}_notice_failed`, { error });
+    });
+    log.info(`${name}_notice_asked`, asked);
+    shown.show();
+  }
+
   // What ended while Scia ran is said by the system when the person is not looking at the list
   // (engine/ended-downloads.ts, ended-batch.ts, ended-notice.ts). Main hears it from the
   // engine's own events, not from the page, which may be hidden.
@@ -238,29 +279,13 @@ async function boot(): Promise<void> {
       lastOfHiddenScia,
     });
     // A person looking at the list sees its rows change.
-    if (isQuitting() || inFront || !Notification.isSupported()) return;
     const text = endedNotice(downloads, { lastOfHiddenScia });
-    const shown = new Notification(text);
-    heldNotices.keep(shown);
-    shown.on('click', () => {
-      log.info('ended_notice_clicked', {});
-      heldNotices.release(shown);
-      openFromNotice();
-    });
-    shown.on('show', () => {
-      log.info('ended_notice_shown', {});
-    });
-    shown.on('failed', (_event, error) => {
-      heldNotices.release(shown);
-      log.warn('ended_notice_failed', { error });
-    });
     // The title names no file: it is what was handed to the system, for whoever reads the log.
-    log.info('ended_notice_asked', {
+    showNotice(text, inFront, 'ended', {
       title: text.title,
       bodyLines: text.body.split('\n').length,
       saysStillInTray: text.body.includes(STILL_IN_TRAY),
     });
-    shown.show();
   }
 
   // The links copied while the switch is on (engine/clipboard-watch.ts, docs/adr/0012): main
@@ -295,21 +320,32 @@ async function boot(): Promise<void> {
   ): void {
     const { inFront, asked } = window.isInFront();
     log.info(event, { added, inFront, asked });
-    if (added === 0 || isQuitting() || inFront || !Notification.isSupported()) return;
-    const text = noticeOf(added);
-    const shown = new Notification(text);
-    heldNotices.keep(shown);
-    shown.on('click', () => {
-      heldNotices.release(shown);
-      openFromNotice();
+    // What is handed to the system is a count: no link, no magnet.
+    if (added > 0) showNotice(noticeOf(added), inFront, 'offered');
+  }
+
+  // Every connection of a service while nobody looks at the window — a code confirmed on the
+  // service's site, Settings open or closed — is said by the system, and so is a confirmed code
+  // whose key connected nothing (the owner, #146; docs/adr/0013). A person looking at the window sees
+  // Settings, or the account's button, change.
+  const newlyConnected = new NewlyConnected();
+  const newCodeFailure = new NewCodeFailure();
+
+  function notifyConnected(id: IntegrationId): void {
+    const { inFront, asked } = window.isInFront();
+    log.info('service_connected_heard', { service: id, inFront, asked });
+    showNotice(connectedNotice(id), inFront, 'connected');
+  }
+
+  function notifyCodeFailed(failed: CodeConnectFailed): void {
+    const { inFront, asked } = window.isInFront();
+    log.info('code_failure_heard', {
+      service: failed.service,
+      failure: failed.failure,
+      inFront,
+      asked,
     });
-    shown.on('failed', (_event, error) => {
-      heldNotices.release(shown);
-      log.warn('offered_notice_failed', { error });
-    });
-    // What was handed to the system, for whoever reads the log: a count, no link, no magnet.
-    log.info('offered_notice_asked', { title: text.title });
-    shown.show();
+    showNotice(codeFailedNotice(failed), inFront, 'code_failed');
   }
 
   async function closeRequested(): Promise<void> {
@@ -525,10 +561,13 @@ async function boot(): Promise<void> {
   // listens is taken for what had already ended — never said.
   void followDownloads({
     engine,
-    onSnapshot: ({ downloads, watchClipboard }) => {
+    onSnapshot: ({ downloads, watchClipboard, connectedServices, codeConnectFailed }) => {
       latest = downloads;
       updates?.engineSays({ idle: unfinished(activityOf(downloads)) === 0 });
       endedBatch.add(ended.seen(downloads));
+      for (const id of newlyConnected.seen(connectedServices)) notifyConnected(id);
+      const failed = newCodeFailure.seen(codeConnectFailed);
+      if (failed !== undefined) notifyCodeFailed(failed);
       // Heard here the moment it changes, whoever changed it; never after a quit has begun.
       clipboardWatch.watch(watchClipboard && !isQuitting());
     },

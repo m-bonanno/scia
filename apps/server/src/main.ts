@@ -113,6 +113,7 @@ export async function main(
     logger,
     resolver: integrations,
     magnets: integrations,
+    services: integrations,
     ...(pageReader === undefined ? {} : { pageReader }),
   });
 

@@ -1,9 +1,12 @@
 import { CodeFailure, ServiceFailure } from '@scia/core';
 import { z } from 'zod';
 
-// The services Scia can be connected to. What each is called lives in the renderer.
+// The services Scia can be connected to.
 export const IntegrationId = { AllDebrid: 'alldebrid' } as const;
 export type IntegrationId = (typeof IntegrationId)[keyof typeof IntegrationId];
+
+// What each is called: by the page, and by the notification main shows once one connects (#146).
+export const SERVICE_NAME: Readonly<Record<IntegrationId, string>> = { alldebrid: 'AllDebrid' };
 
 export function isIntegrationId(value: unknown): value is IntegrationId {
   return Object.values(IntegrationId).some((id) => id === value);
@@ -78,6 +81,24 @@ export const IntegrationCodeFailure = {
 } as const;
 export type IntegrationCodeFailure =
   (typeof IntegrationCodeFailure)[keyof typeof IntegrationCodeFailure];
+
+// Why the key a confirmed code gave connected nothing: the service's refusals of it, and a system
+// that would not keep it. A code that only expired is not one of them.
+export const CodeConnectFailure = {
+  ...ServiceFailure,
+  KeyNotKept: IntegrationCodeFailure.KeyNotKept,
+} as const;
+export type CodeConnectFailure = (typeof CodeConnectFailure)[keyof typeof CodeConnectFailure];
+
+// The last code confirmed on the service's site whose key connected nothing, and when: main says it
+// with a notification while nobody looks at the window (the owner, #146). The moment tells one
+// failure from the next.
+export const codeConnectFailedSchema = z.object({
+  service: z.enum(IntegrationId),
+  failure: z.enum(CodeConnectFailure),
+  at: z.iso.datetime(),
+});
+export type CodeConnectFailed = z.infer<typeof codeConnectFailedSchema>;
 
 // A code to confirm on the service's site, and what became of it. What the service needs to give
 // the key for it stays in the engine: only what the person reads and the page they open cross.

@@ -89,6 +89,9 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 - #257: the update's note says "<version> installs when you quit Scia. Pause your downloads to restart now.", words that stay true once the downloads end. It lands with #159, and does not hold up `v1.0.0` by itself.
 - #156: the update's note seen for the first time in a packaged build, and `update-while-downloading.png` with its light twin retaken, in the owner's single sitting on the release candidate of `v1.0.0` — among "The owner's hands" of the roadmap. #258 merges without them, closing #159 and #257.
 - #271: people can support Scia with money, through Ko-fi and GitHub Sponsors, in the repository (`.github/FUNDING.yml`, the README) and in the app (a quiet "Support Scia" in Settings, which opens the page in the person's browser). Ko-fi is `ko-fi.com/notsosnake`, and Sponsors the profile of `m-bonanno`, public once GitHub approved it; the repository names both, and Settings opens the Ko-fi page alone, one fixed address. `v1.0.0` waits for it, and opening the Ko-fi page from the installed app joins "The owner's hands" (the owner, on the review of #272).
+- #146, on the review of #288 ([ADR 0013](../adr/0013-a-key-that-arrives-by-a-code.md), amendment):
+  - **"AllDebrid is connected"** is notified every time AllDebrid connects while Scia's window is not the one in use: a code confirmed in the browser with Settings open too, not only a code left waiting when Settings closed.
+  - **A code confirmed while Settings is closed whose key then fails** — refused, blocked, not kept — is said by a notification of its own, "AllDebrid could not be connected" with the reason, under the same rule as the notification of a connection.
 
 ## Undated in the roadmap
 
