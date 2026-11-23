@@ -299,6 +299,58 @@ describe('the real app says what went wrong in a notice', () => {
     expect(after).toEqual(before);
   });
 
+  // Settings measures itself again as its rows arrive and as the window changes size (round 2 of
+  // #244): a room taken while it was short, or in another window, would leave its end covered.
+  it('keeps the end of Settings clear of a notice shown before it opened', async () => {
+    const profile = await run.profile();
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    await scia.app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setContentSize(800, 560);
+    });
+    await until(() => page.evaluate(() => window.innerHeight === 560));
+    await page.route(`**${API_PREFIX}/downloads`, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: ApiErrorCode.InternalError, message: 'refused' } }),
+      });
+    });
+    await paste(page, 'https://example.com/a.zip');
+    await page.getByRole('list', { name: 'Notices' }).getByRole('listitem').waitFor();
+
+    const settings = await openSettings(page);
+    const version = settings.getByText(/^Scia \d/);
+    await until(async () => (await roomAround(version)) > 0);
+    await scrollToEnd(version);
+
+    expect(await bottomOf(version)).toBeLessThanOrEqual(await topOfNotices(page));
+  });
+
+  it('keeps the end of Settings clear of the notices when the window changes size', async () => {
+    const profile = await run.profile();
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    await scia.app.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = () => Promise.reject(new Error('the system said no'));
+    });
+    await viewportOf(page, 1040, 1000);
+    const settings = await openSettings(page);
+    await settings.getByRole('button', { name: 'Change folder' }).click();
+    await settings.getByRole('list', { name: 'Notices' }).getByRole('listitem').waitFor();
+    const version = settings.getByText(/^Scia \d/);
+    // A tall window: the notices reach nothing of it, and it keeps no room.
+    expect(await bottomOf(version)).toBeLessThanOrEqual(await topOfNotices(page));
+    expect(await roomAround(version)).toBe(0);
+
+    await viewportOf(page, 1040, 560);
+    await until(async () => (await roomAround(version)) > 0);
+    await scrollToEnd(version);
+
+    expect(await bottomOf(version)).toBeLessThanOrEqual(await topOfNotices(page));
+  });
+
   // The captures #143 asks for, taken from the real app by CI (the owner, on #143): a change the
   // engine failed to keep, Settings scrolled to its end — at 800 px, dark and light, and at 720.
   it('takes the captures of a notice over Settings', async () => {
@@ -346,6 +398,49 @@ describe('the real app says what went wrong in a notice', () => {
       await settings.getByRole('button', { name: 'Close' }).click();
       await settings.waitFor({ state: 'hidden' });
     }
+  });
+
+  // The tech lead, round 2 of #244: a focus scrolled clear of the notices at the pointer's press
+  // moved the button before it was let go, and the click was lost.
+  it('takes a press of the pointer on a control beside the notices, in the room under them', async () => {
+    const profile = await run.profile();
+    const host = run.keep(await startRangeServer({ body: randomBytes(64 * 1024) }));
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    // Wide enough for a row's buttons to lie beside the notices, which are centred and narrower.
+    await scia.app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setContentSize(1000, 700);
+    });
+    await until(() =>
+      page.evaluate(() => window.innerWidth === 1000 && window.innerHeight === 700),
+    );
+    const links = Array.from({ length: 12 }, (_, n) => `${host.url}?copy=${String(n)}`);
+    await paste(page, links.join(' '));
+    await until(() => allCompleted(page));
+    const rows = page.getByRole('main').getByRole('listitem');
+    await until(async () => (await rows.count()) === 12);
+    const lastRow = rows.last();
+    await page.route(`**${API_PREFIX}/downloads`, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: ApiErrorCode.InternalError, message: 'refused' } }),
+      });
+    });
+    await paste(page, 'https://example.com/a.zip');
+    const notice = page.getByRole('list', { name: 'Notices' }).getByRole('listitem');
+    await notice.waitFor();
+    await until(async () => (await roomAround(lastRow)) > 0);
+    const remove = lastRow.getByRole('button', { name: 'Remove from list' });
+    expect(await placeUnderNotices(remove)).toBeGreaterThan(await topOfNotices(page));
+    const button = await remove.boundingBox();
+    const beside = await notice.first().boundingBox();
+    expect(button !== null && beside !== null && button.x > beside.x + beside.width).toBe(true);
+
+    await page.mouse.click((button?.x ?? 0) + (button?.width ?? 0) / 2, (button?.y ?? 0) + 10);
+
+    await until(async () => (await rows.count()) === 11);
   });
 
   it('leaves room under the last row of the list, as tall as the notices', async () => {
