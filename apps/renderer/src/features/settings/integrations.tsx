@@ -127,6 +127,9 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
   const [busy, setBusy] = useState(false);
   const [code, setCode] = useState<IntegrationCode | null>(null);
   const [asking, setAsking] = useState(false);
+  // A disconnection is on its way: no way to connect opens before it answers, so that a refusal
+  // that comes back is said by the row, never by a form or a code opened meanwhile.
+  const [disconnecting, setDisconnecting] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
   const entering = mode === 'key';
   // Set when what the focus is on is about to leave the page: the control named here takes the
@@ -215,7 +218,7 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
   }, [waiting, id]);
 
   const startCode = () => {
-    if (asking) return;
+    if (asking || disconnecting) return;
     askTurn.current += 1;
     const turn = askTurn.current;
     // From the moment it is asked for, the engine may hold a code: leaving cancels it.
@@ -295,6 +298,7 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
 
   const disconnect = () => {
     setRefusal(null);
+    setDisconnecting(true);
     api
       .disconnectIntegration(id)
       .then(() => {
@@ -303,6 +307,9 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
       })
       .catch((error: unknown) => {
         setRefusal(errorMessage(error));
+      })
+      .finally(() => {
+        setDisconnecting(false);
       });
   };
 
@@ -351,8 +358,10 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
               <button
                 type="button"
                 ref={takeFocus('connect-key')}
+                aria-disabled={disconnecting}
                 className={QUIET_BUTTON}
                 onClick={() => {
+                  if (disconnecting) return;
                   // A code still being asked for is left for the key.
                   leaveCode();
                   setMode('key');
@@ -360,11 +369,12 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
               >
                 Use an API key
               </button>
-              {/* While a code is asked for it does nothing, and keeps the focus a press gave it. */}
+              {/* While a code is asked for, or a disconnection is on its way, it does nothing, and
+                  keeps the focus a press gave it. */}
               <button
                 type="button"
                 ref={takeFocus('connect-code')}
-                aria-disabled={asking}
+                aria-disabled={asking || disconnecting}
                 className={TEXT_BUTTON}
                 onClick={startCode}
               >
@@ -376,14 +386,14 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
       </div>
       {/* Across the row, under its head: beside the buttons it was a column three words wide.
           Disconnect is the way out for a person who will not connect again (ADR 0023) — offered,
-          as the ways to connect are, only while none is open: its failure would be said by the
-          key's field or the code, and its success would leave the focus on nothing. */}
+          as the ways to connect are, only while none is open or being asked for: its failure would be
+          said by the key's field or the code, and its success would leave the focus on nothing. */}
       {integration.keyNotRead && (
         <div className="flex items-center justify-between gap-4">
           <p className="text-sm text-destructive">
             Scia could not read back the key it kept for {name}. Connect it again.
           </p>
-          {mode === 'idle' && (
+          {mode === 'idle' && !asking && (
             <ConfirmButton
               ref={takeFocus('disconnect')}
               label="Disconnect"
