@@ -15,6 +15,9 @@ export interface ServerEnvInput {
   // A host of yt-dlp's releases for this run (engine/launch-options.ts); the engine refuses one
   // that is not on this computer.
   readonly ytDlpReleases?: string | undefined;
+  // A host that answers as Bunkr does, for this run (engine/launch-options.ts); the engine
+  // refuses one that is not on this computer.
+  readonly bunkr?: string | undefined;
 }
 
 // Built from scratch, never from `process.env`: inherited variables silently override
@@ -32,6 +35,7 @@ export function buildServerEnv(input: ServerEnvInput): Record<string, string> {
     UV_THREADPOOL_SIZE: String(ENGINE_THREADPOOL_SIZE),
     ...(input.alldebridApi === undefined ? {} : { SCIA_ALLDEBRID_API: input.alldebridApi }),
     ...(input.ytDlpReleases === undefined ? {} : { SCIA_YT_DLP_RELEASES: input.ytDlpReleases }),
+    ...(input.bunkr === undefined ? {} : { SCIA_BUNKR: input.bunkr }),
     ...(input.layout.ytDlp === undefined
       ? {}
       : {

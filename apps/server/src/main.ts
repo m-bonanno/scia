@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { serve } from '@hono/node-server';
 import { AllDebrid } from './alldebrid.ts';
 import { createApp } from './app.ts';
+import { Bunkr } from './bunkr.ts';
 import { parseConfig, type ServerConfig } from './config.ts';
 import { DownloadManager } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
@@ -102,9 +103,11 @@ export async function main(
   });
 
   const { pageReader, updates } = await pageReaderOf(config, logger);
-  const source = new HttpSource(`Mozilla/5.0 (compatible; Scia/${config.version})`);
+  const userAgent = `Mozilla/5.0 (compatible; Scia/${config.version})`;
+  const source = new HttpSource(userAgent);
   const manager = await DownloadManager.open({
     source,
+    bunkr: new Bunkr({ userAgent, ...(config.bunkr === undefined ? {} : { site: config.bunkr }) }),
     store: new JsonStateStore(join(config.dataDir, 'state.json')),
     defaultDirectory: config.downloadDir,
     logger,

@@ -24,6 +24,9 @@ export interface ServerConfig {
   // Where yt-dlp's releases are read: its project's own, unless a run names a host that answers
   // as it does.
   readonly ytDlpReleases: string;
+  // A host that answers as Bunkr does, for a run that must not reach it (docs/adr/0024): its pages
+  // and its API are read there instead of at Bunkr's domains. Nothing in an ordinary run.
+  readonly bunkr: string | undefined;
   // The system's folder for temporary files, which main names: the engine's environment does not
   // carry the system's own variables. The programs the engine runs write theirs there.
   readonly tempDir: string;
@@ -33,7 +36,12 @@ export interface ServerConfig {
 // address on this computer — the simulated service of a run — so that no variable can send a
 // key to another machine.
 function serviceAddress(given: string | undefined, name: string, real: string): string {
-  if (given === undefined || given === '') return real;
+  return localAddress(given, name) ?? real;
+}
+
+// An http address on this computer, or nothing when none is given; any other is refused.
+function localAddress(given: string | undefined, name: string): string | undefined {
+  if (given === undefined || given === '') return undefined;
   const address = URL.canParse(given) ? new URL(given) : undefined;
   if (
     address?.protocol !== 'http:' ||
@@ -93,6 +101,7 @@ export function parseConfig(env: Readonly<Record<string, string | undefined>>): 
       'SCIA_YT_DLP_RELEASES',
       YT_DLP_RELEASES,
     ),
+    bunkr: localAddress(env.SCIA_BUNKR, 'SCIA_BUNKR'),
     tempDir: tempDir === undefined || tempDir === '' ? tmpdir() : tempDir,
   };
 }

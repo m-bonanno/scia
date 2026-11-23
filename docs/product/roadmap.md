@@ -28,6 +28,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [x] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes): 32 s with nothing written for a 32 GiB file on an NVMe SSD, over 45 s for 4 GiB on a USB hard disk.
 - [ ] A large download that starts at once: its part file made sparse, its room looked at instead of reserved, the engine given more disk threads (#182; `v1.0.0` waits for it, the owner, 23 November 2026): built, held by specs and by CI's E2E suite in the built app ([ADR 0026](../adr/0026-a-part-file-made-sparse.md)), measured with the engine's own task; a large file in the app, and on a USB hard disk, to be seen (#265).
 - [x] The installer refuses an older version (#172, #177).
+- [ ] Every file of a Bunkr album downloaded into a folder of its own, by a reader of Scia's own (#228): built ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md)) and held by specs, and by CI's E2E suite on the built app, against a local host that answers as Bunkr does; to be seen against the real Bunkr (#266).
 
 ### The owner's hands
 
@@ -43,12 +44,13 @@ One sitting, from one checklist, on a beta built as a release candidate:
 - [ ] A hand in the folder dialog (#40) and on the speed menu (#43).
 - [ ] The update's note seen in a packaged build, and its two captures retaken (#156).
 - [ ] A real site's video, one file and an HLS stream (#89).
+- [ ] A real public Bunkr album, and a Bunkr file pasted by itself (#266).
 
 Checked after the tag, so not part of the gate: a beta updated to the stable (#82).
 
 ### The owner's decisions
 
-None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisions.md#23-november-2026)).
+None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisions.md#23-november-2026)), #228 joining the gate on 23 November.
 
 ## M0 — Foundations
 
@@ -109,6 +111,7 @@ None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisio
 | [Pages, playlists and channels](./evidence.md#pages-playlists-and-channels)                         | #8        | no      | —           | —                                | no        |
 | [A fallback port, found by the extension](./evidence.md#a-fallback-port)                            | —         | no      | —           | —                                | no        |
 | [A reader of sites of Scia's own](./evidence.md#the-video-of-one-page)                              | #102      | no      | —           | —                                | no        |
+| [A Bunkr album into a folder of its own](./evidence.md#a-bunkr-album)                               | #228      | yes     | Specs, E2E  | the real Bunkr (#266)            | yes       |
 
 ## M3 — Integrations: debrid services
 

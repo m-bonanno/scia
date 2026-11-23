@@ -22,8 +22,30 @@ describe('parseConfig', () => {
       ytDlp: undefined,
       ytDlpUpdates: undefined,
       ytDlpReleases: 'https://github.com/yt-dlp/yt-dlp',
+      bunkr: undefined,
       tempDir: tmpdir(),
     });
+  });
+
+  it('reads Bunkr at another address only when it is on this computer', () => {
+    expect(parseConfig({ ...base, SCIA_BUNKR: '' }).bunkr).toBeUndefined();
+    expect(parseConfig({ ...base, SCIA_BUNKR: 'http://127.0.0.1:8082' }).bunkr).toBe(
+      'http://127.0.0.1:8082',
+    );
+    expect(parseConfig({ ...base, SCIA_BUNKR: 'http://localhost:8082/' }).bunkr).toBe(
+      'http://localhost:8082',
+    );
+    for (const elsewhere of [
+      'https://bunkr.cr',
+      'http://127.0.0.1.example.com',
+      'http://user@127.0.0.1:8082',
+      'https://127.0.0.1:8082',
+      'not an address',
+    ]) {
+      expect(() => parseConfig({ ...base, SCIA_BUNKR: elsewhere }), elsewhere).toThrow(
+        'SCIA_BUNKR',
+      );
+    }
   });
 
   it('brings yt-dlp up to date only when main says which release it shipped and its build’s name', () => {

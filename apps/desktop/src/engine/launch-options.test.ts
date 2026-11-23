@@ -11,7 +11,15 @@ describe('parseLaunchOptions', () => {
       port: undefined,
       alldebridApi: undefined,
       ytDlpReleases: undefined,
+      bunkr: undefined,
     });
+  });
+
+  it('passes on the address of a host that answers as Bunkr does, for the engine to judge', () => {
+    expect(parseLaunchOptions(['--bunkr=http://127.0.0.1:8082'], cwd).bunkr).toBe(
+      'http://127.0.0.1:8082',
+    );
+    expect(parseLaunchOptions(['--bunkr='], cwd).bunkr).toBeUndefined();
   });
 
   it('passes on the address of a host of yt-dlp’s releases, for the engine to judge', () => {
