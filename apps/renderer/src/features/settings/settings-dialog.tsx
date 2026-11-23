@@ -22,6 +22,7 @@ import { FOLDER_REFUSED } from '@/lib/messages.ts';
 import { SettingSwitch } from './setting-switch.tsx';
 import { IntegrationsSection } from './integrations.tsx';
 import { SpeedLimit } from './speed-limit.tsx';
+import { SupportScia } from './support-scia.tsx';
 import { roomOverDialog } from './room-over-dialog.ts';
 import { ThemeChoice } from './theme-choice.tsx';
 
@@ -281,7 +282,10 @@ export function SettingsDialog({
               }}
             />
           )}
-          <p className="text-sm text-muted-foreground">Scia {shell?.version ?? 'development'}</p>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <p className="text-sm text-muted-foreground">Scia {shell?.version ?? 'development'}</p>
+            <SupportScia open={open} />
+          </div>
         </div>
       </div>
     </dialog>

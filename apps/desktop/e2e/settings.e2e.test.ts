@@ -398,6 +398,35 @@ describe('the real app, with what Settings says', () => {
     expect(log).toMatch(/service_connected_heard {[^}]*inFront: true[^}]*asked: 'answered'/);
     expect(log).not.toContain('connected_notice_asked');
   });
+
+  it('offers a way to support Scia, whose page main opens at its fixed address (#271)', async () => {
+    const profile = await run.profile();
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    await scia.app.evaluate(({ shell }) => {
+      const opened: string[] = [];
+      Object.assign(globalThis, { opened });
+      shell.openExternal = (url) => {
+        opened.push(url);
+        return Promise.resolve();
+      };
+    });
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Support Scia' }).click();
+    await until(async () => (await openedBy(scia)).length > 0);
+    // An address handed over the bridge by the page is not what main opens: the preload drops it,
+    // and main reads nothing that comes with the ask (support-page.test.ts holds main's half).
+    await page.evaluate(() =>
+      (
+        window as unknown as { scia: { openSupportPage: (url: string) => Promise<unknown> } }
+      ).scia.openSupportPage('https://elsewhere.example/'),
+    );
+
+    expect(await openedBy(scia)).toEqual([
+      'https://ko-fi.com/notsosnake',
+      'https://ko-fi.com/notsosnake',
+    ]);
+  });
 });
 
 // The ratio of WCAG 2.2 between two opaque colours as the page computes them, `rgb(r, g, b)`.

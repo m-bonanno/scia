@@ -44,6 +44,7 @@ One sitting, from one checklist, on a beta built as a release candidate:
 - [ ] A hand in the folder dialog (#40) and on the speed menu (#43).
 - [ ] The update's note seen in a packaged build, and its two captures retaken (#156).
 - [ ] A real site's video, one file and an HLS stream (#89).
+- [ ] The Ko-fi page opened from the installed app, at "Support Scia" in Settings (#271).
 - [ ] A real public Bunkr album, and a Bunkr file pasted by itself (#266).
 
 Checked after the tag, so not part of the gate: a beta updated to the stable (#82).
@@ -92,6 +93,7 @@ None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisio
 | [The `--inspect` fuse off in the shipped app](./evidence.md#the---inspect-fuse-off)                                       | #115       | yes   | CI install, every PR and release     | a debugger asked for by a hand                              | yes       |
 | [A save of `state.json` while another process holds it](./evidence.md#a-save-of-statejson-while-another-process-holds-it) | #151       | yes   | Specs (integration, on Windows)      | the real app with `state.json` held                         | yes       |
 | [Zero-filling on NTFS: measured, and a part file made sparse](./evidence.md#zero-filling-on-ntfs)                         | #182, #265 | yes   | E2E, Script (the engine's task)      | a large file in the app; a USB disk with the fix (#265)     | yes       |
+| [A way to support Scia](./evidence.md#a-way-to-support-scia)                                                              | #271       | yes   | E2E                                  | the page opened from the app by a hand                      | yes       |
 
 ## M2 — The whole extension
 

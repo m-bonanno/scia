@@ -676,6 +676,7 @@ describe('IntegrationsSection', () => {
         chooseDownloadFolder: vi.fn(async () => undefined),
         themeChanged: vi.fn(async () => undefined),
         openCodePage,
+        openSupportPage: vi.fn(async () => undefined),
         updateOffered: vi.fn(async () => null),
         onUpdateChanged: vi.fn(() => () => undefined),
         restartToUpdate: vi.fn(async () => 'nothing'),
