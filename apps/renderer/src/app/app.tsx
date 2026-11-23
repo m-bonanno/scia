@@ -191,10 +191,15 @@ export function App(): ReactNode {
     };
   }, [add]);
 
+  // The rows a press may make leave the list, by the id it named: a copied folder at its Start, a
+  // link of several files at "Download" and at Remove (#181). A row that leaves by itself — an
+  // album read, a link that opens into one file — is not among them, and moves no focus.
+  const pressedRows = useRef(new Set<string>());
   const actions = useMemo((): RowActions => {
     const shell = bridge();
     return {
       start: (id) => {
+        pressedRows.current.add(id);
         api.start(id).catch(report);
       },
       pause: (id) => {
@@ -225,20 +230,23 @@ export function App(): ReactNode {
 
   const bundleActions = useMemo(
     (): BundleActions => ({
-      start: (id, files) =>
-        api.startBundle(id, files).then(
+      start: (id, files) => {
+        pressedRows.current.add(id);
+        return api.startBundle(id, files).then(
           () => true,
           (error: unknown) => {
             tell(bundleActionMessage(error, 'start'));
             return false;
           },
-        ),
+        );
+      },
       retry: (id) => {
         api.retryBundle(id).catch((error: unknown) => {
           tell(bundleActionMessage(error, 'retry'));
         });
       },
       remove: (id) => {
+        pressedRows.current.add(id);
         api.removeBundle(id).catch((error: unknown) => {
           tell(bundleActionMessage(error, 'remove'));
         });
@@ -281,15 +289,15 @@ export function App(): ReactNode {
       filterTabs.current?.focus();
     }
   }, [hasReady]);
-  // So does any row that leaves under its own press: a link whose files were started, under
-  // "Download", and a copied folder opened into its files, under its "Start" (#181).
+  // So does a row that leaves under its own press (`pressedRows`).
   const rowIds = [...live.downloads, ...live.bundles].map((row) => row.id).join(' ');
   const rowsBefore = useRef(rowIds);
   useEffect(() => {
     const now = new Set(rowIds.split(' '));
-    const left = rowsBefore.current.split(' ').some((id) => id !== '' && !now.has(id));
+    const left = rowsBefore.current.split(' ').filter((id) => id !== '' && !now.has(id));
     rowsBefore.current = rowIds;
-    if (!left) return;
+    const pressed = left.filter((id) => pressedRows.current.delete(id));
+    if (pressed.length === 0) return;
     if (document.activeElement === null || document.activeElement === document.body) {
       filterTabs.current?.focus();
     }

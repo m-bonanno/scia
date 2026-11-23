@@ -986,6 +986,88 @@ describe('App', () => {
       expect(screen.getByRole('button', { name: /^All/ })).toHaveFocus();
     });
 
+    it('hands the focus to the filter in use when the row leaves under its Remove', async () => {
+      live.bundles = [bundle];
+      vi.spyOn(api, 'removeBundle').mockResolvedValue(undefined);
+      const { rerender } = render(<App />);
+      screen.getByRole('button', { name: 'Remove' }).focus();
+
+      await userEvent.keyboard('{Enter}');
+      live.bundles = [];
+      rerender(<App />);
+
+      expect(screen.getByRole('button', { name: /^All/ })).toHaveFocus();
+    });
+
+    it('keeps a focus that went elsewhere between the press and the row leaving', async () => {
+      live.bundles = [bundle];
+      vi.spyOn(api, 'removeBundle').mockResolvedValue(undefined);
+      const { rerender } = render(<App />);
+      screen.getByRole('button', { name: 'Remove' }).focus();
+
+      await userEvent.keyboard('{Enter}');
+      const field = screen.getByRole('textbox', { name: 'Links to download' });
+      field.focus();
+      live.bundles = [];
+      rerender(<App />);
+
+      expect(field).toHaveFocus();
+    });
+
+    describe('moves no focus when a row leaves under no press of its own', () => {
+      // An album read in the background (#259), a link that opens into one file: both leave by
+      // themselves, and so do the rows here.
+      const album = aDownload({ id: 'a1', fileName: 'Album', status: DownloadStatus.Downloading });
+      const other = aDownload({
+        id: 'o1',
+        fileName: 'other.iso',
+        status: DownloadStatus.Downloading,
+      });
+
+      it('keeps it in the field', () => {
+        live.downloads = [album];
+        live.bundles = [bundle];
+        const { rerender } = render(<App />);
+        const field = screen.getByRole('textbox', { name: 'Links to download' });
+        field.focus();
+
+        live.downloads = [];
+        live.bundles = [];
+        rerender(<App />);
+
+        expect(field).toHaveFocus();
+      });
+
+      it("keeps it on another row's button", () => {
+        live.downloads = [album, other];
+        live.bundles = [bundle];
+        const { rerender } = render(<App />);
+        const cancel = within(
+          screen.getByText('other.iso').closest('li') ?? document.body,
+        ).getByRole('button', { name: 'Cancel and delete' });
+        cancel.focus();
+
+        live.downloads = [other];
+        live.bundles = [];
+        rerender(<App />);
+
+        expect(cancel).toHaveFocus();
+      });
+
+      it('leaves a focus that was on nothing where it is', () => {
+        live.downloads = [album, other];
+        live.bundles = [bundle];
+        const { rerender } = render(<App />);
+        screen.getByRole('textbox', { name: 'Links to download' }).blur();
+
+        live.downloads = [other];
+        live.bundles = [];
+        rerender(<App />);
+
+        expect(document.body).toHaveFocus();
+      });
+    });
+
     it('asks again at Retry and forgets it at Remove, and says in its words that it moved on meanwhile', async () => {
       live.bundles = [{ ...bundle, status: 'failed', failure: 'BUNDLE_EMPTY', files: [] }];
       const retry = vi
