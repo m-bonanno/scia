@@ -857,15 +857,22 @@ export class DownloadManager {
   // the magnet puts it in, under the name the magnet gives it — and the magnet leaves the list.
   #magnetReady(record: MagnetRecord, files: readonly MagnetFile[]): void {
     this.#magnets = this.#magnets.filter((other) => other !== record);
+    // A magnet of one file is that file, straight into the download folder (the owner, #150).
+    const alone = files.length === 1;
     // Its folder, or the first free one beside it when a file of its name stands there: a folder of
     // that name is the magnet's to share, as its files take free names inside it.
     const [own = FALLBACK_FILE_NAME] = magnetFolders(record.name, []);
-    const root = uniqueFileName(own, (candidate) => isFileThere(join(record.directory, candidate)));
+    const root = alone
+      ? record.directory
+      : join(
+          record.directory,
+          uniqueFileName(own, (candidate) => isFileThere(join(record.directory, candidate))),
+        );
     const added = files.map((file) => {
       const download = this.#newRecord(file.link, null, DownloadStatus.Queued);
       download.via = IntegrationId.AllDebrid;
-      const [, ...folders] = magnetFolders(record.name, file.folders);
-      download.directory = join(record.directory, root, ...folders);
+      const [, ...folders] = alone ? [] : magnetFolders(record.name, file.folders);
+      download.directory = join(root, ...folders);
       download.fileName = fileNameFromHost(file.name) ?? FALLBACK_FILE_NAME;
       download.nameKept = true;
       return download;

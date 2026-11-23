@@ -1,21 +1,25 @@
 import { randomBytes } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startAllDebridServer } from '@scia/server/testing/alldebrid-server.ts';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import { API_PREFIX, ApiErrorCode } from '@scia/contracts';
+import type { Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
-import { allCompleted, paste, until, useRun } from './scia.ts';
+import { allCompleted, downloadsOf, paste, rowOf, type Scia, until, useRun } from './scia.ts';
 import {
   bottomOf,
+  captureTo,
   placeUnderNotices,
   roomAround,
   scrollsAround,
   scrollToEnd,
   topOfNotices,
+  viewportOf,
 } from './under-notices.ts';
 
 const KIB = 1024;
+const MIB = 1024 * KIB;
 // Made up, as every key and every hash of a spec.
 const KEY = 'e2e-made-up-key-0123456789';
 const PREMIUM_UNTIL = 4_102_444_800;
@@ -56,12 +60,16 @@ describe('the real app, with a magnet', () => {
     );
     const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
     const { page } = scia;
+    const field = page.getByRole('textbox', { name: 'Links to download' });
+    // The field names magnets only while a service is connected (#150).
+    expect(await field.getAttribute('placeholder')).toBe('Paste one or more links');
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByRole('button', { name: 'Use an API key' }).click();
     await page.getByLabel('AllDebrid API key').fill(KEY);
     await page.getByRole('button', { name: 'Connect', exact: true }).click();
     await page.getByRole('button', { name: 'Disconnect' }).waitFor();
     await page.getByRole('button', { name: 'Close' }).click();
+    await until(async () => (await field.getAttribute('placeholder')) === 'Paste links or magnets');
 
     await paste(page, `magnet:?xt=urn:btih:${HASH}&dn=Holiday%20films`);
 
@@ -121,9 +129,9 @@ describe('the real app, with a magnet', () => {
     await panel.getByRole('button', { name: 'Download Concert' }).click();
 
     await until(() => allCompleted(page), 60_000);
-    expect(
-      Buffer.compare(await readFile(join(profile.downloads, 'Concert', 'film.mkv')), film),
-    ).toBe(0);
+    // A magnet of one file: straight into the download folder, with no folder of its own (#150).
+    expect(await readdir(profile.downloads)).toEqual(['film.mkv']);
+    expect(Buffer.compare(await readFile(join(profile.downloads, 'film.mkv')), film)).toBe(0);
     expect(service.requests.some((request) => request.url === '/v4/magnet/upload')).toBe(false);
     await page.keyboard.press('Escape');
     await panel.waitFor({ state: 'detached' });
@@ -202,5 +210,292 @@ describe('the real app, with a magnet', () => {
     expect(await bottomOf(download)).toBeLessThanOrEqual(await topOfNotices(page));
     await scrollToEnd(lastRow);
     expect(await bottomOf(lastRow)).toBeLessThanOrEqual(await topOfNotices(page));
+  });
+
+  // The captures of docs/design/ that show the field while AllDebrid is connected, taken again
+  // from the real app by CI once the field named magnets (#150; the owner, on #143).
+  describe('takes the captures', () => {
+    async function connect(page: Page): Promise<void> {
+      await page.getByRole('button', { name: 'Settings' }).click();
+      await page.getByRole('button', { name: 'Use an API key' }).click();
+      await page.getByLabel('AllDebrid API key').fill(KEY);
+      await page.getByRole('button', { name: 'Connect', exact: true }).click();
+      await page.getByRole('button', { name: 'Disconnect' }).waitFor();
+      await page.getByRole('button', { name: 'Close' }).click();
+      await until(
+        async () =>
+          (await page
+            .getByRole('textbox', { name: 'Links to download' })
+            .getAttribute('placeholder')) === 'Paste links or magnets',
+      );
+    }
+
+    // The system's clipboard answered in main, as clipboard.e2e does: empty at first, then what a
+    // spec copies. A spec never takes a person's clipboard.
+    async function answerClipboard({ app }: Scia): Promise<void> {
+      await app.evaluate(({ clipboard }) => {
+        const copied = globalThis as { sciaCopied?: string };
+        clipboard.readText = () => Promise.resolve(copied.sciaCopied ?? '');
+        clipboard.has = (format) =>
+          Promise.resolve(format === 'text/plain' && (copied.sciaCopied ?? '') !== '');
+      });
+    }
+    async function copy({ app }: Scia, text: string): Promise<void> {
+      await app.evaluate((_electron, copied) => {
+        (globalThis as { sciaCopied?: string }).sciaCopied = copied;
+      }, text);
+    }
+
+    // Nothing under the pointer, and nothing moving but `moving` bars filling, in the variant asked.
+    async function capture(
+      scia: Scia,
+      variant: 'dark' | 'light',
+      name: string,
+      moving = false,
+    ): Promise<void> {
+      const { app, page } = scia;
+      await app.evaluate(({ nativeTheme }, source) => {
+        nativeTheme.themeSource = source;
+      }, variant);
+      await page.mouse.move(1, 1);
+      await until(() =>
+        page.evaluate(
+          ([wanted, bars]) =>
+            matchMedia(`(prefers-color-scheme: ${wanted})`).matches &&
+            document
+              .getAnimations()
+              .every(
+                (animation) =>
+                  bars &&
+                  animation instanceof CSSTransition &&
+                  animation.transitionProperty === 'width',
+              ),
+          [variant, moving] as const,
+        ),
+      );
+      await page.screenshot({ path: await captureTo(name) });
+    }
+
+    it('of a magnet AllDebrid fetches, and of links that went through it', async () => {
+      const profile = await run.profile();
+      const bunny = run.keep(
+        await startRangeServer({
+          body: randomBytes(96 * MIB),
+          fileName: 'Big Buck Bunny.mkv',
+          chunkBytes: 32 * KIB,
+          chunkDelayMs: 200,
+        }),
+      );
+      const notes = run.keep(
+        await startRangeServer({ body: randomBytes(3 * MIB), fileName: 'notes.pdf' }),
+      );
+      const direct = run.keep(
+        await startRangeServer({ body: randomBytes(2 * MIB), fileName: 'direct.zip' }),
+      );
+      const service = run.keep(
+        await startAllDebridServer({
+          accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+          hosts: { alldebrid: ['alldebrid.com'] },
+          links: {
+            'https://alldebrid.com/f/bunny': { direct: bunny.url, filename: 'Big Buck Bunny.mkv' },
+            'https://alldebrid.com/f/notes': { direct: notes.url, filename: 'notes.pdf' },
+            'https://alldebrid.com/f/limit': { error: 'LINK_HOST_LIMIT_REACHED' },
+            'https://alldebrid.com/f/gone': { error: 'LINK_DOWN' },
+          },
+          magnets: {
+            [HASH]: { name: 'Holiday films', size: 24 * MIB, fetchingPolls: 1e6, files: [] },
+          },
+        }),
+      );
+      const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+      const { page } = scia;
+      await connect(page);
+
+      await viewportOf(page, 1040, 520);
+      await paste(page, `magnet:?xt=urn:btih:${HASH}&dn=Holiday%20films`);
+      const magnet = page.getByRole('listitem').filter({ hasText: 'Holiday films' });
+      await magnet.getByText(/1\.0\sMB\/s/).waitFor();
+      await capture(scia, 'dark', 'a-magnet.png');
+      await capture(scia, 'light', 'a-magnet-light.png');
+      await magnet.getByRole('button', { name: /^Remove/ }).click();
+      await magnet.waitFor({ state: 'detached' });
+
+      // Newest first: pasted from the bottom of the capture up.
+      await viewportOf(page, 1040, 720);
+      await paste(page, 'https://alldebrid.com/f/notes');
+      await rowOf(page, 'notes.pdf').getByRole('button', { name: 'Show in folder' }).waitFor();
+      await paste(page, 'https://alldebrid.com/f/gone');
+      await rowOf(page, 'gone').getByText('says the file is no longer on its host').waitFor();
+      await paste(page, 'https://alldebrid.com/f/limit');
+      await rowOf(page, 'limit').getByText('has reached its limit for this host').waitFor();
+      await paste(page, direct.url);
+      await rowOf(page, 'direct.zip').getByRole('button', { name: 'Show in folder' }).waitFor();
+      await paste(page, 'https://alldebrid.com/f/bunny');
+      await until(async () =>
+        (await downloadsOf(page)).some(
+          (download) =>
+            download.fileName === 'Big Buck Bunny.mkv' &&
+            download.totalBytes !== null &&
+            download.downloadedBytes >= download.totalBytes * 0.15,
+        ),
+      );
+      await capture(scia, 'dark', 'via-a-service.png', true);
+    });
+
+    // settings.png and its light twin are settings.e2e's ("takes the captures of Settings"), taken
+    // once AllDebrid is connected and Settings closed: they show the field as it is now too.
+
+    it("of the panel of the account's magnets, beside the list and at its narrowest", async () => {
+      const profile = await run.profile();
+      const video = run.keep(
+        await startRangeServer({
+          body: randomBytes(64 * MIB),
+          fileName: 'holiday-video.mp4',
+          chunkBytes: 32 * KIB,
+          chunkDelayMs: 200,
+        }),
+      );
+      const setup = run.keep(await startRangeServer({ body: randomBytes(KIB) }));
+      const [lecture, holiday, concert] = ['c', 'd', 'e'].map((digit) => digit.repeat(40));
+      const service = run.keep(
+        await startAllDebridServer({
+          accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+          hosts: { alldebrid: ['alldebrid.com'] },
+          links: { 'https://alldebrid.com/f/lecture.zip': { error: 'LINK_PASS_PROTECTED' } },
+          magnets: {
+            [lecture ?? '']: {
+              name: 'Lecture notes',
+              size: MIB,
+              fails: true,
+              files: [],
+              uploadDate: 1_700_000_300,
+            },
+            [holiday ?? '']: {
+              name: 'Holiday films',
+              size: 24 * MIB,
+              fetchingPolls: 1e6,
+              files: [],
+              uploadDate: 1_700_000_200,
+            },
+            [concert ?? '']: {
+              name: 'Concert in the park',
+              size: 8 * MIB,
+              files: [{ n: 'concert.flac', s: 8 * MIB, l: 'https://alldebrid.com/f/concert' }],
+              uploadDate: 1_700_000_100,
+            },
+          },
+          onTheAccount: [lecture ?? '', holiday ?? '', concert ?? ''],
+        }),
+      );
+      const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+      const { page } = scia;
+      await answerClipboard(scia);
+      await connect(page);
+      const toggle = page.getByRole('button', { name: 'AllDebrid magnets' });
+      const panel = page.getByRole('complementary', { name: 'AllDebrid magnets' });
+      const shown = async () => {
+        await toggle.press('Enter');
+        await panel.getByRole('button', { name: 'Download Concert in the park' }).waitFor();
+        await panel.getByText(/1\.0\sMB\/s/).waitFor();
+        await panel.getByText('gave no files for it').waitFor();
+      };
+
+      // The window itself sized, not the page's viewport: the title bar is laid out by the window's
+      // own width (its buttons' room), and a viewport narrower than the window left the page wider
+      // than itself, scrolled sideways under the panel's focus (CI's E2E on 826b48e).
+      const windowOf = async (width: number, height: number) => {
+        await scia.app.evaluate(
+          ({ BrowserWindow }, [w, h]) => {
+            BrowserWindow.getAllWindows()[0]?.setContentSize(w, h);
+          },
+          [width, height] as const,
+        );
+        await until(() =>
+          page.evaluate(([w, h]) => window.innerWidth === w && window.innerHeight === h, [
+            width,
+            height,
+          ] as const),
+        );
+      };
+      // Nothing scrolls sideways: the page is as wide as the window.
+      const widths = () =>
+        page.evaluate(() => ({
+          page: document.documentElement.scrollWidth,
+          window: window.innerWidth,
+          scrolled: document.scrollingElement?.scrollLeft ?? 0,
+        }));
+
+      await windowOf(1040, 520);
+      await shown();
+      expect(await widths()).toEqual({ page: 1040, window: 1040, scrolled: 0 });
+      await capture(scia, 'dark', 'the-account-magnets.png');
+      await capture(scia, 'light', 'the-account-magnets-light.png');
+      await page.keyboard.press('Escape');
+      await panel.waitFor({ state: 'detached' });
+
+      // Beside a list: a running download, a magnet AllDebrid fetches, a ready row and a failure
+      // in full, newest first.
+      await paste(page, video.url);
+      await until(async () =>
+        (await downloadsOf(page)).some(
+          (download) =>
+            download.fileName === 'holiday-video.mp4' &&
+            download.totalBytes !== null &&
+            download.downloadedBytes >= download.totalBytes * 0.15,
+        ),
+      );
+      await paste(page, 'https://alldebrid.com/f/lecture.zip');
+      await rowOf(page, 'lecture.zip').getByText('asks for a password').waitFor();
+      await page.getByRole('button', { name: 'Settings' }).click();
+      const watch = page.getByRole('switch', { name: 'Take links from the clipboard' });
+      await watch.click();
+      await until(() => watch.isChecked());
+      await page.getByRole('button', { name: 'Close' }).click();
+      // Copied once main knows the clipboard held no text when it began reading: a text there
+      // before that is what was there, never taken (ADR 0012).
+      await until(async () => (await profile.log()).includes('clipboard_start_known'));
+      expect(await profile.log()).toContain('clipboard_start_known { text: false }');
+      await copy(scia, setup.url.replace('sample.bin', 'setup.exe'));
+      await rowOf(page, 'setup.exe').getByRole('button', { name: 'Start' }).waitFor();
+      await paste(page, `magnet:?xt=urn:btih:${holiday ?? ''}&dn=Holiday%20films`);
+      await page
+        .getByRole('main')
+        .getByRole('listitem')
+        .filter({ hasText: 'Holiday films' })
+        .getByText(/1\.0\sMB\/s/)
+        .waitFor();
+      await windowOf(640, 720);
+      await shown();
+      expect(await widths()).toEqual({ page: 640, window: 640, scrolled: 0 });
+      await capture(scia, 'dark', 'the-account-magnets-narrow.png', true);
+      await capture(scia, 'light', 'the-account-magnets-narrow-light.png', true);
+    });
+
+    it('of a failure that says more than a line holds', async () => {
+      const profile = await run.profile();
+      const after = run.keep(
+        await startRangeServer({ body: randomBytes(3 * MIB), fileName: 'after.bin' }),
+      );
+      const service = run.keep(
+        await startAllDebridServer({
+          accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+          hosts: { alldebrid: ['alldebrid.com'] },
+          links: {
+            'https://alldebrid.com/f/after': { direct: after.url, filename: 'after.bin' },
+            'https://alldebrid.com/f/dead': { error: 'AUTH_BLOCKED' },
+          },
+        }),
+      );
+      const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+      const { page } = scia;
+      await connect(page);
+      await viewportOf(page, 1040, 720);
+
+      await paste(page, 'https://alldebrid.com/f/after');
+      await rowOf(page, 'after.bin').getByRole('button', { name: 'Show in folder' }).waitFor();
+      await paste(page, 'https://alldebrid.com/f/dead');
+      await rowOf(page, 'dead').getByText('is blocking the key from here').waitFor();
+      await capture(scia, 'dark', 'a-failure-in-full.png');
+    });
   });
 });

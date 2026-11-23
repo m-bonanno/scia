@@ -15,14 +15,14 @@ What it adds:
 - A file host's link unlocked into a direct link, and downloaded like one.
 - That link unlocked again when it expires on the way.
 - A file host's folder, or a protector's or a shortener's link, opened into its files through AllDebrid's redirector: a row with every file ticked, and the files left ticked downloaded into a folder named after the link (#181).
-- A pasted magnet fetched by the service, its files downloaded in their folders.
+- A pasted magnet fetched by the service, its files downloaded in their folders — a magnet of one file straight into the download folder (#150). The field names magnets while the service is connected.
 - The account's magnets listed beside the list.
 - A magnet copied to the clipboard sent at once.
 - With no service connected, its public list of file hosts says which links need one.
 
 ADRs: [0005](../adr/0005-a-service-resolves-a-link.md), [0006](../adr/0006-a-file-host-without-a-service.md), [0013](../adr/0013-a-key-that-arrives-by-a-code.md), [0014](../adr/0014-magnets-through-a-service.md), [0016](../adr/0016-the-magnets-of-the-account.md), [0017](../adr/0017-a-magnet-taken-from-the-clipboard.md), [0022](../adr/0022-a-direct-link-that-expires.md), [0025](../adr/0025-a-link-that-opens-into-several-files.md).
 
-**State:** written and held by specs. #7 is open: the follow-ups #146 and #150 are open, and the owner's try with a real key is to come. How each piece was seen, by piece ([evidence.md](./evidence.md), M3):
+**State:** written and held by specs. #7 is open: the follow-up #146 is open, and so is #150 for its other points; the owner's try with a real key is to come. How each piece was seen, by piece ([evidence.md](./evidence.md), M3):
 
 | Seen in the real app, against a simulated service                                                                                                                                        | Held by specs or CI's E2E only, never seen in the app                                                                                                                                                     |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
