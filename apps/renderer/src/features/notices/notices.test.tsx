@@ -12,14 +12,18 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
+const unheard = () => undefined;
+
 // Synchronous events only: the clock is the spec's, to the millisecond.
 // The page as it uses them: what it was told, and what stays while it is true.
 function Page({
   told,
   lasting = null,
+  onHeight = unheard,
 }: {
   readonly told: readonly string[];
   readonly lasting?: string | null;
+  readonly onHeight?: (px: number) => void;
 }) {
   const { notices, tell, dismiss } = useNotices();
   return (
@@ -40,10 +44,32 @@ function Page({
         notices={notices}
         lasting={lasting}
         onDismiss={dismiss}
+        onHeight={onHeight}
         home={() => screen.getByRole('textbox', { name: 'Links to download' })}
       />
     </>
   );
+}
+
+// jsdom measures nothing: the stack is as tall as the spec says, told as a browser tells it.
+let stackIs: (px: number) => void = unheard;
+class MeasuredStack implements ResizeObserver {
+  readonly #told: ResizeObserverCallback;
+  constructor(told: ResizeObserverCallback) {
+    this.#told = told;
+  }
+  observe(target: Element) {
+    stackIs = (px) => {
+      const entry = { target, borderBoxSize: [{ blockSize: px, inlineSize: 0 }] };
+      this.#told([entry as unknown as ResizeObserverEntry], this);
+    };
+  }
+  unobserve() {
+    stackIs = unheard;
+  }
+  disconnect() {
+    stackIs = unheard;
+  }
 }
 
 // A press of Enter on what has the focus: a click, for a button.
@@ -224,6 +250,56 @@ describe('Notices', () => {
     pressFocused();
     expect(screen.queryByText('Two')).not.toBeInTheDocument();
     expect(screen.getByRole('textbox', { name: 'Links to download' })).toHaveFocus();
+  });
+
+  // The owner, #143: a press of the pointer hands the focus to nothing, so that the notices left
+  // are not held by it and go on their own time; a press of the keyboard hands it on.
+  it('hands the focus of a notice dismissed with the pointer to nothing: the rest go in their time', () => {
+    render(<Page told={['One', 'Two']} />);
+    fireEvent.click(screen.getByRole('button', { name: 'tell One' }));
+    fireEvent.click(screen.getByRole('button', { name: 'tell Two' }));
+    const [first] = screen.getAllByRole('button', { name: 'Dismiss' });
+
+    // A pointer's press focuses the button, then clicks it once.
+    act(() => {
+      first?.focus();
+    });
+    if (first !== undefined) fireEvent.click(first, { detail: 1 });
+
+    expect(screen.queryByText('One')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dismiss' })).not.toHaveFocus();
+    wait(NOTICE_MS);
+    expect(screen.queryByText('Two')).not.toBeInTheDocument();
+  });
+
+  it('hands the focus of the last notice, dismissed with the pointer, to nothing', () => {
+    render(<Page told={['One']} />);
+    fireEvent.click(screen.getByRole('button', { name: 'tell One' }));
+    const button = screen.getByRole('button', { name: 'Dismiss' });
+
+    act(() => {
+      button.focus();
+    });
+    fireEvent.click(button, { detail: 1 });
+
+    expect(screen.queryByText('One')).not.toBeInTheDocument();
+    expect(screen.getByRole('textbox', { name: 'Links to download' })).not.toHaveFocus();
+  });
+
+  it('hands the focus of a notice dismissed with Enter to the next one, which it holds', async () => {
+    vi.useRealTimers();
+    render(<Page told={['One', 'Two']} />);
+    fireEvent.click(screen.getByRole('button', { name: 'tell One' }));
+    fireEvent.click(screen.getByRole('button', { name: 'tell Two' }));
+    const [first] = screen.getAllByRole('button', { name: 'Dismiss' });
+    act(() => {
+      first?.focus();
+    });
+
+    await userEvent.keyboard('{Enter}');
+
+    expect(screen.queryByText('One')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Dismiss' })).toHaveFocus();
   });
 
   it('dismisses one notice for one press of Enter, however long it is held', async () => {
@@ -467,6 +543,7 @@ describe('Notices', () => {
             notices={notices}
             lasting={null}
             onDismiss={dismiss}
+            onHeight={unheard}
             home={() => null}
             layer={inLayer ? layer : null}
           />
@@ -482,6 +559,47 @@ describe('Notices', () => {
     expect(layer).toHaveTextContent('One');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     layer.remove();
+  });
+
+  // The page leaves room under what scrolls beneath the stack, as tall as the stack (#143).
+  describe('says how tall the stack is', () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('while notices are shown, whenever it changes, and none once they are gone', () => {
+      vi.stubGlobal('ResizeObserver', MeasuredStack);
+      const heights = vi.fn();
+      render(<Page told={['One']} onHeight={heights} />);
+      fireEvent.click(screen.getByRole('button', { name: 'tell One' }));
+
+      act(() => {
+        stackIs(84);
+      });
+      expect(heights).toHaveBeenLastCalledWith(84);
+      act(() => {
+        stackIs(132.4);
+      });
+      expect(heights).toHaveBeenLastCalledWith(133);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+      expect(heights).toHaveBeenLastCalledWith(0);
+    });
+
+    it('for what stays true too, and none once it is no longer true', () => {
+      vi.stubGlobal('ResizeObserver', MeasuredStack);
+      const heights = vi.fn();
+      const engine = 'The engine is not responding.';
+      const { rerender } = render(<Page told={[]} lasting={engine} onHeight={heights} />);
+
+      act(() => {
+        stackIs(60);
+      });
+      expect(heights).toHaveBeenLastCalledWith(60);
+
+      rerender(<Page told={[]} lasting={null} onHeight={heights} />);
+      expect(heights).toHaveBeenLastCalledWith(0);
+    });
   });
 });
 
