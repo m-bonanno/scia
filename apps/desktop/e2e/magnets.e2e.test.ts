@@ -3,8 +3,17 @@ import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startAllDebridServer } from '@scia/server/testing/alldebrid-server.ts';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
+import { API_PREFIX, ApiErrorCode } from '@scia/contracts';
 import { describe, expect, it } from 'vitest';
 import { allCompleted, paste, until, useRun } from './scia.ts';
+import {
+  bottomOf,
+  placeUnderNotices,
+  roomAround,
+  scrollsAround,
+  scrollToEnd,
+  topOfNotices,
+} from './under-notices.ts';
 
 const KIB = 1024;
 // Made up, as every key and every hash of a spec.
@@ -125,5 +134,73 @@ describe('the real app, with a magnet', () => {
     // every five seconds.
     const asked = statusAsked();
     await expect(until(() => statusAsked() > asked, 7000)).rejects.toThrow();
+  });
+
+  // WCAG 2.2, 2.4.11 (#143): the panel scrolls beneath the notices as the list does.
+  it('leaves room under the last magnet of the panel, and keeps a focus clear of the notices', async () => {
+    const profile = await run.profile();
+    // Made up, as every hash of a spec: magnets enough for the panel to scroll.
+    const hashes = Array.from({ length: 16 }, (_, n) => String(n).padStart(40, '0'));
+    const service = run.keep(
+      await startAllDebridServer({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+        magnets: Object.fromEntries(
+          hashes.map((hash, n) => [
+            hash,
+            {
+              name: `Album ${String(n + 1)}`,
+              size: KIB,
+              files: [{ n: 'track.flac', s: KIB, l: `https://alldebrid.com/f/${hash}` }],
+            },
+          ]),
+        ),
+        onTheAccount: hashes,
+      }),
+    );
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const { page } = scia;
+    await scia.app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setContentSize(800, 560);
+    });
+    await until(() => page.evaluate(() => window.innerHeight === 560));
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Use an API key' }).click();
+    await page.getByLabel('AllDebrid API key').fill(KEY);
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.getByRole('button', { name: 'Disconnect' }).waitFor();
+    await page.getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('button', { name: 'AllDebrid magnets' }).click();
+    const panel = page.getByRole('complementary', { name: 'AllDebrid magnets' });
+    const rows = panel.getByRole('listitem');
+    await until(async () => (await rows.count()) === hashes.length);
+    const lastRow = rows.last();
+    expect(await scrollsAround(lastRow)).toBe(true);
+    // A notice: an add the engine refuses.
+    await page.route(`**${API_PREFIX}/downloads`, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: ApiErrorCode.InternalError, message: 'refused' } }),
+      });
+    });
+
+    // The field's own button: the panel's "Download <name>" buttons share its first word.
+    await page
+      .getByRole('textbox', { name: 'Links to download' })
+      .fill('https://example.com/a.zip');
+    await page
+      .getByRole('main')
+      .getByRole('button', { name: /^Download/ })
+      .click();
+    await page.getByRole('list', { name: 'Notices' }).getByRole('listitem').waitFor();
+    await until(async () => (await roomAround(lastRow)) > 0);
+    const download = lastRow.getByRole('button', { name: /^Download / });
+
+    expect(await placeUnderNotices(download)).toBeGreaterThan(await topOfNotices(page));
+    await download.focus();
+    expect(await bottomOf(download)).toBeLessThanOrEqual(await topOfNotices(page));
+    await scrollToEnd(lastRow);
+    expect(await bottomOf(lastRow)).toBeLessThanOrEqual(await topOfNotices(page));
   });
 });
