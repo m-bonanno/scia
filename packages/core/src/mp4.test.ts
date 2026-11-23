@@ -65,8 +65,9 @@ interface TrackOf {
   readonly duration?: number;
   readonly offsets?: readonly number[];
   readonly edit?: number;
-  // How many samples its own tables hold (`stsz`).
+  // How many samples its own tables hold, in an `stsz` or the compact `stz2`.
   readonly samples?: number;
+  readonly compactSizes?: boolean;
 }
 
 const trak = (track: TrackOf) =>
@@ -82,7 +83,12 @@ const trak = (track: TrackOf) =>
         'minf',
         boxOf(
           'stbl',
-          boxOf('stsz', versionAndFlags(0, 0), u32(0), u32(track.samples ?? 0)),
+          boxOf(
+            track.compactSizes === true ? 'stz2' : 'stsz',
+            versionAndFlags(0, 0),
+            u32(track.compactSizes === true ? 8 : 0),
+            u32(track.samples ?? 0),
+          ),
           stco(track.offsets ?? []),
         ),
       ),
@@ -504,6 +510,28 @@ describe('joinPlan, for two fragmented movies', () => {
     });
   });
 
+  it("keeps the 64-bit size a fragment's header was written with, so that its data stays where it says", () => {
+    const narrow = moof(1, { trackId: 1, decodeTime: 0 });
+    // The same moof, its size written on 64 bits: legal for a box of any size.
+    const wide = new Uint8Array(narrow.byteLength + 8);
+    wide.set([0, 0, 0, 1, ...narrow.subarray(4, 8)]);
+    view(wide).setBigUint64(8, BigInt(wide.byteLength));
+    wide.set(narrow.subarray(8), 16);
+    const picture = laidOut(FTYP, fragmentedMoov('vide', 10), wide, { type: 'mdat', size: 100 });
+    const sound = laidOut(
+      FTYP,
+      fragmentedMoov('soun', 10),
+      moof(1, { trackId: 1, decodeTime: 5 }),
+      { type: 'mdat', size: 9 },
+    );
+
+    const header = bytesOf(joinPlan(picture, sound)[2]);
+
+    expect(header.byteLength).toBe(wide.byteLength);
+    expect(view(header).getUint32(0)).toBe(1);
+    expect(field(child(header, 'traf', 'tfhd'), 4)).toBe(1);
+  });
+
   it('moves a fragment that says where its data is from the start of the file', () => {
     // Its data said: the first byte of its moof, which comes after the ftyp and the movie.
     const moofAt = FTYP.byteLength + fragmentedMoov('vide', 10).byteLength;
@@ -666,6 +694,28 @@ describe('joinPlan refuses', () => {
     expect(refusalOf(() => joinPlan(withSamples, fragmented('soun')))).toBe(Mp4Refusal.Unsupported);
     expect(refusalOf(() => joinPlan(fragmented('vide'), withSamples))).toBe(Mp4Refusal.Unsupported);
     expect(refusalOf(() => joinPlan(looseData, fragmented('soun')))).toBe(Mp4Refusal.Unsupported);
+  });
+
+  it('a fragmented sound that keeps samples in its movie, its sizes in an stsz or an stz2', () => {
+    const soundWithSamples = (compactSizes: boolean) =>
+      laidOut(
+        FTYP,
+        moov(
+          1000,
+          0,
+          [{ id: 1, handler: 'soun', mediaTimescale: 1000, samples: 4, compactSizes }],
+          boxOf('mvex', trex(1, 0)),
+        ),
+        moof(1, { trackId: 1, decodeTime: 0 }),
+        { type: 'mdat', size: 8 },
+      );
+
+    expect(refusalOf(() => joinPlan(fragmented('vide'), soundWithSamples(false)))).toBe(
+      Mp4Refusal.Unsupported,
+    );
+    expect(refusalOf(() => joinPlan(fragmented('vide'), soundWithSamples(true)))).toBe(
+      Mp4Refusal.Unsupported,
+    );
   });
 
   it('a box too short for the fields it holds as unreadable, never as an error of another kind', () => {

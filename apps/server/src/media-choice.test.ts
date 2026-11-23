@@ -290,6 +290,16 @@ describe('chooseMedia', () => {
     expect([chosen.url, chosen.kind]).toEqual(['https://cdn.example/a.webm', 'file']);
   });
 
+  it('says a video is protected when every format with a picture is, whatever its sound alone is', () => {
+    expect(() =>
+      chooseMedia([
+        file({ hasDrm: true }),
+        picture({ hasDrm: true, height: 1080 }),
+        sound({ hasDrm: false }),
+      ]),
+    ).toThrow(expect.objectContaining({ failure: PageFailure.Drm }));
+  });
+
   it('says a page with no format at all could not be read', () => {
     expect(() => chooseMedia([])).toThrow(
       expect.objectContaining({ failure: PageFailure.Unreadable }),

@@ -182,7 +182,10 @@ export function chooseMedia(formats: readonly PageFormat[], container?: string):
   if (formats.length === 0) {
     throw new PageError(PageFailure.Unreadable, 'The page offers no format of the video.');
   }
-  if (formats.every((format) => format.hasDrm)) {
+  // Protected when every format with a picture is: a sound alone that is not protected does not
+  // make the video fetchable.
+  const pictures = formats.filter((format) => format.vcodec !== 'none');
+  if (pictures.length > 0 && pictures.every((format) => format.hasDrm)) {
     throw new PageError(PageFailure.Drm, 'The video is protected.');
   }
   throw new PageError(

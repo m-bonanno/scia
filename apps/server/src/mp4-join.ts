@@ -15,6 +15,8 @@ import { DiskError } from './remote-source.ts';
 // A movie or a fragment's header is read whole: tens of kilobytes, a few megabytes for hours of
 // a movie that is not fragmented. Never this.
 const MOST_READ_BYTES = 64 * 1024 * 1024;
+// And all of them together, of one file: hours of fragments weigh tens of megabytes.
+const MOST_READ_IN_ALL = 256 * 1024 * 1024;
 // What a file of the two may hold in boxes: hours of fragments of a second or two.
 const MOST_BOXES = 1_000_000;
 // What is copied at a time.
@@ -60,14 +62,17 @@ async function sourceOf(file: FileHandle): Promise<Mp4Source> {
   const boxes: TopBox[] = [];
   const contents = new Map<number, Uint8Array>();
   let start = 0;
+  let read = 0;
   while (start < size) {
     if (boxes.length >= MOST_BOXES) throw new Mp4Error(Mp4Refusal.Unsupported, 'Too many boxes.');
     const header = boxHeaderOf(await readAt(file, start, 16), size - start);
     const box = { ...header, start };
     boxes.push(box);
     if (BOXES_READ.has(box.type)) {
-      if (box.size > MOST_READ_BYTES)
-        throw new Mp4Error(Mp4Refusal.Unsupported, 'A box is too big.');
+      read += box.size;
+      if (box.size > MOST_READ_BYTES || read > MOST_READ_IN_ALL) {
+        throw new Mp4Error(Mp4Refusal.Unsupported, 'The boxes to read are too big.');
+      }
       contents.set(start, await readAt(file, start, box.size));
     }
     start += box.size;

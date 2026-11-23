@@ -33,6 +33,7 @@ import {
   sanitizeFileName,
   type Segment,
   SpeedMeter,
+  isNameTaken,
   uniqueFileName,
   UnlockFailure,
 } from '@scia/core';
@@ -1010,10 +1011,9 @@ export class DownloadManager {
           : picture.remote.totalBytes + sound.remote.totalBytes,
       acceptsRanges: ranged(picture.remote) && ranged(sound.remote),
       fileName: undefined,
-      validator:
-        picture.remote.validator === null && sound.remote.validator === null
-          ? null
-          : `${picture.remote.validator ?? ''} ${sound.remote.validator ?? ''}`,
+      // The picture's size too: where the line splits between the two files, which a swap of
+      // two sizes of the same sum would move.
+      validator: `${String(picture.remote.totalBytes)} ${picture.remote.validator ?? ''} ${sound.remote.validator ?? ''}`,
       isPage: false,
     });
     const fileOf = (part: MediaSource & { readonly remote: RemoteFile }) => ({
@@ -1222,27 +1222,11 @@ export class DownloadManager {
         .filter((other) => other !== record && other.named && other.directory === record.directory)
         .map((other) => other.fileName.toLowerCase()),
     );
-    // A download keeps files beside its name while it runs — its part file, a stream's pieces, a
-    // pair's picture and sound — and no other file may stand under those names: a name is taken
-    // when one of its working names is, and when it is a working name of a download in the list.
-    const workingOf = (name: string) => WORKING_SUFFIXES.map((suffix) => `${name}${suffix}`);
-    const isWorkingNameOfOne = (lower: string) =>
-      WORKING_SUFFIXES.some(
-        (suffix) =>
-          lower.endsWith(suffix.toLowerCase()) &&
-          reserved.has(lower.slice(0, lower.length - suffix.length)),
-      );
-    return uniqueFileName(wanted, (candidate) => {
-      const lower = candidate.toLowerCase();
-      return (
-        reserved.has(lower) ||
-        existsSync(join(record.directory, candidate)) ||
-        workingOf(candidate).some(
-          (name) => reserved.has(name.toLowerCase()) || existsSync(join(record.directory, name)),
-        ) ||
-        isWorkingNameOfOne(lower)
-      );
-    });
+    const used = {
+      inList: reserved,
+      onDisk: (name: string) => existsSync(join(record.directory, name)),
+    };
+    return uniqueFileName(wanted, (candidate) => isNameTaken(candidate, used, WORKING_SUFFIXES));
   }
 
   async #finish(record: DownloadRecord): Promise<void> {

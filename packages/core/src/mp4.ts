@@ -521,26 +521,24 @@ function fragmentsOf(source: Mp4Source, movie: Movie): Fragment[] {
 
 // The fragment's header in the joined file: its track's new id, its place in the sequence, and —
 // when it says where its data is from the start of the file — that place moved by `shift`.
+// Edited in place, on a copy: its size and every header in it stay as they were — a moof written
+// with a 64-bit size keeps it — so that its data, counted from its first byte, is where it says.
 function moofWith(moof: Uint8Array, trackId: number, sequence: number, shift: number): Uint8Array {
-  return rebuilt(moof, (child) => {
-    if (typeOf(child) === 'mfhd') {
-      const box = copyOf(child);
-      viewOf(box).setUint32(payloadStart(box) + 4, sequence);
-      return box;
-    }
-    if (typeOf(child) !== 'traf') return child;
-    return rebuilt(child, (entry) => {
-      if (typeOf(entry) !== 'tfhd') return entry;
-      const box = copyOf(entry);
-      const view = viewOf(box);
-      view.setUint32(payloadStart(box) + 4, trackId);
-      if ((flagsOf(box) & TFHD_BASE_DATA_OFFSET) !== 0) {
-        const at = payloadStart(box) + 8;
+  const box = copyOf(moof);
+  for (const child of childrenOf(box)) {
+    if (typeOf(child) === 'mfhd') viewOf(child).setUint32(payloadStart(child) + 4, sequence);
+    if (typeOf(child) !== 'traf') continue;
+    for (const entry of childrenOf(child)) {
+      if (typeOf(entry) !== 'tfhd') continue;
+      const view = viewOf(entry);
+      view.setUint32(payloadStart(entry) + 4, trackId);
+      if ((flagsOf(entry) & TFHD_BASE_DATA_OFFSET) !== 0) {
+        const at = payloadStart(entry) + 8;
         view.setBigUint64(at, BigInt(Number(view.getBigUint64(at)) + shift));
       }
-      return box;
-    });
-  });
+    }
+  }
+  return box;
 }
 
 function movieIn(source: Mp4Source): Movie {
