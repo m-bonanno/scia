@@ -59,7 +59,7 @@ A file that could not be marked — on a disk without streams — says so on its
 
 ### The download folder
 
-**The default one, in Settings (#37): written, covered by specs, and seen in the real app on Windows** — the system's dialog cancelled and then answered, what is added afterwards landing in the chosen folder, the choice kept after a restart. A folder that takes no file, chosen in that dialog, is refused, and Settings says so beside the folder in use. Not seen (#40): a hand in that dialog (a script filled and pressed it); Linux; the packaged app. The folder of one download: not built (#39).
+**The default one, in Settings (#37): written, covered by specs, and seen in the real app on Windows** — the system's dialog cancelled and then answered, what is added afterwards landing in the chosen folder, the choice kept after a restart. A folder that takes no file, chosen in that dialog, is refused, and Settings says so beside the folder in use. The folder is changed by "Change…", a button in words like the others of Settings, described by the setting beside it (the owner, 21 November 2026), and a long path is cut at its start, so that the name just chosen shows (#276, from #40): **written, covered by specs, and read by CI's E2E suite in the built app** — a chosen folder's path longer than its box, its first character cut and its last name whole inside it, "Change…" in the middle of the label and the path — which took the captures of Settings that show it; not seen by a person. Not seen (#40): a hand in that dialog (a script filled and pressed it); Linux; the packaged app. The folder of one download: not built (#39).
 
 ### The speed limit
 

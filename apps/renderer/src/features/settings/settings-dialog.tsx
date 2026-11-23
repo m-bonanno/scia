@@ -1,6 +1,6 @@
 import { type Settings, SETTINGS_LIMITS, type SettingsPatch } from '@scia/contracts';
 import { FolderChange, isFolderChange, SELF_UPDATING_PLATFORMS } from '@scia/contracts/bridge';
-import { FolderPen, Minus, Plus, X } from 'lucide-react';
+import { Minus, Plus, X } from 'lucide-react';
 import {
   type CSSProperties,
   type ReactNode,
@@ -13,9 +13,11 @@ import {
   useRef,
   useState,
 } from 'react';
+import { TEXT_BUTTON } from '@/components/button-styles.ts';
 import { IconButton } from '@/components/icon-button.tsx';
 import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
+import { cn } from '@/lib/cn.ts';
 import { FOLDER_REFUSED } from '@/lib/messages.ts';
 import { SettingSwitch } from './setting-switch.tsx';
 import { IntegrationsSection } from './integrations.tsx';
@@ -85,6 +87,9 @@ export function SettingsDialog({
     [keep],
   );
   const [folderRefused, setFolderRefused] = useState(false);
+  const folderLabelId = useId();
+  const folderPathId = useId();
+  const folderRefusalId = useId();
   const shell = bridge();
   // The betas are offered where Scia updates itself: in the app, on a system with an installer.
   const updatesItself =
@@ -208,23 +213,43 @@ export function SettingsDialog({
               />
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="text-sm font-medium">Download folder</p>
+                  <p id={folderLabelId} className="text-sm font-medium">
+                    Download folder
+                  </p>
+                  {/* Written right to left, the box cuts a long path at its start, so that the
+                      name just chosen shows (#40); the path inside keeps its own order, and so
+                      does its tooltip, which takes the direction of what carries the title. */}
                   <output
-                    className="block truncate text-sm text-muted-foreground"
-                    title={settings.downloadDirectory}
+                    id={folderPathId}
+                    dir="rtl"
+                    className="block truncate text-left text-sm text-muted-foreground"
                   >
-                    {settings.downloadDirectory}
+                    <bdi dir="ltr" title={settings.downloadDirectory}>
+                      {settings.downloadDirectory}
+                    </bdi>
                   </output>
                   {folderRefused && (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p id={folderRefusalId} role="alert" className="text-sm text-destructive">
                       {FOLDER_REFUSED}
                     </p>
                   )}
                 </div>
+                {/* Its one word is told what it changes by the setting beside it, and by the
+                    refusal while there is one. The margin sets it in the middle of the label and
+                    the path, where the refusal does not move it. */}
                 {shell !== undefined && (
-                  <IconButton label="Change folder" className="shrink-0" onClick={changeFolder}>
-                    <FolderPen size={16} aria-hidden="true" />
-                  </IconButton>
+                  <button
+                    type="button"
+                    aria-describedby={
+                      folderRefused
+                        ? `${folderLabelId} ${folderPathId} ${folderRefusalId}`
+                        : `${folderLabelId} ${folderPathId}`
+                    }
+                    className={cn(TEXT_BUTTON, 'mt-1')}
+                    onClick={changeFolder}
+                  >
+                    Change…
+                  </button>
                 )}
               </div>
               <ThemeChoice
