@@ -168,6 +168,8 @@ describe('DownloadRow', () => {
     );
     const name = screen.getByTitle(page.title);
     expect(name).toHaveTextContent(page.title);
+    // A title comes in any script: its own direction decides where it begins and where it is cut.
+    expect(name).toHaveAttribute('dir', 'auto');
     // Markup a site writes is text: no element of its own.
     expect(container.querySelector('b, img')).toBeNull();
     expect(screen.queryByText(/youtube\.com/)).toBeNull();

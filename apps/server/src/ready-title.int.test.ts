@@ -1,12 +1,13 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile, writeFile } from 'node:fs/promises';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DownloadStatus, PageFailure, TITLE_MOST_CHARS } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DownloadManager, type ManagerDeps } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
 import type { Logger } from './logger.ts';
+import type { MagnetService } from './magnet-service.ts';
 import { PageError, type PageFormat } from './media-choice.ts';
 import type { PageMedia, PageReader } from './page-reader.ts';
 import type { RemoteSource } from './remote-source.ts';
@@ -266,7 +267,8 @@ describe('the title of a video’s page added ready (#285)', () => {
   });
 
   it('never reads the title of a row started while it waited its turn', async () => {
-    const { reader, titles } = aReader();
+    // Ends what it reads at the stop, as yt-dlp does: the engine waits for it as it closes.
+    const { reader, titles } = aReader(never, { hearsStop: true });
     const downloads = await open({ pageReader: reader });
     downloads.updateSettings({ maxConcurrentDownloads: 1 });
     const [, waiting] = await downloads.offer([pageOf('m1'), pageOf('m2'), pageOf('m3')]);
@@ -362,7 +364,7 @@ describe('the title of a video’s page added ready (#285)', () => {
   });
 
   it('asks the next title when the queue is given more room', async () => {
-    const { reader, inFlight } = aReader();
+    const { reader, inFlight } = aReader(never, { hearsStop: true });
     const downloads = await open({ pageReader: reader });
     downloads.updateSettings({ maxConcurrentDownloads: 1 });
     await downloads.offer([pageOf('i1'), pageOf('i2')]);
@@ -427,5 +429,114 @@ describe('the title of a video’s page added ready (#285)', () => {
       expect(titleOf(downloads, long!.id)).toHaveLength(TITLE_MOST_CHARS);
       expect(downloads.find(long!.id).status).toBe(DownloadStatus.Ready);
     }, 30_000);
+
+    it('waits, as it stops, for the yt-dlp of the title it stopped: its tree ended, its folder removed', async () => {
+      const givenFile = join(folder.path, 'given.json');
+      const tempDir = join(folder.path, 'temp');
+      const reader = new YtDlp({
+        command: process.execPath,
+        prefix: [FAKE_YT_DLP, givenFile],
+        timeoutMs: 60_000,
+        tempDir,
+      });
+      const downloads = await open({ pageReader: reader });
+      // As yt-dlp's Windows build reads: a second process holds the output (#170).
+      await downloads.offer([`${pageOf('q1')}&from=/two-processes`]);
+      await until(() => existsSync(`${givenFile}.holder`));
+      const { pid } = JSON.parse(await readFile(givenFile, 'utf8')) as { pid: number };
+      const holder = Number(await readFile(`${givenFile}.holder`, 'utf8'));
+
+      await closed(downloads);
+
+      expect(isRunning(pid)).toBe(false);
+      expect(await readdir(tempDir)).toEqual([]);
+      await until(() => !isRunning(holder));
+    }, 30_000);
+  });
+
+  it('starts no title once the engine begins to stop, also for a copy that lands while it stops', async () => {
+    let sendAsked = false;
+    let letSendAnswer: () => void = () => undefined;
+    // A magnet the service takes its time to receive: the stop waits for that turn.
+    const magnets: MagnetService = {
+      hasService: () => true,
+      send: () =>
+        new Promise((answer) => {
+          sendAsked = true;
+          letSendAnswer = () => {
+            answer([]);
+          };
+        }),
+      states: () => Promise.resolve([]),
+      files: () => Promise.resolve(new Map()),
+    };
+    const { reader, titles } = aReader();
+    const downloads = await open({ pageReader: reader, magnets });
+    downloads.addMagnets([`magnet:?xt=urn:btih:${'a'.repeat(40)}&dn=Slow`]);
+    await until(() => sendAsked);
+
+    const stopping = downloads.close();
+    manager = undefined;
+    await downloads.offer([pageOf('r1')]);
+    letSendAnswer();
+    await stopping;
+
+    expect(titles).toEqual([]);
+  });
+
+  it('runs no more yt-dlp at once than the queue starts downloads: a download’s page takes the turn of the newest title, which waits again', async () => {
+    const site = await startRangeServer({
+      body: Buffer.from('<html></html>'),
+      contentType: 'text/html',
+    });
+    servers.push(site);
+    let readsLive = 0;
+    let most = 0;
+    const answers: (() => void)[] = [];
+    const { reader, titles, reads, inFlight } = aReader(
+      () =>
+        new Promise((done) => {
+          readsLive += 1;
+          most = Math.max(most, readsLive + inFlight().length);
+          answers.push(() => {
+            readsLive -= 1;
+            done(undefined);
+          });
+        }),
+      { hearsStop: true },
+    );
+    const downloads = await open({ pageReader: reader, source: new HttpSource('scia-test') });
+    downloads.updateSettings({ maxConcurrentDownloads: 2 });
+    const offered = await downloads.offer([pageOf('s1'), pageOf('s2')]);
+    expect(inFlight()).toHaveLength(2);
+
+    // Two downloads start, each reading its page: neither waits, and each takes a title's turn.
+    downloads.add({ urls: [`${site.url}?one`, `${site.url}?two`] });
+    await until(() => reads.length === 2);
+    expect(inFlight()).toEqual([]);
+    expect(most).toBe(2);
+
+    // Each page read that ends hands its turn back to the titles, the first copied first.
+    answers[0]?.();
+    await until(() => titles.length === 3);
+    expect(titles[2]?.url).toBe(pageOf('s1'));
+    answers[1]?.();
+    await until(() => titles.length === 4);
+    expect(titles[3]?.url).toBe(pageOf('s2'));
+    expect(most).toBe(2);
+
+    titles[2]?.answer('One');
+    titles[3]?.answer('Two');
+    await until(() => offered.every((download) => titleOf(downloads, download.id) !== null));
+    expect(offered.map((download) => titleOf(downloads, download.id))).toEqual(['One', 'Two']);
   });
 });
+
+function isRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}

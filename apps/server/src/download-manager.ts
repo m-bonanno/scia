@@ -324,11 +324,16 @@ export class DownloadManager {
   // Those the service is being asked about, each with what stops the question.
   readonly #opening = new Map<string, AbortController>();
   // The ready rows of videos' pages whose title is wanted (#285), in the order they were copied,
-  // and those being read, each with what stops the read.
+  // and those whose title is being read, each with what stops the read, in the order they began.
   #titlesWanted: DownloadRecord[] = [];
-  readonly #titles = new Map<string, AbortController>();
+  readonly #titles = new Map<DownloadRecord, AbortController>();
+  // Every title read until it has settled, a stopped one included: `close()` waits for them, as
+  // for a download, so that yt-dlp has ended and its folder is gone when the engine exits.
+  readonly #titleReads = new Set<Promise<void>>();
   // The pages being read for downloads: they and the titles share the queue's limit.
   #pageReads = 0;
+  // Set at the first moment of `close()`: no title is read from then on.
+  #stopping = false;
   // They are opened one after the other: a paste of many is not as many questions at once.
   #openings: Promise<void> = Promise.resolve();
   #settings: Settings;
@@ -1039,16 +1044,20 @@ export class DownloadManager {
   async close(): Promise<void> {
     // A link being opened stays so: it is asked about again at the next start.
     for (const stop of this.#opening.values()) stop.abort();
-    // A title not read by now is not read: the row keeps its address.
+    // A title not read by now is not read: the row keeps its address. Before the first wait, so
+    // that a copy that lands while the engine stops starts no reader.
+    this.#stopping = true;
     this.#titlesWanted = [];
     for (const stop of this.#titles.values()) stop.abort();
+    this.#titles.clear();
     await this.#magnetWatch.close();
     this.#closed = true;
     clearInterval(this.#checkpoint);
     this.#checkpoint = undefined;
-    await Promise.all(
-      [...this.#running.values()].map((running) => this.#stop(running, StopIntent.Shutdown)),
-    );
+    await Promise.all([
+      ...[...this.#running.values()].map((running) => this.#stop(running, StopIntent.Shutdown)),
+      Promise.allSettled(this.#titleReads),
+    ]);
     await this.#save();
     for (const wake of this.#waiters.splice(0)) wake();
   }
@@ -1183,19 +1192,34 @@ export class DownloadManager {
 
   // The titles wanted are read as the queue's limit makes room for them, the pages being read for
   // downloads counted with them (#285): a title takes a turn only while yt-dlp reads fewer pages
-  // than the queue starts downloads. A download never waits for a title.
+  // than the queue starts downloads. A download never waits for a title (`#yieldToPage`).
   #readTitles(): void {
     const reader = this.#deps.pageReader;
-    if (reader === undefined || this.#closed) return;
+    if (reader === undefined || this.#stopping) return;
     while (this.#pageReads + this.#titles.size < this.#settings.maxConcurrentDownloads) {
       const record = this.#titlesWanted.shift();
       if (record === undefined) return;
       const stop = new AbortController();
-      this.#titles.set(record.id, stop);
-      void this.#readTitle(reader, record, stop.signal).finally(() => {
-        this.#titles.delete(record.id);
+      this.#titles.set(record, stop);
+      const read: Promise<void> = this.#readTitle(reader, record, stop.signal).finally(() => {
+        // A read stopped and begun again has another entry, which is not this one's to take.
+        if (this.#titles.get(record) === stop) this.#titles.delete(record);
+        this.#titleReads.delete(read);
         this.#readTitles();
       });
+      this.#titleReads.add(read);
+    }
+  }
+
+  // A download's page about to be read takes the turn of the newest title, which waits again
+  // first in line: yt-dlp never reads more pages at once than the queue starts downloads, and the
+  // download does not wait. The title stopped is read again from its start.
+  #yieldToPage(): void {
+    for (const [record, stop] of [...this.#titles].reverse()) {
+      if (this.#pageReads + this.#titles.size <= this.#settings.maxConcurrentDownloads) return;
+      stop.abort();
+      this.#titles.delete(record);
+      this.#titlesWanted.unshift(record);
     }
   }
 
@@ -1221,7 +1245,8 @@ export class DownloadManager {
   // A row that starts or leaves wants its title no longer.
   #forgetTitle(record: DownloadRecord): void {
     this.#titlesWanted = this.#titlesWanted.filter((wanted) => wanted !== record);
-    this.#titles.get(record.id)?.abort();
+    this.#titles.get(record)?.abort();
+    this.#titles.delete(record);
   }
 
   #keepCheckpointing(): void {
@@ -1693,6 +1718,7 @@ export class DownloadManager {
     const reader = this.#deps.pageReader;
     if (reader === undefined) return undefined;
     this.#pageReads += 1;
+    this.#yieldToPage();
     let found: PageMedia | undefined;
     try {
       found = await reader.read(record.url, signal);

@@ -7,6 +7,7 @@ export type Ending = (typeof Ending)[keyof typeof Ending];
 // A download that has just ended, as a notification names it.
 export interface Ended {
   readonly id: string;
+  // The name its row shows: a video's page whose file is not named yet by its title (#285).
   readonly fileName: string;
   readonly ending: Ending;
 }
@@ -37,7 +38,7 @@ export class EndedDownloads {
       // A pause, a removal and a wait in the queue are the person's doing, or no end at all.
       return ending === undefined || before.get(download.id) === download.status
         ? []
-        : [{ id: download.id, fileName: download.fileName, ending }];
+        : [{ id: download.id, fileName: download.title ?? download.fileName, ending }];
     });
   }
 }

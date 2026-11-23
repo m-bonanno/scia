@@ -131,7 +131,12 @@ export function DownloadRow({ download, actions }: DownloadRowProps): ReactNode 
           <Icon size={18} aria-hidden="true" />
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-[0.9375rem] leading-snug font-medium" title={name}>
+          <p
+            className="truncate text-[0.9375rem] leading-snug font-medium"
+            title={name}
+            // A title comes in any script: its own direction says where it begins and is cut.
+            dir="auto"
+          >
             {name}
           </p>
           <p

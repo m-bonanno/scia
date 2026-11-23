@@ -99,4 +99,13 @@ describe('EndedDownloads', () => {
     // Tried again and failed again within the quarter of a second between two lists.
     expect(ended.seen([aDownload('a', DownloadStatus.Failed)])).toEqual([]);
   });
+
+  it('names a download as its row does: a video’s page by its title while its file is not named (#285)', () => {
+    const ended = new EndedDownloads();
+    ended.seen([{ ...aDownload('a', DownloadStatus.Downloading, 'watch'), title: 'A trip' }]);
+
+    expect(
+      ended.seen([{ ...aDownload('a', DownloadStatus.Failed, 'watch'), title: 'A trip' }]),
+    ).toEqual([{ id: 'a', fileName: 'A trip', ending: Ending.Failed }]);
+  });
 });
