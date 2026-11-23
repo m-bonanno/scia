@@ -23,12 +23,12 @@ npmRebuild: false
 nodeGypRebuild: false
 
 # The installed exe never runs as plain Node (the engine is a utilityProcess), ignores
-# NODE_OPTIONS and loads its code from app.asar only.
-# enableNodeCliInspectArguments stays on: the installer's smoke test drives the installed exe
-# through --inspect (apps/desktop/e2e/installer.smoke.test.ts); turning it off fails every release.
+# NODE_OPTIONS and --inspect, and loads its code from app.asar only. The installer's smoke test
+# drives it by Chromium's debugging port instead (apps/desktop/e2e/installed.ts, #115).
 electronFuses:
   runAsNode: false
   enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
   onlyLoadAppFromAsar: true
 
 # Fetches the programs shipped beside the engine for the system being packed, at the version and

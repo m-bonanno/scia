@@ -17,13 +17,13 @@ import { YT_DLP_VERSION } from '../src/engine/runtime-layout.ts';
 const APP_DIR = resolve(import.meta.dirname, '..');
 
 // A first start on a CI runner is slow, and never tuned against a warm one (apps/desktop/CLAUDE.md).
-const START_LIMIT_MS = 60_000;
+export const START_LIMIT_MS = 60_000;
 // A state of the app comes later than an adapter's: a window, an engine, a cold runner.
 const STATE_LIMIT_MS = 30_000;
 // Quitting never hangs (apps/desktop/CLAUDE.md): the engine is stopped within its own limit.
 const QUIT_LIMIT_MS = 30_000;
 // A process that has not ended by then is ended: a spec never leaves a Scia behind it.
-const CLOSE_LIMIT_MS = 15_000;
+export const CLOSE_LIMIT_MS = 15_000;
 // Main answers in tens of milliseconds while it is not blocked.
 const PID_LIMIT_MS = 5_000;
 
@@ -68,12 +68,9 @@ export interface Scia {
 
 export interface LaunchOptions {
   readonly args?: readonly string[];
-  // A packaged Scia's exe — the installed one, for the installer's smoke test. The built app
-  // otherwise.
-  readonly executable?: string;
 }
 
-const within = <T>(promise: Promise<T>, ms: number, what: string): Promise<T> =>
+export const within = <T>(promise: Promise<T>, ms: number, what: string): Promise<T> =>
   Promise.race([
     promise,
     sleep(ms).then(() => {
@@ -81,7 +78,7 @@ const within = <T>(promise: Promise<T>, ms: number, what: string): Promise<T> =>
     }),
   ]);
 
-const alive = (pid: number) => {
+export const alive = (pid: number) => {
   try {
     process.kill(pid, 0);
     return true;
@@ -99,6 +96,11 @@ async function end(app: ElectronApplication, main: number): Promise<void> {
   } catch {
     // Closing failed: main can be blocked on a dialog nobody will answer.
   }
+  await endProcess(main);
+}
+
+// Ends a process by force, with every process it started, unless it has already ended.
+export async function endProcess(main: number): Promise<void> {
   if (!alive(main)) return;
   if (process.platform === 'win32') {
     spawnSync('taskkill', ['/pid', String(main), '/T', '/F'], { timeout: CLOSE_LIMIT_MS });
@@ -116,17 +118,17 @@ function shellOf(app: ElectronApplication): number {
   return pid;
 }
 
-// Starts Scia as a person starts it, with its own profile and a free port for its engine — and,
-// unless the spec names them, a simulated AllDebrid that knows no account and a host of yt-dlp's
-// releases whose latest is the release Scia ships, with no files: with no service connected Scia still asks AllDebrid which hosts
-// are its own (ADR 0006), and an app whose yt-dlp was fetched asks for yt-dlp's latest release
-// (ADR 0011). A spec reaches no host but this computer's.
-export async function launchScia(profile: Profile, options: LaunchOptions = {}): Promise<Scia> {
-  const args = options.args ?? [];
-  if (args.some((arg) => arg.startsWith('--port=') || arg.startsWith('--user-data-dir='))) {
-    // Main takes the first of each, and these come first: a spec's own would be ignored.
-    throw new Error('launchScia sets the port and the profile itself.');
-  }
+export interface LocalHosts {
+  // The launch options that name them.
+  readonly args: readonly string[];
+  close(): Promise<void>;
+}
+
+// Unless the spec names them, a simulated AllDebrid that knows no account and a host of yt-dlp's
+// releases whose latest is the release Scia ships, with no files: with no service connected Scia
+// still asks AllDebrid which hosts are its own (ADR 0006), and an app whose yt-dlp was fetched asks
+// for yt-dlp's latest release (ADR 0011). A spec reaches no host but this computer's.
+export async function startLocalHosts(args: readonly string[] = []): Promise<LocalHosts> {
   const service = args.some((arg) => arg.startsWith('--alldebrid-api='))
     ? undefined
     : await startAllDebridServer({ accounts: {} });
@@ -135,22 +137,31 @@ export async function launchScia(profile: Profile, options: LaunchOptions = {}):
     : await startReleasesServer();
   // Nothing newer than the release Scia ships.
   if (releases !== undefined) releases.latest = YT_DLP_VERSION;
-  const hosts = async () => {
-    await service?.close();
-    await releases?.close();
+  return {
+    args: [
+      ...(service === undefined ? [] : [`--alldebrid-api=${service.api}`]),
+      ...(releases === undefined ? [] : [`--yt-dlp-releases=${releases.address}`]),
+    ],
+    close: async () => {
+      await service?.close();
+      await releases?.close();
+    },
   };
+}
+
+// Starts the built app as a person starts Scia, with its own profile, a free port for its engine
+// and the hosts of startLocalHosts. The installed exe is started by installed.ts.
+export async function launchScia(profile: Profile, options: LaunchOptions = {}): Promise<Scia> {
+  const args = options.args ?? [];
+  if (args.some((arg) => arg.startsWith('--port=') || arg.startsWith('--user-data-dir='))) {
+    // Main takes the first of each, and these come first: a spec's own would be ignored.
+    throw new Error('launchScia sets the port and the profile itself.');
+  }
+  const local = await startLocalHosts(args);
+  const hosts = () => local.close();
   const app = await _electron
     .launch({
-      // A packaged exe carries its app; Electron's own exe is told where the built one is.
-      ...(options.executable === undefined ? {} : { executablePath: options.executable }),
-      args: [
-        ...(options.executable === undefined ? [APP_DIR] : []),
-        `--user-data-dir=${profile.path}`,
-        '--port=0',
-        ...(service === undefined ? [] : [`--alldebrid-api=${service.api}`]),
-        ...(releases === undefined ? [] : [`--yt-dlp-releases=${releases.address}`]),
-        ...args,
-      ],
+      args: [APP_DIR, `--user-data-dir=${profile.path}`, '--port=0', ...local.args, ...args],
       timeout: START_LIMIT_MS,
       // playwright-core tells the page that the system asks for light unless told otherwise,
       // while main reads the system: a light page under the dark buttons main painted (#155).
