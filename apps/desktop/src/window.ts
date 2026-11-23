@@ -1,7 +1,9 @@
 import { join } from 'node:path';
-import { ColourScheme, DEFAULT_THEME, type Theme, WINDOW_COLOURS } from '@scia/contracts/theme';
+import { ColourScheme, type Theme, WINDOW_COLOURS } from '@scia/contracts/theme';
 import { BrowserWindow, dialog, type IpcMainInvokeEvent, ipcMain, nativeTheme } from 'electron';
 import { guardPermissions } from './engine/page-permissions.ts';
+import type { SessionEndReason } from './engine/quit.ts';
+import { startingPage } from './engine/starting-page.ts';
 import { hasIntegratedTitleBar, titleBarOverlay, windowFrameOptions } from './engine/title-bar.ts';
 import { windowIconFile } from './engine/window-icon.ts';
 import { isInFront, isPutAway, type WindowState } from './engine/window-state.ts';
@@ -19,8 +21,13 @@ export interface MainWindowOptions {
   // Developer tools only where there is a developer.
   readonly devTools: boolean;
   readonly log: WindowLog;
+  // The theme it starts in, before the engine can say which the person chose.
+  readonly theme: Theme;
   // The person closed the window: main decides whether Scia hides or quits.
   readonly onCloseRequested: () => void;
+  // Windows ends the session — a shutdown, a sign-out, an installer that needs Scia's files. It
+  // says so to every top-level window, a hidden one too.
+  readonly onSessionEnd: (reasons: readonly SessionEndReason[]) => void;
 }
 
 export function appOrigin(port: number): string {
@@ -31,17 +38,18 @@ function currentScheme(): ColourScheme {
   return nativeTheme.shouldUseDarkColors ? ColourScheme.Dark : ColourScheme.Light;
 }
 
-// The app's one window. It is made hidden and without a page: it shows once it has loaded the
-// page of the engine it is told to follow.
+// The app's one window. It shows at once, on a page that says Scia is starting, and loads the page
+// of the engine it is told to follow once the engine is ready (#13).
 export class MainWindow {
   readonly #window: BrowserWindow;
   readonly #platform: string;
   #port = 0;
   #shownOnce = false;
-  #theme: Theme = DEFAULT_THEME;
+  #theme: Theme;
 
   constructor(options: MainWindowOptions) {
     this.#platform = options.platform;
+    this.#theme = options.theme;
     this.#window = new BrowserWindow({
       width: 1040,
       height: 720,
@@ -78,9 +86,6 @@ export class MainWindow {
           options.log.warn('window_load_failed', { errorCode, errorDescription, url });
       },
     );
-    this.#window.once('ready-to-show', () => {
-      this.#window.show();
-    });
     this.#window.once('show', () => {
       this.#shownOnce = true;
     });
@@ -90,6 +95,14 @@ export class MainWindow {
       event.preventDefault();
       options.onCloseRequested();
     });
+    // Never prevented: Scia does not ask Windows to wait (#13).
+    this.#window.on('session-end', (event) => {
+      options.onSessionEnd(event.reasons);
+    });
+    // Shown now, in the theme's background, rather than once a page has loaded: the engine's
+    // page comes when the engine is ready, which a cold start takes a minute to be.
+    this.#window.loadURL(startingPage(this.#theme)).catch(() => undefined);
+    this.#window.show();
   }
 
   // A named request of the bridge (apps/desktop/CLAUDE.md: never a generic invoke), answered
@@ -176,10 +189,9 @@ export class MainWindow {
     return canceled ? undefined : filePaths[0];
   }
 
+  // Also before the engine is ready: the window then says Scia is starting.
   focus(): void {
-    // Before the engine is ready there is no page to show: the window shows itself once it
-    // has loaded one.
-    if (this.#window.isDestroyed() || this.#port === 0) return;
+    if (this.#window.isDestroyed()) return;
     if (this.#window.isMinimized()) this.#window.restore();
     this.#window.show();
     this.#window.focus();

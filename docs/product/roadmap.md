@@ -22,7 +22,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [ ] #7's README and ADR point, once #180 and #181 land.
 - [x] A key sealed just before the app was killed, read back (#69): built ([ADR 0023](../adr/0023-a-key-said-kept-once-it-can-be-read-back.md)), and proven by the E2E suite in CI — the built app killed right after a connection on three new profiles, each key read back.
 - [ ] A save of `state.json` not lost while another process has the file open (#151).
-- [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#13), the folder's button (#40), a paused bar's tone (#58), the key's placeholder (#66: built, held by specs and by CI's E2E in both variants; to be seen in the app, with its capture, in #156), the clipboard's first read (#134), room under notices (#143), the popover's note (#159), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
+- [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#256: built, held by specs, by CI's E2E suite and by the installer's smoke test; to be seen by hand in #13), the folder's button (#40), a paused bar's tone (#58), the key's placeholder (#66: built, held by specs and by CI's E2E in both variants; to be seen in the app, with its capture, in #156), the clipboard's first read (#134), room under notices (#143), the popover's note (#159), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
 - [ ] The page's logo and the app's icon drawing the mark in the same proportions (#88).
 - [x] The specs in quarantine fixed and back in the gates: the speed limit's (#43, #232) and HLS's (#162).
 - [ ] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes).
@@ -34,7 +34,7 @@ One sitting, from one checklist, on a beta built as a release candidate:
 
 - [ ] AllDebrid with the owner's real key: a hoster link downloaded to the end, the connection by a code, a pasted magnet and the account's magnets (#7, #137, #138).
 - [ ] The real clipboard: links and a magnet copied (#128, #139).
-- [ ] The tray by hand: the icon, its click, its menu, its tooltip, a notification looked at and clicked (#13).
+- [ ] The tray by hand: the icon, its click, its menu, its tooltip, a notification looked at and clicked; the window as Scia starts; a shutdown, and an installer run, during a download (#13).
 - [ ] The installer downloaded by hand through SmartScreen, and run over a previous version with the app started afterwards (#70).
 - [ ] The icon on screen: taskbar, tray, Start menu, desktop, Alt+Tab (#85, #199).
 - [ ] Windows set to light: the page, the window and its buttons (#58).

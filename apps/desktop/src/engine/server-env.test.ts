@@ -8,6 +8,7 @@ const layout = {
   logsDir: 'logs',
   downloadDir: 'downloads',
   noticesPath: 'notices.json',
+  themePath: 'theme.json',
   keysDir: 'keys',
   ytDlp: undefined,
 };
