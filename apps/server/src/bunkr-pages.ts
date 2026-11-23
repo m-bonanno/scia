@@ -113,7 +113,16 @@ export interface AlbumPage {
   readonly files: readonly { readonly slug: string; readonly name: string | undefined }[];
 }
 
-const FIELD = /^(\w+)\s*:\s*(.*?)\s*,?$/;
+// `name: value,` read with no regular expression that backtracks: a host's line of spaces made
+// one take time in the square of its length, on the engine's one thread.
+function fieldOf(line: string): { name: string; value: string } | undefined {
+  const colon = line.indexOf(':');
+  if (colon === -1) return undefined;
+  const name = line.slice(0, colon).trim();
+  if (!/^\w+$/.test(name)) return undefined;
+  const value = line.slice(colon + 1).trim();
+  return { name, value: (value.endsWith(',') ? value.slice(0, -1) : value).trim() };
+}
 
 // The fields of each object of `window.albumFiles`, one a line. Anything else in the list —
 // a line that is no field, two fields of one name, an object never closed — is a list Scia does
@@ -139,12 +148,10 @@ function objectsOf(list: string): Map<string, string>[] | undefined {
       if (current !== undefined) return undefined;
       return objects;
     }
-    const field = FIELD.exec(line);
-    if (current === undefined || field?.[1] === undefined || field[2] === undefined) {
-      return undefined;
-    }
-    if (current.has(field[1])) return undefined;
-    current.set(field[1], field[2]);
+    const field = fieldOf(line);
+    if (current === undefined || field === undefined) return undefined;
+    if (current.has(field.name)) return undefined;
+    current.set(field.name, field.value);
   }
   return undefined;
 }
@@ -193,7 +200,9 @@ function percentDecoded(text: string): string {
 export function readFilePage(html: string): FilePage | undefined {
   const id = /data-file-id="([^"]*)"/.exec(html)?.[1];
   if (id === undefined || !/^[\w-]{1,64}$/.test(id)) return undefined;
-  const heading = /<h1(?:\s[^>]*)?>([^<]*)</i.exec(html)?.[1];
+  // Its attributes cannot run past a `<`: a page of `<h1 ` never closed is read once, not once
+  // from every `<h1`.
+  const heading = /<h1(?:\s[^<>]*)?>([^<]*)</i.exec(html)?.[1];
   const name = heading === undefined ? '' : percentDecoded(unescapeHtml(heading)).trim();
   return { id, name: name === '' ? undefined : name };
 }

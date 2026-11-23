@@ -135,6 +135,30 @@ describe('readAlbumPage', () => {
   });
 });
 
+describe('a hostile page', () => {
+  // The readers run on the engine's one thread: a page that makes them backtrack stops every
+  // download and the API for as long as they run. Linear readers take milliseconds here.
+  const BOUND_MS = 250;
+
+  it('is read, or refused, in bounded time: a line of an album of many spaces', () => {
+    const file = { id: '1', slug: 's', original: 'a.mp4', link: 'unused' };
+    const page = albumPageOf({ files: [file] }).replace(
+      ' slug: "s",',
+      ` slug: "s"${' '.repeat(60_000)}x,`,
+    );
+    const startedAt = performance.now();
+    readAlbumPage(page);
+    expect(performance.now() - startedAt).toBeLessThan(BOUND_MS);
+  });
+
+  it('is read, or refused, in bounded time: a page of headings never closed', () => {
+    const page = `${'<h1 '.repeat(60_000)}<a data-file-id="1">`;
+    const startedAt = performance.now();
+    readFilePage(page);
+    expect(performance.now() - startedAt).toBeLessThan(BOUND_MS);
+  });
+});
+
 describe('readFilePage', () => {
   it("reads the file's id and its name, as its page writes them", () => {
     expect(readFilePage(filePageOf({ id: '4521', name: 'Day 1 &amp; 2.mp4' }))).toEqual({

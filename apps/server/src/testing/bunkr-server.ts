@@ -36,6 +36,14 @@ export interface BunkrServerOptions {
   readonly pages?: Readonly<Record<string, string>>;
   // What the API answers instead of a file's link.
   readonly apiAnswer?: string;
+  // By path, what the first requests to it meet, one each, in order: a status with no body (and a
+  // `Retry-After`, when given), or a connection dropped before any answer. Then it answers.
+  readonly troubles?: Readonly<
+    Record<string, readonly ({ status: number; retryAfter?: string } | 'drop')[]>
+  >;
+  // Every link the API gives carries `?given=<n>`, a new address at every answer: a link that
+  // expired is not given again.
+  readonly freshLinks?: boolean;
 }
 
 export interface BunkrServer {
@@ -53,6 +61,8 @@ export interface BunkrServer {
     readonly origin: string | undefined;
     readonly userAgent: string | undefined;
     readonly body: string;
+    // On the clock that never steps.
+    readonly atMs: number;
   }[];
   close(): Promise<void>;
 }
@@ -147,6 +157,21 @@ async function bodyOf(request: IncomingMessage): Promise<string> {
 export async function startBunkrServer(options: BunkrServerOptions): Promise<BunkrServer> {
   const asked: BunkrServer['asked'][number][] = [];
   const files = Object.values(options.albums).flatMap((album) => album.files);
+  const troubles = new Map(
+    Object.entries(options.troubles ?? {}).map(([path, list]) => [path, [...list]]),
+  );
+  let given = 0;
+  const linkOf = (file: SimulatedFile) => {
+    given += 1;
+    return options.freshLinks === true ? `${file.link}?given=${String(given)}` : file.link;
+  };
+  const decoded = (segment: string) => {
+    try {
+      return decodeURIComponent(segment);
+    } catch {
+      return segment;
+    }
+  };
   const server = createServer((request, response) => {
     void (async () => {
       const body = await bodyOf(request);
@@ -160,9 +185,24 @@ export async function startBunkrServer(options: BunkrServerOptions): Promise<Bun
         origin: request.headers.origin,
         userAgent: request.headers['user-agent'],
         body,
+        atMs: performance.now(),
       });
       // After the request is counted: a spec that sees it asked has the whole wait to act in.
       if (options.delayMs !== undefined) await sleep(options.delayMs);
+      const trouble = troubles.get(path)?.shift();
+      if (trouble === 'drop') {
+        request.socket.destroy();
+        return;
+      }
+      if (trouble !== undefined) {
+        response
+          .writeHead(
+            trouble.status,
+            trouble.retryAfter === undefined ? {} : { 'retry-after': trouble.retryAfter },
+          )
+          .end();
+        return;
+      }
       const status = options.status?.[path];
       if (status !== undefined) {
         response.writeHead(status).end();
@@ -190,8 +230,8 @@ export async function startBunkrServer(options: BunkrServerOptions): Promise<Bun
             if (file === undefined) return undefined;
             return JSON.stringify(
               file.encrypted === false
-                ? { encrypted: false, url: file.link }
-                : { encrypted: true, timestamp: TIMESTAMP, url: hidden(file.link) },
+                ? { encrypted: false, url: linkOf(file) }
+                : { encrypted: true, timestamp: TIMESTAMP, url: hidden(linkOf(file)) },
             );
           })();
         if (answer === undefined) {
@@ -203,13 +243,13 @@ export async function startBunkrServer(options: BunkrServerOptions): Promise<Bun
       }
       const album = /^\/a\/([^/]+)$/.exec(path);
       if (request.method === 'GET' && album !== null) {
-        const found = options.albums[album[1] ?? ''];
+        const found = options.albums[decoded(album[1] ?? '')];
         if (found === undefined) response.writeHead(404).end();
         else html(albumPageOf(found));
         return;
       }
       const file = /^\/[fvid]\/([^/]+)$/.exec(path);
-      const found = files.find((each) => each.slug === file?.[1]);
+      const found = files.find((each) => file?.[1] !== undefined && each.slug === decoded(file[1]));
       if (request.method === 'GET' && found !== undefined) {
         html(
           filePageOf({

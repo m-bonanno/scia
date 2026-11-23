@@ -13,6 +13,7 @@ import {
 } from '@scia/contracts';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
 import {
+  AlbumFailure,
   canPause,
   canResume,
   canStart,
@@ -244,6 +245,21 @@ function isAnotherFile(record: DownloadRecord, remote: RemoteFile): boolean {
     (record.validator !== null &&
       remote.validator !== null &&
       record.validator !== remote.validator)
+  );
+}
+
+// A refusal from the address a site gave a file at this run (docs/adr/0024): the row says that
+// address stopped working, not the link the person pasted, and that a retry asks for a new one.
+function ofTheSitesLink(error: unknown): unknown {
+  if (!(error instanceof RemoteError) || error.failure !== DownloadFailure.HttpStatus) return error;
+  return new RemoteError(
+    AlbumFailure.LinkFailed,
+    false,
+    'The link the site gave no longer works.',
+    {
+      cause: error,
+      ...(error.status === null ? {} : { status: error.status }),
+    },
   );
 }
 
@@ -950,7 +966,12 @@ export class DownloadManager {
       }
       this.#adopt(record, remote);
       const givenAgain = kept !== null && record.unlockedUrl !== kept;
-      await this.#runFile(record, running, url, headers, givenAgain, signal);
+      const fromSite = bunkr?.isFile(record.url) === true;
+      await this.#runFile(record, running, url, headers, givenAgain, signal).catch(
+        (error: unknown) => {
+          throw fromSite ? ofTheSitesLink(error) : error;
+        },
+      );
       await this.#finish(record);
     } catch (error) {
       if (running.task !== undefined) this.#keepProgress(record, running.task);
@@ -1264,12 +1285,16 @@ export class DownloadManager {
       record.fileName = named;
       record.nameKept = true;
     }
-    const remote = await this.#deps.source.probe(found.url, found.headers, signal);
+    const remote = await this.#deps.source
+      .probe(found.url, found.headers, signal)
+      .catch((error: unknown) => {
+        throw ofTheSitesLink(error);
+      });
     if (isMaintenance(remote.fileName)) {
       throw new RemoteError(PageFailure.SiteBusy, false, 'The file server is in maintenance.');
     }
     if (remote.isPage) {
-      throw new RemoteError(DownloadFailure.HttpStatus, false, 'The link answered a web page.');
+      throw new RemoteError(AlbumFailure.LinkFailed, false, 'The link answered a web page.');
     }
     return { url: found.url, headers: found.headers, remote, kind: 'file' };
   }

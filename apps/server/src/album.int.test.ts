@@ -112,6 +112,7 @@ describe('a Bunkr album', () => {
         userAgent: 'Scia/spec',
         domains: ['127.0.0.1'],
         api: on.api,
+        retryDelayMs: () => 1,
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
       }),
       ...deps,
@@ -338,6 +339,37 @@ describe('a Bunkr album', () => {
     }
   });
 
+  it('says that the link the site gave stopped working partway, and goes on from the bytes at a retry, with a new link', async () => {
+    const file = await host(film, { chunkDelayMs: 5 });
+    const [fileHost] = hosts;
+    const files: SimulatedFile[] = [{ id: '1', slug: 'a', original: 'a.bin', link: file }];
+    const on = await bunkr({ albums: { x: { title: 'Expiring', files } }, freshLinks: true });
+    const downloads = await open(on);
+    downloads.add({ urls: [`${on.url}/a/x`] });
+    await until(() => (downloads.snapshot().downloads[0]?.downloadedBytes ?? 0) > MIB / 4);
+    const [row] = downloads.snapshot().downloads;
+
+    fileHost?.expireLinks(403);
+
+    expect(await failureOf(downloads, row!.id)).toBe(AlbumFailure.LinkFailed);
+    expect(downloads.find(row!.id).failureStatus).toBe(403);
+    const kept = downloads.find(row!.id).downloadedBytes;
+    expect(kept).toBeGreaterThan(0);
+    const askedBefore = fileHost?.asked.length ?? 0;
+    downloads.resume(row!.id);
+    await until(() => downloads.find(row!.id).status === DownloadStatus.Completed);
+    expect(Buffer.compare(await readFile(inDownloads('Expiring', 'a.bin')), film)).toBe(0);
+    // The page and the API asked again, a new link given, and only what was missing asked of it.
+    expect(on.asked.filter(({ path }) => path === '/api/_001_v2')).toHaveLength(2);
+    const resumed = (fileHost?.asked.slice(askedBefore) ?? []).filter(
+      ({ range }) => range !== 'bytes=0-0',
+    );
+    expect(resumed.every(({ link }) => link?.endsWith('?given=2') === true)).toBe(true);
+    for (const { range } of resumed) {
+      expect(Number(/^bytes=(\d+)-/.exec(range ?? '')?.[1])).toBeGreaterThanOrEqual(kept);
+    }
+  });
+
   it('goes on with the files of an album after the engine stops and starts again', async () => {
     const files: SimulatedFile[] = [
       { id: '1', slug: 'a', original: 'a.bin', link: await host(film, { chunkDelayMs: 5 }) },
@@ -443,12 +475,24 @@ describe('a Bunkr album', () => {
       '/a/refused': 403,
       '/a/busy': 503,
       '/a/many': 429,
+      '/a/unknown': 401,
+      // A redirect that says nowhere to go: a status like any other.
+      '/a/nowhere': 302,
     };
     const on = await bunkr({
       status,
+      // A host that asks for longer than Scia waits is not waited for, and not asked again.
+      troubles: {
+        '/a/later': [{ status: 503, retryAfter: '3600' }],
+        '/a/tomorrow': [{ status: 429, retryAfter: 'Wed, 01 Jan 2100 00:00:00 GMT' }],
+      },
       albums: {
         AbCd12: { title: 'Holiday 2026', files: await holiday() },
         empty: { title: 'Nothing', files: [] },
+        // Slugs the address parser makes into another path: `/f/..` is `/`, `/f/.` is `/f/`.
+        dot: { title: 'Dot', files: [{ id: '1', slug: '.', original: 'a.bin', link: '' }] },
+        dots: { title: 'Dots', files: [{ id: '2', slug: '..', original: 'b.bin', link: '' }] },
+        none: { title: 'None', files: [{ id: '3', slug: '', original: 'c.bin', link: '' }] },
       },
       pages: {
         '/a/strange': '<html><body>A page of another shape</body></html>',
@@ -459,7 +503,22 @@ describe('a Bunkr album', () => {
     const downloads = await open(on);
 
     const failures = await Promise.all(
-      ['gone', 'refused', 'busy', 'many', 'strange', 'huge', 'empty'].map(async (id) => {
+      [
+        'gone',
+        'refused',
+        'unknown',
+        'nowhere',
+        'busy',
+        'many',
+        'later',
+        'tomorrow',
+        'strange',
+        'huge',
+        'empty',
+        'dot',
+        'dots',
+        'none',
+      ].map(async (id) => {
         const [added] = downloads.add({ urls: [`${on.url}/a/${id}`] });
         return [id, await failureOf(downloads, added!.id)] as const;
       }),
@@ -468,15 +527,28 @@ describe('a Bunkr album', () => {
     expect(Object.fromEntries(failures)).toEqual({
       gone: AlbumFailure.Gone,
       refused: AlbumFailure.Refused,
+      unknown: AlbumFailure.Refused,
+      nowhere: DownloadFailure.HttpStatus,
       busy: PageFailure.SiteBusy,
       many: PageFailure.SiteBusy,
+      later: PageFailure.SiteBusy,
+      tomorrow: PageFailure.SiteBusy,
       strange: AlbumFailure.Unrecognised,
       huge: AlbumFailure.Unrecognised,
       empty: AlbumFailure.Empty,
+      dot: AlbumFailure.Unrecognised,
+      dots: AlbumFailure.Unrecognised,
+      none: AlbumFailure.Unrecognised,
     });
     expect(existsSync(inDownloads())).toBe(false);
-    // Asked once each: a refusal is not asked again by Scia.
-    expect(on.asked.filter(({ path }) => path === '/a/busy')).toHaveLength(1);
+    const askedOf = (path: string) => on.asked.filter((each) => each.path === path).length;
+    // What cannot heal is asked once; what can, four times in all; a wait longer than Scia's,
+    // once.
+    expect(['gone', 'refused', 'unknown'].map((id) => askedOf(`/a/${id}`))).toEqual([1, 1, 1]);
+    expect(['busy', 'many'].map((id) => askedOf(`/a/${id}`))).toEqual([4, 4]);
+    expect(['later', 'tomorrow'].map((id) => askedOf(`/a/${id}`))).toEqual([1, 1]);
+    const nowhere = downloads.snapshot().downloads.find(({ url }) => url.endsWith('/a/nowhere'));
+    expect(nowhere?.failureStatus).toBe(302);
 
     // The site mended, a retry reads the album again: there is no album of that id, the site says.
     const busy = downloads.snapshot().downloads.find(({ url }) => url.endsWith('/a/busy'));
@@ -485,6 +557,31 @@ describe('a Bunkr album', () => {
     downloads.resume(busy!.id);
     expect(await failureOf(downloads, busy!.id)).toBe(AlbumFailure.Gone);
     expect(on.asked.slice(before).map(({ path }) => path)).toEqual(['/a/busy']);
+  });
+
+  it('asks again, after a wait, what can heal: a busy page, a dropped connection, a 429 and its Retry-After', async () => {
+    const on = await bunkr({
+      troubles: {
+        '/a/AbCd12': [{ status: 503 }, 'drop'],
+        '/f/notes-EfGh': [{ status: 502 }],
+        '/api/_001_v2': [{ status: 429, retryAfter: '1' }],
+      },
+    });
+    const downloads = await open(on);
+
+    downloads.add({ urls: [`${on.url}/a/AbCd12`] });
+    await until(() => allDone(downloads, 3));
+
+    expect(await readdir(inDownloads('Holiday 2026'))).toHaveLength(3);
+    expect(on.asked.filter(({ path }) => path === '/a/AbCd12')).toHaveLength(3);
+    expect(on.asked.filter(({ path }) => path === '/f/notes-EfGh')).toHaveLength(2);
+    // The file the 429 was for was asked again no sooner than the host said, not after Scia's
+    // own wait (a millisecond here).
+    const api = on.asked.filter(({ path }) => path === '/api/_001_v2');
+    expect(api).toHaveLength(4);
+    const [refused] = api;
+    const again = api.slice(1).find(({ body }) => body === refused?.body);
+    expect((again?.atMs ?? 0) - (refused?.atMs ?? 0)).toBeGreaterThanOrEqual(950);
   });
 
   it('says that a site that does not answer in time is busy', async () => {
@@ -539,7 +636,7 @@ describe('a Bunkr album', () => {
         'refused.bin': AlbumFailure.Refused,
         'noid.bin': AlbumFailure.Unrecognised,
         'maint.bin': PageFailure.SiteBusy,
-        'html.bin': DownloadFailure.HttpStatus,
+        'html.bin': AlbumFailure.LinkFailed,
         'unknown.bin': AlbumFailure.Gone,
       });
       // Nothing written: not the maintenance video, not the page, not a part file.

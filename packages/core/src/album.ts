@@ -11,5 +11,8 @@ export const AlbumFailure = {
   Unrecognised: 'ALBUM_UNREADABLE',
   // The album lists no file.
   Empty: 'ALBUM_EMPTY',
+  // The link the site gave for a file at this run stopped working — refused, gone, or a web page
+  // where the file was. Not the link the person pasted: a retry asks the site for a new one.
+  LinkFailed: 'ALBUM_LINK_FAILED',
 } as const;
 export type AlbumFailure = (typeof AlbumFailure)[keyof typeof AlbumFailure];

@@ -1,3 +1,4 @@
+import { setTimeout as sleep } from 'node:timers/promises';
 import { AlbumFailure, DownloadFailure, PageFailure } from '@scia/core';
 import {
   BUNKR_DOMAINS,
@@ -21,14 +22,24 @@ const FILE_PAGE_BYTES = 2 * 1024 * 1024;
 const ANSWER_BYTES = 64 * 1024;
 const MAX_REDIRECTS = 5;
 const REDIRECTS = new Set([301, 302, 303, 307, 308]);
+// What can heal — a busy site, a dropped connection, no answer in time — is asked again, three
+// times at most, after a wait that grows; a site's `Retry-After` is waited for when it asks
+// longer, and a site that asks for more than a minute is not asked again.
+const ATTEMPTS = 4;
+const RETRY_AFTER_LIMIT_MS = 60_000;
+
+function defaultRetryDelayMs(attempt: number): number {
+  return Math.min(8000, 1000 * 2 ** (attempt - 1));
+}
 
 export interface BunkrOptions {
   // Scia's own, as its downloads send it: never a browser's.
   readonly userAgent: string;
-  // Replaced only by a spec's local host.
+  // Replaced only by a run's local host: a spec's, or one a launch option names (`SCIA_BUNKR`).
   readonly domains?: readonly string[];
   readonly api?: string;
   readonly timeoutMs?: number;
+  readonly retryDelayMs?: (attempt: number) => number;
 }
 
 export interface Album {
@@ -51,15 +62,32 @@ function failure(code: DownloadFailure, message: string, status?: number): Remot
   return new RemoteError(code, false, message, status === undefined ? {} : { status });
 }
 
-// What a status of Bunkr's says, as the row will: not there, refused, busy, or itself.
+// What a refusal of Bunkr's says, as the row will: not there, refused, or itself. Final: a busy
+// site's answers are asked again before any of this (`#fetch`).
 function refusalOf(status: number): RemoteError {
   if (status === 404 || status === 410) return failure(AlbumFailure.Gone, 'Not on the site.');
   if (status === 401 || status === 403)
     return failure(AlbumFailure.Refused, 'Refused by the site.');
-  if (status === 429 || status >= 500) {
-    return failure(PageFailure.SiteBusy, `The site answered ${String(status)}.`, status);
-  }
   return failure(DownloadFailure.HttpStatus, `The site answered ${String(status)}.`, status);
+}
+
+// A 429 or a 5xx: the site busy, which a wait can mend.
+class Busy extends RemoteError {
+  // How long the site asked Scia to wait, when it said.
+  readonly retryAfterMs: number | undefined;
+
+  constructor(status: number, retryAfterMs: number | undefined) {
+    super(PageFailure.SiteBusy, true, `The site answered ${String(status)}.`, { status });
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+// `Retry-After` as seconds, or as a date: a date is the system's clock by what it is, read once.
+function retryAfterOf(value: string | null): number | undefined {
+  const text = value?.trim() ?? '';
+  if (/^\d+$/.test(text)) return Number(text) * 1000;
+  const at = Date.parse(text);
+  return Number.isNaN(at) ? undefined : Math.max(0, at - Date.now());
 }
 
 const unreadable = (message: string) => failure(AlbumFailure.Unrecognised, message);
@@ -91,12 +119,14 @@ export class Bunkr {
   readonly #domains: readonly string[];
   readonly #api: string;
   readonly #timeoutMs: number;
+  readonly #retryDelayMs: (attempt: number) => number;
 
   constructor(options: BunkrOptions) {
     this.#userAgent = options.userAgent;
     this.#domains = options.domains ?? BUNKR_DOMAINS;
     this.#api = options.api ?? API;
     this.#timeoutMs = options.timeoutMs ?? READ_LIMIT_MS;
+    this.#retryDelayMs = options.retryDelayMs ?? defaultRetryDelayMs;
   }
 
   isAlbum(url: string): boolean {
@@ -129,13 +159,16 @@ export class Bunkr {
     } catch {
       // Written as it stands in the address.
     }
-    return {
-      name: album.title ?? id,
-      files: album.files.map((file) => ({
-        url: `${origin}/f/${encodeURIComponent(file.slug)}`,
-        name: file.name,
-      })),
-    };
+    const files = album.files.map((file) => ({
+      url: `${origin}/f/${encodeURIComponent(file.slug)}`,
+      name: file.name,
+    }));
+    // A slug the address parser makes into another path (`/f/..` is `/`) would leave Bunkr's road:
+    // its row would be asked of a service, and a page saved as the file.
+    if (files.some(({ url }) => bunkrLinkOf(url, this.#domains)?.kind !== 'file')) {
+      throw unreadable('The album names a file Scia cannot address.');
+    }
+    return { name: album.title ?? id, files };
   }
 
   // The link of a file's page, read again at every run: its page for its id, then the API.
@@ -212,9 +245,38 @@ export class Bunkr {
     }
   }
 
-  // One request, read by `read` within the time Scia gives the site, and given up at a stop. A
-  // site that took too long is busy; one that could not be reached is the network's.
+  // One request, asked again while what went wrong can heal (`ATTEMPTS`), and given up at a stop.
   async #fetch<T>(
+    url: string,
+    init: { readonly method: string; readonly headers: RequestHeaders; readonly body?: string },
+    signal: AbortSignal,
+    read: (response: Response) => Promise<T>,
+  ): Promise<T> {
+    for (let attempt = 1; ; attempt += 1) {
+      try {
+        return await this.#once(url, init, signal, read);
+      } catch (error) {
+        const waitMs =
+          error instanceof RemoteError && error.retryable && attempt < ATTEMPTS && !signal.aborted
+            ? this.#waitBefore(attempt, error)
+            : undefined;
+        if (waitMs === undefined) throw error;
+        await sleep(waitMs, undefined, { signal });
+      }
+    }
+  }
+
+  // Scia's own wait, or the site's when it asks longer; none when it asks for more than Scia
+  // waits.
+  #waitBefore(attempt: number, error: RemoteError): number | undefined {
+    const asked = error instanceof Busy ? error.retryAfterMs : undefined;
+    if (asked !== undefined && asked > RETRY_AFTER_LIMIT_MS) return undefined;
+    return Math.max(this.#retryDelayMs(attempt), asked ?? 0);
+  }
+
+  // One request, read by `read` within the time Scia gives the site. A site that is busy or took
+  // too long, and one that could not be reached, can heal; what `read` refuses cannot.
+  async #once<T>(
     url: string,
     init: { readonly method: string; readonly headers: RequestHeaders; readonly body?: string },
     signal: AbortSignal,
@@ -229,6 +291,9 @@ export class Bunkr {
         signal: AbortSignal.any([signal, timeout]),
       });
       try {
+        if (response.status === 429 || response.status >= 500) {
+          throw new Busy(response.status, retryAfterOf(response.headers.get('retry-after')));
+        }
         return await read(response);
       } finally {
         // An answer not read to its end keeps its connection.
@@ -237,9 +302,9 @@ export class Bunkr {
     } catch (error) {
       if (error instanceof RemoteError) throw error;
       if (timeout.aborted) {
-        throw failure(PageFailure.SiteBusy, 'The site said nothing in time.');
+        throw new RemoteError(PageFailure.SiteBusy, true, 'The site said nothing in time.');
       }
-      throw new RemoteError(DownloadFailure.Network, false, 'The site could not be reached.', {
+      throw new RemoteError(DownloadFailure.Network, true, 'The site could not be reached.', {
         cause: error,
       });
     }

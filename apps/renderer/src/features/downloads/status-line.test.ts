@@ -287,6 +287,37 @@ describe('statusLine', () => {
     },
   );
 
+  // The address the site gave at this run, not the link the person pasted: Retry asks the site
+  // for a new one (docs/adr/0024).
+  it.each([
+    [
+      403,
+      'The link the site gave for this file no longer works (403). Try again: Scia asks the site for a new one.',
+    ],
+    [
+      404,
+      'The link the site gave for this file no longer works (404). Try again: Scia asks the site for a new one.',
+    ],
+    // A web page where the file was: no status to name.
+    [
+      null,
+      'The link the site gave for this file no longer works. Try again: Scia asks the site for a new one.',
+    ],
+  ] as const)(
+    'says that the link a site gave for a file stopped working (%s), and that Retry asks for a new one',
+    (failureStatus, text) => {
+      expect(
+        statusLine(
+          aDownload({
+            status: DownloadStatus.Failed,
+            failure: AlbumFailure.LinkFailed,
+            failureStatus,
+          }),
+        ),
+      ).toBe(text);
+    },
+  );
+
   it('names no service for a link that was never known to be one', () => {
     expect(
       statusLine(aDownload({ status: DownloadStatus.Failed, failure: ServiceFailure.Unavailable })),
