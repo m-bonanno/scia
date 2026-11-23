@@ -1,5 +1,5 @@
 import { settingsPatchSchema } from '@scia/contracts';
-import { render, screen, within } from '@testing-library/react';
+import { act, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api } from '@/lib/api.ts';
@@ -55,6 +55,98 @@ describe('SettingsDialog', () => {
       openCodePage: vi.fn(async () => undefined),
     };
   }
+
+  // The room it keeps under its end, only where the notices would lie over it (#143). jsdom lays
+  // nothing out: what the dialog shows is as tall as the spec says, and so is the window.
+  describe('the room under the notices', () => {
+    let shown = 900;
+    let measureAgain: () => void = ignore;
+    class Watching implements ResizeObserver {
+      readonly #told: ResizeObserverCallback;
+      constructor(told: ResizeObserverCallback) {
+        this.#told = told;
+      }
+      observe() {
+        measureAgain = () => {
+          this.#told([], this);
+        };
+      }
+      unobserve() {
+        measureAgain = ignore;
+      }
+      disconnect() {
+        measureAgain = ignore;
+      }
+    }
+    beforeEach(() => {
+      shown = 900;
+      vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockImplementation(() => shown);
+      vi.stubGlobal('innerHeight', 720);
+      vi.stubGlobal('ResizeObserver', Watching);
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+    const room = () => screen.getByRole('dialog').style.getPropertyValue('--notices-height');
+
+    it('is what the notices cover of a dialog at its tallest, 38 px short of the window', () => {
+      render(
+        <SettingsDialog
+          open
+          onClose={ignore}
+          onError={ignore}
+          onSettings={ignore}
+          noticesHeight={80}
+        />,
+      );
+
+      // It ends 19 px above the window's bottom, at 701; the notices begin at 640.
+      expect(room()).toBe('61px');
+    });
+
+    it('is measured again when what it shows grows', () => {
+      shown = 300;
+      render(
+        <SettingsDialog
+          open
+          onClose={ignore}
+          onError={ignore}
+          onSettings={ignore}
+          noticesHeight={80}
+        />,
+      );
+      expect(room()).toBe('0px');
+
+      shown = 900;
+      act(() => {
+        measureAgain();
+      });
+
+      expect(room()).toBe('61px');
+    });
+
+    it('is measured again when the window changes size', () => {
+      vi.stubGlobal('innerHeight', 1000);
+      shown = 640;
+      render(
+        <SettingsDialog
+          open
+          onClose={ignore}
+          onError={ignore}
+          onSettings={ignore}
+          noticesHeight={80}
+        />,
+      );
+      expect(room()).toBe('0px');
+
+      vi.stubGlobal('innerHeight', 720);
+      act(() => {
+        window.dispatchEvent(new Event('resize'));
+      });
+
+      expect(room()).toBe('61px');
+    });
+  });
 
   it('shows the limits and the folder', async () => {
     const onSettings = vi.fn();

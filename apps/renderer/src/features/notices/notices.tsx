@@ -19,6 +19,10 @@ interface NoticesProps {
   // What stays while it is true, with no time and no way to dismiss it: the engine not answering.
   readonly lasting: string | null;
   readonly onDismiss: (id: number) => void;
+  // Told how tall the stack is, whenever that changes, and 0 once it is gone: the page leaves as
+  // much room under what scrolls beneath it (#143). A function that keeps its identity (a state's
+  // setter): a new one at every render would measure, report 0 and measure again without end.
+  readonly onHeight: (px: number) => void;
   // Where the focus goes when the notice it was on leaves, and no other notice is there.
   readonly home: () => HTMLElement | null;
   // Where the notices are drawn instead of the page: an open modal dialog, which leaves
@@ -31,6 +35,7 @@ export function Notices({
   notices,
   lasting,
   onDismiss,
+  onHeight,
   home,
   layer = null,
 }: NoticesProps): ReactNode {
@@ -61,6 +66,7 @@ export function Notices({
       timed={timed}
       lasting={lasting}
       onDismiss={onDismiss}
+      onHeight={onHeight}
       home={home}
       announced={announced}
     />
@@ -74,11 +80,12 @@ interface StackProps {
   readonly timed: readonly Notice[];
   readonly lasting: string | null;
   readonly onDismiss: (id: number) => void;
+  readonly onHeight: (px: number) => void;
   readonly home: () => HTMLElement | null;
   readonly announced: RefObject<Set<string>>;
 }
 
-function Stack({ timed, lasting, onDismiss, home, announced }: StackProps): ReactNode {
+function Stack({ timed, lasting, onDismiss, onHeight, home, announced }: StackProps): ReactNode {
   const list = useRef<HTMLUListElement>(null);
   // The notice whose × has the focus: it holds the stack while it is there.
   const [focusedId, setFocusedId] = useState<number | null>(null);
@@ -111,6 +118,7 @@ function Stack({ timed, lasting, onDismiss, home, announced }: StackProps): Reac
   return (
     <List
       list={list}
+      onHeight={onHeight}
       focusHeld={timed.some((notice) => notice.id === focusedId)}
       onFocus={(target) => {
         const buttons = [...(list.current?.querySelectorAll('button') ?? [])];
@@ -131,6 +139,11 @@ function Stack({ timed, lasting, onDismiss, home, announced }: StackProps): Reac
               notice={notice}
               held={held}
               onDismiss={onDismiss}
+              // A press of the pointer hands the focus to nothing: the notices left are not held by
+              // it, and go in their own time (the owner, #143). The keyboard's is handed on.
+              onPointerPress={() => {
+                lastFocus.current = null;
+              }}
               announced={announced}
             />
           ))}
@@ -147,18 +160,32 @@ function Stack({ timed, lasting, onDismiss, home, announced }: StackProps): Reac
 // next one starts unheld.
 function List({
   list,
+  onHeight,
   focusHeld,
   onFocus,
   onBlur,
   children,
 }: {
   readonly list: RefObject<HTMLUListElement | null>;
+  readonly onHeight: (px: number) => void;
   readonly focusHeld: boolean;
   readonly onFocus: (target: EventTarget) => void;
   readonly onBlur: () => void;
   readonly children: (held: boolean) => ReactNode;
 }): ReactNode {
   const [pointed, setPointed] = useState(false);
+  useLayoutEffect(() => {
+    const element = list.current;
+    if (element === null) return undefined;
+    const observer = new ResizeObserver(([entry]) => {
+      onHeight(Math.ceil(entry?.borderBoxSize[0]?.blockSize ?? 0));
+    });
+    observer.observe(element);
+    return () => {
+      observer.disconnect();
+      onHeight(0);
+    };
+  }, [list, onHeight]);
   return (
     <ul
       ref={list}
@@ -186,11 +213,13 @@ function TimedNotice({
   notice,
   held,
   onDismiss,
+  onPointerPress,
   announced,
 }: {
   readonly notice: Notice;
   readonly held: boolean;
   readonly onDismiss: (id: number) => void;
+  readonly onPointerPress: () => void;
   readonly announced: RefObject<Set<string>>;
 }): ReactNode {
   const { id, round } = notice;
@@ -214,7 +243,8 @@ function TimedNotice({
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
         }}
-        onClick={() => {
+        onClick={(event) => {
+          if (event.detail > 0) onPointerPress();
           onDismiss(id);
         }}
       >

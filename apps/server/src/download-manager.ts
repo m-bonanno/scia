@@ -50,6 +50,7 @@ import { chooseMedia, type MediaKind, type MediaSource, PageError } from './medi
 import { PairTask, pictureOf, soundOf } from './pair-task.ts';
 import { offeredAs } from './offered-links.ts';
 import { type MarkDownloaded, markerFor } from './origin-mark.ts';
+import { type MarkSparse, sparseMarkerFor } from './sparse-file.ts';
 import type { PageReader } from './page-reader.ts';
 import {
   DiskError,
@@ -140,6 +141,8 @@ export interface ManagerDeps {
   readonly bunkr?: Bunkr;
   // What marks a finished file as coming from the network; the running system's by default.
   readonly markDownloaded?: MarkDownloaded;
+  // What makes a new part file sparse; the running system's by default.
+  readonly markSparse?: MarkSparse;
   readonly now?: () => number;
   readonly newId?: () => string;
   readonly checkpointMs?: number;
@@ -285,6 +288,7 @@ export class DownloadManager {
   #checkpointing = false;
   #closed = false;
   readonly #markDownloaded: MarkDownloaded;
+  readonly #markSparse: MarkSparse;
   // One for every connection of every download: the limit is for all of them together.
   readonly #throttle: Throttle;
 
@@ -296,6 +300,7 @@ export class DownloadManager {
   ) {
     this.#deps = deps;
     this.#markDownloaded = deps.markDownloaded ?? markerFor(process.platform);
+    this.#markSparse = deps.markSparse ?? sparseMarkerFor(process.platform);
     this.#records = records;
     this.#magnets = magnets;
     this.#magnetWatch = new MagnetWatch({
@@ -1040,6 +1045,7 @@ export class DownloadManager {
           running.meter.record(count, this.#now());
         },
         allowance: (expectedBytes) => this.#throttle.allowance(expectedBytes),
+        markSparse: this.#sparseFor(record),
         ...(this.#deps.retryDelayMs === undefined ? {} : { retryDelayMs: this.#deps.retryDelayMs }),
       });
       running.task = task;
@@ -1190,6 +1196,7 @@ export class DownloadManager {
         running.meter.record(count, this.#now());
       },
       allowance: (expectedBytes) => this.#throttle.allowance(expectedBytes),
+      markSparse: this.#sparseFor(record),
       ...(this.#deps.retryDelayMs === undefined ? {} : { retryDelayMs: this.#deps.retryDelayMs }),
     });
     running.task = task;
@@ -1451,5 +1458,20 @@ export class DownloadManager {
     } catch (error) {
       this.#deps.logger.warn('mark_refused', { id: record.id, error: describeFailure(error) });
     }
+  }
+
+  // A part file that cannot be made sparse is downloaded into as it is, dense: slower to start
+  // on NTFS, whole all the same (docs/adr/0026). The log says so.
+  #sparseFor(record: DownloadRecord): MarkSparse {
+    return async (path) => {
+      try {
+        await this.#markSparse(path);
+      } catch (error) {
+        this.#deps.logger.warn('part_file_not_sparse', {
+          id: record.id,
+          error: describeFailure(error),
+        });
+      }
+    };
   }
 }

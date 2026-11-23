@@ -1,17 +1,19 @@
 import { randomBytes } from 'node:crypto';
-import { readFile, stat, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { readFile, stat, statfs, truncate, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DownloadFailure, isComplete, planSegments, type Segment } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DownloadTask, type TaskOptions } from './download-task.ts';
 import { HttpSource } from './http-source.ts';
-import { RemoteError } from './remote-source.ts';
+import { DiskError, RemoteError } from './remote-source.ts';
+import { sparseMarkerFor } from './sparse-file.ts';
 import {
   type RangeServer,
   type RangeServerOptions,
   startRangeServer,
 } from './testing/range-server.ts';
-import { scratchFolder, until } from './testing/scratch.ts';
+import { scratchFolder, sparseFlagOf, until } from './testing/scratch.ts';
 
 const MIB = 1024 * 1024;
 const body = randomBytes(6 * MIB + 123);
@@ -195,6 +197,124 @@ describe('DownloadTask against a real HTTP host', () => {
     expect((failure as RemoteError).status).toBe(404);
     // One request per connection, none repeated.
     expect(ranges.length).toBeLessThanOrEqual(4);
+  });
+
+  describe('the part file on its disk (#182)', () => {
+    it('asks for a new part file to be made sparse while it is still empty, before its size is set', async () => {
+      const { url } = await host();
+      const sizesWhenMarked: number[] = [];
+      const download = task(url, {
+        markSparse: async (path) => {
+          expect(path).toBe(partPath);
+          sizesWhenMarked.push((await stat(path)).size);
+        },
+      });
+
+      await download.run(new AbortController().signal);
+
+      expect(sizesWhenMarked).toEqual([0]);
+      expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+    });
+
+    it.runIf(process.platform === 'win32')(
+      'on Windows, leaves a new part file sparse: a write far into it waits for no zeros',
+      async () => {
+        const { url } = await host();
+        const dense = join(folder.path, 'dense.bin');
+        await writeFile(dense, body);
+
+        await task(url, { markSparse: sparseMarkerFor('win32') }).run(new AbortController().signal);
+
+        expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+        // fsutil answers in the system's language: the part file's answer is told from a dense
+        // file's, not read for words.
+        expect(sparseFlagOf(partPath)).not.toBe(sparseFlagOf(dense));
+      },
+    );
+
+    it('refuses a file larger than the room left on its disk before asking its host for a byte', async () => {
+      const { url, ranges } = await host();
+      const room = await statfs(folder.path);
+      const totalBytes = room.bavail * room.bsize + 1024 * MIB;
+
+      const failure = await task(url, {
+        totalBytes,
+        segments: planSegments(totalBytes, 4, MIB),
+        markSparse: sparseMarkerFor(process.platform),
+      })
+        .run(new AbortController().signal)
+        .catch((error: unknown) => error);
+
+      expect(failure).toBeInstanceOf(DiskError);
+      expect(ranges).toEqual([]);
+      // Not made: one kept would be taken up again as it is, never made sparse.
+      expect(existsSync(partPath)).toBe(false);
+    });
+
+    it('checks the room of a part file it makes against the whole file', async () => {
+      const short = await host();
+      const refused = await task(short.url, {
+        freeBytes: () => Promise.resolve(body.length - 1),
+      })
+        .run(new AbortController().signal)
+        .catch((error: unknown) => error);
+      expect(refused).toBeInstanceOf(DiskError);
+      expect(short.ranges).toEqual([]);
+      await short.close();
+
+      const enough = await host();
+      await task(enough.url, {
+        freeBytes: () => Promise.resolve(body.length),
+      }).run(new AbortController().signal);
+      expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+    });
+
+    it('goes on with a part file it keeps, whatever room is left: its room was looked at, or taken, when it was made', async () => {
+      const { url } = await host();
+      const kept = 4 * MIB;
+      // A dense part file of an earlier attempt: its whole size is already its own on the disk.
+      await writeFile(partPath, body.subarray(0, kept));
+      await truncate(partPath, body.length);
+
+      await task(url, {
+        segments: [
+          { start: 0, end: kept, downloaded: kept },
+          { start: kept, end: body.length, downloaded: 0 },
+        ],
+        freeBytes: () => Promise.resolve(0),
+      }).run(new AbortController().signal);
+
+      expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+    });
+
+    it('checks the room of a part file that is gone as of one it makes, its bytes to come again', async () => {
+      const { url, ranges } = await host();
+      const kept = 4 * MIB;
+
+      // The segments remember bytes the disk no longer has: all of the file is to come again.
+      const refused = await task(url, {
+        segments: [
+          { start: 0, end: kept, downloaded: kept },
+          { start: kept, end: body.length, downloaded: 0 },
+        ],
+        freeBytes: () => Promise.resolve(body.length - kept),
+      })
+        .run(new AbortController().signal)
+        .catch((error: unknown) => error);
+
+      expect(refused).toBeInstanceOf(DiskError);
+      expect(ranges).toEqual([]);
+    });
+
+    it('goes on when the room left cannot be read: a full disk is then said by the write that finds it', async () => {
+      const { url } = await host();
+
+      await task(url, {
+        freeBytes: () => Promise.reject(new Error('This disk does not say.')),
+      }).run(new AbortController().signal);
+
+      expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+    });
   });
 
   describe('under a speed limit', () => {

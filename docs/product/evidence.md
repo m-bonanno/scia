@@ -154,7 +154,41 @@ The first eight were each seen failing with the line they hold taken away, on th
 
 ### Zero-filling on NTFS
 
-To measure: the wait caused by zero-filling on NTFS for very large files (#182; ADR 0001, "to be measured before M1 closes"). Not measured.
+#182; ADR 0001, "to be measured before M1 closes". Measured on 23 November 2026, on Windows 11 (10.0.26200), an i7-12700KF with 64 GB of memory, Node 26.13.1, Defender's real-time protection on, by two throwaway scripts (not committed):
+
+- the engine's own `DownloadTask` and `HttpSource`, unchanged, fetching a file from a local host that generates its bytes, over 8 connections (the default) and 16 (the most), into a part file on the disk; every write timed, each connection's first write logged, the bytes written counted each second, a tiny `stat` of another file made every 50 ms to time the four threads Node gives the disk, and every byte compared afterwards (none wrong);
+- `node:fs` alone: the part file made at its full size with `truncate`, then a write of 256 KB at the start of each of 8 ranges at once.
+
+Each run is set against the same part file marked sparse (`fsutil sparse setflag`) before its size is set.
+
+**Seen.** `truncate` itself takes milliseconds (13 ms at 16 GiB). A first write far into the file then waits while NTFS writes zeros up to it, and with 8 connections those waits hold all four of Node's disk threads: no byte of the download reaches the disk — the first connection's included — and every other disk operation of the engine (a save of `state.json`, the page's files, another download) waits as long.
+
+| Disk                       | File   | Connections | Last first write | Nothing written for | Longest `stat` | Whole, dense   | Whole, sparse |
+| -------------------------- | ------ | ----------- | ---------------- | ------------------- | -------------- | -------------- | ------------- |
+| NVMe SSD (Samsung 970 EVO) | 1 GiB  | 8           | 0.4 s            | —                   | 0.3 s          | 2.8 s          | 2.9 s         |
+| NVMe SSD                   | 4 GiB  | 8           | 1.3 s            | —                   | 1.2 s          | 9.9 s          | 9.8 s         |
+| NVMe SSD                   | 16 GiB | 8           | 12.1 s           | —                   | 11.0 s         | 38.4 s         | 29.6 s        |
+| NVMe SSD                   | 32 GiB | 8           | 32.5 s, 33.2 s   | 32 s                | 32.4 s, 29.5 s | 81.1 s, 72.1 s | 47.2 s        |
+| NVMe SSD                   | 32 GiB | 16          | 21.8 s           | 20 s                | 20.8 s         | 64.2 s         | 40.2 s        |
+| USB hard disk (Seagate M3) | 4 GiB  | 8           | 65.6 s           | over 45 s           | 65.4 s         | 156.6 s        | 113.3 s       |
+
+"Nothing written for" is read from the bytes counted each second, in the runs that counted them (the first 45 seconds). Two numbers are two runs. With the part file sparse, every connection wrote its first byte within 110 ms of the start on both disks, at every size, and no `stat` waited over 3 s. With `node:fs` alone the zeros came at about 1 GB/s on the SSD (a write at 28 GiB done after 29.6 s) and 60 MB/s on the USB disk (a write at 3.5 GiB done after 63 s).
+
+A part file made at its full size takes its room on the disk at once (a 32 GiB file: 32 GiB less free), so that a full disk says so at the start; marked sparse, it takes none (0 GiB less free) until its bytes are written.
+
+**The fix** ([ADR 0026](../adr/0026-a-part-file-made-sparse.md); the owner's decision on #182): a ranged part file is made sparse by the system's `fsutil` before its size is set, its room on the disk is looked at when it is made instead of reserved — less room than the file's size fails `DISK` before a byte is asked for — and the engine starts with 164 disk threads (`UV_THREADPOOL_SIZE`). **Held by specs**: a new part file asked to be made sparse while it is empty, and on Windows read back sparse with `fsutil sparse queryflag` (the task, and a download of the manager); a download whose part file cannot be made sparse finished and logged `part_file_not_sparse`, a pair's two files each; a file larger than the room left refused before its host is asked, with no part file made — also one whose kept part file is gone; a kept part file, dense at its full size, taken up again whatever room is left, its room not looked at again; a disk that does not say its room not checked; what the marker runs — `fsutil` by its full path, its arguments, an environment of `SystemRoot` alone, hidden, its limit — and a program that never answers ended at the limit, the download finished and the refusal logged; main giving the engine the threads. Each line of the fix was taken away, or turned, one at a time, and a spec failed for each. **Held by CI's E2E suite on the built app**: a download paused, its `.scia` part file read back sparse with `fsutil sparse queryflag`, and no `part_file_not_sparse` in the log.
+
+**Measured again with the fix**, the same day, machine and script, the 32 GiB file on the NVMe SSD over 8 connections, with the engine's own marker and `UV_THREADPOOL_SIZE=164`; and the part file dense with the 164 threads alone:
+
+| Run                    | Last first write | Nothing written for | Longest `stat` | First second | Whole          |
+| ---------------------- | ---------------- | ------------------- | -------------- | ------------ | -------------- |
+| Sparse, 164 threads    | 61 ms            | —                   | 10 ms          | 0.32 GiB     | 49.2 s         |
+| Dense, 164 threads     | 27.1 s           | 26 s                | 13 ms          | 0            | 68.0 s         |
+| Before (dense, 4), × 2 | 32.5 s, 33.2 s   | 32 s                | 32.4 s, 29.5 s | 0            | 81.1 s, 72.1 s |
+
+The first writes' 61 ms include `fsutil` and the look at the room. `fsutil sparse setflag` took 22 to 39 ms (median 25, of 20); the 164 threads took 9 MiB more of a Node process (76 to 85 MiB). The threads alone keep the engine's other disk work from waiting; the download still waits for the zeros.
+
+**Not seen** (#265 carries the first three): a large file in the app, by a person; the USB hard disk with the fix; a download refused for room in the app; `UV_THREADPOOL_SIZE` reaching the engine's `utilityProcess`; a network slower than the disk, where the zeros are written while the connections would otherwise wait on the host; a disk with Defender's real-time protection off; a full disk met by a download whose room was there when its part file was made; a finished file left sparse, and what other programs make of it; Linux.
 
 ## M2 — The whole extension
 
