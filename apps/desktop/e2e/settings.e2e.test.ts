@@ -3,10 +3,10 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startAllDebridServer } from '@scia/server/testing/alldebrid-server.ts';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
-import type { ElectronApplication } from 'playwright-core';
+import type { ElectronApplication, Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { allCompleted, paste, rowOf, until, useRun } from './scia.ts';
-import { captureTo, viewportOf } from './under-notices.ts';
+import { captureTo, scrollToEnd, viewportOf } from './under-notices.ts';
 
 const KIB = 1024;
 // A key the simulated service was given: made up, as every key of a spec.
@@ -180,7 +180,8 @@ describe('the real app, with what Settings says', () => {
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByRole('button', { name: 'Support Scia' }).click();
     await until(async () => (await openedBy(scia)).length > 0);
-    // An address handed over the bridge by the page is not what main opens.
+    // An address handed over the bridge by the page is not what main opens: the preload drops it,
+    // and main reads nothing that comes with the ask (support-page.test.ts holds main's half).
     await page.evaluate(() =>
       (
         window as unknown as { scia: { openSupportPage: (url: string) => Promise<unknown> } }
@@ -253,6 +254,35 @@ describe('the real app, with what Settings says', () => {
       await page.screenshot({ path: await captureTo(name) });
     }
   });
+
+  // The two captures of connecting AllDebrid, taken from the real app by CI (#271): the two ways
+  // offered, and a key the service refused, said by its field — 1040 by 720, dark.
+  it('takes the captures of connecting AllDebrid', async () => {
+    const profile = await run.profile();
+    const service = run.keep(await startAllDebridServer({ accounts: {} }));
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const { page } = scia;
+    await scia.app.evaluate(({ nativeTheme }) => {
+      nativeTheme.themeSource = 'dark';
+    });
+    await viewportOf(page, 1040, 720);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await settings.getByRole('button', { name: 'Connect with a code' }).waitFor();
+    await settings.getByRole('switch', { name: 'Beta versions' }).waitFor();
+    await settled(page);
+    await settings.getByRole('button', { name: 'Support Scia' }).waitFor();
+    await page.screenshot({ path: await captureTo('two-ways-to-connect.png') });
+
+    await settings.getByRole('button', { name: 'Use an API key' }).click();
+    // Made up, and known to no account of the simulated service: it is refused.
+    await settings.getByLabel('AllDebrid API key').fill('e2e-made-up-key-refused-0123456');
+    await settings.getByRole('button', { name: 'Connect', exact: true }).click();
+    await settings.getByText(/does not know this key/).waitFor();
+    await scrollToEnd(settings.getByText(/^Scia \d/));
+    await settled(page);
+    await page.screenshot({ path: await captureTo('connect-a-service.png') });
+  });
 });
 
 // The ratio of WCAG 2.2 between two opaque colours as the page computes them, `rgb(r, g, b)`.
@@ -270,6 +300,15 @@ function contrast(one: string, other: string): number {
   };
   const [lighter = 0, darker = 0] = [luminance(one), luminance(other)].sort((a, b) => b - a);
   return (lighter + 0.05) / (darker + 0.05);
+}
+
+// Nothing under the pointer, no focus drawn, and every transition over, before a capture.
+async function settled(page: Page): Promise<void> {
+  await page.mouse.move(1, 1);
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+  await until(() => page.evaluate(() => document.getAnimations().length === 0));
 }
 
 async function openedBy(scia: { readonly app: ElectronApplication }): Promise<string[]> {

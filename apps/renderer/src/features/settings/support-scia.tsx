@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { QUIET_BUTTON } from '@/components/button-styles.ts';
 import { useOnePress } from '@/components/one-press.ts';
 import { bridge } from '@/lib/bridge.ts';
@@ -15,11 +15,17 @@ interface SupportSciaProps {
 export function SupportScia({ open }: SupportSciaProps): ReactNode {
   const press = useOnePress();
   const [failed, setFailed] = useState(false);
+  // Every ask carries its turn, moved on at each press and each opening or closing: main answers
+  // in the system's own time, and an answer is said only while its ask is still the last one.
+  const turn = useRef(0);
   const [openWas, setOpenWas] = useState(open);
   if (openWas !== open) {
     setOpenWas(open);
     setFailed(false);
   }
+  useEffect(() => {
+    turn.current += 1;
+  }, [open]);
 
   const shell = bridge();
   // A page in a plain browser has no main to open the page.
@@ -34,8 +40,10 @@ export function SupportScia({ open }: SupportSciaProps): ReactNode {
         onClick={(event) => {
           if (press.sawTheOneBefore(event)) return;
           setFailed(false);
+          turn.current += 1;
+          const mine = turn.current;
           shell.openSupportPage().catch(() => {
-            setFailed(true);
+            if (mine === turn.current) setFailed(true);
           });
         }}
       >

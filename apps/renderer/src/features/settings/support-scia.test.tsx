@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SciaBridge } from '@/lib/bridge.ts';
@@ -87,6 +87,50 @@ describe('SupportScia', () => {
 
     rerender(<SupportScia open={false} />);
     rerender(<SupportScia open />);
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  // Main answers when the system has handed the page over, which takes its own time: an answer is
+  // said only while its ask is still the last one.
+  it('does not greet the next visit with the failure of an ask made in the visit before', async () => {
+    let refuse: (reason: Error) => void = () => undefined;
+    openSupportPage.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        refuse = reject;
+      }),
+    );
+    const { rerender } = render(<SupportScia open />);
+    await userEvent.click(screen.getByRole('button', { name: 'Support Scia' }));
+
+    rerender(<SupportScia open={false} />);
+    rerender(<SupportScia open />);
+    await act(async () => {
+      refuse(new Error('No browser.'));
+      await Promise.resolve();
+    });
+
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
+
+  it('does not say that the page was not opened under a later press that opened it', async () => {
+    let refuse: (reason: Error) => void = () => undefined;
+    openSupportPage.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        refuse = reject;
+      }),
+    );
+    render(<SupportScia open />);
+    const support = screen.getByRole('button', { name: 'Support Scia' });
+    // Two presses, each a burst of its own.
+    fireEvent.click(support, { detail: 1 });
+    fireEvent.click(support, { detail: 0 });
+    expect(openSupportPage).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      refuse(new Error('No browser.'));
+      await Promise.resolve();
+    });
 
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });

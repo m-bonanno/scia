@@ -173,6 +173,16 @@ describe('SettingsDialog', () => {
     expect(screen.getByText('Scia 1.0.0')).toBeInTheDocument();
   });
 
+  it('reaches "Support Scia" by Tab, after the last setting', async () => {
+    aShell(async () => 'kept');
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    (await screen.findByRole('switch', { name: 'Beta versions' })).focus();
+
+    await userEvent.tab();
+
+    expect(screen.getByRole('button', { name: 'Support Scia' })).toHaveFocus();
+  });
+
   describe('the links of the clipboard', () => {
     it('are not taken until the person turns the switch on, and the engine keeps it', async () => {
       aShell(async () => 'kept');
