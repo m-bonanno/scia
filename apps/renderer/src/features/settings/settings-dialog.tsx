@@ -113,12 +113,13 @@ export function SettingsDialog({
     learn(api.updateSettings(patch)).catch(onError);
   };
 
+  // No `p-0`: Tailwind writes it after `room-under-notices`, and it would take the room away.
   return (
     <dialog
       ref={dialog}
       onClose={onClose}
       aria-labelledby="settings-title"
-      className="m-auto w-[30rem] max-w-[calc(100vw-2rem)] rounded-2xl bg-surface p-0 text-foreground backdrop:bg-overlay"
+      className="room-under-notices m-auto w-[30rem] max-w-[calc(100vw-2rem)] rounded-2xl bg-surface px-0 pt-0 text-foreground backdrop:bg-overlay"
     >
       <div className="flex items-center justify-between py-3 pr-3 pl-6">
         <h2 id="settings-title" className="text-base font-semibold">

@@ -56,6 +56,16 @@
   -webkit-app-region: no-drag;
 }
 
+/* An area that scrolls beneath the notices (#143): while they are shown, it ends as far above
+   them as they are tall, so its last row scrolls clear of them, and a control that takes the
+   focus under them is scrolled above them — Chromium does not scroll one already inside the
+   scrollport, but it does keep it out of the scroll padding (WCAG 2.2, 2.4.11). The page says
+   how tall they are (`--notices-height`, on the app's root). */
+@utility room-under-notices {
+  padding-bottom: var(--notices-height, 0px);
+  scroll-padding-bottom: var(--notices-height, 0px);
+}
+
 @layer base {
   html {
     @apply font-sans;

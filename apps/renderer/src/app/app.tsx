@@ -1,6 +1,14 @@
 import { ApiErrorCode, type Settings } from '@scia/contracts';
 import { DownloadStatus, isUnderWay } from '@scia/core';
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { TEXT_BUTTON } from '@/components/button-styles.ts';
 import { AccountMagnets } from '@/features/account/account-magnets.tsx';
 import { type Added, AddBar } from '@/features/downloads/add-bar.tsx';
@@ -36,6 +44,7 @@ export function App(): ReactNode {
   const live = useLive();
   const [filter, setFilter] = useState<Filter>(Filter.All);
   const { notices, tell, dismiss } = useNotices();
+  const [noticesHeight, setNoticesHeight] = useState(0);
   const field = useRef<HTMLInputElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsLayer, setSettingsLayer] = useState<SettingsLayer | null>(null);
@@ -245,8 +254,12 @@ export function App(): ReactNode {
     }
   }, [hasReady]);
 
+  // How tall the notices are, for the room every area that scrolls beneath them keeps under its
+  // end (`room-under-notices` in styles.css) — Settings' dialog too, inside this element.
+  const noticesRoom = { '--notices-height': `${String(noticesHeight)}px` } as CSSProperties;
+
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-screen flex-col" style={noticesRoom}>
       <TitleBar
         bytesPerSecond={bytesPerSecond}
         speedLimitBytesPerSecond={speedLimit}
@@ -303,7 +316,7 @@ export function App(): ReactNode {
               )}
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="room-under-notices min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl px-6 pb-8">
               {live.connection !== Connection.Connecting && (
                 <DownloadList
@@ -338,6 +351,7 @@ export function App(): ReactNode {
         notices={notices}
         lasting={live.connection === Connection.Offline ? ENGINE_UNREACHABLE : null}
         onDismiss={dismiss}
+        onHeight={setNoticesHeight}
         home={() => (settingsOpen ? (settingsLayer?.top() ?? null) : field.current)}
         layer={settingsOpen ? (settingsLayer?.element ?? null) : null}
       />
