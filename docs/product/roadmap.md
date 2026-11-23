@@ -22,7 +22,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [ ] #7's README and ADR point, once #180 and #181 land.
 - [x] A key sealed just before the app was killed, read back (#69): built ([ADR 0023](../adr/0023-a-key-said-kept-once-it-can-be-read-back.md)), and proven by the E2E suite in CI — the built app killed right after a connection on three new profiles, each key read back.
 - [ ] A save of `state.json` not lost while another process has the file open (#151).
-- [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#13), the folder's button (#40), a paused bar's tone (#58), the key's placeholder (#66: built, held by specs and by CI's E2E in both variants; to be seen in the app, with its capture, in #156), the clipboard's first read (#134), room under notices (#143), the popover's note (#159), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
+- [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#13), the folder's button (#40), a paused bar's tone (#260: built, held by specs and read in the built app by CI's E2E, which took its capture; to be seen by a person, in #58), the key's placeholder (#66: built, held by specs and by CI's E2E in both variants; to be seen in the app, with its capture, in #156), the clipboard's first read (#134), room under notices (#143), the popover's note (#159, #257: built, held by specs; to be seen in a packaged build, with its two captures, in the owner's sitting, #156), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
 - [ ] The page's logo and the app's icon drawing the mark in the same proportions (#88).
 - [x] The specs in quarantine fixed and back in the gates: the speed limit's (#43, #232) and HLS's (#162).
 - [x] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes): 32 s with nothing written for a 32 GiB file on an NVMe SSD, over 45 s for 4 GiB on a USB hard disk.
@@ -42,6 +42,7 @@ One sitting, from one checklist, on a beta built as a release candidate:
 - [ ] Windows set to light: the page, the window and its buttons (#58).
 - [ ] The mark on a real `.exe` and a document (#33).
 - [ ] A hand in the folder dialog (#40) and on the speed menu (#43).
+- [ ] The update's note seen in a packaged build, and its two captures retaken (#156).
 - [ ] A real site's video, one file and an HLS stream (#89).
 - [ ] A real public Bunkr album, and a Bunkr file pasted by itself (#266).
 
@@ -49,7 +50,7 @@ Checked after the tag, so not part of the gate: a beta updated to the stable (#8
 
 ### The owner's decisions
 
-None open: all were settled on 21 November 2026 ([decisions.md](./decisions.md#21-november-2026)), and #228 joined the gate on 23 November 2026 ([decisions.md](./decisions.md#23-november-2026)).
+None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisions.md#23-november-2026)), #228 joining the gate on 23 November.
 
 ## M0 — Foundations
 
@@ -86,7 +87,7 @@ None open: all were settled on 21 November 2026 ([decisions.md](./decisions.md#2
 | [The installer installed and started in CI](./evidence.md#the-installer-in-ci)                                            | #92, #111  | yes   | CI install, every PR and release     | SmartScreen; a hand                                         | yes       |
 | [The installer refuses an older version](./evidence.md#the-installer-refuses-an-older-version)                            | #172       | yes   | Specs (NSIS), CI smoke, Script, Hand | a person running an older release                           | yes       |
 | [Automatic updates](./evidence.md#automatic-updates)                                                                      | #82        | yes   | Script (installed app)               | a stable taken; a quit by the system                        | yes       |
-| [The version, and a downloaded update offered](./evidence.md#the-version-and-a-downloaded-update)                         | #133, #159 | yes   | E2E, Script (packaged)               | a stable offered; real keys                                 | yes       |
+| [The version, and a downloaded update offered](./evidence.md#the-version-and-a-downloaded-update)                         | #133, #159 | yes   | E2E, Script (packaged)               | a stable offered; real keys; the note's words (#156)        | yes       |
 | [E2E suite on the real app](./evidence.md#the-e2e-suite)                                                                  | #91        | yes   | CI, nineteen specs                   | the packaged app; a kill mid-download (#108)                | yes       |
 | [The `--inspect` fuse off in the shipped app](./evidence.md#the---inspect-fuse-off)                                       | #115       | yes   | CI install, every PR and release     | a debugger asked for by a hand                              | yes       |
 | [A save of `state.json` while another process holds it](./evidence.md#a-save-of-statejson-while-another-process-holds-it) | #151       | yes   | Specs (integration, on Windows)      | the real app with `state.json` held                         | yes       |

@@ -7,7 +7,7 @@ const FILL: Readonly<Record<DownloadStatus, string>> = {
   ready: 'bg-muted-foreground',
   downloading: 'bg-accent',
   queued: 'bg-muted-foreground',
-  paused: 'bg-muted-foreground',
+  paused: 'bg-paused',
   failed: 'bg-destructive',
   completed: 'bg-accent',
 };

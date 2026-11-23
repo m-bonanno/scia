@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ColourScheme, DEFAULT_THEME, THEMES, WINDOW_COLOURS } from '@scia/contracts/theme';
+import { ColourScheme, DEFAULT_THEME, Theme, THEMES, WINDOW_COLOURS } from '@scia/contracts/theme';
 import { describe, expect, it } from 'vitest';
 import { titleBarOverlay } from './engine/title-bar.ts';
 
@@ -88,6 +88,7 @@ const PAIRS: readonly (readonly [string, string, number])[] = [
   ['accent', 'surface', NOT_TEXT],
   ['accent', 'surface-hover', NOT_TEXT],
   ['accent', 'tonal', NOT_TEXT],
+  ['paused', 'tonal', NOT_TEXT],
   ['destructive', 'tonal', NOT_TEXT],
   ['ring', 'background', NOT_TEXT],
   ['ring', 'surface', NOT_TEXT],
@@ -131,6 +132,35 @@ describe('the themes of the page', () => {
   );
 });
 
+// A paused bar is a tone of its own, darker than a running one (the owner, #58). In the three
+// variants below "darker" cannot be built without the paused bar coming out less distinct from
+// a running one than the lighter tone it keeps (1.29:1, 1.16:1 and 1.34:1 at best).
+const PAUSED_LIGHTER_THAN_THE_ACCENT: readonly { theme: Theme; scheme: ColourScheme }[] = [
+  { theme: Theme.BlackTie, scheme: ColourScheme.Light },
+  { theme: Theme.Earth, scheme: ColourScheme.Dark },
+  { theme: Theme.WoodFloor, scheme: ColourScheme.Dark },
+];
+
+describe('a paused bar', () => {
+  it.each(variants)(
+    'is told from a running one by its tone in $theme, $scheme',
+    ({ theme, scheme }) => {
+      const { paused = '', accent = '' } = tokensOf(theme, scheme);
+      const lighter = PAUSED_LIGHTER_THAN_THE_ACCENT.some(
+        (variant) => variant.theme === theme && variant.scheme === scheme,
+      );
+
+      // A value in another form would read as no luminance at all, and as "darker".
+      expect([paused, accent]).toEqual([
+        expect.stringMatching(/^#[0-9a-f]{6}$/i),
+        expect.stringMatching(/^#[0-9a-f]{6}$/i),
+      ]);
+      expect(luminance(paused) > luminance(accent)).toBe(lighter);
+      expect(paused).not.toBe(accent);
+    },
+  );
+});
+
 // A state of the page is a pair too: selected text is written on the selection's own ground,
 // whatever was under it.
 describe('selected text', () => {
@@ -142,6 +172,19 @@ describe('selected text', () => {
 
     expect(PAIRS).toContainEqual([text, ground, TEXT]);
   });
+});
+
+// A token the page names by a class (`bg-paused`) is one Tailwind knows: a class it does not know
+// it drops without a word, and the page draws nothing there (#260).
+describe('the names of the tokens', () => {
+  const named = /@theme inline\s*\{([^}]*)\}/.exec(pageRules)?.[1] ?? '';
+
+  it.each(Object.keys(tokensOf(DEFAULT_THEME, ColourScheme.Dark)))(
+    'name --%s for Tailwind',
+    (token) => {
+      expect(named).toContain(`--color-${token}: var(--${token});`);
+    },
+  );
 });
 
 // The scrollbar is the page's own, in its tokens: the system's has arrow buttons and no theme.
