@@ -123,13 +123,13 @@ Mechanics in [`docs/development/release-flow.md`](./docs/development/release-flo
 
 ```
 docs/
-├── product/       # vision, roadmap
+├── product/       # vision, roadmap, integrations, evidence, decisions
 ├── design/        # screenshots and, later, the design system
 ├── adr/           # architecture decision records, numbered, never rewritten — superseded
 └── development/   # runbooks
 ```
 
-**A doc update is required in the same PR** when the change alters: an API route, payload or status code (the contract in `packages/contracts` too); a persisted shape (`state.json`); what the extension may see or send; an architectural decision (new dependency class, new process, new port) → a new ADR; the roadmap's state.
+**A doc update is required in the same PR** when the change alters: an API route, payload or status code (the contract in `packages/contracts` too); a persisted shape (`state.json`); what the extension may see or send; an architectural decision (new dependency class, new process, new port) → a new ADR; the roadmap's state; a site, service or program Scia reaches, or what one adds → its row in [`docs/product/integrations.md`](./docs/product/integrations.md).
 
 **Language**: everything is written in **English** — the interface of the app and of the extension, docs, code, identifiers, comments, commits, issues and PR bodies. A translation of the interface is a feature of its own (i18n), not a second language sprinkled in the code.
 
