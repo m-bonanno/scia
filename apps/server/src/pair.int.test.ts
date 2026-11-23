@@ -1,6 +1,13 @@
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { boxHeaderOf, boxOf, childrenOf, DownloadStatus, PageFailure } from '@scia/core';
+import {
+  boxHeaderOf,
+  boxOf,
+  childrenOf,
+  DownloadFailure,
+  DownloadStatus,
+  PageFailure,
+} from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DownloadManager, type ManagerDeps } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
@@ -265,21 +272,163 @@ describe('DownloadManager and a picture and a sound offered apart (docs/adr/0021
     expect(new Set(fetched).size).toBe(fetched.length);
   }, 60_000);
 
-  it('fails a picture and sound it does not join as a format it cannot fetch, and keeps them for a retry', async () => {
-    // The "picture" is a sound: no picture to join.
-    const { site, picture, sound } = await pairOf('sound.m4a', 'sound.m4a');
+  it('fails a picture and sound it does not join as not joined, and keeps nothing of them (#241)', async () => {
+    // The "picture" is a sound: no picture to join. Slow enough for checkpoints to keep the
+    // pair's bytes in the record before the join, as a long pair's would.
+    const { site, picture, sound } = await pairOf('sound.m4a', 'sound.m4a', {
+      chunkBytes: 1024,
+      chunkDelayMs: 10,
+    });
     const downloads = await open({
       pageReader: reader(() => ({
         title: 'Two sounds',
         formats: [pictureAt(picture.url), soundAt(sound.url)],
       })),
+      checkpointMs: 5,
     });
 
     const [added] = downloads.add({ urls: [site.url] });
     await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
 
-    expect(downloads.find(added!.id).failure).toBe(PageFailure.FormatUnsupported);
-    expect(await readdir(downloadsFolder())).not.toContain('Two sounds.mp4');
+    const failed = downloads.find(added!.id);
+    expect(failed.failure).toBe(PageFailure.NotJoined);
+    // Never joined, never chosen again: their bytes are of nothing now.
+    expect(await readdir(downloadsFolder())).toEqual([]);
+    expect([failed.downloadedBytes, failed.totalBytes, failed.segments]).toEqual([0, null, []]);
+  });
+
+  it('reads the page again at a retry after a join it refused, and fetches its best one file (#241)', async () => {
+    // Two files it does not join: a plain picture beside a fragmented sound.
+    const { site, picture, sound } = await pairOf('picture.mp4', 'sound-fragmented.m4a');
+    const singleBytes = await fixture('picture.mp4');
+    // Slow enough to be paused on its way.
+    const single = await host({ body: singleBytes, chunkBytes: 256, chunkDelayMs: 20 });
+    let reads = 0;
+    const downloads = await open({
+      pageReader: reader(() => {
+        reads += 1;
+        // The same page each time: a pair of 64 lines above one file of 32.
+        return {
+          title: 'Fallen back',
+          formats: [
+            format(single.url, { acodec: 'mp4a.40.2', height: 32 }),
+            pictureAt(picture.url),
+            soundAt(sound.url),
+          ],
+        };
+      }),
+    });
+
+    const [added] = downloads.add({ urls: [site.url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+    expect(downloads.find(added!.id).failure).toBe(PageFailure.NotJoined);
+    expect(downloads.find(added!.id).media).toEqual({ ext: 'mp4', height: 64 });
+
+    downloads.resume(added!.id);
+    await until(() => downloads.find(added!.id).downloadedBytes > 0);
+    // A pause keeps the file the page gave, as for any page: the page is not read a third time.
+    await downloads.pause(added!.id);
+    downloads.resume(added!.id);
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(reads).toBe(2);
+    expect(downloads.find(added!.id).media).toEqual({ ext: 'mp4', height: 32 });
+    expect(await readdir(downloadsFolder())).toEqual(['Fallen back.mp4']);
+    expect(
+      Buffer.compare(await readFile(join(downloadsFolder(), 'Fallen back.mp4')), singleBytes),
+    ).toBe(0);
+  });
+
+  it('remembers a join it refused across a restart, and fetches the one file at the retry (#241)', async () => {
+    const { site, picture, sound } = await pairOf('picture.mp4', 'sound-fragmented.m4a');
+    const singleBytes = await fixture('picture.mp4');
+    const single = await host({ body: singleBytes });
+    const pageReader = reader(() => ({
+      title: 'Restarted',
+      formats: [
+        format(single.url, { acodec: 'mp4a.40.2', height: 32 }),
+        pictureAt(picture.url),
+        soundAt(sound.url),
+      ],
+    }));
+    const first = await open({ pageReader });
+    const [added] = first.add({ urls: [site.url] });
+    await until(() => statusOf(first, added!.id) === DownloadStatus.Failed);
+    await first.close();
+    manager = undefined;
+    const state = JSON.parse(await readFile(join(folder.path, 'data', 'state.json'), 'utf8')) as {
+      downloads: { joinRefused: unknown }[];
+    };
+    expect(state.downloads[0]?.joinRefused).toBe(true);
+
+    const downloads = await open({ pageReader });
+    downloads.resume(added!.id);
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(await readdir(downloadsFolder())).toEqual(['Restarted.mp4']);
+    expect(
+      Buffer.compare(await readFile(join(downloadsFolder(), 'Restarted.mp4')), singleBytes),
+    ).toBe(0);
+  });
+
+  it('never fetches a pair kept from before its join was refused, as a pause during the refusal keeps it (#241)', async () => {
+    const { site, picture, sound } = await pairOf('picture.mp4', 'sound-fragmented.m4a');
+    const singleBytes = await fixture('picture.mp4');
+    const single = await host({ body: singleBytes });
+    const pageReader = reader(() => ({
+      title: 'Paused',
+      formats: [
+        format(single.url, { acodec: 'mp4a.40.2', height: 32 }),
+        pictureAt(picture.url),
+        soundAt(sound.url),
+      ],
+    }));
+    const stateFile = join(folder.path, 'data', 'state.json');
+    const first = await open({ pageReader });
+    const [added] = first.add({ urls: [site.url] });
+    await until(() => statusOf(first, added!.id) === DownloadStatus.Failed);
+    await first.close();
+    manager = undefined;
+    // What a pause landing during the refusal leaves: paused, the mark set, the pair still kept.
+    const state = JSON.parse(await readFile(stateFile, 'utf8')) as {
+      downloads: Record<string, unknown>[];
+    };
+    const record = state.downloads[0]!;
+    expect((record.video as { source: { kind: string } }).source.kind).toBe('pair');
+    record.status = DownloadStatus.Paused;
+    record.failure = null;
+    await writeFile(stateFile, JSON.stringify(state));
+
+    const downloads = await open({ pageReader });
+    downloads.resume(added!.id);
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(downloads.find(added!.id).media).toEqual({ ext: 'mp4', height: 32 });
+    expect(Buffer.compare(await readFile(join(downloadsFolder(), 'Paused.mp4')), singleBytes)).toBe(
+      0,
+    );
+  });
+
+  it('loads a state written before #241 with no join refused, and keeps one that was', async () => {
+    const stateFile = join(folder.path, 'data', 'state.json');
+    const downloads = await open();
+    downloads.add({ urls: ['http://127.0.0.1:9/pair.html'] });
+    await downloads.pause(downloads.snapshot().downloads[0]!.id);
+    await downloads.close();
+    manager = undefined;
+    const state = JSON.parse(await readFile(stateFile, 'utf8')) as {
+      downloads: Record<string, unknown>[];
+    };
+    const record = state.downloads[0]!;
+    expect(record.joinRefused).toBe(false);
+
+    delete record.joinRefused;
+    await writeFile(stateFile, JSON.stringify(state));
+    expect((await new JsonStateStore(stateFile).load())?.downloads[0]?.joinRefused).toBe(false);
+
+    record.joinRefused = true;
+    await writeFile(stateFile, JSON.stringify(state));
+    expect((await new JsonStateStore(stateFile).load())?.downloads[0]?.joinRefused).toBe(true);
   });
 
   it('removes the picture and the sound with a download that is removed before it ends', async () => {
@@ -308,8 +457,10 @@ describe('DownloadManager and a picture and a sound offered apart (docs/adr/0021
   });
 
   it('removes the picture and the sound when the page, read again, gives one file instead', async () => {
-    // Two files it does not join: a plain picture beside a fragmented sound.
-    const { site, picture, sound } = await pairOf('picture.mp4', 'sound-fragmented.m4a');
+    // The sound's host refuses its bytes: the pair fails on the way, not at the join.
+    const { site, picture, sound } = await pairOf('picture.mp4', 'sound.m4a', {
+      refusesRanges: 404,
+    });
     const single = await host({ body: await fixture('picture.mp4') });
     let apart = true;
     const downloads = await open({
@@ -323,16 +474,85 @@ describe('DownloadManager and a picture and a sound offered apart (docs/adr/0021
     const [added] = downloads.add({ urls: [site.url] });
     await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
     // Kept for a retry: the bytes are there.
-    expect((await readdir(downloadsFolder())).sort()).toEqual([
-      'Changed.mp4.scia.picture',
-      'Changed.mp4.scia.sound',
-    ]);
+    expect(await readdir(downloadsFolder())).toContain('Changed.mp4.scia.picture');
 
     apart = false;
     downloads.resume(added!.id);
     await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
 
     expect(await readdir(downloadsFolder())).toEqual(['Changed.mp4']);
+  });
+
+  it('chooses the pair again at a retry after the disk failed at the join, not the files (#241)', async () => {
+    const site = await host({ body: page, contentType: 'text/html' });
+    const picture = await host({ body: await fixture('picture.mp4') });
+    const sound = await host({
+      body: await fixture('sound.m4a'),
+      chunkBytes: 256,
+      chunkDelayMs: 50,
+    });
+    const single = await host({ body: await fixture('picture.mp4') });
+    const downloads = await open({
+      pageReader: reader(() => ({
+        title: 'Disk',
+        formats: [
+          format(single.url, { acodec: 'mp4a.40.2', height: 32 }),
+          pictureAt(picture.url),
+          soundAt(sound.url),
+        ],
+      })),
+    });
+    const [added] = downloads.add({ urls: [site.url] });
+    // Named once its bytes come: the part file's name is final.
+    await until(() => downloads.find(added!.id).downloadedBytes > 0);
+    expect(downloads.find(added!.id).fileName).toBe('Disk.mp4');
+    // A folder where the joined mp4 is to be written: the disk refuses the join, the files do not.
+    const partPath = join(downloadsFolder(), 'Disk.mp4.scia');
+    await mkdir(partPath, { recursive: true });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+    expect(downloads.find(added!.id).failure).toBe(DownloadFailure.Disk);
+
+    await rm(partPath, { recursive: true });
+    downloads.resume(added!.id);
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(downloads.find(added!.id).media).toEqual({ ext: 'mp4', height: 64 });
+    expect(handlersOf(await readFile(join(downloadsFolder(), 'Disk.mp4')))).toEqual([
+      'vide',
+      'soun',
+    ]);
+  });
+
+  it('chooses the pair again at a retry after a failure on the way, not at the join (#241)', async () => {
+    const site = await host({ body: page, contentType: 'text/html' });
+    const picture = await host({ body: await fixture('picture.mp4') });
+    const refused = await host({ body: await fixture('sound.m4a'), refusesRanges: 404 });
+    const sound = await host({ body: await fixture('sound.m4a') });
+    const single = await host({ body: await fixture('picture.mp4') });
+    let soundUrl = refused.url;
+    const downloads = await open({
+      pageReader: reader(() => ({
+        title: 'Again',
+        formats: [
+          format(single.url, { acodec: 'mp4a.40.2', height: 32 }),
+          pictureAt(picture.url),
+          soundAt(soundUrl),
+        ],
+      })),
+    });
+    const [added] = downloads.add({ urls: [site.url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+    expect(downloads.find(added!.id).failure).not.toBe(PageFailure.NotJoined);
+
+    soundUrl = sound.url;
+    downloads.resume(added!.id);
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(downloads.find(added!.id).media).toEqual({ ext: 'mp4', height: 64 });
+    expect(handlersOf(await readFile(join(downloadsFolder(), 'Again.mp4')))).toEqual([
+      'vide',
+      'soun',
+    ]);
   });
 
   // What a download keeps beside its name while it runs: its part file, a stream's pieces, a pair's

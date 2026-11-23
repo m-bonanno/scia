@@ -277,6 +277,26 @@ describe('chooseMedia', () => {
     ]);
   });
 
+  it('takes the best one file or stream, and no pair, once a join was refused (#241)', () => {
+    const formats = [
+      file({ url: 'https://cdn.example/360.mp4', height: 360 }),
+      file({ url: 'https://cdn.example/720/index.m3u8', protocol: 'm3u8_native', height: 720 }),
+      picture({ height: 1080 }),
+      sound(),
+    ];
+
+    expect(chooseMedia(formats).kind).toBe('pair');
+    const chosen = chooseMedia(formats, undefined, { joins: false });
+    expect([chosen.url, chosen.kind]).toEqual(['https://cdn.example/720/index.m3u8', 'hls']);
+    expect(chooseMedia(formats, 'mp4', { joins: false }).kind).toBe('hls');
+  });
+
+  it('says a page that offers nothing but a pair refused is in a form it cannot download (#241)', () => {
+    expect(() =>
+      chooseMedia([picture({ height: 1080 }), sound()], 'mp4', { joins: false }),
+    ).toThrow(expect.objectContaining({ failure: PageFailure.FormatUnsupported }));
+  });
+
   it('joins nothing for a download whose bytes are of another container than an mp4', () => {
     const chosen = chooseMedia(
       [
