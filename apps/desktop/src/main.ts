@@ -73,8 +73,6 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function boot(): Promise<void> {
-  // Asked only when a notification is decided (ADR 0020); loaded now, in milliseconds.
-  void loadForeground();
   const layout = resolveRuntimeLayout({
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
@@ -91,6 +89,12 @@ async function boot(): Promise<void> {
   // presses OK: after a close nobody sees it and the app stays alive. The log is enough.
   log.errorHandler.startCatching({ showDialog: false });
   log.info('boot', { version: app.getVersion(), packaged: app.isPackaged, pid: process.pid });
+  // Asked only when a notification is decided (ADR 0020); loaded now, in milliseconds.
+  void loadForeground().then((load) => {
+    if (load === undefined) return;
+    if (load.loaded) log.info('foreground_ready');
+    else log.warn('foreground_unavailable', { error: load.error });
+  });
 
   // Windows shows a notification only for an app that says who it is.
   if (process.platform === 'win32') app.setAppUserModelId(APP_ID);

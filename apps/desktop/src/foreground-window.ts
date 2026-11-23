@@ -13,14 +13,22 @@ interface Koffi {
 
 let call: ForegroundCall | undefined;
 
-export async function loadForeground(): Promise<void> {
-  if (process.platform !== 'win32' || call !== undefined) return;
+// What became of the loading, for main's log: a koffi that does not load must be seen, since
+// without it every decision notifies.
+export type ForegroundLoad =
+  { readonly loaded: true } | { readonly loaded: false; readonly error: string };
+
+export async function loadForeground(): Promise<ForegroundLoad | undefined> {
+  if (process.platform !== 'win32') return undefined;
+  if (call !== undefined) return { loaded: true };
   try {
     // Kept outside main's bundle: koffi finds its native build beside its own files.
     const koffi = ((await import('koffi')) as { default: Koffi }).default;
     call = koffi.load('user32.dll').func('__stdcall', 'GetForegroundWindow', 'uintptr_t', []);
-  } catch {
+    return { loaded: true };
+  } catch (error) {
     call = undefined;
+    return { loaded: false, error: String(error).split('\n')[0] ?? '' };
   }
 }
 

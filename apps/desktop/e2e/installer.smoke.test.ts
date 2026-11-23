@@ -170,6 +170,10 @@ describe('the installer, installed and started', () => {
     const log = await profile!.log();
     expect(log).toContain(`boot { version: '${VERSION!}', packaged: true`);
     expect(log).toContain('engine_ready');
+    // The installed app loads its one native module, which asks Windows which window is in use
+    // (ADR 0020): without it every notification would be decided as for another window.
+    expect(log).toContain('foreground_ready');
+    expect(log).not.toContain('foreground_unavailable');
     expect(errorsIn(log)).toBe(false);
   });
 
@@ -184,6 +188,8 @@ describe('the installer, installed and started', () => {
       .waitFor({ timeout: 30_000 });
     const written = await readFile(join(profile!.downloads, 'sample.bin'));
     expect(Buffer.compare(written, body)).toBe(0);
+    // The decision on its end was Windows' own, asked through koffi in the installed app (ADR 0020).
+    await until(async () => /downloads_ended .*asked: 'answered'/.test(await profile!.log()));
   });
 
   it('quits when its window is closed with nothing to download', async () => {
