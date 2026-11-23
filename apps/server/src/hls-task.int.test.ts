@@ -34,6 +34,8 @@ function expectAnMp4Of(bytes: Buffer, pieces: number): void {
   expect(boxes.slice(2)).toEqual(Array.from({ length: pieces * 2 }, () => ['moof', 'mdat']).flat());
 }
 
+const CONNECTIONS = 2;
+
 describe('HlsTask against a real HTTP host', () => {
   const source = new HttpSource('scia-test');
   let folder: Awaited<ReturnType<typeof scratchFolder>>;
@@ -58,7 +60,7 @@ describe('HlsTask against a real HTTP host', () => {
       playlistUrl,
       headers: {},
       partPath: join(folder.path, 'video.mp4.scia'),
-      connections: 2,
+      connections: CONNECTIONS,
       onBytes: () => undefined,
       retryDelayMs: () => 1,
       ...overrides,
@@ -315,18 +317,19 @@ describe('HlsTask against a real HTTP host', () => {
     await expect(
       task(`${server.url}/index.m3u8`).run(new AbortController().signal),
     ).rejects.toThrow();
-    // A request a connection sent before the stop can reach the host just after the task ended:
-    // it is in flight, not a connection that went on (#162). What follows is counted once those
-    // have landed, and nothing may be asked after.
-    await new Promise((resolve) => setTimeout(resolve, 200));
-    const askedThen = server.asked.length;
+    const askedAtStop = server.asked.length;
+    // A stretch in which a connection that went on would ask for piece after piece, at the host's
+    // 100 ms a piece: the wait is the case itself.
+    await new Promise((resolve) => setTimeout(resolve, 800));
+
+    // A request a connection sent just before the stop can reach the host after the task ended:
+    // in flight, not a connection that went on (#162). The failed connection has none, and each
+    // other one at most one, since a connection fetches one piece at a time.
+    expect(server.asked.length - askedAtStop).toBeLessThanOrEqual(CONNECTIONS - 1);
     // The other connection stopped at the piece it had: not every piece was asked for.
     expect(server.asked.filter((path) => path.endsWith('.mpegts')).length).toBeLessThan(
       names.length,
     );
-    await new Promise((resolve) => setTimeout(resolve, 800));
-
-    expect(server.asked.length).toBe(askedThen);
   });
 
   it('stops waiting to ask again when it is told to stop', async () => {
