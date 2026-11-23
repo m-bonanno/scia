@@ -25,18 +25,29 @@ export interface RangeServerOptions {
   readonly firstByteAs200?: number;
   // The Content-Type of every answer with a body: a page is `text/html`.
   readonly contentType?: string;
+  // The ETag of every answer with a body; `"v1"` if absent.
+  readonly etag?: string;
 }
 
 export interface RangeServer {
   readonly url: string;
   // The Range header of every request received, in order.
   readonly ranges: (string | undefined)[];
-  // The User-Agent, Referer and Accept-Encoding of every request received, in order.
+  // The User-Agent, Referer and Accept-Encoding of every request received, in order, with the
+  // path and query it asked for.
   readonly asked: {
+    readonly link: string | undefined;
+    readonly range: string | undefined;
     readonly userAgent: string | undefined;
     readonly referer: string | undefined;
     readonly acceptEncoding: string | undefined;
   }[];
+  // Every link asked for so far — a path and query — expires, as a direct link a service gives
+  // does after a while: what it is sending is cut, and it answers `status` from now on. A link
+  // asked for afterwards is good.
+  expireLinks(status: number): void;
+  // The bytes of bodies sent on a link, by its path and query.
+  sentOn(link: string): number;
   close(): Promise<void>;
 }
 
@@ -45,6 +56,7 @@ async function send(
   body: Buffer,
   options: RangeServerOptions,
   mayDrop: () => boolean,
+  onSent: (count: number) => void,
 ): Promise<void> {
   const chunkBytes = options.chunkBytes ?? 64 * 1024;
   let sent = 0;
@@ -56,6 +68,7 @@ async function send(
     const chunk = body.subarray(sent, sent + chunkBytes);
     if (!response.write(chunk)) await new Promise((resolve) => response.once('drain', resolve));
     sent += chunk.length;
+    onSent(chunk.length);
     if (options.chunkDelayMs !== undefined) await sleep(options.chunkDelayMs);
   }
   response.end();
@@ -74,18 +87,30 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
 
   let noContent = options.noContent ?? 0;
   let firstByteAs200 = options.firstByteAs200 ?? 0;
+  const expired = new Map<string, number>();
+  const answering = new Map<ServerResponse, string>();
+  const sent = new Map<string, number>();
 
   const server = createServer((request, response) => {
+    const link = request.url ?? '';
     ranges.push(request.headers.range);
     asked.push({
+      link: request.url,
+      range: request.headers.range,
       userAgent: request.headers['user-agent'],
       referer: request.headers.referer,
       acceptEncoding: request.headers['accept-encoding'],
     });
-    if (options.status !== undefined) {
-      response.writeHead(options.status).end();
+    const status = options.status ?? expired.get(link);
+    if (status !== undefined) {
+      response.writeHead(status).end();
       return;
     }
+    answering.set(response, link);
+    response.on('close', () => answering.delete(response));
+    const counted = (count: number) => {
+      sent.set(link, (sent.get(link) ?? 0) + count);
+    };
     const firstByte = request.headers.range === 'bytes=0-0';
     if (request.headers.range !== undefined && !firstByte && noContent > 0) {
       noContent -= 1;
@@ -98,7 +123,7 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
       return;
     }
     const headers: Record<string, string> = {
-      etag: '"v1"',
+      etag: options.etag ?? '"v1"',
       ...(options.contentType === undefined ? {} : { 'content-type': options.contentType }),
     };
     if (options.fileName !== undefined) {
@@ -109,7 +134,7 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
       if (options.announcesLength !== false)
         headers['content-length'] = String(options.body.length);
       response.writeHead(200, headers);
-      void send(response, options.body, options, mayDrop);
+      void send(response, options.body, options, mayDrop, counted);
       return;
     }
     const start = Number(range[1]);
@@ -124,7 +149,7 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
       'content-length': String(slice.length),
       'content-range': `bytes ${String(start)}-${String(start + slice.length - 1)}/${String(options.body.length)}`,
     });
-    void send(response, slice, options, mayDrop);
+    void send(response, slice, options, mayDrop, counted);
   });
 
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -133,6 +158,13 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
     url: `http://127.0.0.1:${String(port)}/files/sample.bin`,
     ranges,
     asked,
+    expireLinks: (status) => {
+      for (const each of asked) expired.set(each.link ?? '', status);
+      for (const [response, link] of answering) {
+        if (expired.has(link)) response.destroy();
+      }
+    },
+    sentOn: (link) => sent.get(link) ?? 0,
     close: () =>
       new Promise((resolve) => {
         server.closeAllConnections();

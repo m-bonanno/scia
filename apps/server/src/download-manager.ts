@@ -76,6 +76,9 @@ const UNTITLED = 'video';
 // How long a link copied to the clipboard waits for the service to say whether it is a file
 // host's. One it has not said of by then is not taken: no link is offered on a guess.
 const OFFER_HOST_LIMIT_MS = 5000;
+// What the host of a direct link a service gave answers once the link has expired (#180).
+// AllDebrid's documentation does not say how long a link lasts, nor how it answers after.
+const EXPIRED = new Set([403, 410]);
 
 export const ManagerRefusal = {
   NotFound: 'NOT_FOUND',
@@ -889,25 +892,7 @@ export class DownloadManager {
         return;
       }
       this.#adopt(record, remote);
-      const task = new DownloadTask({
-        source: this.#deps.source,
-        url,
-        headers,
-        partPath: partPathOf(record),
-        totalBytes: record.totalBytes,
-        resumable: record.resumable,
-        connections: this.#settings.connectionsPerDownload,
-        segments: record.segments,
-        onBytes: (count) => {
-          running.meter.record(count, this.#now());
-        },
-        allowance: (expectedBytes) => this.#throttle.allowance(expectedBytes),
-        ...(this.#deps.retryDelayMs === undefined ? {} : { retryDelayMs: this.#deps.retryDelayMs }),
-      });
-      running.task = task;
-      this.#changed();
-      await task.run(signal);
-      this.#keepProgress(record, task);
+      await this.#runFile(record, running, url, headers, signal);
       await this.#finish(record);
     } catch (error) {
       if (running.task !== undefined) this.#keepProgress(record, running.task);
@@ -917,6 +902,69 @@ export class DownloadManager {
       this.#changed();
       this.#schedule();
     }
+  }
+
+  // A file's bytes, from those already on the disk. A direct link a service gave that expires on
+  // the way is asked for again, and the download goes on from its bytes on the new one — or from
+  // the first byte, if the new link is another file (#adopt). Once for each link that brought
+  // bytes: one that expires before its first byte fails the download, as each request to the
+  // service can count against what the account is allowed of a host (docs/adr/0022).
+  async #runFile(
+    record: DownloadRecord,
+    running: Running,
+    url: string,
+    headers: RequestHeaders,
+    signal: AbortSignal,
+  ): Promise<void> {
+    for (let link = url; ;) {
+      let brought = 0;
+      const task = new DownloadTask({
+        source: this.#deps.source,
+        url: link,
+        headers,
+        partPath: partPathOf(record),
+        totalBytes: record.totalBytes,
+        resumable: record.resumable,
+        connections: this.#settings.connectionsPerDownload,
+        segments: record.segments,
+        onBytes: (count) => {
+          brought += count;
+          running.meter.record(count, this.#now());
+        },
+        allowance: (expectedBytes) => this.#throttle.allowance(expectedBytes),
+        ...(this.#deps.retryDelayMs === undefined ? {} : { retryDelayMs: this.#deps.retryDelayMs }),
+      });
+      running.task = task;
+      this.#changed();
+      try {
+        await task.run(signal);
+        this.#keepProgress(record, task);
+        return;
+      } catch (error) {
+        if (brought === 0 || signal.aborted || !this.#expired(record, error)) throw error;
+        this.#keepProgress(record, task);
+      }
+      link = await this.#unlockAgain(record, signal);
+      this.#adopt(record, await this.#deps.source.probe(link, headers, signal));
+    }
+  }
+
+  // The host of a direct link a service gave says the link has expired.
+  #expired(record: DownloadRecord, error: unknown): boolean {
+    return (
+      this.#deps.resolver !== undefined &&
+      record.via !== null &&
+      record.unlockedUrl !== null &&
+      error instanceof RemoteError &&
+      error.status !== null &&
+      EXPIRED.has(error.status)
+    );
+  }
+
+  async #unlockAgain(record: DownloadRecord, signal: AbortSignal): Promise<string> {
+    record.unlockedUrl = null;
+    this.#deps.logger.info('link_unlocked_again', { id: record.id });
+    return this.#address(record, signal);
   }
 
   // A page's video offered as an HLS stream (docs/adr/0010): named once, of no size known before,
@@ -996,9 +1044,18 @@ export class DownloadManager {
   // again. A link that went through a service is not read: the service said what it is.
   async #locate(record: DownloadRecord, signal: AbortSignal): Promise<Located> {
     if (record.video !== null || record.fromPage) return this.#locateVideo(record, signal);
-    const url = await this.#address(record, signal);
+    const kept = record.unlockedUrl;
+    let url = await this.#address(record, signal);
     const headers = headersOf(record);
-    const remote = await this.#deps.source.probe(url, headers, signal);
+    let remote: RemoteFile;
+    try {
+      remote = await this.#deps.source.probe(url, headers, signal);
+    } catch (error) {
+      // A direct link kept from before — a pause, a restart — that expired meanwhile.
+      if (url !== kept || !this.#expired(record, error)) throw error;
+      url = await this.#unlockAgain(record, signal);
+      remote = await this.#deps.source.probe(url, headers, signal);
+    }
     const asItStands = { url, headers, remote, kind: 'file' } as const;
     if (!remote.isPage || record.named || record.via !== null) return asItStands;
     const chosen = await this.#readPage(record, signal);
@@ -1049,8 +1106,8 @@ export class DownloadManager {
 
   // Where the bytes are: at the link itself, or — for a link a connected service takes — at
   // the direct link the service gives for it. The service is asked once: its link is kept, and
-  // used again after a pause or a restart. The link that was added stays what the download
-  // is known by; the one the service gave is never shown and never logged.
+  // used again after a pause or a restart, until it expires (#runFile). The link that was added
+  // stays what the download is known by; the one the service gave is never shown and never logged.
   async #address(record: DownloadRecord, signal: AbortSignal): Promise<string> {
     const { resolver } = this.#deps;
     if (resolver === undefined) return record.url;

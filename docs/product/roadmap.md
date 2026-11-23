@@ -17,7 +17,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [ ] The window really in use before Scia stays silent (#62): built ([ADR 0020](../adr/0020-the-window-in-use-asked-of-windows.md)), to be seen by hand (#13).
 - [x] The `--inspect` fuse off in the shipped app, and the installer's smoke test driving it by the page's debugging port (#115).
 - [ ] A video and its sound offered apart, joined into one mp4 (#99), piece 3 of the video of a page (#89).
-- [ ] A link that expires during a long download, unlocked again keeping the bytes (#180).
+- [ ] A link that expires during a long download, unlocked again keeping the bytes (#180): built and held by specs ([ADR 0022](../adr/0022-a-direct-link-that-expires.md)), to be seen in the app.
 - [ ] A link that unlocks into several files, shown as a list to tick (#181).
 - [ ] #7's README and ADR point, once #180 and #181 land.
 - [ ] A key sealed just before the app was killed, read back (#69).
@@ -118,7 +118,7 @@ M3 does not wait for M2. Integrations arrive one at a time, each visible in Sett
 | [A key read back after the app was killed](./evidence.md#the-alldebrid-connection-in-settings) | #69        | no    | —                                | —                                             | yes       |
 | [A pasted hoster link unlocked](./evidence.md#the-unlocking-of-a-pasted-link)                  | #48        | yes   | Script; one real try, unfinished | a download through the real service that ends | yes       |
 | ["via AllDebrid" on the row](./evidence.md#via-alldebrid-on-the-row)                           | #48        | yes   | Script                           | paused (specs only)                           | yes       |
-| [A link that expires, unlocked again](./evidence.md#a-link-that-expires)                       | #180       | no    | —                                | —                                             | yes       |
+| [A link that expires, unlocked again](./evidence.md#a-link-that-expires)                       | #180       | yes   | Specs                            | the app; the real service                     | yes       |
 | [A link into several files](./evidence.md#a-link-into-several-files)                           | #181       | no    | —                                | —                                             | yes       |
 | [A file host's link with no service](./evidence.md#a-file-host-without-a-service)              | #49        | yes   | Script                           | the real list in the app                      | yes       |
 | [Connected by a code](./evidence.md#connected-by-a-code)                                       | #136, #146 | yes   | E2E, Script                      | AllDebrid's real page                         | yes       |
