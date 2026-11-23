@@ -1,6 +1,17 @@
 import { DEFAULT_THEME, Theme } from '@scia/contracts/theme';
 import { describe, expect, it } from 'vitest';
-import { RememberedTheme, type ThemeStore } from './remembered-theme.ts';
+import { RememberedTheme, type ThemeLog, type ThemeStore } from './remembered-theme.ts';
+
+function recording() {
+  const lines: [string, string, object][] = [];
+  const log: ThemeLog = {
+    info: (message, details) => lines.push(['info', message, details]),
+    warn: (message, details) => lines.push(['warn', message, details]),
+  };
+  return { log, lines };
+}
+
+const silent = recording().log;
 
 function storing(stored: unknown) {
   const writes: unknown[] = [];
@@ -13,7 +24,7 @@ function storing(stored: unknown) {
       writes.push(value);
     },
   };
-  return { theme: new RememberedTheme(store), writes };
+  return { theme: new RememberedTheme(store, silent), writes };
 }
 
 describe('RememberedTheme', () => {
@@ -61,13 +72,16 @@ describe('RememberedTheme', () => {
   it('writes again the theme it had kept, once a later write failed', async () => {
     let fails = false;
     const writes: unknown[] = [];
-    const theme = new RememberedTheme({
-      read: async () => undefined,
-      write: async (value) => {
-        if (fails) throw new Error('disk full');
-        writes.push(value);
+    const theme = new RememberedTheme(
+      {
+        read: async () => undefined,
+        write: async (value) => {
+          if (fails) throw new Error('disk full');
+          writes.push(value);
+        },
       },
-    });
+      silent,
+    );
     await theme.keep(Theme.Brick);
     fails = true;
     await theme.keep(Theme.Ice);
@@ -81,19 +95,54 @@ describe('RememberedTheme', () => {
   it('never stops anything for a write that fails, and tries it again at the next', async () => {
     let fails = true;
     const writes: unknown[] = [];
-    const theme = new RememberedTheme({
-      read: async () => undefined,
-      write: async (value) => {
-        if (fails) throw new Error('read-only profile');
-        writes.push(value);
+    const theme = new RememberedTheme(
+      {
+        read: async () => undefined,
+        write: async (value) => {
+          if (fails) throw new Error('read-only profile');
+          writes.push(value);
+        },
       },
-    });
+      silent,
+    );
 
     await expect(theme.keep(Theme.Space)).resolves.toBeUndefined();
     fails = false;
     await theme.keep(Theme.Space);
 
     expect(writes).toEqual([{ theme: Theme.Space }]);
+  });
+
+  // What another program does to the file is not Scia's to see: on Windows a rename onto a file
+  // another process has open fails (EPERM), and a write lost so said nothing at all (#280). The
+  // log is also what a run waits on, rather than reading the file under the write.
+  it('says in the log the theme it kept, once its write has landed', async () => {
+    const disk = slowStore();
+    const { log, lines } = recording();
+    const theme = new RememberedTheme(disk.store, log);
+
+    const kept = theme.keep(Theme.Ice);
+    await settle();
+    expect(lines).toEqual([]);
+    disk.started[0]?.land();
+    await kept;
+
+    expect(lines).toEqual([['info', 'theme_kept', { theme: Theme.Ice }]]);
+  });
+
+  it('says in the log a write that failed, with its theme and why', async () => {
+    const disk = slowStore();
+    const { log, lines } = recording();
+    const theme = new RememberedTheme(disk.store, log);
+
+    const kept = theme.keep(Theme.Ice);
+    await settle();
+    disk.started[0]?.fail();
+    await kept;
+
+    expect(lines).toEqual([
+      ['warn', 'theme_not_kept', { theme: Theme.Ice, error: 'Error: EPERM' }],
+    ]);
   });
 
   // A store whose writes end when the spec says, in any order: the engine said brick, then ice,
@@ -136,7 +185,7 @@ describe('RememberedTheme', () => {
 
   it('writes one at a time, and leaves the theme said last on disk, whatever lands first', async () => {
     const disk = slowStore();
-    const theme = new RememberedTheme(disk.store);
+    const theme = new RememberedTheme(disk.store, silent);
 
     const kept = [theme.keep(Theme.Brick), theme.keep(Theme.Ice), theme.keep(Theme.RoadTrip)];
     await settle();
@@ -156,7 +205,7 @@ describe('RememberedTheme', () => {
 
   it('writes again a theme whose write failed while another was asked', async () => {
     const disk = slowStore();
-    const theme = new RememberedTheme(disk.store);
+    const theme = new RememberedTheme(disk.store, silent);
     const first = theme.keep(Theme.Brick);
     await settle();
     const second = theme.keep(Theme.Ice);
