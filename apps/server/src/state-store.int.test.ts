@@ -18,24 +18,33 @@ describe('JsonStateStore against a real folder', () => {
     await folder.remove();
   });
 
-  it('lands a save whose rename the system refuses for a moment, as Windows does while another process holds the file (#151)', async () => {
-    const path = join(folder.path, 'state.json');
-    const store = new JsonStateStore(path);
-    // The store writes what it is given: a state of the spec's own, told apart by its settings.
-    const stateOf = (mark: number) =>
-      ({ version: 1, settings: { mark }, downloads: [], magnets: [] }) as unknown as PersistedState;
-    const before = stateOf(1);
-    await store.save(before);
+  // Windows refuses a rename onto an open file; Linux allows it, so the spec holds only there.
+  it.runIf(process.platform === 'win32')(
+    'lands a save whose rename the system refuses for a moment, as Windows does while another process holds the file (#151)',
+    async () => {
+      const path = join(folder.path, 'state.json');
+      const store = new JsonStateStore(path);
+      // The store writes what it is given: a state of the spec's own, told apart by its settings.
+      const stateOf = (mark: number) =>
+        ({
+          version: 1,
+          settings: { mark },
+          downloads: [],
+          magnets: [],
+        }) as unknown as PersistedState;
+      const before = stateOf(1);
+      await store.save(before);
 
-    // An antivirus or an indexer reading the file: on Windows a rename onto it fails meanwhile.
-    const held = await open(path, 'r');
-    const after = stateOf(2);
-    const saving = store.save(after);
-    setTimeout(() => void held.close(), 300);
+      // An antivirus or an indexer reading the file: on Windows a rename onto it fails meanwhile.
+      const held = await open(path, 'r');
+      const after = stateOf(2);
+      const saving = store.save(after);
+      setTimeout(() => void held.close(), 300);
 
-    await saving;
-    expect(await markOn(path)).toBe(2);
-  });
+      await saving;
+      expect(await markOn(path)).toBe(2);
+    },
+  );
 
   it.runIf(process.platform === 'win32')(
     'gives a save up, as before, when the file stays held: the next change saves again',
