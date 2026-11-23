@@ -951,6 +951,28 @@ describe('App', () => {
       });
     });
 
+    it('hands the focus to the filter in use when a copied folder leaves under its Start, another link still ready', async () => {
+      const folder = aDownload({
+        id: 'f1',
+        url: 'https://1fichier.com/dir/Holiday',
+        fileName: 'Holiday',
+        status: DownloadStatus.Ready,
+      });
+      const report = aDownload({ id: 'r1', fileName: 'report.pdf', status: DownloadStatus.Ready });
+      vi.spyOn(api, 'start').mockResolvedValue({ ...folder, status: DownloadStatus.Queued });
+      live.downloads = [folder, report];
+      const { rerender } = render(<App />);
+      const row = screen.getByText('Holiday').closest('li') ?? document.body;
+      within(row).getByRole('button', { name: 'Start' }).focus();
+
+      await userEvent.keyboard('{Enter}');
+      live.downloads = [report];
+      live.bundles = [{ ...bundle, id: 'b9', name: 'Holiday', status: 'opening', files: [] }];
+      rerender(<App />);
+
+      expect(screen.getByRole('button', { name: /^All/ })).toHaveFocus();
+    });
+
     it('hands the focus to the filter in use when the row leaves under Download', async () => {
       live.bundles = [bundle];
       vi.spyOn(api, 'startBundle').mockResolvedValue([]);

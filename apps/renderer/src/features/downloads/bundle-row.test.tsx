@@ -132,6 +132,29 @@ describe('BundleRow', () => {
     expect(actions.start).toHaveBeenLastCalledWith('b1', [0, 2]);
   });
 
+  it('keeps "All files" saying that some are ticked when it is pressed while the choice is held, and after a refusal', async () => {
+    const { actions, item } = row(choosing);
+    let settle: (started: boolean) => void = () => undefined;
+    actions.start.mockReturnValueOnce(
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+    );
+    const all = item.getByRole<HTMLInputElement>('checkbox', { name: 'All files' });
+    await userEvent.click(item.getByRole('checkbox', { name: /Day 2\.mkv/ }));
+    await userEvent.click(item.getByRole('button', { name: 'Download 2 files' }));
+
+    await userEvent.click(all);
+
+    expect(all.indeterminate).toBe(true);
+    expect(all).not.toBeChecked();
+    settle(false);
+    await vi.waitFor(() => {
+      expect(all).not.toHaveAttribute('aria-disabled');
+    });
+    expect(all.indeterminate).toBe(true);
+  });
+
   it('keeps the choice held once the engine took it, while the row is on its way out', async () => {
     const { actions, item } = row(choosing);
     const download = item.getByRole('button', { name: 'Download 3 files' });

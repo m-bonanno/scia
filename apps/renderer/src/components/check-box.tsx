@@ -38,7 +38,10 @@ export function CheckBox({
         checked={checked}
         aria-disabled={held ? true : undefined}
         onChange={(event) => {
-          if (!held) onChange(event.target.checked);
+          // Held, the press is refused: React gives `checked` back, and the mixed state the
+          // browser cleared at the click is given back here.
+          if (held) event.target.indeterminate = mixed;
+          else onChange(event.target.checked);
         }}
         className="peer sr-only"
       />

@@ -281,18 +281,19 @@ export function App(): ReactNode {
       filterTabs.current?.focus();
     }
   }, [hasReady]);
-  // So does a link whose files were started: its row leaves under "Download" (#181).
-  const bundleIds = live.bundles.map((bundle) => bundle.id).join(' ');
-  const bundlesBefore = useRef(bundleIds);
+  // So does any row that leaves under its own press: a link whose files were started, under
+  // "Download", and a copied folder opened into its files, under its "Start" (#181).
+  const rowIds = [...live.downloads, ...live.bundles].map((row) => row.id).join(' ');
+  const rowsBefore = useRef(rowIds);
   useEffect(() => {
-    const now = new Set(bundleIds.split(' '));
-    const left = bundlesBefore.current.split(' ').some((id) => id !== '' && !now.has(id));
-    bundlesBefore.current = bundleIds;
+    const now = new Set(rowIds.split(' '));
+    const left = rowsBefore.current.split(' ').some((id) => id !== '' && !now.has(id));
+    rowsBefore.current = rowIds;
     if (!left) return;
     if (document.activeElement === null || document.activeElement === document.body) {
       filterTabs.current?.focus();
     }
-  }, [bundleIds]);
+  }, [rowIds]);
 
   // How tall the notices are, for the room every area that scrolls beneath them keeps under its
   // end (`room-under-notices` in styles.css). Settings, inside this element, keeps its own.
