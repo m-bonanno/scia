@@ -3,11 +3,12 @@ import { randomBytes } from 'node:crypto';
 import { access, readdir, readFile, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
+import { DownloadStatus } from '@scia/core';
 import { type RangeServer, startRangeServer } from '@scia/server/testing/range-server.ts';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { YT_DLP_OF_PLATFORM, YT_DLP_VERSION } from '../src/engine/runtime-layout.ts';
 import { type InstalledScia, launchInstalled } from './installed.ts';
-import { paste, type Profile, rowOf, scratchProfile, until } from './scia.ts';
+import { downloadsOf, paste, type Profile, rowOf, scratchProfile, until } from './scia.ts';
 
 const run = promisify(execFile);
 
@@ -91,6 +92,7 @@ describe('the installer, installed and started', () => {
   let profile: Profile | undefined;
   let scia: InstalledScia | undefined;
   let host: RangeServer | undefined;
+  let slow: RangeServer | undefined;
 
   beforeAll(async () => {
     if (
@@ -116,6 +118,7 @@ describe('the installer, installed and started', () => {
   afterAll(async () => {
     await scia?.close();
     await host?.close();
+    await slow?.close();
     await profile?.remove();
   });
 
@@ -189,6 +192,56 @@ describe('the installer, installed and started', () => {
     expect(Buffer.compare(written, body)).toBe(0);
     // The decision on its end was Windows' own, asked through koffi in the installed app (ADR 0020).
     await until(async () => /downloads_ended {[^}]*asked: 'answered'/.test(await profile!.log()));
+  });
+
+  // An update by hand: the installer tells the Scia that runs that its session ends, and Scia
+  // writes its state and ends before anything is replaced (build/installer.nsh, #13).
+  it('is closed with its state written by an installer run during a download, which goes on at its next start', async () => {
+    const body = randomBytes(8 * 1024 * 1024);
+    // Slow enough that the download is still running when the installer starts: seconds.
+    slow = await startRangeServer({
+      body,
+      fileName: 'during-install.bin',
+      chunkBytes: 16 * 1024,
+      chunkDelayMs: 100,
+    });
+    await paste(scia!.page, slow.url);
+    await until(async () =>
+      (await downloadsOf(scia!.page)).some((download) => download.downloadedBytes > 0),
+    );
+    let ended = false;
+    void scia!.exited.then(() => {
+      ended = true;
+    });
+
+    await run(INSTALLER!, ['/S'], { timeout: INSTALL_LIMIT_MS });
+
+    // The installer waited for it: it ended before the installer did.
+    expect(ended).toBe(true);
+    await scia!.close();
+    // What the engine wrote as it stopped, read first: a download it was stopping is `queued`,
+    // one it was killed in the middle of stays `downloading` at its last checkpoint.
+    const state = JSON.parse(
+      await readFile(join(profile!.path, 'engine', 'state.json'), 'utf8'),
+    ) as { downloads: { fileName: string; status: string; segments: { downloaded: number }[] }[] };
+    const during = state.downloads.find((download) => download.fileName === 'during-install.bin');
+    expect(during?.status).toBe(DownloadStatus.Queued);
+    expect(during?.segments.some((segment) => segment.downloaded > 0)).toBe(true);
+    const log = await profile!.log();
+    expect(log).toMatch(/session_ended {[^}]*'close-app'/);
+    // Quit's own last line, written once the engine's process has ended: Scia ended itself, not
+    // Electron at once. The engine's own `stopped` is not read: main relays it from a pipe that the
+    // engine's exit can outrun (#262).
+    expect(log).toMatch(/\squit\s*$/m);
+    expect(log).not.toContain('update_installing');
+
+    scia = await launchInstalled(profile!, EXE);
+
+    await rowOf(scia.page, 'during-install.bin')
+      .getByRole('button', { name: 'Show in folder' })
+      .waitFor({ timeout: 60_000 });
+    const written = await readFile(join(profile!.downloads, 'during-install.bin'));
+    expect(Buffer.compare(written, body)).toBe(0);
   });
 
   it('quits when its window is closed with nothing to download', async () => {

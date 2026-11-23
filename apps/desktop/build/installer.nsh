@@ -1,5 +1,6 @@
 ; Included by electron-builder in the installer it packs (electron-builder.yml, `nsis.include`).
-; The installer refuses to install a Scia older than the one installed (docs/adr/0018).
+; The installer refuses to install a Scia older than the one installed (docs/adr/0018), and tells
+; a Scia that runs that its session ends before it ends it (#13).
 !ifndef BUILD_UNINSTALLER
 
 !include LogicLib.nsh
@@ -304,5 +305,149 @@ FunctionEnd
     Quit
   ${EndIf}
 !macroend
+
+; Windows' WM_ENDSESSION with ENDSESSION_CLOSEAPP: the session ends for this program alone, as an
+; installer needs its files. The Restart Manager says the same; Electron hands it to Scia as the
+; window's "session-end", with the reason "close-app".
+!define SCIA_WM_ENDSESSION 0x0016
+!define SCIA_ENDSESSION_CLOSEAPP 0x0001
+; SendMessageTimeout's SMTO_ABORTIFHUNG, and how long a window has to take the message.
+!define SCIA_ABORT_IF_HUNG 0x0002
+!define SCIA_MESSAGE_LIMIT_MS 5000
+; SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION: enough to read which program a process runs,
+; and to wait for it to end.
+!define SCIA_QUERY_AND_WAIT 0x101000
+; How long, from the first message, the programs told have to end: Scia's engine has five seconds
+; to stop and write its state, and is stopped after them (apps/desktop/src/server-process.ts).
+!define SCIA_CLOSE_LIMIT_MS 15000
+; WaitForSingleObject's answer for an object that was signalled: the process ended.
+!define SCIA_WAIT_OBJECT_0 0
+; Chromium's class for a top-level window: a BrowserWindow's, among others.
+!define SCIA_WINDOW_CLASS "Chrome_WidgetWin_1"
+
+Var SciaTarget
+Var SciaTold
+Var SciaLeft
+Var SciaWindow
+Var SciaPid
+Var SciaProcess
+Var SciaImage
+Var SciaToldWindows
+Var SciaToldPids
+Var SciaHandles
+Var SciaStarted
+Var SciaRemaining
+Var SciaWaitResult
+
+; $SciaFound 1 when the text pushed last holds the text pushed before it. The text goes to the
+; System plug-in by the stack, never inside its call.
+Function SciaHolds
+  System::Call 'shlwapi::StrStrW(w s, w s) p .s'
+  Pop $SciaFound
+  ${If} $SciaFound != 0
+    StrCpy $SciaFound 1
+  ${EndIf}
+FunctionEnd
+
+; Tells every top-level window of Chromium's class, hidden ones included, whose process runs the
+; program $SciaTarget that its session ends, and keeps a handle on each such process to wait on.
+; Once told, a Scia closes its window at once (#262): the walk starts again from the first window
+; after each, and passes over the windows already told.
+Function SciaTellWindowsOf
+  StrCpy $SciaTold 0
+  StrCpy $SciaToldWindows "|"
+  StrCpy $SciaToldPids "|"
+  StrCpy $SciaHandles ""
+  StrCpy $SciaWindow ""
+  ${Do}
+    FindWindow $SciaWindow "${SCIA_WINDOW_CLASS}" "" "" $SciaWindow
+    ${If} $SciaWindow == 0
+      ${Break}
+    ${EndIf}
+    Push "|$SciaWindow|"
+    Push $SciaToldWindows
+    Call SciaHolds
+    ${If} $SciaFound == 1
+      ${Continue}
+    ${EndIf}
+    System::Call 'user32::GetWindowThreadProcessId(p $SciaWindow, *i .s)'
+    Pop $SciaPid
+    System::Call 'kernel32::OpenProcess(i ${SCIA_QUERY_AND_WAIT}, i 0, i $SciaPid) p .s'
+    Pop $SciaProcess
+    ${If} $SciaProcess == 0
+      ${Continue}
+    ${EndIf}
+    System::Call 'kernel32::QueryFullProcessImageNameW(p $SciaProcess, i 0, w .s, *i ${NSIS_MAX_STRLEN})'
+    Pop $SciaImage
+    ; LogicLib's == ignores case, as Windows' paths do. A path spelled otherwise — the folder's short
+    ; 8.3 name — is not taken for this one: that Scia is ended by electron-builder's check.
+    ${If} $SciaImage != $SciaTarget
+      System::Call 'kernel32::CloseHandle(p $SciaProcess)'
+      ${Continue}
+    ${EndIf}
+    System::Call 'user32::SendMessageTimeoutW(p $SciaWindow, i ${SCIA_WM_ENDSESSION}, p 1, p ${SCIA_ENDSESSION_CLOSEAPP}, i ${SCIA_ABORT_IF_HUNG}, i ${SCIA_MESSAGE_LIMIT_MS}, p 0)'
+    IntOp $SciaTold $SciaTold + 1
+    StrCpy $SciaToldWindows "$SciaToldWindows$SciaWindow|"
+    Push "|$SciaPid|"
+    Push $SciaToldPids
+    Call SciaHolds
+    ${If} $SciaFound == 1
+      System::Call 'kernel32::CloseHandle(p $SciaProcess)'
+    ${Else}
+      StrCpy $SciaToldPids "$SciaToldPids$SciaPid|"
+      StrCpy $SciaHandles "$SciaHandles$SciaProcess "
+    ${EndIf}
+    StrCpy $SciaWindow ""
+  ${Loop}
+FunctionEnd
+
+; Tells every window of a program running $SciaTarget that its session ends, then waits for each
+; process told to end, SCIA_CLOSE_LIMIT_MS at most from the first message: a Scia told so writes
+; its state, stops its engine and ends, and its downloads go on at its next start (#13). Its
+; windows are no sign of it: it closes them at once (#262). $SciaTold: how many windows were told;
+; $SciaLeft: how many processes told had not ended within the bound.
+Function SciaEndSessionOf
+  System::Call 'kernel32::GetTickCount() i .s'
+  Pop $SciaStarted
+  Call SciaTellWindowsOf
+  StrCpy $SciaLeft 0
+  StrCpy $SciaSeparator " "
+  StrCpy $SciaRest $SciaHandles
+  ${DoUntil} $SciaRest == ""
+    Call SciaSplit
+    System::Call 'kernel32::GetTickCount() i .s'
+    Pop $SciaRemaining
+    IntOp $SciaRemaining $SciaRemaining - $SciaStarted
+    IntOp $SciaRemaining ${SCIA_CLOSE_LIMIT_MS} - $SciaRemaining
+    ${If} $SciaRemaining < 0
+      StrCpy $SciaRemaining 0
+    ${EndIf}
+    System::Call 'kernel32::WaitForSingleObject(p $SciaHead, i $SciaRemaining) i .s'
+    Pop $SciaWaitResult
+    ${If} $SciaWaitResult != ${SCIA_WAIT_OBJECT_0}
+      IntOp $SciaLeft $SciaLeft + 1
+    ${EndIf}
+    System::Call 'kernel32::CloseHandle(p $SciaHead)'
+  ${Loop}
+FunctionEnd
+
+; electron-builder's own check of a running app ends it by force, with whatever it was writing. It
+; is run here after Scia was told its session ends — for what is left, which it ends as before. Not
+; for the update Scia installs at its own quit: that Scia has ended already. Defined only where
+; electron-builder packs the installer: a program made of this include alone has none of its macros.
+!ifdef PRODUCT_FILENAME
+  ; What electron-builder's check needs and leaves out once a check of the app's own is defined.
+  !include "getProcessInfo.nsh"
+  Var pid
+
+  !macro customCheckAppRunning
+    ${IfNot} ${isUpdated}
+      StrCpy $SciaTarget "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+      Call SciaEndSessionOf
+    ${EndIf}
+    !insertmacro IS_POWERSHELL_AVAILABLE
+    !insertmacro _CHECK_APP_RUNNING
+  !macroend
+!endif
 
 !endif
