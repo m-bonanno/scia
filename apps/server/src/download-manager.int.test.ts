@@ -8,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DownloadManager, type ManagerDeps, PART_SUFFIX } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
 import { markerFor } from './origin-mark.ts';
+import { sparseMarkerFor } from './sparse-file.ts';
 import { JsonStateStore } from './state-store.ts';
+import { neverAnswers } from './testing/never-answers.ts';
 import {
   type RangeServer,
   type RangeServerOptions,
@@ -194,6 +196,26 @@ describe('DownloadManager', () => {
     expect(warned.map((warning) => warning.event)).toEqual(['part_file_not_sparse']);
     expect(warned[0]?.details).toMatchObject({ id: added!.id });
     expect(JSON.stringify(warned)).not.toContain('Film.mkv');
+  });
+
+  it('downloads all the same a file whose fsutil never answers, once its limit has passed, and says so in the log', async () => {
+    const { url } = await host({ fileName: 'Film.mkv' });
+    const warned: string[] = [];
+    const downloads = await open({
+      logger: {
+        ...silentLogger,
+        warn: (event) => {
+          warned.push(event);
+        },
+      },
+      markSparse: sparseMarkerFor('win32', { run: neverAnswers, limitMs: 300 }),
+    });
+
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
+    expect(warned).toEqual(['part_file_not_sparse']);
   });
 
   it.runIf(process.platform === 'win32')(

@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile, stat, statfs, writeFile } from 'node:fs/promises';
+import { readFile, stat, statfs, truncate, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DownloadFailure, isComplete, planSegments, type Segment } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -251,19 +251,10 @@ describe('DownloadTask against a real HTTP host', () => {
       expect(existsSync(partPath)).toBe(false);
     });
 
-    it('counts against the room left only the bytes still to come', async () => {
-      const kept = 4 * MIB;
-      const toCome = body.length - kept;
-      const segments: Segment[] = [
-        { start: 0, end: kept, downloaded: kept },
-        { start: kept, end: body.length, downloaded: 0 },
-      ];
-
+    it('checks the room of a part file it makes against the whole file', async () => {
       const short = await host();
-      await writeFile(partPath, body.subarray(0, kept));
       const refused = await task(short.url, {
-        segments,
-        freeBytes: () => Promise.resolve(toCome - 1),
+        freeBytes: () => Promise.resolve(body.length - 1),
       })
         .run(new AbortController().signal)
         .catch((error: unknown) => error);
@@ -273,10 +264,46 @@ describe('DownloadTask against a real HTTP host', () => {
 
       const enough = await host();
       await task(enough.url, {
-        segments,
-        freeBytes: () => Promise.resolve(toCome),
+        freeBytes: () => Promise.resolve(body.length),
       }).run(new AbortController().signal);
       expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+    });
+
+    it('goes on with a part file it keeps, whatever room is left: its room was looked at, or taken, when it was made', async () => {
+      const { url } = await host();
+      const kept = 4 * MIB;
+      // A dense part file of an earlier attempt: its whole size is already its own on the disk.
+      await writeFile(partPath, body.subarray(0, kept));
+      await truncate(partPath, body.length);
+
+      await task(url, {
+        segments: [
+          { start: 0, end: kept, downloaded: kept },
+          { start: kept, end: body.length, downloaded: 0 },
+        ],
+        freeBytes: () => Promise.resolve(0),
+      }).run(new AbortController().signal);
+
+      expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+    });
+
+    it('checks the room of a part file that is gone as of one it makes, its bytes to come again', async () => {
+      const { url, ranges } = await host();
+      const kept = 4 * MIB;
+
+      // The segments remember bytes the disk no longer has: all of the file is to come again.
+      const refused = await task(url, {
+        segments: [
+          { start: 0, end: kept, downloaded: kept },
+          { start: kept, end: body.length, downloaded: 0 },
+        ],
+        freeBytes: () => Promise.resolve(body.length - kept),
+      })
+        .run(new AbortController().signal)
+        .catch((error: unknown) => error);
+
+      expect(refused).toBeInstanceOf(DiskError);
+      expect(ranges).toEqual([]);
     });
 
     it('goes on when the room left cannot be read: a full disk is then said by the write that finds it', async () => {

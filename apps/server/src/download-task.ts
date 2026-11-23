@@ -153,13 +153,10 @@ export class DownloadTask {
 
   async #openPart(): Promise<FileHandle> {
     const kept = await onDisk(() => this.#openKept());
-    if (this.#ranged) {
-      // Before the file is made: a download refused for its room leaves nothing on the disk.
-      await this.#roomForTheRest().catch(async (error: unknown) => {
-        await kept?.close();
-        throw error;
-      });
-    }
+    // Only a part file about to be made, before it is: a download refused for its room leaves
+    // nothing on the disk. A kept one had its room looked at when it was made — or taken, made
+    // dense — and what it has not written yet is no room it still needs.
+    if (this.#ranged && kept === undefined) await this.#roomForTheRest();
     const file = kept ?? (await onDisk(() => open(this.#options.partPath, 'w+')));
     try {
       // A ranged part file is the file's length: the whole size at once when it is made, kept
@@ -182,7 +179,7 @@ export class DownloadTask {
 
   // A sparse file takes its room as its bytes arrive, so the room is not reserved: it is looked
   // at, so that a full disk is still said before a byte is fetched. What another download or
-  // program writes meanwhile is said by the write that finds the disk full, and so is the room of
+  // program writes afterwards is said by the write that finds the disk full, and so is the room of
   // a disk that does not say it.
   async #roomForTheRest(): Promise<void> {
     const room = await (this.#options.freeBytes ?? roomOf)(dirname(this.#options.partPath)).catch(
