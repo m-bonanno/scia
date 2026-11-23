@@ -145,6 +145,100 @@ describe('a link that goes through a service', () => {
     expect(JSON.stringify(alldebrid.requests)).not.toContain(host.url);
   });
 
+  describe('while the kept key cannot be read (#69)', () => {
+    const never = new AbortController().signal;
+    // Main answers that it could not read the key: the system no longer has what opens it.
+    async function keyNotRead(to: AllDebridServer): Promise<Integrations> {
+      const vault = new MemoryVault();
+      return Integrations.open({
+        vault: {
+          read: () => Promise.reject(new Error('Main did not read the key of alldebrid.')),
+          write: (name, key) => vault.write(name, key),
+          remove: (name) => vault.remove(name),
+        },
+        hostsFile: hostsFile(),
+        alldebrid: new AllDebrid({ api: to.api, userAgent: 'Scia/spec', retryDelayMs: () => 1 }),
+        logger,
+      });
+    }
+    // The list the account gave in the run before, kept: the public list does not have the host.
+    async function keptList(): Promise<void> {
+      mkdirSync(join(folder.path, 'data'), { recursive: true });
+      await writeFile(hostsFile(), JSON.stringify({ domains: ['hoster.example'] }));
+    }
+
+    it("says a link of the account's hosts needs the service, and fetches nothing from its host", async () => {
+      await keptList();
+      const alldebrid = await serviceWith({ hosts: {}, links: {} });
+      // Not even the public list answers: the kept one is what knows the host.
+      alldebrid.misbehave({ status: 503, route: 'GET /v4/hosts/domains' });
+      const downloads = await open(await keyNotRead(alldebrid));
+
+      const [added] = downloads.add({ urls: [LINK] });
+      const failed = await finished(downloads, added!.id, DownloadStatus.Failed);
+
+      expect(failed.failure).toBe(UnlockFailure.NeedsService);
+      expect(failed.via).toBeNull();
+      expect(existsSync(inDownloads('abc123'))).toBe(false);
+      expect(alldebrid.requests.every((request) => request.authorization === undefined)).toBe(true);
+    });
+
+    it("takes for the account's host its own domain and its www, as with no service", async () => {
+      await keptList();
+      const alldebrid = await serviceWith({ hosts: {}, links: {} });
+      const integrations = await keyNotRead(alldebrid);
+      const needsService = { failure: UnlockFailure.NeedsService };
+
+      await expect(
+        integrations.serviceFor('https://www.hoster.example/f/1', never),
+      ).rejects.toMatchObject(needsService);
+      expect(await integrations.serviceFor('https://dl42.hoster.example/f/1', never)).toBe(
+        undefined,
+      );
+    });
+
+    it('goes by the public list alone when no key was kept, whatever list was left behind', async () => {
+      // A list a disconnection could not remove: it is no account's any more.
+      await keptList();
+      const alldebrid = await serviceWith({ hosts: {}, links: {} });
+      const integrations = await Integrations.open({
+        vault: new MemoryVault(),
+        hostsFile: hostsFile(),
+        alldebrid: new AllDebrid({ api: alldebrid.api, userAgent: 'Scia/spec' }),
+        logger,
+      });
+
+      expect(await integrations.serviceFor(LINK, never)).toBeUndefined();
+    });
+
+    it('fetches as it stands a link of no host either list has', async () => {
+      await keptList();
+      const host = await fileHost({ fileName: 'direct.bin' });
+      const alldebrid = await serviceWith({ hosts: {}, links: {} });
+      const downloads = await open(await keyNotRead(alldebrid));
+
+      const [added] = downloads.add({ urls: [host.url] });
+      const done = await finished(downloads, added!.id, DownloadStatus.Completed);
+
+      expect(done.via).toBeNull();
+      expect(Buffer.compare(await readFile(inDownloads('direct.bin')), body)).toBe(0);
+    });
+
+    it('goes through the service once a key is connected again', async () => {
+      await keptList();
+      const host = await fileHost({ fileName: 'Film.mkv' });
+      const alldebrid = await serviceWith({ links: { [LINK]: { direct: host.url } } });
+      const integrations = await keyNotRead(alldebrid);
+      const downloads = await open(integrations);
+
+      await integrations.connect(IntegrationId.AllDebrid, KEY);
+      const [added] = downloads.add({ urls: [LINK] });
+      const done = await finished(downloads, added!.id, DownloadStatus.Completed);
+
+      expect(done.via).toBe('alldebrid');
+    });
+  });
+
   describe('while no service is connected', () => {
     const never = new AbortController().signal;
     const publicListAsked = (of: AllDebridServer) =>

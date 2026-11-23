@@ -1,4 +1,5 @@
-import { isIntegrationId } from '@scia/contracts';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { isIntegrationId, KEY_SEAL_LIMIT_MS } from '@scia/contracts';
 import type { KeyAnswer, KeyRequest } from '@scia/server';
 
 // What seals a key so that only this account on this computer reads it back: the operating
@@ -8,6 +9,25 @@ export interface KeyCipher {
   readonly available: () => boolean;
   readonly encrypt: (key: string) => Uint8Array;
   readonly decrypt: (kept: Uint8Array) => string;
+  // Whether what opens a key sealed now is on disk, for the next start to read: a key sealed
+  // before it gets there cannot be read back once the app is killed (docs/adr/0023).
+  readonly sealKept: () => Promise<boolean>;
+}
+
+// How often a write looks again for what opens its key: the file is Chromium's, which renames
+// onto it, and is read no more often than that.
+const SEAL_POLL_MS = 250;
+
+// Whether the profile's `Local State`, as Chromium writes it, holds the key it seals with on
+// Windows: the system's Data Protection API seals that key, Chromium seals every value with it.
+export function holdsSealingKey(localState: string): boolean {
+  try {
+    const state = JSON.parse(localState) as { os_crypt?: { encrypted_key?: unknown } } | null;
+    const key = state?.os_crypt?.encrypted_key;
+    return typeof key === 'string' && key !== '';
+  } catch {
+    return false;
+  }
 }
 
 // Where the sealed keys are, one file per service. A name it is given is a service's id.
@@ -21,7 +41,12 @@ export interface KeyFiles {
 export interface KeyVaultDeps {
   readonly cipher: KeyCipher;
   readonly files: KeyFiles;
-  readonly log: { warn(message: string, details: object): void };
+  readonly log: {
+    info(message: string, details: object): void;
+    warn(message: string, details: object): void;
+  };
+  readonly sealLimitMs?: number;
+  readonly sealPollMs?: number;
 }
 
 // On Linux Electron says it can encrypt also when no keyring is there, and then seals with a
@@ -58,9 +83,26 @@ export class KeyVault {
   // One request at a time, in the order they came: a write that is slow never lands after
   // the removal that was asked after it.
   #last: Promise<unknown> = Promise.resolve();
+  // Once on disk, what opens a key stays there: it is not looked for again.
+  #sealOnDisk = false;
 
   constructor(deps: KeyVaultDeps) {
     this.#deps = deps;
+  }
+
+  // Has the system make what opens a key now, at the start, when it is not on disk yet: it
+  // reaches the disk some seconds later, long before a person connects a service, who then waits
+  // for nothing. It never fails the start.
+  async prepare(): Promise<void> {
+    const { cipher } = this.#deps;
+    try {
+      if (await this.#sealKept()) return;
+      if (!cipher.available()) return;
+      cipher.encrypt('');
+      this.#deps.log.info('key_seal_prepared', {});
+    } catch (error) {
+      this.#deps.log.warn('key_seal_not_prepared', { error: String(error) });
+    }
   }
 
   // What main answers to a message of the engine's; undefined for one that asks for no key.
@@ -104,10 +146,40 @@ export class KeyVault {
         if (typeof key !== 'string' || key === '') throw new Error('Not a key.');
         if (!cipher.available()) throw new Error('This system has no protected storage.');
         await files.write(name, cipher.encrypt(key));
+        await this.#waitForSeal(name);
         return undefined;
       case 'remove':
         await files.remove(name);
         return undefined;
     }
+  }
+
+  // A key is said kept only once what opens it is on disk: one the person was told is connected
+  // is read back at the next start, however soon the app is killed (#69). The engine undoes a
+  // write refused here, as any other.
+  async #waitForSeal(name: string): Promise<void> {
+    const limitMs = this.#deps.sealLimitMs ?? KEY_SEAL_LIMIT_MS;
+    const started = performance.now();
+    const sealOnDisk = await this.#sealKept();
+    let kept = sealOnDisk;
+    while (!kept) {
+      if (performance.now() - started >= limitMs) {
+        throw new Error('What opens the key did not reach the disk.');
+      }
+      await sleep(this.#deps.sealPollMs ?? SEAL_POLL_MS);
+      kept = await this.#sealKept();
+    }
+    this.#deps.log.info('key_kept', {
+      service: name,
+      sealOnDisk,
+      waitedMs: sealOnDisk ? 0 : Math.round(performance.now() - started),
+    });
+  }
+
+  async #sealKept(): Promise<boolean> {
+    if (this.#sealOnDisk) return true;
+    // Only a look that found it writes: an older look answering "not yet" says nothing of now.
+    if (await this.#deps.cipher.sealKept()) this.#sealOnDisk = true;
+    return this.#sealOnDisk;
   }
 }

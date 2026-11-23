@@ -156,24 +156,35 @@ export class Integrations implements LinkResolver, MagnetService {
   // Moved on by every end of a wait: a code the service gives after it is nobody's.
   #codeTurn = 0;
 
-  constructor(deps: IntegrationsDeps, key: string | undefined, hosts?: HostList) {
+  // A key was kept and could not be read back at this start (docs/adr/0023): said in Settings
+  // until a key is connected again or the service disconnected.
+  #keyNotRead: boolean;
+
+  constructor(
+    deps: IntegrationsDeps,
+    kept: { readonly key: string | undefined; readonly notRead: boolean },
+    hosts?: HostList,
+  ) {
     this.#deps = deps;
-    this.#key = key;
+    this.#key = kept.key;
+    this.#keyNotRead = kept.notRead;
     this.#hosts = hosts;
   }
 
   static async open(deps: IntegrationsDeps): Promise<Integrations> {
     let key: string | undefined;
+    let notRead = false;
     try {
       key = await deps.vault.read(IntegrationId.AllDebrid);
     } catch (error) {
-      // A key nobody can read back is no key: the person connects again.
+      // A key nobody can read back is no key: the person is told, and connects again.
+      notRead = true;
       deps.logger.warn('key_not_read', {
         service: IntegrationId.AllDebrid,
         error: describeFailure(error),
       });
     }
-    return new Integrations(deps, key, await keptHosts(deps));
+    return new Integrations(deps, { key, notRead }, await keptHosts(deps));
   }
 
   async list(): Promise<Integration[]> {
@@ -324,6 +335,7 @@ export class Integrations implements LinkResolver, MagnetService {
       throw new KeyNotKeptError('The key could not be kept.', { cause: error });
     }
     this.#key = apiKey;
+    this.#keyNotRead = false;
     // Another key may be another account, with other hosts.
     await this.#forgetHosts();
     this.#account = account;
@@ -348,6 +360,7 @@ export class Integrations implements LinkResolver, MagnetService {
   async #disconnect(id: IntegrationId): Promise<void> {
     await this.#deps.vault.remove(id);
     this.#key = undefined;
+    this.#keyNotRead = false;
     await this.#forgetHosts();
     this.#account = null;
     this.#failure = null;
@@ -362,16 +375,21 @@ export class Integrations implements LinkResolver, MagnetService {
     if (key === undefined) {
       // A file host's page is on its own domain, or on its www; its other names are the
       // servers of its files, which give them to anyone: those links go as they stand.
-      const domains = await unlessStopped(this.#publicDomains(), signal);
-      // A service connected while the list was read is the one that decides.
-      if (this.#key !== undefined) return this.serviceFor(url, signal);
-      if (domains.some((domain) => host === domain || host === `www.${domain}`)) {
-        throw new ServiceError(
+      const isFileHostPage = (domains: readonly string[]) =>
+        domains.some((domain) => host === domain || host === `www.${domain}`);
+      const needsService = () =>
+        new ServiceError(
           IntegrationId.AllDebrid,
           UnlockFailure.NeedsService,
           "A file host's link, and no service is connected.",
         );
-      }
+      // While the kept key cannot be read, the list its account gave in a run before still says
+      // which hosts are the person's, also when the public list cannot be read (#69).
+      if (this.#keyNotRead && isFileHostPage(this.#hosts?.domains ?? [])) throw needsService();
+      const domains = await unlessStopped(this.#publicDomains(), signal);
+      // A service connected while the list was read is the one that decides.
+      if (this.#key !== undefined) return this.serviceFor(url, signal);
+      if (isFileHostPage(domains)) throw needsService();
       return undefined;
     }
     const domains = await unlessStopped(this.#domains(key), signal);
@@ -544,6 +562,7 @@ export class Integrations implements LinkResolver, MagnetService {
       connected: this.#key !== undefined,
       account: this.#account,
       failure: this.#failure,
+      keyNotRead: this.#keyNotRead,
     };
   }
 

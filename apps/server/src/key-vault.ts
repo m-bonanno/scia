@@ -1,4 +1,4 @@
-import type { IntegrationId } from '@scia/contracts';
+import { type IntegrationId, KEY_SEAL_LIMIT_MS } from '@scia/contracts';
 import type { ParentPort } from './parent-port.ts';
 
 // The PORT the key of a connected service is kept through (docs/adr/0004). The engine holds a
@@ -45,12 +45,15 @@ function isAnswerTo(id: number, message: unknown): message is KeyAnswer {
 export class ParentVault implements KeyVault {
   readonly #port: ParentPort;
   readonly #limitMs: number;
+  readonly #sealLimitMs: number;
   readonly #waiting = new Map<number, (message: unknown) => void>();
   #lastId = 0;
 
-  constructor(port: ParentPort, limitMs = ANSWER_LIMIT_MS) {
+  // A write is answered once what opens the key is on disk, which main waits for (docs/adr/0023).
+  constructor(port: ParentPort, limitMs = ANSWER_LIMIT_MS, sealLimitMs = KEY_SEAL_LIMIT_MS) {
     this.#port = port;
     this.#limitMs = limitMs;
+    this.#sealLimitMs = sealLimitMs;
     port.on('message', (event) => {
       for (const hear of [...this.#waiting.values()]) hear(event.data);
     });
@@ -77,7 +80,10 @@ export class ParentVault implements KeyVault {
         this.#waiting.delete(id);
         reject(new Error(`Main did not ${action} the key of ${name}.`));
       };
-      const limit = setTimeout(fail, this.#limitMs);
+      const limit = setTimeout(
+        fail,
+        action === 'write' ? this.#limitMs + this.#sealLimitMs : this.#limitMs,
+      );
       this.#waiting.set(id, (message) => {
         if (!isAnswerTo(id, message)) return;
         clearTimeout(limit);

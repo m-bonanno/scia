@@ -115,7 +115,14 @@ async function boot(): Promise<void> {
   });
   // The keys of the services the engine is connected to: the engine asks, main keeps them
   // sealed by the system (engine/key-vault.ts).
-  const keys = new KeyVault({ cipher: systemCipher, files: new KeyFolder(layout.keysDir), log });
+  const keys = new KeyVault({
+    cipher: systemCipher(app.getPath('userData')),
+    files: new KeyFolder(layout.keysDir),
+    log,
+  });
+  // What opens a key is made now, before the engine starts, rather than when a service is
+  // connected: it is on disk by the time a person connects one (docs/adr/0023).
+  void keys.prepare();
 
   let port = 0;
   let quitting = false;
