@@ -73,6 +73,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 ## 23 November 2026
 
 - #99: picture and sound offered apart are joined only as an mp4 picture in H.264 or AV1 and an AAC sound. The most lines win, and H.264 at equal lines; HEVC never, since Windows plays it only with a paid extension. A webm picture with Opus sound is an issue of its own (#239) ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)).
+- #257: the update's note says "<version> installs when you quit Scia. Pause your downloads to restart now.", words that stay true once the downloads end. It lands with #159, and does not hold up `v1.0.0` by itself.
 
 ## Undated in the roadmap
 

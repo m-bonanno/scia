@@ -4,6 +4,9 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { UpdateOffer } from './update-offer.tsx';
 
+// What the note says while something downloads, and still says once nothing does (#159, #257).
+const NOTE = '1.0.0-beta.18 installs when you quit Scia. Pause your downloads to restart now.';
+
 function offer(overrides: Partial<Parameters<typeof UpdateOffer>[0]> = {}) {
   const props = {
     version: '1.0.0-beta.17',
@@ -108,10 +111,7 @@ describe('UpdateOffer', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
 
-    const note = screen.getByRole('dialog');
-    expect(note).toHaveTextContent(
-      'Scia is downloading. 1.0.0-beta.18 installs when you quit Scia. Pause your downloads to restart now.',
-    );
+    expect(screen.getByRole('dialog')).toHaveAccessibleName(NOTE);
     expect(screen.queryByRole('button', { name: 'Restart now' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
     expect(props.onRestart).not.toHaveBeenCalled();
@@ -130,7 +130,7 @@ describe('UpdateOffer', () => {
       </>,
     );
 
-    expect(screen.getByRole('dialog')).toHaveTextContent('Scia is downloading.');
+    expect(screen.getByRole('dialog')).toHaveAccessibleName(NOTE);
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
   });
 
@@ -316,8 +316,20 @@ describe('UpdateOffer', () => {
 
       rerender(page({ ...props, downloading: false }));
 
-      expect(screen.getByRole('dialog')).toHaveTextContent('Scia is downloading.');
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Restart now' })).not.toBeInTheDocument();
+    });
+
+    // The note stays open after the last download ends, so it says nothing of whether Scia is
+    // downloading now (#257).
+    it('keeps words that stay true once the downloads end', async () => {
+      const { props, rerender } = offer({ downloading: true });
+      await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
+
+      rerender(page({ ...props, downloading: false }));
+
+      expect(screen.getByRole('dialog')).toHaveAccessibleName(NOTE);
+      expect(screen.getByRole('dialog')).not.toHaveTextContent('Scia is downloading');
     });
 
     it('hands the focus to the field when main has nothing to restart for and the offer goes', async () => {

@@ -301,8 +301,10 @@ export function updateQuestion(version: string): string {
 }
 
 // A paused download holds no restart back (isUnderWay), so pausing is the way to restart now (#159).
+// The note stays open after the last download ends: it says nothing of whether Scia downloads now
+// (#257).
 export function updateWhileDownloading(version: string): string {
-  return `Scia is downloading. ${version} installs when you quit Scia. Pause your downloads to restart now.`;
+  return `${version} installs when you quit Scia. Pause your downloads to restart now.`;
 }
 
 // Main did not restart: a download began meanwhile, or the engine did not say what it was doing.
