@@ -278,9 +278,12 @@ describe('App', () => {
     );
     const notices = await within(dialog).findByRole('list', { name: 'Notices' });
 
-    for (const dismiss of within(notices).getAllByRole('button', { name: 'Dismiss' }).reverse()) {
-      await userEvent.click(dismiss);
-    }
+    // With the keyboard: a press of the pointer hands the focus to nothing (the owner, #143).
+    const dismisses = within(notices).getAllByRole('button', { name: 'Dismiss' });
+    act(() => {
+      dismisses.at(-1)?.focus();
+    });
+    for (const _ of dismisses) await userEvent.keyboard('{Enter}');
 
     expect(within(dialog).queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
     expect(within(dialog).getByRole('button', { name: 'Close' })).toHaveFocus();

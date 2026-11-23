@@ -138,6 +138,11 @@ function Stack({ timed, lasting, onDismiss, onHeight, home, announced }: StackPr
               notice={notice}
               held={held}
               onDismiss={onDismiss}
+              // A press of the pointer hands the focus to nothing: the notices left are not held by
+              // it, and go in their own time (the owner, #143). The keyboard's is handed on.
+              onPointerPress={() => {
+                lastFocus.current = null;
+              }}
               announced={announced}
             />
           ))}
@@ -207,11 +212,13 @@ function TimedNotice({
   notice,
   held,
   onDismiss,
+  onPointerPress,
   announced,
 }: {
   readonly notice: Notice;
   readonly held: boolean;
   readonly onDismiss: (id: number) => void;
+  readonly onPointerPress: () => void;
   readonly announced: RefObject<Set<string>>;
 }): ReactNode {
   const { id, round } = notice;
@@ -235,7 +242,8 @@ function TimedNotice({
         onKeyDown={(event) => {
           if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
         }}
-        onClick={() => {
+        onClick={(event) => {
+          if (event.detail > 0) onPointerPress();
           onDismiss(id);
         }}
       >

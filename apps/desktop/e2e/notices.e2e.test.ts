@@ -144,6 +144,40 @@ describe('the real app says what went wrong in a notice', () => {
     expect(focused).toBe(true);
   });
 
+  // The owner, #143: a press of the pointer hands the focus to nothing, and the notices left go in
+  // their own time once the pointer has left them.
+  it('hands the focus of a notice dismissed with the pointer to nothing', async () => {
+    const profile = await run.profile();
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    const refusals = [ApiErrorCode.NotFound, ApiErrorCode.Conflict];
+    let answered = 0;
+    await page.route(`**${API_PREFIX}/downloads`, async (route) => {
+      if (route.request().method() !== 'POST') return route.fallback();
+      const code = refusals[answered] ?? ApiErrorCode.InternalError;
+      answered += 1;
+      return route.fulfill({
+        status: code === ApiErrorCode.NotFound ? 404 : 409,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code, message: 'refused' } }),
+      });
+    });
+    const notices = page.getByRole('list', { name: 'Notices' }).getByRole('listitem');
+    for (let told = 1; told <= refusals.length; told += 1) {
+      await paste(page, 'https://example.com/a.zip');
+      await until(async () => (await notices.count()) === told);
+    }
+
+    await notices.first().getByRole('button', { name: 'Dismiss' }).click();
+    await until(async () => (await notices.count()) === 1);
+    const onADismiss = await page.evaluate(
+      () => document.activeElement?.getAttribute('aria-label') === 'Dismiss',
+    );
+    expect(onADismiss).toBe(false);
+    await page.mouse.move(5, 5);
+    await until(async () => (await notices.count()) === 0, NOTICE_MS + 5000);
+  });
+
   it('over Settings while it is open, where it can be dismissed', async () => {
     const profile = await run.profile();
     const scia = await run.launch(profile);
