@@ -16,11 +16,17 @@ const choosing: Bundle = {
     { name: 'notes.nfo', size: 10 },
   ],
   unavailable: 0,
+  leftOut: 0,
   createdAt: '2026-11-23T12:00:00.000Z',
 };
 
-function row(bundle: Bundle) {
-  const actions = { start: vi.fn(), retry: vi.fn(), remove: vi.fn() };
+// `started`: whether the engine took the files — a refusal gives the row back.
+function row(bundle: Bundle, started = true) {
+  const actions = {
+    start: vi.fn((_id: string, _files: readonly number[]) => Promise.resolve(started)),
+    retry: vi.fn(),
+    remove: vi.fn(),
+  };
   const view = render(
     <ul>
       <BundleRow bundle={bundle} actions={actions} />
@@ -82,13 +88,71 @@ describe('BundleRow', () => {
   });
 
   it('starts the files once, however often Download is pressed', async () => {
-    const { actions, item } = row(choosing);
+    // Refused at once: each press that is one finds the row given back.
+    const { actions, item } = row(choosing, false);
 
     await userEvent.dblClick(item.getByRole('button', { name: 'Download 3 files' }));
     item.getByRole('button', { name: 'Download 3 files' }).focus();
     await userEvent.keyboard('{Enter>4/}');
 
     expect(actions.start).toHaveBeenCalledTimes(2);
+  });
+
+  it('holds the choice once it is sent: Download says it does nothing and the boxes stay as they are, until a refusal gives them back', async () => {
+    const { actions, item } = row(choosing);
+    let settle: (started: boolean) => void = () => undefined;
+    actions.start.mockReturnValueOnce(
+      new Promise((resolve) => {
+        settle = resolve;
+      }),
+    );
+    const download = item.getByRole('button', { name: 'Download 3 files' });
+
+    await userEvent.click(download);
+    await userEvent.click(item.getByRole('checkbox', { name: /Day 2\.mkv/ }));
+    expect(item.getByRole('checkbox', { name: /Day 2\.mkv/ })).toBeChecked();
+    await userEvent.click(item.getByRole('checkbox', { name: 'All files' }));
+    expect(item.getByRole('checkbox', { name: 'All files' })).toBeChecked();
+    await userEvent.click(download);
+
+    expect(actions.start).toHaveBeenCalledExactlyOnceWith('b1', [0, 1, 2]);
+    expect(download).toHaveAttribute('aria-disabled', 'true');
+    expect(download).toHaveAccessibleName('Download 3 files');
+    for (const box of item.getAllByRole('checkbox')) {
+      expect(box).toBeChecked();
+      expect(box).toHaveAttribute('aria-disabled', 'true');
+    }
+
+    settle(false);
+    await vi.waitFor(() => {
+      expect(download).not.toHaveAttribute('aria-disabled');
+    });
+    await userEvent.click(item.getByRole('checkbox', { name: /Day 2\.mkv/ }));
+    await userEvent.click(item.getByRole('button', { name: 'Download 2 files' }));
+    expect(actions.start).toHaveBeenLastCalledWith('b1', [0, 2]);
+  });
+
+  it('keeps the choice held once the engine took it, while the row is on its way out', async () => {
+    const { actions, item } = row(choosing);
+    const download = item.getByRole('button', { name: 'Download 3 files' });
+
+    await userEvent.click(download);
+    await userEvent.click(download);
+
+    expect(actions.start).toHaveBeenCalledOnce();
+    expect(download).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('forgets it once however often Remove is pressed, by the pointer or by a held Enter', async () => {
+    const pressed = row(choosing);
+    await userEvent.dblClick(pressed.item.getByRole('button', { name: 'Remove' }));
+    expect(pressed.actions.remove).toHaveBeenCalledOnce();
+    pressed.view.unmount();
+
+    const held = row(choosing);
+    held.item.getByRole('button', { name: 'Remove' }).focus();
+    await userEvent.keyboard('{Enter>5/}');
+    expect(held.actions.remove).toHaveBeenCalledOnce();
   });
 
   it('says what each file weighs beside its name', () => {

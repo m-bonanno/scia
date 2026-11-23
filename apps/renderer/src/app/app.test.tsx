@@ -865,6 +865,7 @@ describe('App', () => {
         { name: 'Day 2.mkv', size: 2048 },
       ],
       unavailable: 0,
+      leftOut: 0,
       createdAt: '2026-11-23T12:00:00.000Z',
     };
 
@@ -905,6 +906,49 @@ describe('App', () => {
       await userEvent.click(screen.getByRole('button', { name: 'Download 1 file' }));
 
       expect(start).toHaveBeenCalledExactlyOnceWith('b1', [1]);
+    });
+
+    it('sends the choice once while it is on its way, and says nothing of a start that worked', async () => {
+      live.bundles = [bundle];
+      let answer: (downloads: Download[]) => void = () => undefined;
+      const start = vi.spyOn(api, 'startBundle').mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+      const { rerender } = render(<App />);
+      const download = screen.getByRole('button', { name: 'Download 2 files' });
+
+      await userEvent.click(download);
+      await userEvent.click(screen.getByRole('checkbox', { name: /Day 2\.mkv/ }));
+      await userEvent.click(download);
+      answer([]);
+      // Taken: the row waits for the next list to leave, and is still held.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await userEvent.click(download);
+      live.bundles = [];
+      rerender(<App />);
+
+      expect(start).toHaveBeenCalledExactlyOnceWith('b1', [0, 1]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
+    });
+
+    it('gives the row back with a notice when the start is refused', async () => {
+      live.bundles = [bundle];
+      vi.spyOn(api, 'startBundle').mockRejectedValue(
+        new ApiError(409, ApiErrorCode.Conflict, 'not waiting'),
+      );
+      render(<App />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Download 2 files' }));
+
+      await screen.findByRole('list', { name: 'Notices' });
+      await vi.waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Download 2 files' })).not.toHaveAttribute(
+          'aria-disabled',
+        );
+      });
     });
 
     it('hands the focus to the filter in use when the row leaves under Download', async () => {

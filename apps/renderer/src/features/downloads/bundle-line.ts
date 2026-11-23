@@ -11,7 +11,8 @@ export function filesCount(count: number): string {
 }
 
 // What the row says of a link that opens into several files: that the service is asked, what it
-// listed, or why it listed nothing.
+// listed and what it did not — files it cannot get, files past the most Scia lists — or why it
+// listed nothing.
 export function bundleLine(bundle: Bundle): string {
   if (bundle.status === BundleStatus.Failed) {
     return bundleFailureMessage(bundle.failure ?? BundleFailure.Unavailable);
@@ -24,5 +25,6 @@ export function bundleLine(bundle: Bundle): string {
     ...(bundle.unavailable > 0
       ? [`${formatCount(bundle.unavailable)} more ${SERVICE} cannot get`]
       : []),
+    ...(bundle.leftOut > 0 ? [`${formatCount(bundle.leftOut)} more left out of the list`] : []),
   ].join(SEPARATOR);
 }

@@ -14,6 +14,7 @@ const choosing: Bundle = {
     { name: 'Day 2.mkv', size: 2 * 1024 * 1024 },
   ],
   unavailable: 0,
+  leftOut: 0,
   createdAt: '2026-11-23T12:00:00.000Z',
 };
 
@@ -34,6 +35,15 @@ describe('bundleLine', () => {
   it('says how many files behind the link the service cannot get', () => {
     expect(bundleLine({ ...choosing, unavailable: 3 })).toBe(
       `2 files · 3.0${NBSP}MB · 3 more AllDebrid cannot get`,
+    );
+  });
+
+  it('says how many files were left out of a list of the most Scia lists', () => {
+    expect(bundleLine({ ...choosing, leftOut: 1234 })).toBe(
+      `2 files · 3.0${NBSP}MB · 1,234 more left out of the list`,
+    );
+    expect(bundleLine({ ...choosing, unavailable: 1, leftOut: 1 })).toBe(
+      `2 files · 3.0${NBSP}MB · 1 more AllDebrid cannot get · 1 more left out of the list`,
     );
   });
 

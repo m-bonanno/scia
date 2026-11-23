@@ -69,4 +69,67 @@ describe('the real app, with a link that opens into several files (#181)', () =>
     expect(log).not.toContain('1fichier');
     expect(log).not.toContain(REDIRECT_LINKS);
   });
+
+  it('scrolls a box reached by Tab below the fold of a long list into sight, its focus outline whole', async () => {
+    const profile = await run.profile();
+    const links = Array.from({ length: 40 }, (_, index) => `${REDIRECT_LINKS}ep-${String(index)}`);
+    const service = run.keep(
+      await startAllDebridServer({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+        hosts: { onefichier: ['1fichier.com'] },
+        redirects: { [FOLDER]: links },
+        links: Object.fromEntries(
+          links.map((link, index) => [
+            link,
+            {
+              direct: 'http://127.0.0.1:9/never',
+              filename: `Episode ${String(index + 1).padStart(2, '0')}.mkv`,
+              size: KIB,
+            },
+          ]),
+        ),
+      }),
+    );
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const { page } = scia;
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Use an API key' }).click();
+    await page.getByLabel('AllDebrid API key').fill(KEY);
+    await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await page.getByRole('button', { name: 'Disconnect' }).waitFor();
+    await page.getByRole('button', { name: 'Close' }).click();
+    await paste(page, FOLDER);
+    const files = page.getByRole('group', { name: 'Files of Holiday films' });
+    await files.waitFor();
+
+    await files.getByRole('checkbox', { name: 'All files' }).focus();
+    for (let step = 0; step < 20; step += 1) await page.keyboard.press('Tab');
+
+    expect(
+      await files
+        .getByRole('checkbox', { name: /Episode 20\.mkv/ })
+        .evaluate((input) => input === document.activeElement),
+    ).toBe(true);
+    // The box drawn beside the focused control, with the 4 px its outline reaches beyond it (2 px
+    // wide, 2 px away), against what the list shows of itself.
+    const seen = await page.evaluate(() => {
+      const input = document.activeElement;
+      const box = input?.nextElementSibling?.getBoundingClientRect();
+      const list = input?.closest('label')?.parentElement;
+      const shown = list?.getBoundingClientRect();
+      if (box === undefined || list === null || list === undefined || shown === undefined) {
+        return null;
+      }
+      const reach = 4;
+      return {
+        scrolled: list.scrollTop > 0,
+        inside:
+          box.left - reach >= shown.left &&
+          box.top - reach >= shown.top &&
+          box.right + reach <= shown.left + list.clientWidth &&
+          box.bottom + reach <= shown.top + list.clientHeight,
+      };
+    });
+    expect(seen).toEqual({ scrolled: true, inside: true });
+  });
 });

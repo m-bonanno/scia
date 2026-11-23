@@ -278,7 +278,6 @@ const BUNDLE_FAILED: Readonly<Record<BundleFailure, (service: string) => string>
   // The redirector does not open this site, or could not open this link: true of both.
   [BundleFailure.Refused]: (service) => `${service} could not open this link.`,
   [BundleFailure.Empty]: (service) => `${service} found no file it can get behind this link.`,
-  [BundleFailure.TooMany]: () => 'This link holds more files than Scia lists to choose from.',
   [BundleFailure.KeyRefused]: (service) => LINK_NOT_UNLOCKED[ServiceFailure.KeyRefused](service),
   [BundleFailure.KeyBlocked]: (service) => LINK_NOT_UNLOCKED[ServiceFailure.KeyBlocked](service),
   [BundleFailure.AccountBanned]: (service) =>
@@ -288,8 +287,8 @@ const BUNDLE_FAILED: Readonly<Record<BundleFailure, (service: string) => string>
   [BundleFailure.Unavailable]: (service) => LINK_NOT_UNLOCKED[ServiceFailure.Unavailable](service),
   [BundleFailure.NotPremium]: (service) =>
     `${service} opens links like this for premium accounts only.`,
-  // A file host's folder with no service connected, or a link whose service left while it was
-  // opened: true of both.
+  // A file host's folder with no service connected, also one whose service left while it was
+  // opened: a protector's or a shortener's link is then fetched as it stands.
   [BundleFailure.NeedsService]: () =>
     `This link opens into several files through ${SERVICE_NAME.alldebrid}. Connect ${SERVICE_NAME.alldebrid} in Settings, then try again.`,
 };

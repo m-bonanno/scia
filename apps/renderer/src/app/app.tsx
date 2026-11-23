@@ -225,11 +225,14 @@ export function App(): ReactNode {
 
   const bundleActions = useMemo(
     (): BundleActions => ({
-      start: (id, files) => {
-        api.startBundle(id, files).catch((error: unknown) => {
-          tell(bundleActionMessage(error, 'start'));
-        });
-      },
+      start: (id, files) =>
+        api.startBundle(id, files).then(
+          () => true,
+          (error: unknown) => {
+            tell(bundleActionMessage(error, 'start'));
+            return false;
+          },
+        ),
       retry: (id) => {
         api.retryBundle(id).catch((error: unknown) => {
           tell(bundleActionMessage(error, 'retry'));

@@ -12,8 +12,8 @@ import { SERVICE_NAME } from '@/lib/messages.ts';
 import { bundleLine, filesCount } from './bundle-line.ts';
 
 export interface BundleActions {
-  // The files chosen, by their place in the list, become downloads.
-  readonly start: (id: string, files: readonly number[]) => void;
+  // The files chosen, by their place in the list, become downloads: whether the engine took them.
+  readonly start: (id: string, files: readonly number[]) => Promise<boolean>;
   readonly retry: (id: string) => void;
   // Scia forgets the link, and the files it listed.
   readonly remove: (id: string) => void;
@@ -46,10 +46,11 @@ export function BundleRow({ bundle, actions }: BundleRowProps): ReactNode {
           <p className="truncate text-[0.9375rem] leading-snug font-medium" title={bundle.name}>
             {bundle.name}
           </p>
+          {/* It wraps: what the list leaves out, it alone says (the designer, #263). */}
           <p
             className={cn(
               'text-sm tabular-nums',
-              failed ? 'text-destructive' : 'truncate text-muted-foreground',
+              failed ? 'text-destructive' : 'text-muted-foreground',
             )}
           >
             {bundleLine(bundle)}
@@ -95,8 +96,7 @@ export function BundleRow({ bundle, actions }: BundleRowProps): ReactNode {
         </div>
       )}
       {bundle.status === BundleStatus.Choosing && (
-        // Keyed by the files: a list the service gave again is ticked whole again.
-        <FileChoice key={bundle.files.length} bundle={bundle} start={actions.start} />
+        <FileChoice bundle={bundle} start={actions.start} />
       )}
     </li>
   );
@@ -112,23 +112,19 @@ function FileChoice({
   const [ticked, setTicked] = useState<ReadonlySet<number>>(
     () => new Set(bundle.files.map((_, index) => index)),
   );
+  // The choice on its way to the engine: held as it was sent until a refusal gives it back. Taken,
+  // the row leaves with the next list.
+  const [sent, setSent] = useState(false);
   const downloadPress = useOnePress();
   const all = ticked.size === bundle.files.length;
   const none = ticked.size === 0;
-  const tick = (index: number, on: boolean) => {
-    setTicked((before) => {
-      const next = new Set(before);
-      if (on) next.add(index);
-      else next.delete(index);
-      return next;
-    });
-  };
   return (
     <fieldset className="mt-3 min-w-0">
       <legend className="sr-only">{`Files of ${bundle.name}`}</legend>
       <CheckBox
         checked={all}
         mixed={!all && !none}
+        held={sent}
         onChange={(on) => {
           setTicked(on ? new Set(bundle.files.map((_, index) => index)) : new Set());
         }}
@@ -136,14 +132,21 @@ function FileChoice({
       >
         All files
       </CheckBox>
-      <div className="max-h-60 overflow-y-auto">
+      {/* Room on every side for the boxes' focus outline, which the scroller would cut. */}
+      <div className="-mx-1 max-h-60 overflow-y-auto px-1 py-0.5">
         {bundle.files.map((file, index) => (
           <CheckBox
             // The service's order is the files' identity: two may share a name.
             key={index}
             checked={ticked.has(index)}
+            held={sent}
             onChange={(on) => {
-              tick(index, on);
+              setTicked((before) => {
+                const next = new Set(before);
+                if (on) next.add(index);
+                else next.delete(index);
+                return next;
+              });
             }}
             className="py-1 text-sm"
           >
@@ -160,14 +163,17 @@ function FileChoice({
         <button
           type="button"
           className={PRIMARY_BUTTON}
-          aria-disabled={none ? true : undefined}
+          aria-disabled={none || sent ? true : undefined}
           onKeyDown={downloadPress.onKeyDown}
           onClick={(event) => {
-            if (downloadPress.sawTheOneBefore(event) || none) return;
-            start(
+            if (downloadPress.sawTheOneBefore(event) || none || sent) return;
+            setSent(true);
+            void start(
               bundle.id,
               [...ticked].sort((a, b) => a - b),
-            );
+            ).then((started) => {
+              if (!started) setSent(false);
+            });
           }}
         >
           {none ? 'Download' : `Download ${filesCount(ticked.size)}`}
