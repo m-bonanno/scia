@@ -439,6 +439,14 @@ async function boot(): Promise<void> {
     event.preventDefault();
     quit.asked(quitAskedByPerson);
   });
+  // PROBE (#262, round 1; removed in the next commit): which of Electron's own quit events come
+  // at the end of a session.
+  app.on('will-quit', () => {
+    log.info('probe_will_quit');
+  });
+  app.on('quit', () => {
+    log.info('probe_quit');
+  });
 
   // Starting Scia again is how a person whose desktop draws no tray gets the window back — also
   // while it starts, when the window says so.
