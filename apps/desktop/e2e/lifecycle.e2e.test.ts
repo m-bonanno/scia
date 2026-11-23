@@ -150,9 +150,11 @@ describe('the real app, from start to quit', () => {
       expect(state.downloads[0]?.segments.some((segment) => segment.downloaded > 0)).toBe(true);
       const log = await profile.log();
       expect(log).toMatch(/\bsession_ended\b/);
-      // Quit's own last line: Scia ended itself, after the engine, not Electron at once.
+      // Quit's own last line, written once the engine's process has ended: Scia ended itself, not
+      // Electron at once. The engine's own `stopped` is not read: main relays it from a pipe that
+      // the engine's exit can outrun, and two runs in three of round 2 lost it with the state
+      // written (#262).
       expect(log).toMatch(/\squit\s*$/m);
-      expect(log).toMatch(/\[engine\][^\n]*\bstopped\b/);
       expect(log).not.toContain('update_installing');
 
       const again = await run.launch(profile);
