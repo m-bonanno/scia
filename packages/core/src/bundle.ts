@@ -18,8 +18,6 @@ export const BundleFailure = {
   Refused: 'BUNDLE_REFUSED',
   // The service found nothing behind it, or nothing it can get.
   Empty: 'BUNDLE_EMPTY',
-  // More files than Scia lists to choose from.
-  TooMany: 'BUNDLE_TOO_MANY',
   // A key it refuses, a network it does not serve, an account that is not premium, no service
   // connected, a service that cannot be asked.
   ...ServiceFailure,

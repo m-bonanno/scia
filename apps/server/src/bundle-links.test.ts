@@ -67,8 +67,9 @@ describe('bundleName', () => {
     expect(bundleName('https://rapidgator.net/folder/123/holiday.htm')).toBe('holiday');
   });
 
-  it('names it after the host when the path says nothing', () => {
+  it('names it after the host, without its www., when the path says nothing', () => {
     expect(bundleName('https://bit.ly/')).toBe('bit.ly');
+    expect(bundleName('https://www.bit.ly/')).toBe('bit.ly');
     expect(bundleName('https://www.mediafire.com/folder/abc/')).toBe('abc');
   });
 

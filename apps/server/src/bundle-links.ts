@@ -17,9 +17,11 @@ interface BundleSite {
 
 // The sites whose links AllDebrid's redirector opens into several (`redirectors` of
 // GET /v4/hosts/domains, read on 23 November 2026), as far as Scia takes them: a file host by the
-// shape of its folders' paths, as the hosts write them; a protector or a shortener whole. Not
-// taken: what lists the same file on several hosts (multiup.org), a site's pages of links, and
-// what is no site of its own (google.com, example.com) — the owner's decision on #181.
+// shape of its folders' paths, as the hosts write them; a protector or a shortener whole. That they
+// are a list kept as data, never asked of the service first, is the owner's decision on #181.
+// What is not taken is the team's choice, which the owner let stand as such (#181): what lists the same file on several
+// hosts (multiup.org), a site's pages of links, and what is no site of its own (google.com,
+// example.com).
 export const BUNDLE_SITES: readonly BundleSite[] = [
   { domain: '1fichier.com', folders: ['/dir/'] },
   { domain: 'mega.nz', folders: ['/folder/'] },

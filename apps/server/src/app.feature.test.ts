@@ -652,6 +652,7 @@ describe('the engine API', () => {
                   { link: 'https://redirect.alldebrid.com/b', name: 'Day 2.mkv', size: 20 },
                 ],
                 unavailable: 0,
+                leftOut: 0,
               },
         ),
     };
@@ -735,13 +736,14 @@ describe('the engine API', () => {
       await until(() => bundles.snapshot().bundles[1]?.status === 'failed');
       const [waiting, failed] = bundles.snapshot().bundles.map((each) => each.id);
 
-      for (const files of [[], [2], [0, 0], [-1], [0.5], 'all', null]) {
+      for (const files of [[], [2], [0, 0], [-1], [0.5], [0, 99], ['0'], 'all', null]) {
         const response = await start(waiting ?? '', files);
         expect(response.status, JSON.stringify(files)).toBe(400);
         expect(await codeOf(response)).toBe(ApiErrorCode.InvalidRequest);
       }
       expect((await start(failed ?? '', [0])).status).toBe(409);
       expect(bundles.snapshot().bundles[0]?.status).toBe('choosing');
+      expect(bundles.snapshot().downloads).toEqual([]);
     });
 
     it('lets the app alone try again one that failed, and forget one', async () => {

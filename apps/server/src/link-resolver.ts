@@ -27,11 +27,11 @@ export interface LinkResolver {
   // or with the reason of `signal`.
   unlock(service: IntegrationId, url: string, signal: AbortSignal): Promise<UnlockedLink>;
   // The files a folder, a protector's or a shortener's link opens into, beside `unlock`
-  // (docs/adr/0025): nothing to list, or too much, is an answer; the rest rejects as `unlock` does
-  // — `SERVICE_NEEDED` with no service connected.
+  // (docs/adr/0025): nothing to list is an answer; the rest rejects as `unlock` does —
+  // `SERVICE_NEEDED` with no service connected.
   open(
     service: IntegrationId,
     url: string,
     signal: AbortSignal,
-  ): Promise<OpenedLink | typeof BundleFailure.Empty | typeof BundleFailure.TooMany>;
+  ): Promise<OpenedLink | typeof BundleFailure.Empty>;
 }

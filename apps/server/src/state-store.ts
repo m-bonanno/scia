@@ -102,19 +102,31 @@ export type MagnetRecord = z.infer<typeof magnetRecordSchema>;
 
 // A link that opens into several files (#181; docs/adr/0025), until the person starts the files
 // they chose: then those are downloads, and it leaves the list.
+// A file the service listed: its link to it — unlocked as a hoster's is, and in no answer of the API
+// and no log until the file is a download — the name it will have, made safe (none: the service
+// gave none, and its host names it), and its size.
+const bundleFileSchema = z.object({
+  link: z.string(),
+  name: z.string().nullable(),
+  size: z.number(),
+});
+export type BundleFile = z.infer<typeof bundleFileSchema>;
+
 export const bundleRecordSchema = z.object({
   id: z.string(),
-  // The link that was added: asked of the service again while it is being opened.
+  // The link that was added: asked of the service again while it is being opened, and fetched as
+  // it stands, from the page it was added from, when a protector's or a shortener's gives nothing.
   url: z.string(),
+  referrer: z.string().nullable(),
   // The folder its files go into, named after the link.
   name: z.string(),
   status: z.enum(BundleStatus),
   failure: z.enum(BundleFailure).nullable(),
-  // What the service listed, in its order: its link to each file — unlocked as a hoster's is, and
-  // in no answer of the API and no log — what the file is called, and its size.
-  files: z.array(z.object({ link: z.string(), name: z.string(), size: z.number() })),
-  // The files the service could say nothing of.
+  // What the service listed, in its order.
+  files: z.array(bundleFileSchema),
+  // The files the service could say nothing of, and those past the most listed.
   unavailable: z.number(),
+  leftOut: z.number(),
   // The folder downloads went to when it was added: its files go there.
   directory: z.string(),
   createdAt: z.string(),

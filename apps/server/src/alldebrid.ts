@@ -114,7 +114,7 @@ function asMagnetsRefusal(error: unknown): never {
   throw refused(failure, `AllDebrid answered ${code}.`);
 }
 
-// The most files of one link Scia lists for a person to tick through (#181).
+// The most files of one link Scia lists for a person to tick through (#181): the rest are counted.
 export const LINK_FILES_AT_MOST = 1000;
 // How many links one request asks the infos of: the documentation gives no limit.
 const INFOS_AT_ONCE = 100;
@@ -316,10 +316,17 @@ export interface LinkFile {
   readonly size: number;
 }
 
-// What a link opens into: the files the service can say what they are, and how many it cannot.
+// What a link opens into: the files the service can say what they are, how many it cannot, and
+// how many were left out past the most a person ticks through.
 export interface OpenedLink {
   readonly files: readonly LinkFile[];
   readonly unavailable: number;
+  readonly leftOut: number;
+}
+
+function sameLink(written: string | undefined, asked: string): boolean {
+  const schemeAside = (link: string) => link.replace(/^https?:/, '');
+  return written !== undefined && schemeAside(written) === schemeAside(asked);
 }
 
 // A code to confirm on the service's site (https://docs.alldebrid.com, "Pin auth"). `check` is
@@ -587,41 +594,45 @@ export class AllDebrid {
   // The files a folder, a protector's or a shortener's link opens into (#181): its links through the
   // redirector, then what each is through their infos, a hundred at a time. A file the service says
   // nothing of — refused, not an http address — is counted, not listed; a link given twice is one
-  // file. Nothing to list, or more than a person ticks through, is said as such.
+  // file. Of more than a person ticks through, the first are listed and the rest counted, never
+  // asked about (the owner, #181). Nothing to list is said as such.
   async openLink(
     apiKey: string,
     link: string,
     signal?: AbortSignal,
-  ): Promise<OpenedLink | typeof BundleFailure.Empty | typeof BundleFailure.TooMany> {
+  ): Promise<OpenedLink | typeof BundleFailure.Empty> {
     const { links } = await this.#insist(
       () => this.#ask('/v4/link/redirector', apiKey, redirectorSchema, { link }, signal),
       signal,
     );
-    const given = new Set(links.map((each) => (typeof each === 'string' ? each : null)));
-    const usable = [...given].filter((each) => isHttpAddress(each));
-    if (usable.length > LINK_FILES_AT_MOST) return BundleFailure.TooMany;
+    const strings = [...new Set(links.filter((each) => typeof each === 'string'))];
+    const usable = strings.filter((each) => isHttpAddress(each));
+    const listed = usable.slice(0, LINK_FILES_AT_MOST);
     // What is no link Scia fetches: not a string, not an http address.
     let unavailable =
-      links.filter((each) => typeof each !== 'string').length +
-      [...given].filter((each) => each !== null && !isHttpAddress(each)).length;
+      links.filter((each) => typeof each !== 'string').length + strings.length - usable.length;
     const files: LinkFile[] = [];
-    for (let start = 0; start < usable.length; start += INFOS_AT_ONCE) {
-      const asked = usable.slice(start, start + INFOS_AT_ONCE);
+    for (let start = 0; start < listed.length; start += INFOS_AT_ONCE) {
+      const asked = listed.slice(start, start + INFOS_AT_ONCE);
       const { infos } = await this.#insist(
         () => this.#ask('/v4/link/infos', apiKey, infosSchema, { 'link[]': asked }, signal),
         signal,
       );
       asked.forEach((each, index) => {
-        // By the link it names; else by its place.
+        // By the link it names — written in https for one asked in http, as the documentation's
+        // example answers — else by its place, the order asked.
         const said =
-          infos.find((info) => infoSchema.safeParse(info).data?.link === each) ?? infos[index];
+          infos.find((info) => sameLink(infoSchema.safeParse(info).data?.link, each)) ??
+          infos[index];
         const info = infoSchema.safeParse(said);
         if (info.success)
           files.push({ link: each, name: info.data.filename, size: info.data.size });
         else unavailable += 1;
       });
     }
-    return files.length === 0 ? BundleFailure.Empty : { files, unavailable };
+    return files.length === 0
+      ? BundleFailure.Empty
+      : { files, unavailable, leftOut: usable.length - listed.length };
   }
 
   // The direct link for a hoster's. A link the service needs time to prepare is waited for,

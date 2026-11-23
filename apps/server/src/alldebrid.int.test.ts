@@ -861,6 +861,7 @@ describe('AllDebrid', () => {
           { link: TWO, name: 'Day 2.mkv', size: 2000 },
         ],
         unavailable: 0,
+        leftOut: 0,
       });
       expect(
         server.requests.map(({ url, form, lists, authorization }) => ({
@@ -897,6 +898,52 @@ describe('AllDebrid', () => {
           { link: TWO, name: 'Day 2.mkv', size: 2000 },
         ],
         unavailable: 2,
+        leftOut: 0,
+      });
+    });
+
+    it('counts an entry of the redirector that is no link at all as a file it cannot get', async () => {
+      const server = await serviceWith({
+        redirects: { [FOLDER]: [ONE, null, 5, { link: TWO }, TWO] },
+        links: known,
+      });
+
+      expect(await clientOf(server).openLink(KEY, FOLDER)).toMatchObject({
+        files: [{ link: ONE }, { link: TWO }],
+        unavailable: 3,
+      });
+    });
+
+    it('names each file after the entry of its own link, in whatever order the service answers, its link written https for http', async () => {
+      const one = ONE.replace(/^https:/, 'http:');
+      const two = TWO.replace(/^https:/, 'http:');
+      const server = await serviceWith({
+        redirects: { [FOLDER]: [one, two] },
+        links: { [one]: known[ONE], [two]: known[TWO] },
+        infosAnswer: { reversed: true },
+      });
+
+      expect(await clientOf(server).openLink(KEY, FOLDER)).toMatchObject({
+        files: [
+          { link: one, name: 'Day 1.mkv', size: 1000 },
+          { link: two, name: 'Day 2.mkv', size: 2000 },
+        ],
+      });
+    });
+
+    it('names a file after the entry in its place when the service writes no link of those asked', async () => {
+      const server = await serviceWith({
+        redirects: { [FOLDER]: [ONE, TWO] },
+        links: known,
+        infosAnswer: { linkAs: (asked) => `${asked}/elsewhere` },
+      });
+
+      expect(await clientOf(server).openLink(KEY, FOLDER)).toMatchObject({
+        files: [
+          { link: ONE, name: 'Day 1.mkv' },
+          { link: TWO, name: 'Day 2.mkv' },
+        ],
+        unavailable: 0,
       });
     });
 
@@ -928,15 +975,40 @@ describe('AllDebrid', () => {
       ).toEqual([100, 100, 50]);
     });
 
-    it('lists no more files than a person ticks through, and asks nothing about them', async () => {
+    it('lists the first files of a link of more than a person ticks through, says how many it left out, and asks nothing about them', async () => {
       const many = Array.from(
-        { length: 1001 },
+        { length: 1003 },
         (_, index) => `${REDIRECT_LINKS}x-${String(index)}`,
       );
-      const server = await serviceWith({ redirects: { [FOLDER]: many } });
+      const server = await serviceWith({
+        redirects: { [FOLDER]: many },
+        links: Object.fromEntries(many.map((link) => [link, { direct: 'http://127.0.0.1:9/x' }])),
+      });
 
-      expect(await clientOf(server).openLink(KEY, FOLDER)).toBe(BundleFailure.TooMany);
-      expect(server.requests.map((request) => request.url)).toEqual(['/v4/link/redirector']);
+      const opened = await clientOf(server).openLink(KEY, FOLDER);
+
+      expect(typeof opened === 'string' ? opened : opened.files.map((file) => file.link)).toEqual(
+        many.slice(0, 1000),
+      );
+      expect(opened).toMatchObject({ unavailable: 0, leftOut: 3 });
+      expect(
+        server.requests
+          .filter((request) => request.url === '/v4/link/infos')
+          .flatMap((request) => request.lists['link[]'] ?? []),
+      ).toEqual(many.slice(0, 1000));
+    });
+
+    it('lists a link of as many files as a person ticks through whole', async () => {
+      const many = Array.from(
+        { length: 1000 },
+        (_, index) => `${REDIRECT_LINKS}x-${String(index)}`,
+      );
+      const server = await serviceWith({
+        redirects: { [FOLDER]: many },
+        links: Object.fromEntries(many.map((link) => [link, { direct: 'http://127.0.0.1:9/x' }])),
+      });
+
+      expect(await clientOf(server).openLink(KEY, FOLDER)).toMatchObject({ leftOut: 0 });
     });
 
     it.each([

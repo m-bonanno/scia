@@ -2,15 +2,17 @@ import { randomBytes } from 'node:crypto';
 import { readdir, readFile, writeFile, mkdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { IntegrationId } from '@scia/contracts';
-import { BundleFailure, BundleStatus, DownloadStatus } from '@scia/core';
+import { BundleFailure, BundleStatus, DownloadStatus, UnlockFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
 import { DownloadManager, ManagerRefusal } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
 import { Integrations } from './integrations.ts';
 import { MemoryVault } from './key-vault.ts';
+import type { LinkResolver, OpenedLink } from './link-resolver.ts';
 import type { Logger } from './logger.ts';
-import type { RemoteSource } from './remote-source.ts';
+import type { RemoteSource, RequestHeaders } from './remote-source.ts';
+import { ServiceError } from './service-error.ts';
 import { JsonStateStore } from './state-store.ts';
 import {
   type AllDebridServer,
@@ -111,6 +113,58 @@ describe('a link that opens into several files', () => {
     });
     return manager;
   }
+  // A resolver whose questions the spec answers by hand, deaf to their abort: what an answer that
+  // lands after Remove or after another question does is the manager's alone.
+  function byHand() {
+    const asked: {
+      readonly url: string;
+      readonly answer: (opened: OpenedLink | typeof BundleFailure.Empty) => void;
+      readonly refuse: (error: unknown) => void;
+    }[] = [];
+    const resolver: LinkResolver = {
+      hasService: () => true,
+      serviceFor: () => Promise.resolve(undefined),
+      unlock: () => Promise.reject(new Error('not here')),
+      open: (_service, url) =>
+        new Promise((answer, refuse) => {
+          asked.push({ url, answer, refuse });
+        }),
+    };
+    return { resolver, asked };
+  }
+  // A host that stays silent, and says what it was asked for and with what.
+  function probing() {
+    const probed: { readonly url: string; readonly headers: RequestHeaders }[] = [];
+    const remote: RemoteSource = {
+      ...silentSource,
+      probe: (url, headers, signal) => {
+        probed.push({ url, headers });
+        return silentSource.probe(url, headers, signal);
+      },
+    };
+    return { remote, probed };
+  }
+  async function openWith(resolver: LinkResolver, from: RemoteSource = silentSource) {
+    manager = await DownloadManager.open({
+      source: from,
+      store: new JsonStateStore(statePath()),
+      defaultDirectory: downloads(),
+      logger,
+      retryDelayMs: () => 1,
+      resolver,
+    });
+    return manager;
+  }
+  const oneFile: OpenedLink = {
+    files: [{ link: ONE, name: 'Day 1.mkv', size: 10 }],
+    unavailable: 0,
+    leftOut: 0,
+  };
+  const twoFiles: OpenedLink = {
+    files: [...oneFile.files, { link: TWO, name: 'Day 2.mkv', size: 20 }],
+    unavailable: 0,
+    leftOut: 0,
+  };
   const bundleOf = (scia: DownloadManager) => scia.snapshot().bundles[0];
   const choosing = (scia: DownloadManager) =>
     until(() => bundleOf(scia)?.status === BundleStatus.Choosing);
@@ -225,6 +279,8 @@ describe('a link that opens into several files', () => {
 
     scia.add({ urls: [FOLDER] });
     await choosing(scia);
+    // Listed under the names the files will have.
+    expect(bundleOf(scia)?.files.map((file) => file.name)).toEqual(['evil.exe', 'Day 2.mkv']);
     scia.startBundle(bundleOf(scia)?.id ?? '', [0, 1]);
 
     await until(() => allDone(scia, 2));
@@ -232,6 +288,37 @@ describe('a link that opens into several files', () => {
     expect((await readdir(join(downloads(), 'Holiday films (1)'))).sort()).toEqual([
       'Day 2.mkv',
       'evil.exe',
+    ]);
+  });
+
+  it("keeps the name the service gave a file over its host's, and takes its host's when the service gave none", async () => {
+    const named = await Promise.all(
+      ['Other.mkv', 'From host.mkv'].map(async (fileName, index) =>
+        startRangeServer({ body: bodies[index] ?? Buffer.alloc(1), fileName }),
+      ),
+    );
+    hosts.push(...named);
+    const scia = await open(
+      await connected(
+        await serviceWith({
+          links: {
+            [ONE]: { direct: named[0]?.url ?? '', filename: 'Day 1.mkv' },
+            [TWO]: { direct: named[1]?.url ?? '', filename: '' },
+          },
+          redirects: { [FOLDER]: [ONE, TWO] },
+        }),
+      ),
+    );
+
+    scia.add({ urls: [FOLDER] });
+    await choosing(scia);
+    expect(bundleOf(scia)?.files.map((file) => file.name)).toEqual(['Day 1.mkv', 'download']);
+    scia.startBundle(bundleOf(scia)?.id ?? '', [0, 1]);
+
+    await until(() => allDone(scia, 2));
+    expect((await readdir(join(downloads(), 'Holiday films'))).sort()).toEqual([
+      'Day 1.mkv',
+      'From host.mkv',
     ]);
   });
 
@@ -291,23 +378,131 @@ describe('a link that opens into several files', () => {
     expect(bundleOf(scia)?.failure).toBe(failure);
   });
 
-  it('says the service found nothing behind it, or too many files to list', async () => {
-    const many = Array.from({ length: 1001 }, (_, index) => `${REDIRECT_LINKS}x-${String(index)}`);
+  it("says the service found nothing behind a file host's folder", async () => {
+    const scia = await open(await connected(await serviceWith({ redirects: { [FOLDER]: [] } })));
+
+    scia.add({ urls: [FOLDER] });
+
+    await failed(scia);
+    expect(bundleOf(scia)?.failure).toBe(BundleFailure.Empty);
+  });
+
+  it('offers the first files of a folder of more than a person ticks through, and says how many were left out', async () => {
+    const many = Array.from({ length: 1002 }, (_, index) => `${REDIRECT_LINKS}x-${String(index)}`);
     const scia = await open(
       await connected(
         await serviceWith({
-          redirects: { [FOLDER]: [], [SHORT]: many },
+          redirects: { [FOLDER]: many },
+          links: Object.fromEntries(many.map((link) => [link, { direct: 'http://127.0.0.1:9/x' }])),
         }),
       ),
     );
 
-    scia.add({ urls: [FOLDER, SHORT] });
+    scia.add({ urls: [FOLDER] });
 
-    await until(() => scia.snapshot().bundles.every((each) => each.status === BundleStatus.Failed));
-    expect(scia.snapshot().bundles.map((each) => each.failure)).toEqual([
-      BundleFailure.Empty,
-      BundleFailure.TooMany,
+    await choosing(scia);
+    expect(bundleOf(scia)?.files).toHaveLength(1000);
+    expect(bundleOf(scia)).toMatchObject({ unavailable: 0, leftOut: 2 });
+  });
+
+  it("fetches a shortener's link as it stands, with the page it was added from, when the service does not open it or opens it into nothing it can get", async () => {
+    const { remote, probed } = probing();
+    const refused = 'https://bit.ly/refused';
+    const scia = await open(
+      await connected(
+        await serviceWith({
+          redirects: { [refused]: { error: 'REDIRECTOR_NOT_SUPPORTED' }, [SHORT]: [THREE] },
+          links: { [THREE]: { error: 'LINK_DOWN' } },
+        }),
+      ),
+      remote,
+    );
+
+    scia.add({ urls: [refused, SHORT], referrer: 'https://page.example/post' });
+
+    await until(() => probed.length === 2);
+    expect(scia.snapshot().bundles).toEqual([]);
+    expect(scia.snapshot().downloads.map((each) => [each.url, each.via])).toEqual([
+      [refused, null],
+      [SHORT, null],
     ]);
+    expect(probed.map(({ url, headers }) => [url, headers.referer])).toEqual([
+      [refused, 'https://page.example/post'],
+      [SHORT, 'https://page.example/post'],
+    ]);
+    expect(logged.join('\n')).not.toContain('bit.ly');
+  });
+
+  it("fetches a shortener's link as it stands when its service left while it waited, into the folder it was added for", async () => {
+    const { resolver, asked } = byHand();
+    const scia = await openWith(resolver);
+    const before = downloads();
+
+    scia.add({ urls: [SHORT] });
+    await until(() => asked.length === 1);
+    await scia.setDownloadDirectory(join(folder.path, 'elsewhere'));
+    asked[0]?.refuse(new ServiceError(IntegrationId.AllDebrid, UnlockFailure.NeedsService, 'gone'));
+
+    await until(() => scia.snapshot().downloads.length === 1);
+    expect(scia.snapshot().bundles).toEqual([]);
+    expect(scia.snapshot().downloads[0]).toMatchObject({ url: SHORT, directory: before });
+  });
+
+  it("says a file host's folder needs a service when its service left while it waited", async () => {
+    const { resolver, asked } = byHand();
+    const scia = await openWith(resolver);
+
+    scia.add({ urls: [FOLDER] });
+    await until(() => asked.length === 1);
+    asked[0]?.refuse(new ServiceError(IntegrationId.AllDebrid, UnlockFailure.NeedsService, 'gone'));
+
+    await failed(scia);
+    expect(bundleOf(scia)?.failure).toBe(BundleFailure.NeedsService);
+    expect(scia.snapshot().downloads).toEqual([]);
+  });
+
+  it('says the service could not be asked when asking it failed in a way it never said', async () => {
+    const { resolver, asked } = byHand();
+    const scia = await openWith(resolver);
+
+    scia.add({ urls: [FOLDER] });
+    await until(() => asked.length === 1);
+    asked[0]?.refuse(new Error('a socket closed'));
+
+    await failed(scia);
+    expect(bundleOf(scia)?.failure).toBe(BundleFailure.Unavailable);
+  });
+
+  it('keeps nothing of an answer that lands after Remove', async () => {
+    const { resolver, asked } = byHand();
+    const scia = await openWith(resolver);
+
+    scia.add({ urls: [FOLDER, SHORT] });
+    await until(() => asked.length === 1);
+    scia.removeBundle(bundleOf(scia)?.id ?? '');
+    asked[0]?.answer(oneFile);
+    await until(() => asked.length === 2);
+    asked[1]?.answer(twoFiles);
+
+    await choosing(scia);
+    expect(scia.snapshot().bundles).toHaveLength(1);
+    expect(scia.snapshot().downloads).toEqual([]);
+  });
+
+  it('never asks about a link removed while it waited its turn', async () => {
+    const { resolver, asked } = byHand();
+    const scia = await openWith(resolver);
+    const second = 'https://1fichier.com/dir/Second';
+
+    scia.add({ urls: [FOLDER, second] });
+    await until(() => asked.length === 1);
+    scia.removeBundle(scia.snapshot().bundles[1]?.id ?? '');
+    asked[0]?.answer(twoFiles);
+    await choosing(scia);
+    scia.add({ urls: [SHORT] });
+
+    await until(() => asked.length === 2);
+    expect(asked.map((each) => each.url)).toEqual([FOLDER, SHORT]);
   });
 
   it('says the service could not be asked, and asks again at Retry', async () => {
@@ -351,9 +546,9 @@ describe('a link that opens into several files', () => {
     await until(() => allDone(scia, 2));
   });
 
-  it('forgets it at Remove, also while the service is asked, and keeps nothing of what it answers then', async () => {
+  it('forgets it at Remove, also while the service is asked, and stops the question', async () => {
     const alldebrid = await serviceWith();
-    alldebrid.misbehave({ slowMs: 200 });
+    alldebrid.misbehave({ silent: true });
     const scia = await open(await connected(alldebrid));
 
     scia.add({ urls: [FOLDER] });
@@ -362,9 +557,10 @@ describe('a link that opens into several files', () => {
 
     expect(scia.snapshot().bundles).toEqual([]);
     alldebrid.misbehave(undefined);
-    // The next one is opened, not held behind the one removed.
+    // The next one is opened, not held behind the one removed, whose question never answers: well
+    // within the client's ten seconds, after which a question nobody stopped ends by itself.
     scia.add({ urls: [FOLDER] });
-    await choosing(scia);
+    await until(() => bundleOf(scia)?.status === BundleStatus.Choosing, 3000);
     expect(scia.snapshot().bundles).toHaveLength(1);
     expect(scia.snapshot().downloads).toEqual([]);
   });
@@ -389,36 +585,72 @@ describe('a link that opens into several files', () => {
     alldebrid.misbehave(undefined);
     const again = await open(await connected(alldebrid));
     await choosing(again);
-    for (const chosen of [[], [3], [-1], [0, 0], [0.5]]) {
+    for (const chosen of [[], [3], [-1], [0, 0], [0.5], [0, 99]]) {
       expect(() => again.startBundle(id, chosen), JSON.stringify(chosen)).toThrow(
         expect.objectContaining({ refusal: ManagerRefusal.Invalid }),
       );
     }
     expect(bundleOf(again)?.status).toBe(BundleStatus.Choosing);
+    expect(again.snapshot().downloads).toEqual([]);
   });
 
-  it('leaves such a link out of the links taken from the clipboard: nothing is asked of a copy', async () => {
+  it("takes a file host's folder copied to the clipboard as ready, while a service is connected, and opens it into its files at Start", async () => {
     const alldebrid = await serviceWith();
     const scia = await open(await connected(alldebrid));
 
-    expect(await scia.offer([FOLDER, SHORT])).toEqual([]);
+    const offered = await scia.offer([FOLDER, SHORT]);
+
+    expect(offered.map((each) => [each.url, each.status])).toEqual([
+      [FOLDER, DownloadStatus.Ready],
+    ]);
     expect(scia.snapshot().bundles).toEqual([]);
+    expect(asked(alldebrid, '/v4/link/redirector')).toBe(0);
+
+    scia.start(offered[0]?.id ?? '');
+
+    expect(scia.snapshot().downloads).toEqual([]);
+    await choosing(scia);
+    expect(bundleOf(scia)).toMatchObject({ name: 'Holiday films', files: [{}, {}, {}] });
+  });
+
+  it('opens a ready folder into its files when every ready link is started', async () => {
+    const scia = await open(await connected(await serviceWith()));
+    const [lone] = hosts;
+    await scia.offer([FOLDER, `${lone?.url ?? ''}/setup.exe`]);
+
+    scia.startReady();
+
+    await choosing(scia);
+    expect(scia.snapshot().downloads.map((each) => each.status)).not.toContain(
+      DownloadStatus.Ready,
+    );
+    expect(scia.snapshot().downloads).toHaveLength(1);
+  });
+
+  it('leaves a copied folder out while no service is connected: a copy is not a request to connect', async () => {
+    const alldebrid = await serviceWith();
+    const scia = await open(await connected(alldebrid, null));
+
+    expect(await scia.offer([FOLDER, SHORT])).toEqual([]);
     expect(asked(alldebrid, '/v4/link/redirector')).toBe(0);
   });
 
-  it("never writes the link nor the service's links in the log, nor in what it says of the link", async () => {
+  it("never writes the link in the log nor in an answer, nor the service's links in the log; its files are downloads known by the service's links", async () => {
     const scia = await open(await connected(await serviceWith()));
 
     scia.add({ urls: [FOLDER] });
     await choosing(scia);
-    const shown = JSON.stringify(scia.snapshot().bundles);
-    scia.startBundle(bundleOf(scia)?.id ?? '', [0]);
+    const listed = JSON.stringify(scia.snapshot());
+    const started = scia.startBundle(bundleOf(scia)?.id ?? '', [0]);
     await until(() => allDone(scia, 1));
 
-    for (const text of [logged.join('\n'), shown]) {
+    for (const text of [logged.join('\n'), listed, JSON.stringify([started, scia.snapshot()])]) {
       expect(text).not.toContain('1fichier');
+    }
+    for (const text of [logged.join('\n'), listed]) {
       expect(text).not.toContain(REDIRECT_LINKS);
     }
+    expect(started.map((each) => each.url)).toEqual([ONE]);
     expect(logged.join('\n')).toContain('bundle_opened');
   });
 });

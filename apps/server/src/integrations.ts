@@ -448,7 +448,7 @@ export class Integrations implements LinkResolver, MagnetService {
     service: IntegrationId,
     url: string,
     signal: AbortSignal,
-  ): Promise<OpenedLink | typeof BundleFailure.Empty | typeof BundleFailure.TooMany> {
+  ): Promise<OpenedLink | typeof BundleFailure.Empty> {
     const key = this.#key;
     // Nothing was ever this service's: it is the service to connect, not one that left.
     if (key === undefined) {

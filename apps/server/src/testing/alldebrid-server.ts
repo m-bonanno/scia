@@ -150,9 +150,16 @@ export interface AllDebridServerOptions {
   readonly streams?: readonly string[];
   readonly redirectors?: readonly string[];
   // What its redirector opens a link into (#181): the links it gives — links of the service's own,
-  // unlocked as any of `links` — or one of its refusals, by its code. A link that is not here is
-  // one it does not open.
-  readonly redirects?: Readonly<Record<string, readonly string[] | { readonly error: string }>>;
+  // unlocked as any of `links`, or whatever else an answer may hold — or one of its refusals, by
+  // its code. A link that is not here is one it does not open.
+  readonly redirects?: Readonly<Record<string, readonly unknown[] | { readonly error: string }>>;
+  // How the infos of links are answered: in the order asked unless `reversed`, each naming the
+  // link it is of as the service writes it — an `http` link as `https`, as the documentation's
+  // example does — unless `linkAs` writes it otherwise.
+  readonly infosAnswer?: {
+    readonly reversed?: boolean;
+    readonly linkAs?: (asked: string) => string;
+  };
   // The links it knows, by address. A link of one of its hosts that is not here is "down".
   readonly links?: Readonly<Record<string, SimulatedLink>>;
   // The HTTP status that goes with a refused key. The documentation says both that some errors
@@ -269,8 +276,12 @@ function isPremium(account: SimulatedAccount): boolean {
   return account.premium ?? (account.premiumUntil ?? 0) > 0;
 }
 
+function asTheServiceWrites(link: string): string {
+  return link.replace(/^http:/, 'https:');
+}
+
 function hostOf(link: string, options: AllDebridServerOptions): string | undefined {
-  if (link.startsWith(REDIRECT_LINKS)) return 'redirect';
+  if (asTheServiceWrites(link).startsWith(REDIRECT_LINKS)) return 'redirect';
   if (!URL.canParse(link)) return undefined;
   const { hostname } = new URL(link);
   return Object.entries(options.hosts ?? {}).find(([, domains]) =>
@@ -417,31 +428,31 @@ export async function startAllDebridServer(
     else succeed(response, { links: opened });
   }
 
-  // Each link answered on its own, in the order asked: what its host calls the file and its size,
-  // or why not.
+  // Each link answered on its own: what its host calls the file and its size, or why not.
   function infos(response: ServerResponse, links: readonly string[]): void {
     if (links.length === 0) {
       refuse(response, 200, 'LINK_IS_MISSING');
       return;
     }
-    succeed(response, {
-      infos: links.map((link) => {
-        const host = hostOf(link, options);
-        const known = options.links?.[link];
-        if (host === undefined || known === undefined || 'error' in known) {
-          const refused = known !== undefined && 'error' in known ? known.error : 'LINK_DOWN';
-          const code = host === undefined ? 'LINK_HOST_NOT_SUPPORTED' : refused;
-          return { link, error: { code, message: MESSAGES[code] ?? '' } };
-        }
-        return {
-          link,
-          filename: known.filename ?? 'file.bin',
-          size: known.size ?? 0,
-          host,
-          hostDomain: options.hosts?.[host]?.[0] ?? host,
-        };
-      }),
+    const { reversed = false, linkAs = asTheServiceWrites } = options.infosAnswer ?? {};
+    const answered = links.map((asked) => {
+      const host = hostOf(asked, options);
+      const known = options.links?.[asked];
+      const link = linkAs(asked);
+      if (host === undefined || known === undefined || 'error' in known) {
+        const refused = known !== undefined && 'error' in known ? known.error : 'LINK_DOWN';
+        const code = host === undefined ? 'LINK_HOST_NOT_SUPPORTED' : refused;
+        return { link, error: { code, message: MESSAGES[code] ?? '' } };
+      }
+      return {
+        link,
+        filename: known.filename ?? 'file.bin',
+        size: known.size ?? 0,
+        host,
+        hostDomain: options.hosts?.[host]?.[0] ?? host,
+      };
     });
+    succeed(response, { infos: reversed ? answered.toReversed() : answered });
   }
 
   function giveCode(response: ServerResponse): void {
