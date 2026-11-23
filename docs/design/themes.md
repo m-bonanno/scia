@@ -2,7 +2,7 @@
 
 Scia wears one of nine themes, chosen in Settings; Black Tie is the default. Each is one of the "Minimal" palettes of color-hex.com — [palette 5244](https://www.color-hex.com/color-palette/5244) and the eight it lists as related (#52). Which variant a theme shows, light or dark, is the system's choice.
 
-A palette is five flat colours; a theme is the thirteen tokens of `apps/renderer/src/themes.css`, in two variants. This page says, token by token, what each theme took from its palette and what it had to make: **bold** is a colour of the palette as the page has it, the rest are tones of the palette's own hues (the same hue, lighter or darker, less saturated for the grounds).
+A palette is five flat colours; a theme is the fourteen tokens of `apps/renderer/src/themes.css`, in two variants. This page says, token by token, what each theme took from its palette and what it had to make: **bold** is a colour of the palette as the page has it, the rest are tones of the palette's own hues (the same hue, lighter or darker, less saturated for the grounds).
 
 Three things no palette gives, in any theme:
 
@@ -14,13 +14,15 @@ Two tokens are not held as the others are, and say so here so that the next them
 
 Selected text is not a token: it is `accent-foreground` on `accent`, in every theme, and the same spec holds that.
 
+A paused bar has a tone of its own, `paused` (the owner, #58). In 16 of the 18 variants it is the hue of the secondary text, darkened until it is darker than the accent and still 3:1 or more on its track: about 3.2:1 on the dark tracks, and 1.8:1 under the accent on the light ones. Black Tie light and Earth dark keep the paused bar they had, the secondary text's own tone, lighter than the accent: there, a tone darker than the accent could differ from it by 1.29:1 and 1.16:1 at most, less than the lighter one does (1.62:1 and 1.60:1). The row's "Paused" says the rest. The spec holds the tone at 3:1 on the track, and its order against the accent in each variant, the two exceptions written as a list. A ready or a queued bar stays `muted-foreground`.
+
 Captures of every theme, from the real app: [`themes/`](./themes/); the default one is the captures of [`README.md`](./README.md).
 
 ## Black Tie
 
 [Palette 5244](https://www.color-hex.com/color-palette/5244): `#202020` `#e3e3e3` `#424242` `#111111`.
 
-Monochrome, by the owner’s decision: the accent is the palette’s own light grey on dark and its dark grey on light, and the only colour left is the red of a failure. `#424242` is 1.88:1 on `#111111`, so it cannot be the secondary text of the dark variant: it is the field’s boundary there, and the secondary text of the light one. A paused bar is told from a running one by tone alone: 2.09:1 between them on dark, 1.62:1 on light.
+Monochrome, by the owner’s decision: the accent is the palette’s own light grey on dark and its dark grey on light, and the only colour left is the red of a failure. `#424242` is 1.88:1 on `#111111`, so it cannot be the secondary text of the dark variant: it is the field’s boundary there, and the secondary text of the light one. A paused bar is told from a running one by tone alone: 3.08:1 between them on dark, 1.62:1 on light.
 
 | Token                    | Dark              | Light                 |
 | ------------------------ | ----------------- | --------------------- |
@@ -31,6 +33,7 @@ Monochrome, by the owner’s decision: the accent is the palette’s own light g
 | `foreground`             | **`#e3e3e3`**     | **`#111111`**         |
 | `muted-foreground`       | `#9e9e9e`         | **`#424242`**         |
 | `accent`                 | **`#e3e3e3`**     | **`#202020`**         |
+| `paused`                 | `#808080`         | **`#424242`**         |
 | `accent-foreground`      | **`#111111`**     | **`#e3e3e3`**         |
 | `destructive`            | `#ff8585`         | `#b42828`             |
 | `destructive-foreground` | `#2b0707`         | `#ffffff`             |
@@ -38,7 +41,7 @@ Monochrome, by the owner’s decision: the accent is the palette’s own light g
 | `ring`                   | **`#e3e3e3`**     | **`#202020`**         |
 | `overlay`                | `#000000` at 60 % | **`#111111`** at 40 % |
 
-Lowest contrast — text: 4.72:1 dark, 5.00:1 light; marks: 5.38:1 dark, 4.28:1 light.
+Lowest contrast — text: 4.72:1 dark, 5.00:1 light; marks: 3.20:1 dark (the paused bar on its track), 4.28:1 light.
 
 ## Brick
 
@@ -55,6 +58,7 @@ The accent is the palette’s brick red, lightened on dark, where `#bf390b` is t
 | `foreground`             | **`#dfccaf`**     | **`#511301`**         |
 | `muted-foreground`       | **`#b4a389`**     | `#5f3f35`             |
 | `accent`                 | `#f16842`         | **`#bf390b`**         |
+| `paused`                 | `#827562`         | `#5a3b32`             |
 | `accent-foreground`      | `#190804`         | `#ffffff`             |
 | `destructive`            | `#ff7a9c`         | `#a3123f`             |
 | `destructive-foreground` | `#2b0712`         | `#ffffff`             |
@@ -62,7 +66,7 @@ The accent is the palette’s brick red, lightened on dark, where `#bf390b` is t
 | `ring`                   | `#f16842`         | **`#bf390b`**         |
 | `overlay`                | `#000000` at 60 % | **`#511301`** at 40 % |
 
-Lowest contrast — text: 5.84:1 dark, 4.93:1 light; marks: 4.65:1 dark, 3.11:1 light.
+Lowest contrast — text: 5.84:1 dark, 4.93:1 light; marks: 3.19:1 dark (the paused bar on its track), 3.11:1 light.
 
 ## Road Trip
 
@@ -79,6 +83,7 @@ The asphalt greys are the dark variant as they are. The palette has no light col
 | `foreground`             | `#f0f0f0`         | **`#2f2f2f`**         |
 | `muted-foreground`       | `#b6b6b6`         | **`#565656`**         |
 | `accent`                 | **`#d2b746`**     | `#756207`             |
+| `paused`                 | `#979797`         | `#3d3d3d`             |
 | `accent-foreground`      | **`#2f2f2f`**     | `#ffffff`             |
 | `destructive`            | `#ff9494`         | `#c62f2f`             |
 | `destructive-foreground` | `#2b0707`         | `#ffffff`             |
@@ -86,13 +91,13 @@ The asphalt greys are the dark variant as they are. The palette has no light col
 | `ring`                   | **`#d2b746`**     | `#756207`             |
 | `overlay`                | `#000000` at 60 % | **`#2f2f2f`** at 40 % |
 
-Lowest contrast — text: 4.58:1 dark, 4.87:1 light; marks: 4.39:1 dark, 4.45:1 light.
+Lowest contrast — text: 4.58:1 dark, 4.87:1 light; marks: 3.18:1 dark (the paused bar on its track), 4.45:1 light.
 
 ## Earth
 
 [Palette 5237](https://www.color-hex.com/color-palette/5237): `#2b5a23` `#506d41` `#828345` `#7a682e` `#544218`.
 
-No two colours of this palette reach 4.5:1 against each other (the best pair is 2.43:1): every ground and every text colour is a tone of the palette’s hues. The accents are the palette’s own: its olive on dark (the owner, 20 November 2026 — a made green stood there first, and the dark variant wore no colour of its palette), its green on light, where its brown is the secondary text. On dark the olive is dimmer than the secondary text: of a paused bar and a running one, the paused is the lighter, and the one without hue.
+No two colours of this palette reach 4.5:1 against each other (the best pair is 2.43:1): every ground and every text colour is a tone of the palette’s hues. The accents are the palette’s own: its olive on dark (the owner, 20 November 2026 — a made green stood there first, and the dark variant wore no colour of its palette), its green on light, where its brown is the secondary text. On dark the olive is dimmer than the secondary text: of a paused bar and a running one, the paused is the lighter, and the one without hue — the secondary text's own tone, which the owner kept there (#58).
 
 | Token                    | Dark              | Light                 |
 | ------------------------ | ----------------- | --------------------- |
@@ -103,6 +108,7 @@ No two colours of this palette reach 4.5:1 against each other (the best pair is 
 | `foreground`             | `#e9ead7`         | `#2b2005`             |
 | `muted-foreground`       | `#aca48e`         | **`#544218`**         |
 | `accent`                 | **`#828345`**     | **`#2b5a23`**         |
+| `paused`                 | `#aca48e`         | `#33270b`             |
 | `accent-foreground`      | `#120e05`         | `#ffffff`             |
 | `destructive`            | `#ff8585`         | `#c62f2f`             |
 | `destructive-foreground` | `#2b0707`         | `#ffffff`             |
@@ -127,6 +133,7 @@ The dark variant is the palette as it is: four browns for the grounds and the go
 | `foreground`             | `#f6efd5`         | **`#3e1000`**         |
 | `muted-foreground`       | `#d3b7a7`         | **`#653719`**         |
 | `accent`                 | **`#ceb035`**     | `#766206`             |
+| `paused`                 | `#a48e81`         | `#5e3317`             |
 | `accent-foreground`      | **`#3e1000`**     | `#ffffff`             |
 | `destructive`            | `#ff9d94`         | `#c62f2f`             |
 | `destructive-foreground` | `#2b0707`         | `#ffffff`             |
@@ -134,7 +141,7 @@ The dark variant is the palette as it is: four browns for the grounds and the go
 | `ring`                   | **`#ceb035`**     | `#766206`             |
 | `overlay`                | `#000000` at 60 % | **`#3e1000`** at 40 % |
 
-Lowest contrast — text: 5.25:1 dark, 4.78:1 light; marks: 4.68:1 dark, 4.12:1 light.
+Lowest contrast — text: 5.25:1 dark, 4.78:1 light; marks: 3.20:1 dark (the paused bar on its track), 4.12:1 light.
 
 ## New Car
 
@@ -151,6 +158,7 @@ The light variant uses the palette’s blue and two of its silvers; `#a7a7a7` is
 | `foreground`             | `#ececec`         | `#1c1c1c`         |
 | `muted-foreground`       | **`#a7a7a7`**     | **`#676767`**     |
 | `accent`                 | `#71a8ea`         | **`#265285`**     |
+| `paused`                 | `#7b7b7b`         | `#2a2a2a`         |
 | `accent-foreground`      | `#08101a`         | `#ffffff`         |
 | `destructive`            | `#ff8585`         | `#c62f2f`         |
 | `destructive-foreground` | `#2b0707`         | `#ffffff`         |
@@ -158,7 +166,7 @@ The light variant uses the palette’s blue and two of its silvers; `#a7a7a7` is
 | `ring`                   | `#71a8ea`         | **`#265285`**     |
 | `overlay`                | `#000000` at 60 % | `#1c1c1c` at 40 % |
 
-Lowest contrast — text: 5.64:1 dark, 4.62:1 light; marks: 5.49:1 dark, 4.45:1 light.
+Lowest contrast — text: 5.64:1 dark, 4.62:1 light; marks: 3.21:1 dark (the paused bar on its track), 4.45:1 light.
 
 ## Wood Floor
 
@@ -175,6 +183,7 @@ No two colours of this palette reach 4.5:1 against each other (the best pair is 
 | `foreground`             | `#f7e4d6`         | `#391605`             |
 | `muted-foreground`       | `#b9a392`         | `#684b3e`             |
 | `accent`                 | **`#c9731e`**     | **`#a54b00`**         |
+| `paused`                 | `#857568`         | `#523a30`             |
 | `accent-foreground`      | `#180904`         | `#ffffff`             |
 | `destructive`            | `#ff7a9c`         | `#a3123f`             |
 | `destructive-foreground` | `#2b0712`         | `#ffffff`             |
@@ -182,7 +191,7 @@ No two colours of this palette reach 4.5:1 against each other (the best pair is 
 | `ring`                   | **`#c9731e`**     | **`#a54b00`**         |
 | `overlay`                | `#000000` at 60 % | **`#70300d`** at 40 % |
 
-Lowest contrast — text: 5.52:1 dark, 5.82:1 light; marks: 4.02:1 dark, 4.38:1 light.
+Lowest contrast — text: 5.52:1 dark, 5.82:1 light; marks: 3.20:1 dark (the paused bar on its track), 4.38:1 light.
 
 ## Ice
 
@@ -199,6 +208,7 @@ The light variant is the palette’s lavender, sky blue, mid blue and navy. On d
 | `foreground`             | **`#d5d8f0`**     | **`#003d6b`**         |
 | `muted-foreground`       | `#9cadbd`         | `#40586f`             |
 | `accent`                 | **`#7997d6`**     | **`#5b73b4`**         |
+| `paused`                 | `#727f8b`         | `#3a5066`             |
 | `accent-foreground`      | `#011021`         | `#ffffff`             |
 | `destructive`            | `#ff8585`         | `#c62f2f`             |
 | `destructive-foreground` | `#2b0707`         | `#ffffff`             |
@@ -206,7 +216,7 @@ The light variant is the palette’s lavender, sky blue, mid blue and navy. On d
 | `ring`                   | **`#7997d6`**     | **`#5b73b4`**         |
 | `overlay`                | `#000000` at 60 % | **`#003d6b`** at 40 % |
 
-Lowest contrast — text: 5.71:1 dark, 4.61:1 light; marks: 4.51:1 dark, 3.27:1 light.
+Lowest contrast — text: 5.71:1 dark, 4.61:1 light; marks: 3.21:1 dark (the paused bar on its track), 3.27:1 light.
 
 ## Space
 
@@ -223,6 +233,7 @@ No two colours of this palette reach 4.5:1 against each other (the best pair is 
 | `foreground`             | `#ece9f6`             | **`#1c1936`**         |
 | `muted-foreground`       | `#ada6c0`             | `#59586d`             |
 | `accent`                 | `#b39aed`             | **`#4d3b72`**         |
+| `paused`                 | `#868196`             | `#1a1a22`             |
 | `accent-foreground`      | **`#000000`**         | `#ffffff`             |
 | `destructive`            | `#f78483`             | `#ad2d37`             |
 | `destructive-foreground` | **`#000000`**         | `#ffffff`             |
@@ -230,4 +241,4 @@ No two colours of this palette reach 4.5:1 against each other (the best pair is 
 | `ring`                   | `#b39aed`             | **`#4d3b72`**         |
 | `overlay`                | **`#000000`** at 60 % | **`#1c1936`** at 40 % |
 
-Lowest contrast — text: 5.15:1 dark, 5.18:1 light; marks: 4.91:1 dark, 4.92:1 light.
+Lowest contrast — text: 5.15:1 dark, 5.18:1 light; marks: 3.20:1 dark (the paused bar on its track), 4.92:1 light.

@@ -73,6 +73,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 ## 23 November 2026
 
 - #99: picture and sound offered apart are joined only as an mp4 picture in H.264 or AV1 and an AAC sound. The most lines win, and H.264 at equal lines; HEVC never, since Windows plays it only with a paid extension. A webm picture with Opus sound is an issue of its own (#239) ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)).
+- #58, changing the decision of 21 November 2026 after the contrast was computed in every variant: a paused bar gets a tone of its own, darker than the accent and 3:1 or more on its track, in 16 of the 18 variants; Black Tie light and Earth dark keep today's paused bar, lighter than the accent, since "darker" there would be less distinct from a running bar (1.29:1 and 1.16:1 at best). The contrast spec holds the tone on the track and its order against the accent in each variant (#260).
 
 ## Undated in the roadmap
 

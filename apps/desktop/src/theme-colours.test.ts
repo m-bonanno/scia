@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { ColourScheme, DEFAULT_THEME, THEMES, WINDOW_COLOURS } from '@scia/contracts/theme';
+import { ColourScheme, DEFAULT_THEME, Theme, THEMES, WINDOW_COLOURS } from '@scia/contracts/theme';
 import { describe, expect, it } from 'vitest';
 import { titleBarOverlay } from './engine/title-bar.ts';
 
@@ -88,6 +88,7 @@ const PAIRS: readonly (readonly [string, string, number])[] = [
   ['accent', 'surface', NOT_TEXT],
   ['accent', 'surface-hover', NOT_TEXT],
   ['accent', 'tonal', NOT_TEXT],
+  ['paused', 'tonal', NOT_TEXT],
   ['destructive', 'tonal', NOT_TEXT],
   ['ring', 'background', NOT_TEXT],
   ['ring', 'surface', NOT_TEXT],
@@ -127,6 +128,29 @@ describe('the themes of the page', () => {
       });
 
       expect(short).toEqual([]);
+    },
+  );
+});
+
+// A paused bar is a tone of its own, darker than a running one (the owner, #58). In the two
+// variants below "darker" cannot be built without the paused bar coming out less distinct from
+// a running one than the lighter tone it keeps (1.29:1 and 1.16:1 at best).
+const PAUSED_LIGHTER_THAN_THE_ACCENT: readonly { theme: Theme; scheme: ColourScheme }[] = [
+  { theme: Theme.BlackTie, scheme: ColourScheme.Light },
+  { theme: Theme.Earth, scheme: ColourScheme.Dark },
+];
+
+describe('a paused bar', () => {
+  it.each(variants)(
+    'is told from a running one by its tone in $theme, $scheme',
+    ({ theme, scheme }) => {
+      const { paused = '', accent = '' } = tokensOf(theme, scheme);
+      const lighter = PAUSED_LIGHTER_THAN_THE_ACCENT.some(
+        (variant) => variant.theme === theme && variant.scheme === scheme,
+      );
+
+      expect(luminance(paused) > luminance(accent)).toBe(lighter);
+      expect(paused).not.toBe(accent);
     },
   );
 });
