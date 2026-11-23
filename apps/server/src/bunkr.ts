@@ -42,6 +42,11 @@ export interface BunkrOptions {
   readonly retryDelayMs?: (attempt: number) => number;
 }
 
+// Where Bunkr's API is: its own address, or the same path on a run's local host.
+export function apiOf(site: string | undefined): string {
+  return site === undefined ? API : new URL(new URL(API).pathname, site).href;
+}
+
 export interface Album {
   // What its folder is named after: its title, or its id when it has none.
   readonly name: string;
@@ -125,7 +130,7 @@ export class Bunkr {
     this.#userAgent = options.userAgent;
     const site = options.site === undefined ? undefined : new URL(options.site);
     this.#domains = site === undefined ? BUNKR_DOMAINS : [site.hostname];
-    this.#api = site === undefined ? API : new URL(new URL(API).pathname, site).href;
+    this.#api = apiOf(options.site);
     this.#timeoutMs = options.timeoutMs ?? READ_LIMIT_MS;
     this.#retryDelayMs = options.retryDelayMs ?? defaultRetryDelayMs;
   }
@@ -138,8 +143,8 @@ export class Bunkr {
     return bunkrLinkOf(url, this.#domains)?.kind === 'file';
   }
 
-  // Its files, each by its page on the host the album was read at. Rejects with a RemoteError
-  // that says why not, or with the reason of `signal`.
+  // Its files, each by its page on the host the album was read at. Rejects with a RemoteError that
+  // says why not — also at a stop, which `#settle` reads as the stop it is, from its intent.
   async readAlbum(url: string, signal: AbortSignal): Promise<Album> {
     const link = bunkrLinkOf(url, this.#domains);
     if (link?.kind !== 'album') throw unreadable('Not an album of Bunkr.');
