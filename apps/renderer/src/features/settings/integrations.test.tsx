@@ -437,6 +437,20 @@ describe('IntegrationsSection', () => {
       expect(service.getByRole('button', { name: 'Connect with a code' })).toHaveFocus();
     });
 
+    it('offers no Disconnect while the key form is open, and keeps saying the key was not read', async () => {
+      listing([{ ...notConnected, keyNotRead: true }]);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await typeAKey();
+
+      // Its failure would be the field's alert, and its success would leave the focus on nothing.
+      expect(service.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument();
+      expect(service.getByText(NOT_READ)).toBeInTheDocument();
+      expect(service.getByLabelText('AllDebrid API key')).not.toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+    });
+
     it('says nothing of it after a connected service is disconnected', async () => {
       listing([connected]);
       vi.spyOn(api, 'disconnectIntegration').mockResolvedValue();
@@ -607,6 +621,27 @@ describe('IntegrationsSection', () => {
       const key = service.getByRole('button', { name: 'Use an API key' });
       expect(code).toBeInTheDocument();
       expect(key).toBeInTheDocument();
+    });
+
+    it('offers no Disconnect while a code is shown for a key that was not read (#69)', async () => {
+      const user = setUp();
+      withMain();
+      listing([{ ...notConnected, keyNotRead: true }]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await service.findByText('ABCD', { selector: 'p' });
+
+      // Its failure would replace what the code says, and its success would leave the code waiting
+      // and the focus on nothing.
+      expect(service.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument();
+      expect(
+        service.getByText(
+          'Scia could not read back the key it kept for AllDebrid. Connect it again.',
+        ),
+      ).toBeInTheDocument();
     });
 
     it('shows the code, where to enter it and how long it works, and opens the page through main', async () => {
