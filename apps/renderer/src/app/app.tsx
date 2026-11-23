@@ -45,7 +45,7 @@ export function App(): ReactNode {
   const [filter, setFilter] = useState<Filter>(Filter.All);
   const { notices, tell, dismiss } = useNotices();
   const [noticesHeight, setNoticesHeight] = useState(0);
-  // Whether the pointer is being pressed in this turn: the focus it gives is not scrolled.
+  // Whether a press of the pointer is in this task: the focus it gives is not scrolled.
   const pressing = useRef(false);
   const field = useRef<HTMLInputElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -267,8 +267,10 @@ export function App(): ReactNode {
       // Chromium keeps what Tab moves to clear of that room, but not a focus the page moves itself
       // onto a control already in the scrollport: `nearest` does, for both (#143). Not the focus a
       // press of the pointer gives, at the press: moved before it is let go, the control would no
-      // longer be under the pointer, and the click would be lost (round 2 of #244).
-      onPointerDownCapture={() => {
+      // longer be under the pointer, and the click would be lost (round 2 of #244). Marked at
+      // `mousedown`, which comes in the same task as that focus for a mouse, a pen and a finger's
+      // tap alike — a tap's `pointerdown` comes before it, a task or more ahead (round 3).
+      onMouseDownCapture={() => {
         pressing.current = true;
         setTimeout(() => {
           pressing.current = false;

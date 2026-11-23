@@ -384,6 +384,24 @@ describe('App', () => {
       expect(scrolled.mock.contexts).not.toContain(settings);
     });
 
+    // A finger's tap: Chromium sends pointerdown and pointerup as it lands and lifts, and the
+    // tap's mousedown, which gives the focus, in a later task (the frontend, round 3 of #244).
+    it('nor the focus a tap gives, after its pointer events', async () => {
+      render(<App />);
+      await aNotice();
+      const settings = screen.getByRole('button', { name: 'Settings' });
+
+      fireEvent.pointerDown(settings, { pointerType: 'touch' });
+      fireEvent.pointerUp(settings, { pointerType: 'touch' });
+      await new Promise((later) => setTimeout(later, 0));
+      fireEvent.mouseDown(settings);
+      act(() => {
+        settings.focus();
+      });
+
+      expect(scrolled.mock.contexts).not.toContain(settings);
+    });
+
     it('and still when the page moves it after a press of the pointer', async () => {
       render(<App />);
       await aNotice();
