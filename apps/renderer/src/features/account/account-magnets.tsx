@@ -193,21 +193,23 @@ export function AccountMagnets({ id, again, onClose, tell }: AccountMagnetsProps
           <X size={16} aria-hidden="true" />
         </IconButton>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-4">
-        <p role="status" className="px-1 py-2 text-sm text-muted-foreground empty:py-0">
-          {stateOf(read)}
-        </p>
-        {read.magnets !== null && read.magnets.length > 0 && (
-          <ul className="flex flex-col gap-1">
-            {newestFirst(read.magnets).map((magnet) => (
-              <Row
-                key={magnet.id}
-                magnet={{ ...magnet, inScia: magnet.inScia || taken.has(magnet.id) }}
-                onTake={take}
-              />
-            ))}
-          </ul>
-        )}
+      <div className="room-under-notices min-h-0 flex-1 overflow-y-auto">
+        <div className="px-3 pb-4">
+          <p role="status" className="px-1 py-2 text-sm text-muted-foreground empty:py-0">
+            {stateOf(read)}
+          </p>
+          {read.magnets !== null && read.magnets.length > 0 && (
+            <ul className="flex flex-col gap-1">
+              {newestFirst(read.magnets).map((magnet) => (
+                <Row
+                  key={magnet.id}
+                  magnet={{ ...magnet, inScia: magnet.inScia || taken.has(magnet.id) }}
+                  onTake={take}
+                />
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </aside>
   );
