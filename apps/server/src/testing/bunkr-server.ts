@@ -10,6 +10,8 @@ export interface SimulatedFile {
   // The name it was uploaded with; the album may give only the name it is stored under.
   readonly original?: string;
   readonly name?: string;
+  // What its own page's heading says, when not the name it was uploaded with.
+  readonly heading?: string;
   readonly link: string;
   // False for an API answer that gives the link as it stands.
   readonly encrypted?: boolean;
@@ -45,6 +47,8 @@ export interface BunkrServer {
   readonly asked: {
     readonly method: string | undefined;
     readonly path: string;
+    // With its `?`, or empty.
+    readonly query: string;
     readonly referer: string | undefined;
     readonly origin: string | undefined;
     readonly userAgent: string | undefined;
@@ -146,10 +150,12 @@ export async function startBunkrServer(options: BunkrServerOptions): Promise<Bun
   const server = createServer((request, response) => {
     void (async () => {
       const body = await bodyOf(request);
-      const path = (request.url ?? '/').split('?')[0] ?? '/';
+      const address = request.url ?? '/';
+      const path = address.split('?')[0] ?? '/';
       asked.push({
         method: request.method,
         path,
+        query: address.slice(path.length),
         referer: request.headers.referer,
         origin: request.headers.origin,
         userAgent: request.headers['user-agent'],
@@ -208,7 +214,7 @@ export async function startBunkrServer(options: BunkrServerOptions): Promise<Bun
         html(
           filePageOf({
             id: found.id,
-            name: escapeHtml(found.original ?? found.name ?? found.slug),
+            name: escapeHtml(found.heading ?? found.original ?? found.name ?? found.slug),
           }),
         );
         return;

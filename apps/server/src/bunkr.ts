@@ -212,8 +212,8 @@ export class Bunkr {
     }
   }
 
-  // One request, read by `read` within the time Scia gives the site. A stop is the caller's
-  // reason; a site that took too long is busy; one that could not be reached is the network's.
+  // One request, read by `read` within the time Scia gives the site, and given up at a stop. A
+  // site that took too long is busy; one that could not be reached is the network's.
   async #fetch<T>(
     url: string,
     init: { readonly method: string; readonly headers: RequestHeaders; readonly body?: string },
@@ -235,7 +235,6 @@ export class Bunkr {
         await response.body?.cancel().catch(() => undefined);
       }
     } catch (error) {
-      if (signal.aborted) throw signal.reason;
       if (error instanceof RemoteError) throw error;
       if (timeout.aborted) {
         throw failure(PageFailure.SiteBusy, 'The site said nothing in time.');

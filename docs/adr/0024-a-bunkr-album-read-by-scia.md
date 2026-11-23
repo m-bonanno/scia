@@ -44,7 +44,7 @@ Nothing here was read from Bunkr itself: no request was made to it while this wa
 5. **What fails, and with which code** (`AlbumFailure` in `@scia/core`, one sentence each in the row, true of an album and of a file page alike):
    - the page or the API says the album or file is not there (404, 410, the API's 400): `ALBUM_GONE`;
    - it refuses Scia (401, 403): `ALBUM_REFUSED`;
-   - a page or an answer Scia cannot read — no list of files, an object with two ids on one line, no file id, an address that is not http(s), a page past its bound, a redirect off the list: `ALBUM_UNREADABLE`;
+   - a page or an answer Scia cannot read — no list of files; a list not written one field a line (every file on one line, a field twice in one file, a line that is no field); a file with no slug; a file page with no id; an answer that is not JSON, or whose address is not http(s); a page past its bound; a redirect off the list, or a sixth one: `ALBUM_UNREADABLE`;
    - an album with no file: `ALBUM_EMPTY`;
    - a site that is busy — 5xx, 429, no answer in 30 s — or a file server in maintenance (a link that lands on `maint.mp4` or `maintenance-vid.mp4`): `PAGE_SITE_BUSY`, as a page's site ([ADR 0009](./0009-the-video-of-a-page.md));
    - a host that cannot be reached: `NETWORK`; another status: `HTTP_STATUS` with it;
@@ -64,6 +64,7 @@ Nothing here was read from Bunkr itself: no request was made to it while this wa
 - Pasting an album makes one request to Bunkr for its page, then two for each file when it starts — its page and the API — before its bytes.
 - An album added before a restart is read at the next start, as a queued download; its files, once there, are ordinary downloads in `state.json`.
 - What Scia reads of Bunkr is held by specs against a local host that answers as gallery-dl's source says Bunkr does (`testing/bunkr-server.ts`), **not against Bunkr itself**: no run against the real site has been made. When Bunkr changes its pages, the rows say `ALBUM_UNREADABLE`, and a release of Scia follows.
-- A file whose link expires partway is not asked again on the way: the download fails with its host's answer, and "Retry" reads the page and the API again, keeping the bytes.
+- A file whose link expires partway is not asked again on the way, as a service's link is (ADR 0022): the download fails with its host's answer, and "Retry" reads the page and the API again, keeping the bytes when the host says the file is the same.
+- A pause, a removal or a shutdown while an album's page is read stops the read, and adds no file; the album is read again when it is resumed or at the next start.
 - An album link copied to the clipboard is not offered ([ADR 0012](./0012-links-taken-from-the-clipboard.md)): `offeredAs` knows files and videos' pages, not lists.
 - #214 makes the album one row.

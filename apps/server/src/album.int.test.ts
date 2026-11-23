@@ -15,6 +15,7 @@ import {
   type BunkrServer,
   type BunkrServerOptions,
   type SimulatedFile,
+  albumPageOf,
   startBunkrServer,
 } from './testing/bunkr-server.ts';
 import {
@@ -66,11 +67,18 @@ describe('a Bunkr album', () => {
     return started.url;
   }
 
-  // Three files, each on a host of its own; the last one the API gives as it stands.
+  // Three files, each on a host of its own; the last one the API gives as it stands. The notes
+  // are named otherwise by their server and by their own page: the album's name wins.
   async function holiday(options: Partial<RangeServerOptions> = {}): Promise<SimulatedFile[]> {
     return [
       { id: '101', slug: 'Day-1-AbCd', original: 'Day 1.mp4', link: await host(film, options) },
-      { id: '102', slug: 'notes-EfGh', original: "Ada's notes.txt", link: await host(notes) },
+      {
+        id: '102',
+        slug: 'notes-EfGh',
+        original: "Ada's notes.txt",
+        heading: 'Notes of the trip.txt',
+        link: await host(notes, { fileName: '5f2c-0123456789ab.txt' }),
+      },
       {
         id: '103',
         slug: 'photo-IjKl',
@@ -162,14 +170,17 @@ describe('a Bunkr album', () => {
     downloads.add({ urls: [`${on.url}/a/AbCd12`] });
     await until(() => allDone(downloads, 3));
 
-    expect(on.asked.filter(({ path }) => path === '/a/AbCd12')).toHaveLength(1);
+    // The page that lists every file, as gallery-dl asks it.
+    expect(on.asked.filter(({ path }) => path === '/a/AbCd12').map(({ query }) => query)).toEqual([
+      '?advanced=1',
+    ]);
     const api = on.asked.filter(({ path }) => path === '/api/_001_v2');
     expect(api.map(({ method }) => method)).toEqual(['POST', 'POST', 'POST']);
-    expect(api.map(({ body }) => JSON.parse(body) as unknown).sort()).toEqual(
-      [{ id: '101' }, { id: '102' }, { id: '103' }].sort(),
-    );
+    const ids = api.map(({ body }) => (JSON.parse(body) as { id: string }).id);
+    expect(ids.sort()).toEqual(['101', '102', '103']);
     for (const { body, referer, origin } of api) {
       const { id } = JSON.parse(body) as { id: string };
+      expect(JSON.parse(body)).toEqual({ id });
       expect(referer).toBe(refererOf(id));
       expect(origin).toBe('https://get.bunkrr.su');
     }
@@ -390,8 +401,9 @@ describe('a Bunkr album', () => {
     const [file] = downloads.add({ urls: [`${on.url}/f/notes-EfGh`] });
     await until(() => downloads.find(file!.id).status === DownloadStatus.Completed);
 
-    expect(downloads.find(file!.id).fileName).toBe("Ada's notes.txt");
-    expect(Buffer.compare(await readFile(inDownloads("Ada's notes.txt")), notes)).toBe(0);
+    // Its page's heading, not what its server calls it.
+    expect(downloads.find(file!.id).fileName).toBe('Notes of the trip.txt');
+    expect(Buffer.compare(await readFile(inDownloads('Notes of the trip.txt')), notes)).toBe(0);
   });
 
   it('follows a redirect to a host of the list, and never one off it', async () => {
@@ -440,7 +452,8 @@ describe('a Bunkr album', () => {
       },
       pages: {
         '/a/strange': '<html><body>A page of another shape</body></html>',
-        '/a/huge': `<html>${'x'.repeat(17 * MIB)}</html>`,
+        // An album Scia would read, but for its size.
+        '/a/huge': `${albumPageOf({ title: 'Huge', files: [{ id: '1', slug: 'a', link: '' }] })}${' '.repeat(17 * MIB)}`,
       },
     });
     const downloads = await open(on);
@@ -533,6 +546,28 @@ describe('a Bunkr album', () => {
       expect(existsSync(inDownloads())).toBe(false);
     } finally {
       await server.close();
+    }
+  });
+
+  it("says what the API's refusals mean", async () => {
+    for (const [status, failure] of [
+      [403, AlbumFailure.Refused],
+      [503, PageFailure.SiteBusy],
+      [429, PageFailure.SiteBusy],
+      [418, DownloadFailure.HttpStatus],
+    ] as const) {
+      await site?.close();
+      const on = await bunkr({ status: { '/api/_001_v2': status } });
+      const downloads = await open(on);
+
+      const [file] = downloads.add({ urls: [`${on.url}/f/notes-EfGh`] });
+
+      expect(await failureOf(downloads, file!.id), String(status)).toBe(failure);
+      if (failure === DownloadFailure.HttpStatus) {
+        expect(downloads.find(file!.id).failureStatus).toBe(status);
+      }
+      await manager?.close();
+      manager = undefined;
     }
   });
 

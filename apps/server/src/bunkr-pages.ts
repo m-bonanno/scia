@@ -202,8 +202,6 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-const BASE64 = /^[A-Za-z0-9+/]*={0,2}$/;
-
 // The link the API gives for a file: as it stands, or — `encrypted` — each byte XOR'd with
 // `SECRET_KEY_<the answer's hour>`, in base64, which is what Bunkr's download page undoes in every
 // visitor's browser. Undefined for an answer that is not one, or a link that is not http(s).
@@ -215,7 +213,7 @@ export function linkOfAnswer(answer: unknown): string | undefined {
     if (typeof timestamp !== 'number' || !Number.isSafeInteger(timestamp) || timestamp < 0) {
       return undefined;
     }
-    if (!BASE64.test(link) || link.length % 4 !== 0) return undefined;
+    // What is not base64 is passed over by the decoding, and what comes out is no address.
     const key = Buffer.from(`SECRET_KEY_${String(Math.floor(timestamp / 3600))}`);
     const bytes = Buffer.from(link, 'base64');
     try {

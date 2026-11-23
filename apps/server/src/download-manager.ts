@@ -967,9 +967,8 @@ export class DownloadManager {
   // when a file stands under that name; a folder of that name is shared, as its files take free
   // names inside it, a magnet's rule. Each is named as the album names it, a name from a host.
   async #openAlbum(record: DownloadRecord, bunkr: Bunkr, signal: AbortSignal): Promise<void> {
+    // A pause, a removal or a shutdown while the page is read ends the read: nothing is added.
     const album = await bunkr.readAlbum(record.url, signal);
-    // A pause or a removal that came as the page answered: nothing is added for a stopped run.
-    signal.throwIfAborted();
     const folder = uniqueFileName(sanitizeFileName(album.name), (candidate) =>
       isFileThere(join(record.directory, candidate)),
     );

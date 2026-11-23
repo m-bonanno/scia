@@ -113,9 +113,14 @@ describe('readAlbumPage', () => {
   it('reads nothing of a page that is not an album as gallery-dl knows it', () => {
     const file = { id: '1', slug: 's', original: 'a.mp4', link: 'unused' };
     const good = albumPageOf({ files: [file] });
+    const two = albumPageOf({ files: [file, { ...file, id: '2', slug: 't' }] });
+    expect(readAlbumPage(two)?.files).toHaveLength(2);
     for (const [why, page] of [
       ['no list of files', '<html><head><title>Bunkr</title></head><body></body></html>'],
-      ['a list never closed', good.replace('</script>', '')],
+      ['a script never closed', good.replace('</script>', '')],
+      ['a list never closed', good.replace('\n];', '')],
+      ['a file opened inside another', two.replace(/\n},\n/, '\n')],
+      ['a file closed twice', good.replace('\n}', '\n}\n}')],
       // Every file on one line: Scia would take the first file's fields for all of them.
       ['a list on one line', good.replace(/\n/g, ' ')],
       ['a file with no slug', good.replace(/\s*slug: .*\n/, '\n')],
