@@ -27,15 +27,47 @@ export interface InstalledScia {
   stderr(): string;
 }
 
-// What Chromium writes to stderr once its debugging port is open (port 0: one the system chose).
-const DEVTOOLS = /DevTools listening on (ws:\/\/\S+)/;
+// What Chromium writes to stderr once its debugging port is open (port 0: one the system chose),
+// read once its line has ended.
+const DEVTOOLS = /DevTools listening on (ws:\/\/\S+)\r?\n/;
+// The page the engine serves, once the window has loaded it.
+const APP_PAGE = /^http:\/\/127\.0\.0\.1:\d+\//;
+
+// Whether the debugging port lists the app's page, loaded: playwright-core, connected to a window
+// that has loaded nothing, asks it for what only a renderer answers and waits for ever. Its
+// Electron driver is told not to; connectOverCDP cannot be, so it connects once the page is there.
+const pageLoaded = async (endpoint: string) =>
+  (await targetsOf(endpoint)).some(
+    (target) => target.type === 'page' && APP_PAGE.test(target.url ?? ''),
+  );
+
+interface Target {
+  readonly type?: string;
+  readonly url?: string;
+}
+
+// What the debugging port lists: none when it does not answer.
+async function targetsOf(endpoint: string): Promise<Target[]> {
+  const list = new URL(endpoint);
+  list.protocol = 'http:';
+  list.pathname = '/json/list';
+  try {
+    return (await (await fetch(list)).json()) as Target[];
+  } catch {
+    return [];
+  }
+}
 
 export async function launchInstalled(
   profile: Profile,
   exe: string,
   args: readonly string[] = [],
 ): Promise<InstalledScia> {
-  const hosts = await startLocalHosts();
+  if (args.some((arg) => arg.startsWith('--port=') || arg.startsWith('--user-data-dir='))) {
+    // Main takes the first of each, and these come first: a spec's own would be ignored.
+    throw new Error('launchInstalled sets the port and the profile itself.');
+  }
+  const hosts = await startLocalHosts(args);
   const child = spawn(
     exe,
     [
@@ -76,18 +108,19 @@ export async function launchInstalled(
     await browser?.close().catch(() => undefined);
     await hosts.close();
   };
+  let address: string | undefined;
   try {
-    browser = await chromium.connectOverCDP(
-      await within(endpoint, START_LIMIT_MS, 'Scia opened no debugging port'),
-      { timeout: START_LIMIT_MS },
-    );
+    const opened = await within(endpoint, START_LIMIT_MS, 'Scia opened no debugging port');
+    address = opened;
+    // The window exists before it has a page: it follows the engine once the engine is ready.
+    await until(() => pageLoaded(opened), START_LIMIT_MS);
+    browser = await chromium.connectOverCDP(opened, { timeout: START_LIMIT_MS });
     const [context] = browser.contexts();
     if (context === undefined) throw new Error('Scia has no browser context.');
     await until(() => context.pages().length > 0, START_LIMIT_MS);
     const [page] = context.pages();
     if (page === undefined) throw new Error('Scia has no page.');
-    // The window exists before it has a page: it follows the engine once the engine is ready.
-    await page.waitForURL(/^http:\/\/127\.0\.0\.1:\d+\//, { timeout: START_LIMIT_MS });
+    await page.waitForURL(APP_PAGE, { timeout: START_LIMIT_MS });
     await page.getByRole('textbox', { name: 'Links to download' }).waitFor();
     return {
       page,
@@ -100,9 +133,18 @@ export async function launchInstalled(
       },
     };
   } catch (error) {
+    // Read before the end: what the exe said, and what its port listed, are seen on a CI runner
+    // only.
+    const targets = address === undefined ? [] : await targetsOf(address);
     // A start that failed leaves no Scia running, holding the profile.
     await close();
-    throw error;
+    throw new Error(
+      `Scia did not start: ${String(error)}
+Its debugging port listed ${JSON.stringify(targets)}
+Its stderr:
+${stderr}`,
+      { cause: error },
+    );
   }
 }
 
@@ -126,15 +168,16 @@ function closeWindowOf(pid: number): void {
     'uintptr_t',
     out(pointer('uint32_t')),
   ]) as (window: Handle, owner: [number]) => number;
-  const isVisible = user32.func('__stdcall', 'IsWindowVisible', 'bool', ['uintptr_t']) as (
+  // A BOOL is an int, not koffi's one-byte bool.
+  const isVisible = user32.func('__stdcall', 'IsWindowVisible', 'int', ['uintptr_t']) as (
     window: Handle,
-  ) => boolean;
-  const post = user32.func('__stdcall', 'PostMessageW', 'bool', [
+  ) => number;
+  const post = user32.func('__stdcall', 'PostMessageW', 'int', [
     'uintptr_t',
     'uint32_t',
     'uintptr_t',
     'intptr_t',
-  ]) as (window: Handle, message: number, wParam: number, lParam: number) => boolean;
+  ]) as (window: Handle, message: number, wParam: number, lParam: number) => number;
 
   const shown: Handle[] = [];
   for (
@@ -144,11 +187,11 @@ function closeWindowOf(pid: number): void {
   ) {
     const owner: [number] = [0];
     processOf(window, owner);
-    if (owner[0] === pid && isVisible(window)) shown.push(window);
+    if (owner[0] === pid && isVisible(window) !== 0) shown.push(window);
   }
   const [window] = shown;
   if (window === undefined || shown.length > 1) {
     throw new Error(`Scia shows ${String(shown.length)} windows, not one.`);
   }
-  if (!post(window, WM_CLOSE, 0, 0)) throw new Error('WM_CLOSE could not be posted.');
+  if (post(window, WM_CLOSE, 0, 0) === 0) throw new Error('WM_CLOSE could not be posted.');
 }

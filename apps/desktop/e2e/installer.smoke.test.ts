@@ -200,6 +200,8 @@ describe('the installer, installed and started', () => {
     scia!.closeWindow();
 
     await until(() => ended);
+    // Its hosts and the connection to its port, which outlive it.
+    await scia!.close();
     scia = undefined;
     const log = await profile!.log();
     expect(log).toMatch(/\bquit\b/);

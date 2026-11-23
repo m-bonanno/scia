@@ -23,7 +23,7 @@ const STATE_LIMIT_MS = 30_000;
 // Quitting never hangs (apps/desktop/CLAUDE.md): the engine is stopped within its own limit.
 const QUIT_LIMIT_MS = 30_000;
 // A process that has not ended by then is ended: a spec never leaves a Scia behind it.
-export const CLOSE_LIMIT_MS = 15_000;
+const CLOSE_LIMIT_MS = 15_000;
 // Main answers in tens of milliseconds while it is not blocked.
 const PID_LIMIT_MS = 5_000;
 
