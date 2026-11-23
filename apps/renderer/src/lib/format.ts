@@ -26,6 +26,11 @@ export function formatBytes(bytes: number): string {
   return `${text}${NBSP}${UNITS[unit] ?? 'B'}`;
 }
 
+// How many of something: whole, its thousands grouped.
+export function formatCount(count: number): string {
+  return whole.format(count);
+}
+
 export function formatSpeed(bytesPerSecond: number): string {
   return `${formatBytes(bytesPerSecond)}/s`;
 }

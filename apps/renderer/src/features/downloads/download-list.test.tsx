@@ -27,6 +27,8 @@ describe('DownloadList', () => {
         actions={actions}
         magnets={[]}
         magnetActions={{ retry: vi.fn(), remove: vi.fn() }}
+        bundles={[]}
+        bundleActions={{ start: vi.fn(), retry: vi.fn(), remove: vi.fn() }}
       />
     );
     const topCross = () => screen.getAllByRole('button', { name: 'Remove from list' })[0]!;

@@ -7,7 +7,7 @@ import {
   IntegrationId,
   SETTINGS_LIMITS,
 } from '@scia/contracts';
-import { UnlockFailure } from '@scia/core';
+import { BundleFailure, UnlockFailure } from '@scia/core';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
 import type { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,6 +16,7 @@ import { createApp } from './app.ts';
 import { DownloadManager } from './download-manager.ts';
 import { Integrations } from './integrations.ts';
 import { MemoryVault } from './key-vault.ts';
+import type { LinkResolver } from './link-resolver.ts';
 import type { MagnetState } from './magnet-service.ts';
 import { ServiceError } from './service-error.ts';
 import { JsonStateStore } from './state-store.ts';
@@ -162,7 +163,7 @@ describe('the engine API', () => {
 
     expect(
       heard.startsWith(
-        'event: snapshot\ndata: {"downloads":[],"magnets":[],"watchClipboard":false}\n\n',
+        'event: snapshot\ndata: {"downloads":[],"magnets":[],"bundles":[],"watchClipboard":false}\n\n',
       ),
     ).toBe(true);
     expect(heard.match(/event: snapshot/g)).toHaveLength(1);
@@ -626,6 +627,151 @@ describe('the engine API', () => {
           [8, false],
         ]);
       });
+    });
+  });
+
+  // A link that opens into several files (#181; docs/adr/0025), behind a resolver that answers at
+  // once: what the service would say is AllDebrid's client's, proven against it elsewhere.
+  describe('links that open into several files', () => {
+    const FOLDER = 'https://1fichier.com/dir/Holiday';
+    const EMPTY = 'https://1fichier.com/dir/Nothing';
+    const dataOf = async <T>(response: Response) => ((await response.json()) as { data: T }).data;
+    let bundles: DownloadManager;
+    let api: Hono;
+    const resolver: LinkResolver = {
+      hasService: () => true,
+      serviceFor: () => Promise.resolve(undefined),
+      unlock: () => Promise.reject(new Error('not here')),
+      open: (_service, url) =>
+        Promise.resolve(
+          url === EMPTY
+            ? BundleFailure.Empty
+            : {
+                files: [
+                  { link: 'https://redirect.alldebrid.com/a', name: 'Day 1.mkv', size: 10 },
+                  { link: 'https://redirect.alldebrid.com/b', name: 'Day 2.mkv', size: 20 },
+                ],
+                unavailable: 0,
+                leftOut: 0,
+              },
+        ),
+    };
+
+    beforeEach(async () => {
+      bundles = await DownloadManager.open({
+        source: silentSource,
+        store: new JsonStateStore(join(folder.path, 'bundles.json')),
+        defaultDirectory: join(folder.path, 'downloads'),
+        logger: silentLogger,
+        resolver,
+      });
+      api = createApp({
+        manager: bundles,
+        integrations,
+        apiToken: APP_TOKEN,
+        extensionToken: EXTENSION_TOKEN,
+        version: '1.2.3',
+        port: () => DEFAULT_API_PORT,
+        staticDir: undefined,
+        logger: silentLogger,
+      });
+    });
+    afterEach(async () => {
+      await bundles.close();
+    });
+
+    const ask = (path: string, init: RequestInit & { token: string }) =>
+      api.request(`${ORIGIN}${API_PREFIX}${path}`, {
+        ...init,
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${init.token}` },
+      });
+    const add = (urls: string[], token = APP_TOKEN) =>
+      ask('/downloads', { method: 'POST', token, body: JSON.stringify({ urls }) });
+    const start = (id: string, files: unknown, token = APP_TOKEN) =>
+      ask(`/bundles/${id}/start`, { method: 'POST', token, body: JSON.stringify({ files }) });
+    const choosing = () => until(() => bundles.snapshot().bundles[0]?.status === 'choosing');
+
+    it('takes such a link from the app or the extension as one whose files wait for a choice, and answers the downloads alone', async () => {
+      const added = await add([FOLDER, 'https://example.com/a.zip']);
+      const sent = await add([FOLDER], EXTENSION_TOKEN);
+
+      expect(added.status).toBe(201);
+      expect(
+        (await dataOf<{ fileName: string }[]>(added)).map((download) => download.fileName),
+      ).toEqual(['a.zip']);
+      expect(sent.status).toBe(201);
+      expect(await dataOf(sent)).toEqual([]);
+      await until(() => bundles.snapshot().bundles.every((each) => each.status === 'choosing'));
+      expect(bundles.snapshot().bundles).toHaveLength(2);
+      expect(bundles.snapshot().bundles[0]).toMatchObject({
+        name: 'Holiday',
+        files: [
+          { name: 'Day 1.mkv', size: 10 },
+          { name: 'Day 2.mkv', size: 20 },
+        ],
+      });
+    });
+
+    it('starts the files chosen, for the app alone, and answers the downloads they became', async () => {
+      await add([FOLDER]);
+      await choosing();
+      const id = bundles.snapshot().bundles[0]?.id ?? '';
+
+      expect((await start(id, [1], EXTENSION_TOKEN)).status).toBe(403);
+      const started = await start(id, [1]);
+
+      expect(started.status).toBe(201);
+      expect(
+        (await dataOf<{ fileName: string; via: string }[]>(started)).map((each) => [
+          each.fileName,
+          each.via,
+        ]),
+      ).toEqual([['Day 2.mkv', 'alldebrid']]);
+      expect(bundles.snapshot().bundles).toEqual([]);
+      expect((await start(id, [0])).status).toBe(404);
+    });
+
+    it('refuses a choice that is none, before it changes anything, and one of a link not waiting for it', async () => {
+      await add([FOLDER, EMPTY]);
+      await until(() => bundles.snapshot().bundles[1]?.status === 'failed');
+      const [waiting, failed] = bundles.snapshot().bundles.map((each) => each.id);
+
+      for (const files of [[], [2], [0, 0], [-1], [0.5], [0, 99], ['0'], 'all', null]) {
+        const response = await start(waiting ?? '', files);
+        expect(response.status, JSON.stringify(files)).toBe(400);
+        expect(await codeOf(response)).toBe(ApiErrorCode.InvalidRequest);
+      }
+      expect((await start(failed ?? '', [0])).status).toBe(409);
+      expect(bundles.snapshot().bundles[0]?.status).toBe('choosing');
+      expect(bundles.snapshot().downloads).toEqual([]);
+    });
+
+    it('lets the app alone try again one that failed, and forget one', async () => {
+      await add([EMPTY]);
+      await until(() => bundles.snapshot().bundles[0]?.status === 'failed');
+      const id = bundles.snapshot().bundles[0]?.id ?? '';
+
+      expect(
+        (await ask(`/bundles/${id}/retry`, { method: 'POST', token: EXTENSION_TOKEN })).status,
+      ).toBe(403);
+      const retried = await ask(`/bundles/${id}/retry`, { method: 'POST', token: APP_TOKEN });
+      expect(retried.status).toBe(200);
+      expect(await dataOf<{ status: string }>(retried)).toMatchObject({ status: 'opening' });
+      await until(() => bundles.snapshot().bundles[0]?.status === 'failed');
+
+      expect(
+        (await ask(`/bundles/${id}`, { method: 'DELETE', token: EXTENSION_TOKEN })).status,
+      ).toBe(403);
+      expect((await ask(`/bundles/${id}`, { method: 'DELETE', token: APP_TOKEN })).status).toBe(
+        204,
+      );
+      expect(bundles.snapshot().bundles).toEqual([]);
+      expect((await ask(`/bundles/${id}`, { method: 'DELETE', token: APP_TOKEN })).status).toBe(
+        404,
+      );
+      expect((await ask(`/bundles/${id}/retry`, { method: 'POST', token: APP_TOKEN })).status).toBe(
+        404,
+      );
     });
   });
 

@@ -857,6 +857,8 @@ describe('a Bunkr album', () => {
         return Promise.resolve(IntegrationId.AllDebrid);
       },
       unlock: () => Promise.reject(new Error('Not a link of the service.')),
+      hasService: () => true,
+      open: () => Promise.reject(new Error('Not a link of the service.')),
     };
     const on = await bunkr();
     const downloads = await open(on, { resolver });

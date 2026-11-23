@@ -72,6 +72,15 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 
 ## 23 November 2026
 
+- #181, after AllDebrid's documentation showed that one link unlocks into one file, and that several files come only through its redirector ([ADR 0025](../adr/0025-a-link-that-opens-into-several-files.md)):
+  - **Which links**: a file host's folder and the links of the protectors and shorteners AllDebrid's redirector opens. The owner chose this knowing that a protector puts a captcha in front of its links, which AllDebrid gets past on its own servers: under "Respect the hosts" that is the service's doing, as a hoster's wait is (#7).
+  - **How they are known**: by path shapes Scia keeps as data, in one list (`1fichier.com/dir/…`, `mega.nz/folder/…`); a protector's or a shortener's domain whole. AllDebrid is not asked first about every link.
+  - **Where the list shows**: on a row of its own that waits for the person's choice, every file ticked, as a magnet's row does. The chosen files go into a folder named after the link. A link of one file skips the list, as a magnet of one file does (#150).
+- #181, on the review of #263 ([ADR 0025](../adr/0025-a-link-that-opens-into-several-files.md)):
+  - **A shortener's link that leads to one file** is downloaded as it stands while AllDebrid is connected, when the redirector refuses it or opens it to nothing AllDebrid can get, as before #263.
+  - **The sites left out** — multiup.org, sites of pages of links, google.com, example.com — stay out, as the team's choice, not the owner's.
+  - **A folder of more than 1,000 files** is not refused whole: the person chooses among its first 1,000 files, and the row says how many were left out.
+  - **A folder's link copied to the clipboard** appears in the list as "Ready", like any other copied link, while "Take links from the clipboard" is on and AllDebrid is connected, and opens into its files when the person presses Start.
 - #99: picture and sound offered apart are joined only as an mp4 picture in H.264 or AV1 and an AAC sound. The most lines win, and H.264 at equal lines; HEVC never, since Windows plays it only with a paid extension. A webm picture with Opus sound is an issue of its own (#239) ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)).
 - #228: `v1.0.0` waits for a Bunkr album downloaded into a folder of its own. Its reader is Scia's own — a small reader of Bunkr's album and file pages, its domains kept as data in one list — and no second program is shipped: when Bunkr changes its pages, Scia is updated ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md)). Until #214, the album's files are separate downloads in its folder, as a magnet's.
 - #228: undoing the XOR Bunkr puts on the link its API answers is within "Respect the hosts": Bunkr's own download page does the same in every visitor's browser, with no account, payment, region or check behind it, so it is no access control ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md), point 4).

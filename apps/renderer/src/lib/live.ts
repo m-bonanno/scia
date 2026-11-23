@@ -1,5 +1,6 @@
 import {
   API_PREFIX,
+  type Bundle,
   type Download,
   type Magnet,
   SNAPSHOT_EVENT,
@@ -17,12 +18,19 @@ export interface LiveState {
   readonly downloads: readonly Download[];
   // The magnets the service is fetching, or could not (#137).
   readonly magnets: readonly Magnet[];
+  // The links that open into several files, until their files are chosen (#181).
+  readonly bundles: readonly Bundle[];
 }
 
 const FIRST_RETRY_MS = 500;
 const LONGEST_RETRY_MS = 5000;
 
-let state: LiveState = { connection: Connection.Connecting, downloads: [], magnets: [] };
+let state: LiveState = {
+  connection: Connection.Connecting,
+  downloads: [],
+  magnets: [],
+  bundles: [],
+};
 const listeners = new Set<() => void>();
 
 function set(next: LiveState): void {
@@ -37,13 +45,15 @@ function subscribe(listener: () => void): () => void {
   };
 }
 
-function snapshotOf(
-  data: string,
-): { readonly downloads: readonly Download[]; readonly magnets: readonly Magnet[] } | undefined {
+function snapshotOf(data: string): Omit<LiveState, 'connection'> | undefined {
   try {
     const parsed = snapshotSchema.safeParse(JSON.parse(data));
     return parsed.success
-      ? { downloads: parsed.data.downloads, magnets: parsed.data.magnets }
+      ? {
+          downloads: parsed.data.downloads,
+          magnets: parsed.data.magnets,
+          bundles: parsed.data.bundles,
+        }
       : undefined;
   } catch {
     return undefined;

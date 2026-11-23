@@ -6,24 +6,38 @@ function aWatch(
   options: {
     offer?: (links: readonly string[]) => Promise<number>;
     offerMagnets?: (magnets: readonly string[]) => Promise<number>;
+    holdsText?: () => Promise<boolean>;
   } = {},
 ) {
   // Something is on the clipboard before the reading starts, as it nearly always is.
   let text = 'copied before Scia read it';
   let reads = 0;
   let failing = false;
+  // Electron answers '' for a clipboard it could not open, while its formats still say what is
+  // there: Windows tells them without opening it.
+  let refused = false;
+  let formatsFailing = false;
+  let formatsRead = 0;
   const offered: string[][] = [];
   const said: number[] = [];
   const magnets: string[][] = [];
   const sent: number[] = [];
   const warnings: string[] = [];
+  const infos: string[] = [];
   const timers: { ms: number; run: () => void; cancelled: boolean }[] = [];
   const watch = new ClipboardWatch({
     read: async () => {
       reads += 1;
       if (failing) throw new Error('The system said no.');
-      return text;
+      return refused ? '' : text;
     },
+    holdsText:
+      options.holdsText ??
+      (async () => {
+        formatsRead += 1;
+        if (formatsFailing) throw new Error('The system said no.');
+        return text !== '';
+      }),
     // By default the engine takes every link it is given.
     offer:
       options.offer ??
@@ -52,7 +66,7 @@ function aWatch(
       };
     },
     log: {
-      info: () => undefined,
+      info: (message, details) => infos.push(`${message} ${JSON.stringify(details)}`),
       warn: (message, details) => warnings.push(`${message} ${JSON.stringify(details)}`),
     },
   });
@@ -64,6 +78,7 @@ function aWatch(
     magnets,
     sent,
     warnings,
+    infos,
     timers: live,
     copy: (copied: string) => {
       text = copied;
@@ -71,7 +86,14 @@ function aWatch(
     fail: (yes: boolean) => {
       failing = yes;
     },
+    refuse: (yes: boolean) => {
+      refused = yes;
+    },
+    failFormats: (yes: boolean) => {
+      formatsFailing = yes;
+    },
     reads: () => reads,
+    formatsRead: () => formatsRead,
     // Turned on, and what it read then settled.
     on: async () => {
       watch.watch(true);
@@ -376,18 +398,98 @@ describe('ClipboardWatch', () => {
     expect(clipboard.offered).toEqual([['https://example.com/after.zip']]);
   });
 
-  it('takes nothing that was there when it started behind an empty first read, which Electron answers for a clipboard it could not open', async () => {
+  it('takes nothing that was there when it started behind empty reads, which Electron answers for a clipboard it could not open, however many there are', async () => {
     const clipboard = aWatch();
-    clipboard.copy('');
-    await clipboard.on();
-
     clipboard.copy('https://example.com/before.zip');
+    clipboard.refuse(true);
+    await clipboard.on();
+    for (let beat = 0; beat < 10; beat += 1) await clipboard.beat();
+
+    clipboard.refuse(false);
     await clipboard.beat();
     expect(clipboard.offered).toEqual([]);
 
     clipboard.copy('https://example.com/after.zip');
     await clipboard.beat();
     expect(clipboard.offered).toEqual([['https://example.com/after.zip']]);
+  });
+
+  it('takes nothing that was there when it started while the system will not say what the clipboard holds', async () => {
+    const clipboard = aWatch();
+    clipboard.copy('https://example.com/before.zip');
+    clipboard.refuse(true);
+    clipboard.failFormats(true);
+    await clipboard.on();
+    for (let beat = 0; beat < 5; beat += 1) await clipboard.beat();
+
+    clipboard.failFormats(false);
+    clipboard.refuse(false);
+    await clipboard.beat();
+    expect(clipboard.offered).toEqual([]);
+
+    clipboard.copy('https://example.com/after.zip');
+    await clipboard.beat();
+    expect(clipboard.offered).toEqual([['https://example.com/after.zip']]);
+  });
+
+  it('asks what the clipboard holds only until it knows what was there when it started', async () => {
+    const clipboard = aWatch();
+    clipboard.refuse(true);
+    await clipboard.on();
+    await clipboard.beat();
+    expect(clipboard.formatsRead()).toBe(2);
+
+    clipboard.refuse(false);
+    await clipboard.beat();
+    await clipboard.beat();
+    await clipboard.beat();
+    expect(clipboard.formatsRead()).toBe(3);
+  });
+
+  it('offers the first copy at once when the clipboard held no text when it started: empty, a picture, files', async () => {
+    const clipboard = aWatch();
+    clipboard.copy('');
+    await clipboard.on();
+
+    clipboard.copy('https://example.com/first.zip');
+    await clipboard.beat();
+
+    expect(clipboard.offered).toEqual([['https://example.com/first.zip']]);
+  });
+
+  it('says in the log once whether the clipboard held text when it started, never what', async () => {
+    const clipboard = aWatch();
+    clipboard.copy('https://example.com/secret.zip');
+    clipboard.refuse(true);
+    await clipboard.on();
+    await clipboard.beat();
+    clipboard.refuse(false);
+    await clipboard.beat();
+    await clipboard.beat();
+    clipboard.watch.watch(false);
+    clipboard.copy('');
+    await clipboard.on();
+    await clipboard.beat();
+
+    expect(clipboard.infos.filter((line) => line.startsWith('clipboard_start_known'))).toEqual([
+      'clipboard_start_known {"text":true}',
+      'clipboard_start_known {"text":false}',
+    ]);
+    expect(clipboard.infos.join('\n')).not.toContain('secret');
+  });
+
+  it('offers a text copied between what the clipboard holds and its read: it was copied after the start', async () => {
+    const link = 'https://example.com/copied-at-once.zip';
+    const clipboard = aWatch({
+      holdsText: async () => {
+        clipboard.copy(link);
+        return false;
+      },
+    });
+    clipboard.copy('');
+    await clipboard.on();
+
+    expect(clipboard.offered).toEqual([[link]]);
   });
 
   it('offers nothing again for a text read before and after an empty read', async () => {
@@ -397,39 +499,25 @@ describe('ClipboardWatch', () => {
     await clipboard.beat();
 
     // Another program holds the clipboard for a few seconds.
-    clipboard.copy('');
+    clipboard.refuse(true);
     for (let beat = 0; beat < 5; beat += 1) await clipboard.beat();
-    clipboard.copy('https://example.com/a.zip');
+    clipboard.refuse(false);
     await clipboard.beat();
 
     expect(clipboard.offered).toEqual([['https://example.com/a.zip']]);
   });
 
-  it('counts the empty reads of each start afresh', async () => {
+  it('learns what was there at each start afresh: a clipboard with no text before an off is not one after it', async () => {
     const clipboard = aWatch();
     clipboard.copy('');
     await clipboard.on();
-    await clipboard.beat();
     clipboard.watch.watch(false);
 
+    clipboard.copy('https://example.com/while-off.zip');
     await clipboard.on();
-    clipboard.copy('https://example.com/before.zip');
     await clipboard.beat();
 
     expect(clipboard.offered).toEqual([]);
-  });
-
-  it('takes a clipboard empty for a few reads at the start as empty: the first copy after them is offered', async () => {
-    const clipboard = aWatch();
-    clipboard.copy('');
-    await clipboard.on();
-    await clipboard.beat();
-    await clipboard.beat();
-
-    clipboard.copy('https://example.com/first.zip');
-    await clipboard.beat();
-
-    expect(clipboard.offered).toEqual([['https://example.com/first.zip']]);
   });
 
   it('stops reading when it is turned off, and starts from what is there when turned on again', async () => {
@@ -527,6 +615,7 @@ describe('ClipboardWatch', () => {
 
   describe('with reads that answer when the spec says', () => {
     function aSlowWatch() {
+      const formats: ((holdsText: boolean) => void)[] = [];
       const reads: ((text: string) => void)[] = [];
       const offered: string[][] = [];
       const beats: (() => void)[] = [];
@@ -534,6 +623,10 @@ describe('ClipboardWatch', () => {
         read: () =>
           new Promise((resolve) => {
             reads.push(resolve);
+          }),
+        holdsText: () =>
+          new Promise((resolve) => {
+            formats.push(resolve);
           }),
         offer: async (links) => {
           offered.push([...links]);
@@ -554,51 +647,71 @@ describe('ClipboardWatch', () => {
         for (const run of [...beats]) run();
         await settle();
       };
-      return { watch, reads, offered, beat };
+      // Answers the oldest question on its way, and lets what it started go on.
+      const answer = async <T>(waiting: ((value: T) => void)[], value: T) => {
+        waiting.shift()?.(value);
+        await settle();
+      };
+      return { watch, formats, reads, offered, beat, answer };
     }
     const link = 'https://example.com/copied-before.zip';
 
     it('takes nothing a beat of before a turn off and on reads, nor reads before the new start is known', async () => {
-      const { watch, reads, offered, beat } = aSlowWatch();
+      const { watch, formats, reads, offered, beat, answer } = aSlowWatch();
 
       watch.watch(true);
-      reads.shift()?.('');
-      await settle();
+      await answer(formats, true);
+      await answer(reads, '');
       // A beat's read is on its way when the switch goes off and on again.
       await beat();
+      await answer(formats, true);
       watch.watch(false);
       watch.watch(true);
-      reads.shift()?.(link);
-      await settle();
+      await answer(reads, link);
       // The new start has not read the clipboard yet: no beat reads before it has — one that did,
       // answered first, would find a clipboard nothing was known of.
       await beat();
-      reads.pop()?.(link);
-      await settle();
-      reads.shift()?.(link);
-      await settle();
+      await answer(formats, true);
+      await answer(reads, link);
       await beat();
-      reads.shift()?.(link);
-      await settle();
+      await answer(reads, link);
 
+      expect(formats).toEqual([]);
+      expect(reads).toEqual([]);
       expect(offered).toEqual([]);
     });
 
     it('lets no first read of before a turn off and on set what was there', async () => {
-      const { watch, reads, offered, beat } = aSlowWatch();
+      const { watch, formats, reads, offered, beat, answer } = aSlowWatch();
 
       // The first read of the first turn is slow; the switch goes off and on meanwhile.
       watch.watch(true);
+      await answer(formats, true);
       watch.watch(false);
       watch.watch(true);
+      await answer(formats, true);
       // The new turn's first read finds the link that was copied before.
       reads.pop()?.(link);
       await settle();
       // The old one answers last, with what was on the clipboard long before.
-      reads.shift()?.('https://example.com/copied-long-before.zip');
-      await settle();
+      await answer(reads, 'https://example.com/copied-long-before.zip');
       await beat();
-      reads.shift()?.(link);
+      await answer(reads, link);
+
+      expect(offered).toEqual([]);
+    });
+
+    it('lets no answer of before a turn off and on say that the clipboard held no text', async () => {
+      const { watch, formats, reads, offered, answer } = aSlowWatch();
+
+      // The clipboard held no text when the first turn asked; it holds a link when the second
+      // does, and that turn's own answer comes last.
+      watch.watch(true);
+      watch.watch(false);
+      watch.watch(true);
+      await answer(formats, false);
+      await answer(formats, true);
+      for (const read of reads.splice(0)) read(link);
       await settle();
 
       expect(offered).toEqual([]);
