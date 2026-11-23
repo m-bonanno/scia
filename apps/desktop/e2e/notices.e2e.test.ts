@@ -192,7 +192,7 @@ describe('the real app says what went wrong in a notice', () => {
     await page.getByRole('button', { name: 'Settings' }).click();
     const settings = page.getByRole('dialog', { name: 'Settings' });
 
-    await settings.getByRole('button', { name: 'Change folder' }).click();
+    await settings.getByRole('button', { name: 'Change…' }).click();
 
     const notice = settings.getByRole('list', { name: 'Notices' }).getByRole('listitem');
     await notice.waitFor();
@@ -227,7 +227,7 @@ describe('the real app says what went wrong in a notice', () => {
     ).toBeGreaterThan(sizes.clientHeight);
     const last = settings.getByRole('switch', { name: 'Beta versions' });
 
-    await settings.getByRole('button', { name: 'Change folder' }).click();
+    await settings.getByRole('button', { name: 'Change…' }).click();
     await settings.getByRole('list', { name: 'Notices' }).getByRole('listitem').waitFor();
     await until(async () => (await roomAround(last)) > 0);
 
@@ -269,7 +269,7 @@ describe('the real app says what went wrong in a notice', () => {
     }));
     expect(before.scrolls, `Settings scrolls at 1000 px: ${JSON.stringify(before)}`).toBe(false);
 
-    await settings.getByRole('button', { name: 'Change folder' }).click();
+    await settings.getByRole('button', { name: 'Change…' }).click();
     await settings.getByRole('list', { name: 'Notices' }).getByRole('listitem').waitFor();
     // Once the page knows how tall they are, and has drawn what it does with it.
     await until(() =>
@@ -338,7 +338,7 @@ describe('the real app says what went wrong in a notice', () => {
     });
     await viewportOf(page, 1040, 1000);
     const settings = await openSettings(page);
-    await settings.getByRole('button', { name: 'Change folder' }).click();
+    await settings.getByRole('button', { name: 'Change…' }).click();
     await settings.getByRole('list', { name: 'Notices' }).getByRole('listitem').waitFor();
     const version = settings.getByText(/^Scia \d/);
     // A tall window: the notices reach nothing of it, and it keeps no room.
