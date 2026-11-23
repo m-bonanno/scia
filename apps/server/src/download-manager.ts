@@ -5,6 +5,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import {
   type AccountMagnet,
   type Bundle,
+  type CodeConnectFailed,
   type Download,
   IntegrationId,
   type Magnet,
@@ -158,6 +159,16 @@ export interface ManagerDeps {
   readonly newId?: () => string;
   readonly checkpointMs?: number;
   readonly retryDelayMs?: (attempt: number) => number;
+  // Which services are connected, said by every snapshot (#146). Without it, none is.
+  readonly services?: ConnectedServices;
+}
+
+// The services Scia holds a key for, and a word whenever that changes: `Integrations` says it.
+export interface ConnectedServices {
+  readonly connected: () => readonly IntegrationId[];
+  // The last confirmed code whose key connected nothing (#146).
+  readonly codeConnectFailed: () => CodeConnectFailed | null;
+  readonly onChange: (listener: () => void) => () => void;
 }
 
 // Why a running download is being stopped, which decides what it is afterwards.
@@ -345,6 +356,8 @@ export class DownloadManager {
   #checkpoint: ReturnType<typeof setInterval> | undefined;
   #checkpointing = false;
   #closed = false;
+  // Stops listening to the services once closed.
+  readonly #unheard: () => void;
   readonly #markDownloaded: MarkDownloaded;
   readonly #markSparse: MarkSparse;
   // One for every connection of every download: the limit is for all of them together.
@@ -380,6 +393,10 @@ export class DownloadManager {
     });
     this.#settings = settings;
     this.#throttle = new Throttle(settings.speedLimitBytesPerSecond);
+    this.#unheard =
+      deps.services?.onChange(() => {
+        this.#changed();
+      }) ?? (() => undefined);
   }
 
   static async open(deps: ManagerDeps): Promise<DownloadManager> {
@@ -417,6 +434,8 @@ export class DownloadManager {
       magnets: this.#magnets.map((record) => this.#magnetView(record)),
       bundles: this.#bundles.map((record) => this.#bundleView(record)),
       watchClipboard: this.#settings.watchClipboard,
+      connectedServices: [...(this.#deps.services?.connected() ?? [])],
+      codeConnectFailed: this.#deps.services?.codeConnectFailed() ?? null,
     };
   }
 
@@ -1050,6 +1069,7 @@ export class DownloadManager {
     this.#titlesWanted = [];
     for (const stop of this.#titles.values()) stop.abort();
     await this.#magnetWatch.close();
+    this.#unheard();
     this.#closed = true;
     clearInterval(this.#checkpoint);
     this.#checkpoint = undefined;

@@ -3,6 +3,7 @@ import { getEventListeners } from 'node:events';
 import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, sep } from 'node:path';
+import { IntegrationId } from '@scia/contracts';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DownloadManager, type ManagerDeps, PART_SUFFIX } from './download-manager.ts';
@@ -340,6 +341,66 @@ describe('DownloadManager', () => {
     expect(await waiting).toBe(seen);
     // And asked by someone who has already gone, it does not wait at all.
     expect(await downloads.nextChange(seen, gone.signal)).toBe(seen);
+  });
+
+  // A service connected while Settings is closed — a code confirmed later (#146) — is heard by main
+  // and the page in the engine's events, which wait on the manager.
+  it('says which services are connected, and wakes whoever waits when that changes', async () => {
+    let connected: readonly IntegrationId[] = [];
+    const listeners = new Set<() => void>();
+    const downloads = await open({
+      services: {
+        connected: () => connected,
+        codeConnectFailed: () => null,
+        onChange: (listener) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      },
+    });
+    expect(downloads.snapshot().connectedServices).toEqual([]);
+    // The watch of magnets changes the list once, at its first turn after the manager opened: the
+    // spec waits for it, so that the change it then waits for can only be its own.
+    const seen = await downloads.nextChange(await downloads.nextChange(-1));
+    let answered = false;
+    const waiting = downloads.nextChange(seen).then((version) => {
+      answered = true;
+      return version;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(answered).toBe(false);
+
+    connected = [IntegrationId.AllDebrid];
+    for (const listener of listeners) listener();
+
+    expect(await waiting).toBeGreaterThan(seen);
+    expect(downloads.snapshot().connectedServices).toEqual([IntegrationId.AllDebrid]);
+    // A manager that closed listens no more.
+    await downloads.close();
+    expect(listeners.size).toBe(0);
+  });
+
+  it('says no service is connected, and no code failed, when it is given none to ask', async () => {
+    const { connectedServices, codeConnectFailed } = (await open()).snapshot();
+    expect(connectedServices).toEqual([]);
+    expect(codeConnectFailed).toBeNull();
+  });
+
+  it('says the last confirmed code that connected nothing, as the services say it', async () => {
+    const failed = {
+      service: IntegrationId.AllDebrid,
+      failure: 'KEY_REFUSED',
+      at: '2026-11-23T20:00:00.000Z',
+    } as const;
+    const downloads = await open({
+      services: {
+        connected: () => [],
+        codeConnectFailed: () => failed,
+        onChange: () => () => undefined,
+      },
+    });
+
+    expect(downloads.snapshot().codeConnectFailed).toEqual(failed);
   });
 
   it('leaves nothing on the signal of whoever waits, however many changes it is told of', async () => {
