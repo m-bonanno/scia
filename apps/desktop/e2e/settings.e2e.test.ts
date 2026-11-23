@@ -93,6 +93,25 @@ describe('the real app, with what Settings says', () => {
     // The key reached the service, and nowhere a person reads.
     expect(await profile.log()).not.toContain(KEY);
   });
+  // WCAG 2.2, 1.4.11: at rest and empty, the key's field is drawn by its placeholder alone —
+  // its boundary is held to no ratio — so the placeholder is held at the contrast of text (#66).
+  it("draws the key's field at rest with a placeholder at the contrast of text", async () => {
+    const profile = await run.profile();
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Use an API key' }).click();
+    const field = page.getByLabel('AllDebrid API key');
+
+    expect(await field.getAttribute('placeholder')).toBe('Paste your API key');
+    expect(await field.inputValue()).toBe('');
+    const { placeholder, ground } = await field.evaluate((element) => ({
+      placeholder: getComputedStyle(element, '::placeholder').color,
+      ground: getComputedStyle(element.closest('dialog') ?? element).backgroundColor,
+    }));
+    expect(contrast(placeholder, ground)).toBeGreaterThanOrEqual(4.5);
+  });
+
   it('connects AllDebrid with a code confirmed on its site, whose page main opens', async () => {
     const profile = await run.profile();
     const service = run.keep(
@@ -131,6 +150,21 @@ describe('the real app, with what Settings says', () => {
     expect(await profile.log()).not.toContain(KEY);
   });
 });
+
+// The ratio of WCAG 2.2 between two opaque colours as the page computes them, `rgb(r, g, b)`.
+function contrast(one: string, other: string): number {
+  const luminance = (colour: string) => {
+    const [red = 0, green = 0, blue = 0] = (colour.match(/\d+(\.\d+)?/g) ?? [])
+      .slice(0, 3)
+      .map((channel) => Number(channel) / 255)
+      .map((channel) =>
+        channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4,
+      );
+    return 0.2126 * red + 0.7152 * green + 0.0722 * blue;
+  };
+  const [lighter = 0, darker = 0] = [luminance(one), luminance(other)].sort((a, b) => b - a);
+  return (lighter + 0.05) / (darker + 0.05);
+}
 
 async function openedBy(scia: { readonly app: ElectronApplication }): Promise<string[]> {
   return scia.app.evaluate(() => (globalThis as unknown as { opened: string[] }).opened);

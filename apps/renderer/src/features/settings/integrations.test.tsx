@@ -71,6 +71,20 @@ describe('IntegrationsSection', () => {
     expect(field).toHaveAttribute('autocomplete', 'off');
   });
 
+  // Its boundary is held to no ratio: at rest and empty, the placeholder is what draws the field,
+  // in the secondary text's colour, which the contrast spec holds at 4.5:1 on the dialog (#66).
+  it('says what goes in the key’s field while it is empty, at the contrast of text', async () => {
+    listing([notConnected]);
+    render(<IntegrationsSection open onError={ignore} />);
+    const service = await theService();
+
+    await userEvent.click(service.getByRole('button', { name: 'Use an API key' }));
+
+    const field = service.getByLabelText('AllDebrid API key');
+    expect(field).toHaveAttribute('placeholder', 'Paste your API key');
+    expect(field).toHaveClass('placeholder:text-muted-foreground');
+  });
+
   it('connects with the key that was typed, and says whose account it is and until when it is premium', async () => {
     listing([notConnected]);
     const connect = vi.spyOn(api, 'connectIntegration').mockResolvedValue(connected);
