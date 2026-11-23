@@ -1248,6 +1248,27 @@ describe('a link that goes through a service', () => {
       );
       expect(logged.join('\n')).not.toContain('link_unlocked_again');
     });
+
+    // What this PR decides of a page is a service's link's: a link pasted as it stands whose
+    // host answers a page after a pause goes as it did before — a changed file, fetched whole.
+    it('takes a page from a link no service gave, after a pause, as it did before: a changed file, asking nobody', async () => {
+      const host = await fileHost(slow);
+      const alldebrid = await serviceWith({ links: {} });
+      const downloads = await open(await connected(alldebrid));
+      const [added] = downloads.add({ urls: [host.url] });
+      await until(() => host.sentOn('/files/sample.bin') > MIB);
+      await downloads.pause(added!.id);
+      const name = downloads.find(added!.id).fileName;
+
+      host.expireLinks('page');
+      downloads.resume(added!.id);
+      const done = await finished(downloads, added!.id, DownloadStatus.Completed);
+
+      expect(done.via).toBeNull();
+      expect((await readFile(inDownloads(name))).toString()).toContain('This link has expired');
+      expect(unlocks(alldebrid)).toHaveLength(0);
+      expect(logged.join('\n')).not.toContain('link_unlocked_again');
+    });
   });
 
   it('says the service is no longer connected, and fetches nothing, for a link that was its own', async () => {
