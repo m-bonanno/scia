@@ -1051,6 +1051,60 @@ describe('a link that goes through a service', () => {
       expect(existsSync(inDownloads('Film.mkv'))).toBe(false);
     });
 
+    it('fails, saving nothing, when the link given after an expiry on the way answers a web page', async () => {
+      const host = await fileHost(slow);
+      const pages = await fileHost({ body: Buffer.from(PAGE), contentType: 'text/html' });
+      const alldebrid = await serviceWith({ links: inTurn(host, pages) });
+      const downloads = await open(await connected(alldebrid));
+      const [added] = downloads.add({ urls: [LINK] });
+      await until(() => host.sentOn(nth(1)) > MIB);
+
+      host.expireLinks(410);
+      const failed = await finished(downloads, added!.id, DownloadStatus.Failed);
+
+      expect(failed.failure).toBe(DownloadFailure.HttpStatus);
+      expect(failed.failureStatus).toBeNull();
+      expect(unlocks(alldebrid)).toHaveLength(2);
+      expect(failed.downloadedBytes).toBeGreaterThan(0);
+      expect(existsSync(inDownloads('Film.mkv'))).toBe(false);
+    });
+
+    // A file a host labels as a web page is still the file when it is the one whose bytes are on
+    // the disk: the same size, and the same validator.
+    it('goes on from its bytes when the file itself is served as a web page and its link expires on the way', async () => {
+      const host = await fileHost({ ...slow, contentType: 'text/html' });
+      const alldebrid = await serviceWith({ links: inTurn(host) });
+      const downloads = await open(await connected(alldebrid));
+      const [added] = downloads.add({ urls: [LINK] });
+      await until(() => host.sentOn(nth(1)) > MIB);
+
+      host.expireLinks(410);
+      await finished(downloads, added!.id, DownloadStatus.Completed);
+
+      expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
+      expect(unlocks(alldebrid)).toHaveLength(2);
+      expect(host.sentOn(nth(2))).toBeLessThan(body.length - MIB / 2);
+    });
+
+    it('goes on from its bytes after a Retry when the file itself is served as a web page', async () => {
+      const host = await fileHost({ ...slow, contentType: 'text/html' });
+      const gone = await fileHost({ status: 404 });
+      const alldebrid = await serviceWith({ links: inTurn(host, gone, host) });
+      const downloads = await open(await connected(alldebrid));
+      const [added] = downloads.add({ urls: [LINK] });
+      await until(() => host.sentOn(nth(1)) > MIB);
+      host.expireLinks(410);
+      const failed = await finished(downloads, added!.id, DownloadStatus.Failed);
+      expect(failed.failureStatus).toBe(404);
+
+      downloads.resume(added!.id);
+      await finished(downloads, added!.id, DownloadStatus.Completed);
+
+      expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
+      expect(unlocks(alldebrid)).toHaveLength(3);
+      expect(host.sentOn(nth(3))).toBeLessThan(body.length - MIB / 2);
+    });
+
     it.each([
       { what: 'of another size', other: randomBytes(3 * MIB + 1), etag: undefined },
       {

@@ -231,6 +231,17 @@ function isFileThere(path: string): boolean {
   }
 }
 
+// The host's file is not the one the record's bytes are of: another size, or another validator
+// where both answers carry one.
+function isAnotherFile(record: DownloadRecord, remote: RemoteFile): boolean {
+  return (
+    record.totalBytes !== remote.totalBytes ||
+    (record.validator !== null &&
+      remote.validator !== null &&
+      record.validator !== remote.validator)
+  );
+}
+
 function partPathOf(record: DownloadRecord): string {
   return join(record.directory, `${record.fileName}${PART_SUFFIX}`);
 }
@@ -993,10 +1004,11 @@ export class DownloadManager {
     }
   }
 
-  // What the host of a link says of its file. A web page from a service's direct link, for a
-  // download whose file is already named — a link kept over a pause or a restart, or given again
-  // — is not that file: most likely what is answered for a link that has expired. It is never
-  // saved over the bytes. A first link that answers a page is the file the service unlocked.
+  // What the host of a link says of its file. A web page from a service's direct link, while the
+  // download keeps bytes of another file, is not the file: most likely what is answered for a
+  // link that has expired, and never saved over the bytes. A page that is the file those bytes
+  // are of — a host that labels the file a page — goes on, and so does a page with no bytes kept:
+  // the file the service unlocked may be one.
   async #probe(
     record: DownloadRecord,
     url: string,
@@ -1004,7 +1016,14 @@ export class DownloadManager {
     signal: AbortSignal,
   ): Promise<RemoteFile> {
     const remote = await this.#deps.source.probe(url, headers, signal);
-    if (record.via !== null && record.named && remote.isPage) throw new NotTheFile();
+    if (
+      record.via !== null &&
+      remote.isPage &&
+      record.downloadedBytes > 0 &&
+      isAnotherFile(record, remote)
+    ) {
+      throw new NotTheFile();
+    }
     return remote;
   }
 
@@ -1286,11 +1305,7 @@ export class DownloadManager {
       record.fileName = this.#freeName(record, wanted);
       record.named = true;
     }
-    const changed =
-      record.totalBytes !== remote.totalBytes ||
-      (record.validator !== null &&
-        remote.validator !== null &&
-        record.validator !== remote.validator);
+    const changed = isAnotherFile(record, remote);
     record.totalBytes = remote.totalBytes;
     record.validator = remote.validator;
     record.resumable = remote.acceptsRanges && remote.totalBytes !== null;
