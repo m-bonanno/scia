@@ -31,11 +31,12 @@ async function isOnTop(notice: Locator): Promise<boolean> {
   });
 }
 
-// Settings open, with its rows and its services drawn: before them it is short.
+// Settings open, with its rows and its services drawn: before them it is short. The row's label
+// exactly: a notice of a change not kept names the setting too (#142).
 async function openSettings(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'Settings' }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
-  await settings.getByText('Simultaneous downloads').waitFor();
+  await settings.getByText('Simultaneous downloads', { exact: true }).waitFor();
   await settings.getByRole('region', { name: 'Integrations' }).getByText('AllDebrid').waitFor();
   await settings.getByRole('switch', { name: 'Beta versions' }).waitFor();
   return settings;
