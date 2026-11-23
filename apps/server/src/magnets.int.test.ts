@@ -561,6 +561,98 @@ describe('a magnet that goes through a service', () => {
     expect(await readFile(join(root, 'readme.txt'), 'utf8')).toBe('kept as it was');
   });
 
+  describe('of one file (#150)', () => {
+    function oneFile(files: SimulatedMagnet['files']): SimulatedMagnet {
+      return { name: 'Beach film', size: film.length, fetchingPolls: 0, files };
+    }
+    const beach = { n: 'beach.mkv', s: film.length, l: 'https://alldebrid.com/f/beach' };
+
+    it('puts its file straight into the download folder, with no folder of its own', async () => {
+      const scia = await open(
+        await connected(await serviceWith({ magnets: { [HASH]: oneFile([beach]) } })),
+      );
+
+      scia.addMagnets([MAGNET]);
+
+      await until(() => scia.snapshot().downloads[0]?.status === DownloadStatus.Completed);
+      expect(scia.snapshot().downloads).toHaveLength(1);
+      expect(scia.snapshot().downloads[0]).toMatchObject({
+        directory: downloads(),
+        fileName: 'beach.mkv',
+      });
+      expect(await readdir(downloads())).toEqual(['beach.mkv']);
+      expect(Buffer.compare(await readFile(join(downloads(), 'beach.mkv')), film)).toBe(0);
+      expect(scia.snapshot().magnets).toEqual([]);
+    });
+
+    it('leaves out the folders its tree puts the file in', async () => {
+      const scia = await open(
+        await connected(
+          await serviceWith({
+            magnets: { [HASH]: oneFile([{ n: 'Disc 1', e: [{ n: 'Video', e: [beach] }] }]) },
+          }),
+        ),
+      );
+
+      scia.addMagnets([MAGNET]);
+
+      await until(() => scia.snapshot().downloads[0]?.status === DownloadStatus.Completed);
+      expect(await readdir(downloads())).toEqual(['beach.mkv']);
+      expect(Buffer.compare(await readFile(join(downloads(), 'beach.mkv')), film)).toBe(0);
+    });
+
+    it('puts its file under a free name when one of its name is already in the download folder', async () => {
+      await mkdir(downloads(), { recursive: true });
+      await writeFile(join(downloads(), 'beach.mkv'), 'kept as it was');
+      const scia = await open(
+        await connected(await serviceWith({ magnets: { [HASH]: oneFile([beach]) } })),
+      );
+
+      scia.addMagnets([MAGNET]);
+
+      await until(() => scia.snapshot().downloads[0]?.status === DownloadStatus.Completed);
+      const [only] = scia.snapshot().downloads;
+      expect(only?.directory).toBe(downloads());
+      expect(only?.fileName).not.toBe('beach.mkv');
+      expect(Buffer.compare(await readFile(join(downloads(), only?.fileName ?? '')), film)).toBe(0);
+      expect(await readFile(join(downloads(), 'beach.mkv'), 'utf8')).toBe('kept as it was');
+    });
+
+    it('keeps its file in the download folder whatever name the tree gives it', async () => {
+      const scia = await open(
+        await connected(
+          await serviceWith({
+            magnets: {
+              [HASH]: oneFile([{ n: '..', e: [{ ...beach, n: '../../evil.mkv' }] }]),
+            },
+          }),
+        ),
+      );
+
+      scia.addMagnets([MAGNET]);
+
+      await until(() => scia.snapshot().downloads[0]?.status === DownloadStatus.Completed);
+      expect((await readdir(folder.path)).sort()).toEqual(['data', 'downloads']);
+      const [only] = scia.snapshot().downloads;
+      expect(only?.directory).toBe(downloads());
+      expect(await readdir(downloads())).toEqual([only?.fileName]);
+    });
+
+    it('puts the one file of a magnet of the account straight into the download folder too', async () => {
+      const alldebrid = await serviceWith({
+        magnets: { [HASH]: oneFile([{ n: 'Disc 1', e: [beach] }]) },
+        onTheAccount: [HASH],
+      });
+      const scia = await open(await connected(alldebrid));
+      const [listed] = await scia.accountMagnets();
+
+      await scia.addAccountMagnet(listed?.id ?? 0);
+
+      await until(() => scia.snapshot().downloads[0]?.status === DownloadStatus.Completed);
+      expect(await readdir(downloads())).toEqual(['beach.mkv']);
+    });
+  });
+
   it('sends a magnet pasted while the service is asked about another as soon as that ends', async () => {
     const alldebrid = await serviceWith({
       magnets: {

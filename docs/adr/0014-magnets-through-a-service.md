@@ -84,3 +84,16 @@ AllDebrid's help page on magnet folders (https://faq.alldebrid.com/en/tools/magn
 - A magnet's files are as many downloads as it has files, queued like any others under the limit of downloads at once.
 - A magnet pasted again while it is in the list is not added twice. One whose files are already downloads is sent again: the service has it, and its files arrive again under free names beside the ones already there.
 - The real service is the owner's to try: the simulated one (`apps/server/src/testing/alldebrid-server.ts`) answers as the documentation says. Two things are unproven against AllDebrid itself: that its `alldebrid.com/f/…` links unlock as the documentation's integrations say they do, and that a file it packed into an archive is listed as that archive.
+
+## Amendment — a magnet of one file goes straight into the download folder (2026-11-23, #150, #283)
+
+The owner decided (21 November 2026, #150): a magnet of one file goes straight into the download folder, with no folder of its own. `v1.0.0` waits for it.
+
+Point 3 is amended for a magnet whose tree lists **one file**:
+
+- its download's folder is the download folder of the moment the magnet was pasted — or taken from the account — and nothing under it: neither the magnet's name nor the folders the tree puts the file in;
+- its name is still the tree's, through `sanitizeFileName` (`nameKept`), and takes a free name when one of its name is already in that folder, as any download's does.
+
+A magnet of two files or more is as point 3 says. A link that opens into one file was already that download, in the download folder itself (ADR 0025): the two now agree.
+
+The field names magnets only while a service is connected (the owner, #150): its placeholder says "Paste links or magnets" then, and "Paste one or more links" otherwise, as the page last learned it — when the engine is reached and whenever Settings closes, as the panel of the account's magnets does (ADR 0016).
