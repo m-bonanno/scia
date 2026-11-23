@@ -6,15 +6,8 @@ import { promisify } from 'node:util';
 import { type RangeServer, startRangeServer } from '@scia/server/testing/range-server.ts';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { YT_DLP_OF_PLATFORM, YT_DLP_VERSION } from '../src/engine/runtime-layout.ts';
-import {
-  launchScia,
-  paste,
-  type Profile,
-  rowOf,
-  type Scia,
-  scratchProfile,
-  until,
-} from './scia.ts';
+import { type InstalledScia, launchInstalled } from './installed.ts';
+import { paste, type Profile, rowOf, scratchProfile, until } from './scia.ts';
 
 const run = promisify(execFile);
 
@@ -96,7 +89,7 @@ const exists = (path: string) =>
 // removed afterwards: never on a person's computer (ADR 0008). The specs are one road, in order.
 describe('the installer, installed and started', () => {
   let profile: Profile | undefined;
-  let scia: Scia | undefined;
+  let scia: InstalledScia | undefined;
   let host: RangeServer | undefined;
 
   beforeAll(async () => {
@@ -164,8 +157,14 @@ describe('the installer, installed and started', () => {
     expect(stdout.trim()).toBe(YT_DLP_VERSION);
   });
 
+  // As it ships: with no --inspect to reach main by (installed.ts, #115).
   it('starts on a scratch profile as the packaged app of its version', async () => {
-    scia = await launchScia(profile!, { executable: EXE });
+    scia = await launchInstalled(profile!, EXE, ['--inspect=0']);
+
+    // Its fuse is off (electron-builder.yml): asked to, main opened no debugger to anyone who can
+    // start it. Node says so on the stderr Chromium's own port was read from.
+    expect(scia.stderr()).toMatch(/DevTools listening on/);
+    expect(scia.stderr()).not.toMatch(/Debugger listening on/);
 
     const log = await profile!.log();
     expect(log).toContain(`boot { version: '${VERSION!}', packaged: true`);
@@ -198,9 +197,11 @@ describe('the installer, installed and started', () => {
       ended = true;
     });
 
-    await scia!.closeWindow();
+    scia!.closeWindow();
 
     await until(() => ended);
+    // Its hosts and the connection to its port, which outlive it.
+    await scia!.close();
     scia = undefined;
     const log = await profile!.log();
     expect(log).toMatch(/\bquit\b/);

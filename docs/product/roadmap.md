@@ -15,7 +15,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 ### Build
 
 - [ ] The window really in use before Scia stays silent (#62): built ([ADR 0020](../adr/0020-the-window-in-use-asked-of-windows.md)), to be seen by hand (#13).
-- [ ] The `--inspect` fuse off in the shipped app, and the installer's smoke test driving it by the page's debugging port (#115).
+- [x] The `--inspect` fuse off in the shipped app, and the installer's smoke test driving it by the page's debugging port (#115).
 - [ ] A video and its sound offered apart, joined into one mp4 (#99), piece 3 of the video of a page (#89).
 - [ ] A link that expires during a long download, unlocked again keeping the bytes (#180).
 - [ ] A link that unlocks into several files, shown as a list to tick (#181).
@@ -85,7 +85,7 @@ None open: all were settled on 21 November 2026 ([decisions.md](./decisions.md#2
 | [Automatic updates](./evidence.md#automatic-updates)                                                                      | #82        | yes   | Script (installed app)               | a stable taken; a quit by the system                        | yes       |
 | [The version, and a downloaded update offered](./evidence.md#the-version-and-a-downloaded-update)                         | #133, #159 | yes   | E2E, Script (packaged)               | a stable offered; real keys                                 | yes       |
 | [E2E suite on the real app](./evidence.md#the-e2e-suite)                                                                  | #91        | yes   | CI, nineteen specs                   | the packaged app; a kill mid-download (#108)                | yes       |
-| The `--inspect` fuse off in the shipped app                                                                               | #115       | no    | —                                    | —                                                           | yes       |
+| [The `--inspect` fuse off in the shipped app](./evidence.md#the---inspect-fuse-off)                                       | #115       | yes   | CI install, every PR and release     | a debugger asked for by a hand                              | yes       |
 | [A save of `state.json` while another process holds it](./evidence.md#a-save-of-statejson-while-another-process-holds-it) | #151       | yes   | Specs (integration, on Windows)      | the real app with `state.json` held                         | yes       |
 | [Zero-filling on NTFS, measured](./evidence.md#zero-filling-on-ntfs)                                                      | #182       | no    | —                                    | —                                                           | yes       |
 
