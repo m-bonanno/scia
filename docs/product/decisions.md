@@ -73,6 +73,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 ## 23 November 2026
 
 - #99: picture and sound offered apart are joined only as an mp4 picture in H.264 or AV1 and an AAC sound. The most lines win, and H.264 at equal lines; HEVC never, since Windows plays it only with a paid extension. A webm picture with Opus sound is an issue of its own (#239) ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)).
+- #182, on its measure: the part file is made sparse on Windows, as ADR 0001 said it would be if the measure called for it, with the room on the disk looked at when a download starts instead of reserved, so that a full disk is still said early; the engine gets more disk threads, so that its other disk work never waits behind a write. `v1.0.0` waits for this fix ([ADR 0026](../adr/0026-a-part-file-made-sparse.md)).
 - #58, changing the decision of 21 November 2026 after the contrast was computed in every variant: a paused bar gets a tone of its own, darker than the accent and 3:1 or more on its track, in 15 of the 18 variants; Black Tie light, Earth dark and Wood Floor dark keep today's paused bar, lighter than the accent, since "darker" there would be less distinct from a running bar (1.29:1, 1.16:1 and 1.34:1 at best). Wood Floor dark was added from the review of #261. The contrast spec holds the tone on the track and its order against the accent in each variant (#260).
 
 ## Undated in the roadmap

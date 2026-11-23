@@ -25,7 +25,8 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#13), the folder's button (#40), a paused bar's tone (#260: built, held by specs and read in the built app by CI's E2E, which took its capture; to be seen by a person, in #58), the key's placeholder (#66: built, held by specs and by CI's E2E in both variants; to be seen in the app, with its capture, in #156), the clipboard's first read (#134), room under notices (#143), the popover's note (#159), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
 - [ ] The page's logo and the app's icon drawing the mark in the same proportions (#88).
 - [x] The specs in quarantine fixed and back in the gates: the speed limit's (#43, #232) and HLS's (#162).
-- [ ] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes).
+- [x] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes): 32 s with nothing written for a 32 GiB file on an NVMe SSD, over 45 s for 4 GiB on a USB hard disk.
+- [ ] A large download that starts at once: its part file made sparse, its room looked at instead of reserved, the engine given more disk threads (#182; `v1.0.0` waits for it, the owner, 23 November 2026): built, held by specs and by CI's E2E suite in the built app ([ADR 0026](../adr/0026-a-part-file-made-sparse.md)), measured with the engine's own task; a large file in the app, and on a USB hard disk, to be seen (#265).
 - [x] The installer refuses an older version (#172, #177).
 
 ### The owner's hands
@@ -87,7 +88,7 @@ None open: all were settled on 21 November 2026 ([decisions.md](./decisions.md#2
 | [E2E suite on the real app](./evidence.md#the-e2e-suite)                                                                  | #91        | yes   | CI, nineteen specs                   | the packaged app; a kill mid-download (#108)                | yes       |
 | [The `--inspect` fuse off in the shipped app](./evidence.md#the---inspect-fuse-off)                                       | #115       | yes   | CI install, every PR and release     | a debugger asked for by a hand                              | yes       |
 | [A save of `state.json` while another process holds it](./evidence.md#a-save-of-statejson-while-another-process-holds-it) | #151       | yes   | Specs (integration, on Windows)      | the real app with `state.json` held                         | yes       |
-| [Zero-filling on NTFS, measured](./evidence.md#zero-filling-on-ntfs)                                                      | #182       | no    | —                                    | —                                                           | yes       |
+| [Zero-filling on NTFS: measured, and a part file made sparse](./evidence.md#zero-filling-on-ntfs)                         | #182, #265 | yes   | E2E, Script (the engine's task)      | a large file in the app; a USB disk with the fix (#265)     | yes       |
 
 ## M2 — The whole extension
 
