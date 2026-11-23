@@ -18,7 +18,7 @@ import { IconButton } from '@/components/icon-button.tsx';
 import { api } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { cn } from '@/lib/cn.ts';
-import { FOLDER_REFUSED } from '@/lib/messages.ts';
+import { FOLDER_NOT_CHANGED, FOLDER_REFUSED, settingNotChangedMessage } from '@/lib/messages.ts';
 import { SettingSwitch } from './setting-switch.tsx';
 import { IntegrationsSection } from './integrations.tsx';
 import { SpeedLimit } from './speed-limit.tsx';
@@ -35,6 +35,8 @@ interface SettingsDialogProps {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly onError: (error: unknown) => void;
+  // Told a sentence the dialog wrote itself: a change the engine did not keep.
+  readonly tell: (sentence: string) => void;
   // Told every time the dialog learns what the engine keeps: what it read, what it changed.
   readonly onSettings: (settings: Settings) => void;
   // How tall the notices at the window's bottom are: 0 while none is shown.
@@ -53,6 +55,7 @@ export function SettingsDialog({
   open,
   onClose,
   onError,
+  tell,
   onSettings,
   noticesHeight = 0,
   ref,
@@ -77,11 +80,12 @@ export function SettingsDialog({
   // says what was there before it, whenever it arrives.
   const asked = useRef(0);
   const learn = useCallback(
-    (ask: Promise<Settings>): Promise<void> => {
+    (ask: Promise<Settings>): Promise<Settings> => {
       asked.current += 1;
       const mine = asked.current;
       return ask.then((answer) => {
         if (mine === asked.current) keep(answer);
+        return answer;
       });
     },
     [keep],
@@ -110,19 +114,30 @@ export function SettingsDialog({
 
   // The page names no folder: main shows the system's dialog and tells the engine, and the
   // page reads back what the engine kept.
-  // Main answers what became of the folder; it fails for what is not about a folder (an engine
-  // that is silent, or restarting). Either way the settings are read again: an engine that
-  // answered main too late may have taken the folder all the same.
+  // Main answers what became of the folder; it fails for what is not about a folder (the system's
+  // dialog, an engine that is silent or restarting). Either way the settings are read again: an
+  // engine that answered main too late may have taken the folder all the same, so a failure, or
+  // an answer the page does not know, is told only when the folder read again is the one before
+  // (#142).
   const changeFolder = () => {
     setFolderRefused(false);
+    const before = settings?.downloadDirectory;
+    let unsaid = false;
     shell
       ?.chooseDownloadFolder()
-      .then((change) => {
-        if (!isFolderChange(change)) throw new Error('Main did not say what became of the folder.');
-        setFolderRefused(change === FolderChange.Refused);
-      })
-      .catch(onError)
+      .then(
+        (change) => {
+          unsaid = !isFolderChange(change);
+          setFolderRefused(change === FolderChange.Refused);
+        },
+        () => {
+          unsaid = true;
+        },
+      )
       .then(() => learn(api.settings()))
+      .then((kept) => {
+        if (unsaid && kept.downloadDirectory === before) tell(FOLDER_NOT_CHANGED);
+      })
       .catch(onError);
   };
 
@@ -157,8 +172,11 @@ export function SettingsDialog({
     };
   }, [open, noticesHeight]);
 
-  const change = (patch: SettingsPatch) => {
-    learn(api.updateSettings(patch)).catch(onError);
+  // One setting at a time: a change the engine did not keep is told by its name (#142).
+  const change = (setting: keyof SettingsPatch, patch: SettingsPatch) => {
+    learn(api.updateSettings(patch)).catch((error: unknown) => {
+      tell(settingNotChangedMessage(setting, error));
+    });
   };
 
   // No `p-0`: Tailwind writes it after `room-under-notices`, and it would take the room away.
@@ -193,7 +211,7 @@ export function SettingsDialog({
                 value={settings.maxConcurrentDownloads}
                 {...SETTINGS_LIMITS.maxConcurrentDownloads}
                 onChange={(maxConcurrentDownloads) => {
-                  change({ maxConcurrentDownloads });
+                  change('maxConcurrentDownloads', { maxConcurrentDownloads });
                 }}
               />
               <Stepper
@@ -202,13 +220,13 @@ export function SettingsDialog({
                 value={settings.connectionsPerDownload}
                 {...SETTINGS_LIMITS.connectionsPerDownload}
                 onChange={(connectionsPerDownload) => {
-                  change({ connectionsPerDownload });
+                  change('connectionsPerDownload', { connectionsPerDownload });
                 }}
               />
               <SpeedLimit
                 value={settings.speedLimitBytesPerSecond}
                 onChange={(speedLimitBytesPerSecond) => {
-                  change({ speedLimitBytesPerSecond });
+                  change('speedLimitBytesPerSecond', { speedLimitBytesPerSecond });
                 }}
               />
               <div className="flex items-start justify-between gap-4">
@@ -255,7 +273,7 @@ export function SettingsDialog({
               <ThemeChoice
                 value={settings.theme}
                 onChange={(theme) => {
-                  change({ theme });
+                  change('theme', { theme });
                 }}
               />
               {/* Main reads the clipboard: a browser tab has no main to do it. */}
@@ -265,7 +283,7 @@ export function SettingsDialog({
                   hint="Links to files and videos you copy appear in the list, ready to start."
                   value={settings.watchClipboard}
                   onChange={(watchClipboard) => {
-                    change({ watchClipboard });
+                    change('watchClipboard', { watchClipboard });
                   }}
                 />
               )}
@@ -278,7 +296,7 @@ export function SettingsDialog({
               hint="Also update to versions still being tried. Scia updates itself when you quit it."
               value={settings.betaUpdates}
               onChange={(betaUpdates) => {
-                change({ betaUpdates });
+                change('betaUpdates', { betaUpdates });
               }}
             />
           )}

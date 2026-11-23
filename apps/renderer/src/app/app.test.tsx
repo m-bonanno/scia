@@ -1,6 +1,7 @@
 import {
   ApiErrorCode,
   type Bundle,
+  MAX_URLS_PER_REQUEST,
   type Download,
   type IntegrationId,
   type Magnet,
@@ -73,6 +74,10 @@ beforeEach(() => {
   vi.spyOn(api, 'integrations').mockResolvedValue([alldebrid(false)]);
 });
 
+function manyLinks(count: number): string[] {
+  return Array.from({ length: count }, (_, index) => `https://example.com/${String(index)}.zip`);
+}
+
 function alldebrid(connected: boolean) {
   return { id: 'alldebrid' as const, connected, account: null, failure: null, keyNotRead: false };
 }
@@ -130,13 +135,74 @@ describe('App', () => {
     await vi.waitFor(() => {
       expect(field).toHaveAttribute('aria-invalid', 'true');
     });
-    expect(field).toHaveAccessibleDescription('No http or https links in what you pasted.');
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take the links you pasted.');
     expect(field).toHaveValue('https://example.com/a.zip');
     expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
 
     await userEvent.type(field, 'x');
     expect(field).not.toHaveAttribute('aria-invalid', 'true');
     expect(field).not.toHaveAccessibleDescription();
+  });
+
+  // The engine takes at most MAX_URLS_PER_REQUEST of each in one request (#142): more is sent in
+  // batches, and "Download 201 files" downloads 201 files.
+  it('sends more links than one request holds in batches, and takes them all', async () => {
+    const add = vi.spyOn(api, 'addDownloads').mockResolvedValue([]);
+    const links = manyLinks(MAX_URLS_PER_REQUEST + 1);
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+    await userEvent.click(field);
+    await userEvent.paste(links.join(' '));
+    await userEvent.click(screen.getByRole('button', { name: 'Download 201 files' }));
+
+    await vi.waitFor(() => {
+      expect(field).toHaveValue('');
+    });
+    expect(add.mock.calls).toEqual([[links.slice(0, MAX_URLS_PER_REQUEST)], [links.slice(-1)]]);
+    expect(field).not.toHaveAttribute('aria-invalid', 'true');
+    expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
+  });
+
+  it('keeps in the field only the batch the engine refused, and says it there', async () => {
+    const links = manyLinks(MAX_URLS_PER_REQUEST + 1);
+    vi.spyOn(api, 'addDownloads')
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'));
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+    await userEvent.click(field);
+    await userEvent.paste(links.join(' '));
+    await userEvent.click(screen.getByRole('button', { name: 'Download 201 files' }));
+
+    await vi.waitFor(() => {
+      expect(field).toHaveValue(links.at(-1));
+    });
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take the links you pasted.');
+  });
+
+  it('sends more magnets than one request holds in batches, and names magnets when one is refused', async () => {
+    const magnets = Array.from(
+      { length: MAX_URLS_PER_REQUEST + 1 },
+      (_, index) => `magnet:?xt=urn:btih:${index.toString(16).padStart(40, '0')}`,
+    );
+    const add = vi
+      .spyOn(api, 'addMagnets')
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new ApiError(400, ApiErrorCode.InvalidRequest, 'not magnets'));
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+    await userEvent.click(field);
+    await userEvent.paste(magnets.join(' '));
+    await userEvent.click(screen.getByRole('button', { name: 'Download 201 links' }));
+
+    await vi.waitFor(() => {
+      expect(field).toHaveValue(magnets.at(-1));
+    });
+    expect(add.mock.calls).toEqual([[magnets.slice(0, MAX_URLS_PER_REQUEST)], [magnets.slice(-1)]]);
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take the magnets you pasted.');
   });
 
   it('does not say under the field a refusal of text the field no longer holds', async () => {
@@ -159,7 +225,7 @@ describe('App', () => {
     });
     expect(field).not.toHaveAttribute('aria-invalid', 'true');
     expect(
-      screen.queryByText('No http or https links in what you pasted.'),
+      screen.queryByText('Scia’s engine did not take the links you pasted.'),
     ).not.toBeInTheDocument();
   });
 
@@ -459,7 +525,7 @@ describe('App', () => {
     await userEvent.paste('https://example.com/a.zip');
 
     const notices = await screen.findByRole('list', { name: 'Notices' });
-    expect(notices).toHaveTextContent('No http or https links in what you pasted.');
+    expect(notices).toHaveTextContent('Scia’s engine did not take the links you pasted.');
     expect(field).not.toHaveAttribute('aria-invalid', 'true');
   });
 
@@ -490,7 +556,7 @@ describe('App', () => {
     );
 
     const notices = await within(dialog).findByRole('list', { name: 'Notices' });
-    expect(notices).toHaveTextContent('Scia could not complete the operation.');
+    expect(notices).toHaveTextContent('Scia could not change the theme. Try again.');
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }));
     expect(dialog).not.toContainElement(screen.getByRole('list', { name: 'Notices' }));

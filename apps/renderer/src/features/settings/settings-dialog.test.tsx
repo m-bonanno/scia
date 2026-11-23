@@ -97,6 +97,7 @@ describe('SettingsDialog', () => {
           onClose={ignore}
           onError={ignore}
           onSettings={ignore}
+          tell={ignore}
           noticesHeight={80}
         />,
       );
@@ -113,6 +114,7 @@ describe('SettingsDialog', () => {
           onClose={ignore}
           onError={ignore}
           onSettings={ignore}
+          tell={ignore}
           noticesHeight={80}
         />,
       );
@@ -135,6 +137,7 @@ describe('SettingsDialog', () => {
           onClose={ignore}
           onError={ignore}
           onSettings={ignore}
+          tell={ignore}
           noticesHeight={80}
         />,
       );
@@ -151,7 +154,15 @@ describe('SettingsDialog', () => {
 
   it('shows the limits and the folder', async () => {
     const onSettings = vi.fn();
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
+    render(
+      <SettingsDialog
+        open
+        onClose={ignore}
+        onError={ignore}
+        onSettings={onSettings}
+        tell={ignore}
+      />,
+    );
 
     expect(await screen.findByRole('heading', { name: 'Settings' })).toBeInTheDocument();
     expect(await screen.findByText('Simultaneous downloads')).toBeInTheDocument();
@@ -165,7 +176,9 @@ describe('SettingsDialog', () => {
     aShell(async () => 'kept');
     const openSupportPage = vi.fn(async () => undefined);
     window.scia = { ...window.scia!, openSupportPage };
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
 
     await userEvent.click(await screen.findByRole('button', { name: 'Support Scia' }));
 
@@ -175,7 +188,9 @@ describe('SettingsDialog', () => {
 
   it('reaches "Support Scia" by Tab, after the last setting', async () => {
     aShell(async () => 'kept');
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
     (await screen.findByRole('switch', { name: 'Beta versions' })).focus();
 
     await userEvent.tab();
@@ -189,7 +204,9 @@ describe('SettingsDialog', () => {
       const updateSettings = vi
         .spyOn(api, 'updateSettings')
         .mockResolvedValue({ ...settings, watchClipboard: true });
-      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+      render(
+        <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+      );
 
       const watch = await screen.findByRole('switch', { name: 'Take links from the clipboard' });
       expect(watch).not.toBeChecked();
@@ -207,7 +224,9 @@ describe('SettingsDialog', () => {
     });
 
     it('are offered only in the desktop app, which reads the clipboard', async () => {
-      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+      render(
+        <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+      );
       await screen.findByText('Simultaneous downloads');
       expect(
         screen.queryByRole('switch', { name: 'Take links from the clipboard' }),
@@ -221,7 +240,9 @@ describe('SettingsDialog', () => {
       const updateSettings = vi
         .spyOn(api, 'updateSettings')
         .mockResolvedValue({ ...settings, betaUpdates: true });
-      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+      render(
+        <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+      );
 
       const betas = await screen.findByRole('switch', { name: 'Beta versions' });
       expect(betas).not.toBeChecked();
@@ -239,7 +260,9 @@ describe('SettingsDialog', () => {
       aShell(async () => 'kept');
       vi.spyOn(api, 'settings').mockResolvedValue({ ...settings, betaUpdates: true });
       const updateSettings = vi.spyOn(api, 'updateSettings').mockResolvedValue(settings);
-      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+      render(
+        <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+      );
 
       const betas = await screen.findByRole('switch', { name: 'Beta versions' });
       expect(betas).toBeChecked();
@@ -250,23 +273,30 @@ describe('SettingsDialog', () => {
       expect(await screen.findByRole('switch', { name: 'Beta versions' })).not.toBeChecked();
     });
 
-    it('stay as the engine keeps them when it refuses the change, and the refusal is told', async () => {
+    it('stay as the engine keeps them when it refuses the change, and the change lost is named', async () => {
       aShell(async () => 'kept');
-      const refusal = new Error('The engine is restarting.');
-      vi.spyOn(api, 'updateSettings').mockRejectedValue(refusal);
+      vi.spyOn(api, 'updateSettings').mockRejectedValue(new Error('The engine is restarting.'));
       const onError = vi.fn();
-      render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
+      const tell = vi.fn();
+      render(
+        <SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} tell={tell} />,
+      );
 
       await userEvent.click(await screen.findByRole('switch', { name: 'Beta versions' }));
 
       await vi.waitFor(() => {
-        expect(onError).toHaveBeenCalledWith(refusal);
+        expect(tell).toHaveBeenCalledExactlyOnceWith(
+          'Scia could not change whether it updates to beta versions. Try again.',
+        );
       });
+      expect(onError).not.toHaveBeenCalled();
       expect(screen.getByRole('switch', { name: 'Beta versions' })).not.toBeChecked();
     });
 
     it('are offered only where Scia updates itself', async () => {
-      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+      render(
+        <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+      );
       await screen.findByText('Simultaneous downloads');
       expect(screen.queryByRole('switch', { name: 'Beta versions' })).not.toBeInTheDocument();
     });
@@ -274,14 +304,18 @@ describe('SettingsDialog', () => {
     it('are not offered on a system whose releases carry no installer', async () => {
       aShell(async () => 'kept');
       window.scia = { ...window.scia!, platform: 'linux' };
-      render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+      render(
+        <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+      );
       await screen.findByText('Simultaneous downloads');
       expect(screen.queryByRole('switch', { name: 'Beta versions' })).not.toBeInTheDocument();
     });
   });
 
   it('lists the services Scia connects to, after the settings', async () => {
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
 
     const integrations = await screen.findByRole('region', { name: 'Integrations' });
     expect(within(integrations).getByText('AllDebrid')).toBeInTheDocument();
@@ -296,7 +330,15 @@ describe('SettingsDialog', () => {
       .mockResolvedValueOnce(settings)
       .mockResolvedValueOnce({ ...settings, downloadDirectory: '/media/films' });
     const onSettings = vi.fn();
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
+    render(
+      <SettingsDialog
+        open
+        onClose={ignore}
+        onError={ignore}
+        onSettings={onSettings}
+        tell={ignore}
+      />,
+    );
 
     await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
 
@@ -309,7 +351,9 @@ describe('SettingsDialog', () => {
   // only a tooltip. Its one word is told what it changes by the setting it sits beside.
   it('offers to change the folder in words, described by the folder it changes', async () => {
     aShell(async () => 'kept');
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
 
     const change = await screen.findByRole('button', { name: 'Change…' });
 
@@ -322,7 +366,9 @@ describe('SettingsDialog', () => {
   // start; the path inside it keeps its own order. That the name shows is read in the built app
   // (`apps/desktop/e2e/settings.e2e.test.ts`): jsdom lays nothing out.
   it('cuts a long path at its start, so that the folder’s own name shows', async () => {
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
 
     const path = await screen.findByText('/home/me/Downloads');
 
@@ -337,7 +383,9 @@ describe('SettingsDialog', () => {
   it('says so, by the folder, when the engine refused the one that was chosen', async () => {
     aShell(async () => 'refused');
     const onError = vi.fn();
-    render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} tell={ignore} />,
+    );
 
     await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
 
@@ -356,7 +404,9 @@ describe('SettingsDialog', () => {
       .mockResolvedValueOnce('refused')
       .mockResolvedValueOnce('kept');
     aShell(chooseDownloadFolder);
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
     const change = await screen.findByRole('button', { name: 'Change…' });
 
     await userEvent.click(change);
@@ -374,10 +424,35 @@ describe('SettingsDialog', () => {
     expect(change).toHaveAccessibleDescription('Download folder /home/me/Downloads');
   });
 
-  it('does not blame a folder when main failed before or after the dialog: it says what failed, and reads the folder again', async () => {
-    const failure = new Error('Error invoking remote method: the engine said nothing');
+  // Main fails for the system's dialog as for an engine silent before or after it (#142): what is
+  // true of every cause is that the folder did not change — once the engine, read again, says so.
+  // Not "the engine is not responding", and not by the folder: nothing is wrong with the folder.
+  it('tells that the folder did not change when main failed, and the folder read again is the same', async () => {
     aShell(async () => {
-      throw failure;
+      throw new Error('Error invoking remote method: the dialog did not open');
+    });
+    const read = vi.spyOn(api, 'settings').mockResolvedValue(settings);
+    const onError = vi.fn();
+    const tell = vi.fn();
+    render(
+      <SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} tell={tell} />,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
+
+    await vi.waitFor(() => {
+      expect(tell).toHaveBeenCalledExactlyOnceWith(
+        'Scia could not change the download folder. Try again.',
+      );
+    });
+    expect(onError).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(read).toHaveBeenCalledTimes(2);
+  });
+
+  it('tells nothing of a failure of main when the folder read again shows that it changed', async () => {
+    aShell(async () => {
+      throw new Error('Error invoking remote method: the engine said nothing');
     });
     const read = vi
       .spyOn(api, 'settings')
@@ -385,37 +460,62 @@ describe('SettingsDialog', () => {
       // The engine may have taken the folder after main stopped waiting for its answer.
       .mockResolvedValueOnce({ ...settings, downloadDirectory: '/media/films' });
     const onError = vi.fn();
-    render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
+    const tell = vi.fn();
+    render(
+      <SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} tell={tell} />,
+    );
 
     await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
 
     expect(await screen.findByText('/media/films')).toBeInTheDocument();
-    expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
+    expect(onError).not.toHaveBeenCalled();
+    expect(tell).not.toHaveBeenCalled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(read).toHaveBeenCalledTimes(2);
   });
 
-  it('takes an answer it does not know, and a folder it cannot read again, as failures to report', async () => {
+  it('takes an answer it does not know as a failure, and reports a folder it cannot read again', async () => {
     aShell(async () => 'something else');
     const unread = new Error('the engine is restarting');
     vi.spyOn(api, 'settings').mockResolvedValueOnce(settings).mockRejectedValueOnce(unread);
     const onError = vi.fn();
-    render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
+    const tell = vi.fn();
+    render(
+      <SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} tell={tell} />,
+    );
 
     await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
 
     await vi.waitFor(() => {
-      expect(onError).toHaveBeenCalledTimes(2);
+      expect(onError).toHaveBeenCalledExactlyOnceWith(unread);
     });
-    expect(onError).toHaveBeenLastCalledWith(unread);
+    expect(tell).not.toHaveBeenCalled();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
+  });
+
+  it('tells that the folder did not change when main answered what it does not know', async () => {
+    aShell(async () => 'something else');
+    const tell = vi.fn();
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={tell} />,
+    );
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
+
+    await vi.waitFor(() => {
+      expect(tell).toHaveBeenCalledExactlyOnceWith(
+        'Scia could not change the download folder. Try again.',
+      );
+    });
   });
 
   it('says nothing when the person closed the dialog without choosing', async () => {
     aShell(async () => 'kept');
     const onError = vi.fn();
-    render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} tell={ignore} />,
+    );
 
     await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
 
@@ -432,13 +532,23 @@ describe('SettingsDialog', () => {
       .mockResolvedValueOnce('kept');
     aShell(chooseDownloadFolder);
     const { rerender } = render(
-      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />,
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
     );
 
     await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
-    rerender(<SettingsDialog open={false} onClose={ignore} onError={ignore} onSettings={ignore} />);
-    rerender(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    rerender(
+      <SettingsDialog
+        open={false}
+        onClose={ignore}
+        onError={ignore}
+        onSettings={ignore}
+        tell={ignore}
+      />,
+    );
+    rerender(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
     await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
@@ -449,7 +559,9 @@ describe('SettingsDialog', () => {
   });
 
   it('does not offer to change the folder where there is no desktop shell to show the dialog', async () => {
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
 
     expect(await screen.findByText('/home/me/Downloads')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Change…' })).not.toBeInTheDocument();
@@ -458,7 +570,15 @@ describe('SettingsDialog', () => {
   it('offers the nine themes by name, the default one first, and keeps the one chosen', async () => {
     const update = vi.spyOn(api, 'updateSettings').mockResolvedValue({ ...settings, theme: 'ice' });
     const onSettings = vi.fn();
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
+    render(
+      <SettingsDialog
+        open
+        onClose={ignore}
+        onError={ignore}
+        onSettings={onSettings}
+        tell={ignore}
+      />,
+    );
     const theme = await screen.findByRole('combobox', { name: 'Theme' });
 
     expect(
@@ -505,14 +625,34 @@ describe('SettingsDialog', () => {
     vi.spyOn(api, 'updateSettings').mockResolvedValue({ ...settings, theme: 'ice' });
     const onSettings = vi.fn();
     const { rerender } = render(
-      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />,
+      <SettingsDialog
+        open
+        onClose={ignore}
+        onError={ignore}
+        onSettings={onSettings}
+        tell={ignore}
+      />,
     );
     const theme = await screen.findByRole('combobox', { name: 'Theme' });
     // Settings stays mounted: opened again, it shows what it knew while it reads anew.
     rerender(
-      <SettingsDialog open={false} onClose={ignore} onError={ignore} onSettings={onSettings} />,
+      <SettingsDialog
+        open={false}
+        onClose={ignore}
+        onError={ignore}
+        onSettings={onSettings}
+        tell={ignore}
+      />,
     );
-    rerender(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
+    rerender(
+      <SettingsDialog
+        open
+        onClose={ignore}
+        onError={ignore}
+        onSettings={onSettings}
+        tell={ignore}
+      />,
+    );
 
     await userEvent.selectOptions(theme, 'Ice');
     await vi.waitFor(() => {
@@ -539,7 +679,15 @@ describe('SettingsDialog', () => {
       );
     vi.spyOn(api, 'updateSettings').mockResolvedValue({ ...settings, theme: 'ice' });
     const onSettings = vi.fn();
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
+    render(
+      <SettingsDialog
+        open
+        onClose={ignore}
+        onError={ignore}
+        onSettings={onSettings}
+        tell={ignore}
+      />,
+    );
     const theme = await screen.findByRole('combobox', { name: 'Theme' });
 
     await userEvent.click(screen.getByRole('button', { name: 'Change…' }));
@@ -563,7 +711,9 @@ describe('SettingsDialog', () => {
       .spyOn(api, 'updateSettings')
       .mockResolvedValueOnce({ ...settings, speedLimitBytesPerSecond: 5 * MIB })
       .mockResolvedValueOnce(settings);
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
     const limit = await screen.findByRole('combobox', { name: 'Speed limit' });
 
     expect(
@@ -593,23 +743,30 @@ describe('SettingsDialog', () => {
     expect(update).toHaveBeenLastCalledWith({ speedLimitBytesPerSecond: null });
   });
 
-  it('keeps showing what the engine has when a change of the limit fails, and reports it', async () => {
-    const failure = new Error('refused');
-    vi.spyOn(api, 'updateSettings').mockRejectedValue(failure);
+  it('keeps showing what the engine has when a change of the limit fails, and names the change lost', async () => {
+    vi.spyOn(api, 'updateSettings').mockRejectedValue(new Error('refused'));
     const onError = vi.fn();
-    render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
+    const tell = vi.fn();
+    render(
+      <SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} tell={tell} />,
+    );
     const limit = await screen.findByRole('combobox', { name: 'Speed limit' });
 
     await userEvent.selectOptions(limit, String(5 * MIB));
 
     await vi.waitFor(() => {
-      expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
+      expect(tell).toHaveBeenCalledExactlyOnceWith(
+        'Scia could not change the speed limit. Try again.',
+      );
     });
+    expect(onError).not.toHaveBeenCalled();
     expect(limit).toHaveValue('none');
   });
 
   it('offers no limit the engine would refuse', async () => {
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
     const limit = await screen.findByRole('combobox', { name: 'Speed limit' });
 
     const offered = within(limit)
@@ -627,7 +784,9 @@ describe('SettingsDialog', () => {
 
   it('shows a limit the engine has that is not one of the ready values', async () => {
     vi.spyOn(api, 'settings').mockResolvedValue({ ...settings, speedLimitBytesPerSecond: 3 * MIB });
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
     const limit = await screen.findByRole('combobox', { name: 'Speed limit' });
 
     expect(limit).toHaveValue(String(3 * MIB));
@@ -640,7 +799,9 @@ describe('SettingsDialog', () => {
     const update = vi
       .spyOn(api, 'updateSettings')
       .mockResolvedValue({ ...settings, connectionsPerDownload: 9 });
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
     const connections = await screen.findByRole('group', { name: 'Connections per download' });
 
     await userEvent.click(within(connections).getByRole('button', { name: 'Increase' }));
@@ -651,7 +812,9 @@ describe('SettingsDialog', () => {
 
   it('does not offer a step past a limit', async () => {
     vi.spyOn(api, 'settings').mockResolvedValue({ ...settings, maxConcurrentDownloads: 1 });
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
     const simultaneous = await screen.findByRole('group', { name: 'Simultaneous downloads' });
 
     expect(within(simultaneous).getByRole('button', { name: 'Decrease' })).toBeDisabled();
@@ -661,7 +824,9 @@ describe('SettingsDialog', () => {
   // The extension is not published: a code to paste into it asks for a step nobody can take (the
   // owner, #152). The engine keeps the code; the section comes back with the extension.
   it('offers no code for a browser extension that cannot be installed yet', async () => {
-    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
+    );
     await screen.findByText('Simultaneous downloads');
 
     expect(screen.queryByText(/extension/i)).not.toBeInTheDocument();
@@ -672,7 +837,9 @@ describe('SettingsDialog', () => {
     const failure = new Error('offline');
     vi.spyOn(api, 'settings').mockRejectedValue(failure);
     const onError = vi.fn();
-    render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
+    render(
+      <SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} tell={ignore} />,
+    );
 
     await vi.waitFor(() => {
       expect(onError).toHaveBeenCalledWith(failure);

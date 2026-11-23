@@ -4,10 +4,12 @@ import { describe, expect, it } from 'vitest';
 import { ApiError } from './api.ts';
 import {
   accountMagnetMessage,
+  addRefusedMessage,
   bundleActionMessage,
   bundleFailureMessage,
   errorMessage,
   magnetActionMessage,
+  settingNotChangedMessage,
 } from './messages.ts';
 
 describe('the sentence of a code', () => {
@@ -20,6 +22,51 @@ describe('the sentence of a code', () => {
       expect(accountMagnetMessage(error), code).toBe(fallback);
       expect(bundleActionMessage(error, 'retry'), code).toBe(fallback);
     }
+  });
+
+  // INVALID_REQUEST answers a choice of files, a setting and a folder as well as links (#142).
+  it('names no links for a refusal of what any request carried', () => {
+    expect(errorMessage(new ApiError(400, ApiErrorCode.InvalidRequest, 'x'))).toBe(
+      'Scia could not complete the operation. Try again.',
+    );
+  });
+});
+
+describe('what the engine refused of an add', () => {
+  it('names what was sent: links, or magnets', () => {
+    expect(addRefusedMessage('links')).toBe('Scia’s engine did not take the links you pasted.');
+    expect(addRefusedMessage('magnets')).toBe('Scia’s engine did not take the magnets you pasted.');
+  });
+});
+
+describe('a change in Settings not kept', () => {
+  const failure = new ApiError(400, ApiErrorCode.InvalidRequest, 'x');
+
+  it('names the setting whose change was lost, for every cause', () => {
+    expect(settingNotChangedMessage('maxConcurrentDownloads', failure)).toBe(
+      'Scia could not change the number of simultaneous downloads. Try again.',
+    );
+    expect(settingNotChangedMessage('connectionsPerDownload', new TypeError('offline'))).toBe(
+      'Scia could not change the number of connections per download. Try again.',
+    );
+    expect(settingNotChangedMessage('speedLimitBytesPerSecond', failure)).toBe(
+      'Scia could not change the speed limit. Try again.',
+    );
+    expect(settingNotChangedMessage('theme', failure)).toBe(
+      'Scia could not change the theme. Try again.',
+    );
+    expect(settingNotChangedMessage('betaUpdates', failure)).toBe(
+      'Scia could not change whether it updates to beta versions. Try again.',
+    );
+    expect(settingNotChangedMessage('watchClipboard', failure)).toBe(
+      'Scia could not change whether it takes links from the clipboard. Try again.',
+    );
+  });
+
+  // Trying again does not mend a window the engine does not know: the remedy is its own.
+  it('says what a window the engine does not recognize says', () => {
+    const unknown = new ApiError(401, ApiErrorCode.Unauthorized, 'x');
+    expect(settingNotChangedMessage('theme', unknown)).toBe(errorMessage(unknown));
   });
 });
 

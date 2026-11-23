@@ -14,9 +14,9 @@ const REFUSED_STATUS = 400;
 //
 // It answers what became of the folder — changed, kept because the dialog was closed, or
 // refused by the engine as one it cannot use — and rejects for everything that is not about
-// the folder: an engine that fails or says nothing within `limitMs`. The page tells the two
-// apart, and never blames a folder nobody chose. The limit is for the engine's answers, never
-// for the person, who takes the time they need in the dialog.
+// the folder: the system's dialog failing, an engine that fails or says nothing within `limitMs`.
+// The page tells the two apart, and never blames a folder nobody chose. The limit is for the
+// engine's answers, never for the person, who takes the time they need in the dialog.
 export async function chooseDownloadFolder(
   pick: PickFolder,
   engine: EngineAccess,
