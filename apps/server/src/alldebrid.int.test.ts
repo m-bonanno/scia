@@ -931,6 +931,20 @@ describe('AllDebrid', () => {
       });
     });
 
+    it('counts a file the service refused by the entry of its own link, in whatever order it answers', async () => {
+      const server = await serviceWith({
+        redirects: { [FOLDER]: [ONE, THREE] },
+        links: { ...known, [THREE]: { error: 'LINK_DOWN' } },
+        infosAnswer: { reversed: true },
+      });
+
+      expect(await clientOf(server).openLink(KEY, FOLDER)).toEqual({
+        files: [{ link: ONE, name: 'Day 1.mkv', size: 1000 }],
+        unavailable: 1,
+        leftOut: 0,
+      });
+    });
+
     it('names a file after the entry in its place when the service writes no link of those asked', async () => {
       const server = await serviceWith({
         redirects: { [FOLDER]: [ONE, TWO] },

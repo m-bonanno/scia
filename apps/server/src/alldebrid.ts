@@ -170,6 +170,8 @@ const redirectorSchema = z.object({ links: z.array(z.unknown()) });
 // One entry for each link asked, in the order asked: what its host calls the file and its size, or
 // why not (https://docs.alldebrid.com, "Link infos"). Each is read on its own.
 const infosSchema = z.object({ infos: z.array(z.unknown()) });
+// The link an entry is of, a file's or a refusal's alike: read before what it says of it.
+const linkOfSchema = z.object({ link: z.string() });
 const infoSchema = z.object({
   link: z.string(),
   filename: z.string(),
@@ -622,7 +624,7 @@ export class AllDebrid {
         // By the link it names — written in https for one asked in http, as the documentation's
         // example answers — else by its place, the order asked.
         const said =
-          infos.find((info) => sameLink(infoSchema.safeParse(info).data?.link, each)) ??
+          infos.find((info) => sameLink(linkOfSchema.safeParse(info).data?.link, each)) ??
           infos[index];
         const info = infoSchema.safeParse(said);
         if (info.success)

@@ -378,6 +378,60 @@ describe('a link that opens into several files', () => {
     expect(bundleOf(scia)?.failure).toBe(failure);
   });
 
+  it.each([
+    [
+      'refuses the key',
+      { redirects: { [SHORT]: { error: 'AUTH_BLOCKED' } } },
+      BundleFailure.KeyBlocked,
+    ],
+    [
+      'is not premium',
+      { redirects: { [SHORT]: { error: 'MUST_BE_PREMIUM' } } },
+      BundleFailure.NotPremium,
+    ],
+  ] as const)(
+    "fails a shortener's link on its row, and fetches nothing, when the service %s",
+    async (_case, options, failure) => {
+      const { remote, probed } = probing();
+      const scia = await open(await connected(await serviceWith(options)), remote);
+
+      scia.add({ urls: [SHORT] });
+
+      await failed(scia);
+      expect(bundleOf(scia)?.failure).toBe(failure);
+      expect(scia.snapshot().downloads).toEqual([]);
+      expect(probed).toEqual([]);
+    },
+  );
+
+  it("fails a shortener's link on its row, and fetches nothing, when the service cannot be asked", async () => {
+    const { remote, probed } = probing();
+    const alldebrid = await serviceWith();
+    alldebrid.misbehave({ status: 503 });
+    const scia = await open(await connected(alldebrid), remote);
+
+    scia.add({ urls: [SHORT] });
+
+    await failed(scia);
+    expect(bundleOf(scia)?.failure).toBe(BundleFailure.Unavailable);
+    expect(scia.snapshot().downloads).toEqual([]);
+    expect(probed).toEqual([]);
+  });
+
+  it("adds nothing for a shortener's link whose refusal lands after Remove", async () => {
+    const { resolver, asked } = byHand();
+    const scia = await openWith(resolver);
+
+    scia.add({ urls: [SHORT, FOLDER] });
+    await until(() => asked.length === 1);
+    scia.removeBundle(bundleOf(scia)?.id ?? '');
+    asked[0]?.refuse(new ServiceError(IntegrationId.AllDebrid, UnlockFailure.LinkRefused, 'no'));
+    await until(() => asked.length === 2);
+
+    expect(scia.snapshot().downloads).toEqual([]);
+    expect(scia.snapshot().bundles.map((each) => each.name)).toEqual(['Holiday films']);
+  });
+
   it("says the service found nothing behind a file host's folder", async () => {
     const scia = await open(await connected(await serviceWith({ redirects: { [FOLDER]: [] } })));
 
@@ -625,6 +679,29 @@ describe('a link that opens into several files', () => {
       DownloadStatus.Ready,
     );
     expect(scia.snapshot().downloads).toHaveLength(1);
+  });
+
+  it('opens a copied folder into the download folder it was copied for, whatever the setting is at its Start', async () => {
+    const scia = await open(await connected(await serviceWith()));
+    const [offered] = await scia.offer([FOLDER]);
+    await scia.setDownloadDirectory(join(folder.path, 'elsewhere'));
+
+    scia.start(offered?.id ?? '');
+    await choosing(scia);
+    const [started] = scia.startBundle(bundleOf(scia)?.id ?? '', [0]);
+
+    expect(started?.directory).toBe(join(downloads(), 'Holiday films'));
+  });
+
+  it('does not offer again from the clipboard a folder already in the list on a row of its own', async () => {
+    const alldebrid = await serviceWith();
+    alldebrid.misbehave({ silent: true });
+    const scia = await open(await connected(alldebrid));
+    scia.add({ urls: [FOLDER] });
+
+    expect(await scia.offer([FOLDER])).toEqual([]);
+    expect(scia.snapshot().downloads).toEqual([]);
+    expect(scia.snapshot().bundles).toHaveLength(1);
   });
 
   it('leaves a copied folder out while no service is connected: a copy is not a request to connect', async () => {

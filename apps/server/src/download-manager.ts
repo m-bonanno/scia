@@ -461,7 +461,8 @@ export class DownloadManager {
       .filter((url) => !bundled.includes(url))
       .map((url) => this.#newRecord(url, input.referrer ?? null, DownloadStatus.Queued));
     this.#records.push(...added);
-    for (const url of bundled) this.#addBundle(url, input.referrer ?? null);
+    for (const url of bundled)
+      this.#addBundle(url, input.referrer ?? null, this.#settings.downloadDirectory);
     if (bundled.length > 0) this.#deps.logger.info('bundles_added', { links: bundled.length });
     this.#changed();
     this.#schedule();
@@ -518,8 +519,11 @@ export class DownloadManager {
     const taken = await Promise.all(
       urls.map(async (url) => ((await this.#isOffered(url)) ? url : undefined)),
     );
-    // Read after the wait: another offer may have added some of them meanwhile.
-    const known = new Set(this.#records.map((record) => addressOf(record.url)));
+    // Read after the wait: another offer may have added some of them meanwhile. A link on a row of
+    // its own, waiting for its files to be chosen, is in the list too (#181).
+    const known = new Set(
+      [...this.#records, ...this.#bundles].map((record) => addressOf(record.url)),
+    );
     const added: DownloadRecord[] = [];
     for (const url of taken) {
       if (url === undefined || known.has(addressOf(url))) continue;
@@ -635,7 +639,7 @@ export class DownloadManager {
     record.status = DownloadStatus.Queued;
     if (!this.#opensIntoSeveral(record.url)) return;
     this.#records.splice(this.#records.indexOf(record), 1);
-    this.#addBundle(record.url, record.referrer);
+    this.#addBundle(record.url, record.referrer, record.directory);
   }
 
   async pause(id: string): Promise<Download> {
@@ -867,7 +871,7 @@ export class DownloadManager {
     return kind === BundleKind.Folder || resolver.hasService();
   }
 
-  #addBundle(url: string, referrer: string | null): void {
+  #addBundle(url: string, referrer: string | null, directory: string): void {
     const record: BundleRecord = {
       id: (this.#deps.newId ?? randomUUID)(),
       url,
@@ -878,7 +882,7 @@ export class DownloadManager {
       files: [],
       unavailable: 0,
       leftOut: 0,
-      directory: this.#settings.downloadDirectory,
+      directory,
       createdAt: new Date(this.#now()).toISOString(),
     };
     this.#bundles.push(record);
