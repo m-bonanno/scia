@@ -87,8 +87,18 @@ const UNTITLED = 'video';
 // host's. One it has not said of by then is not taken: no link is offered on a guess.
 const OFFER_HOST_LIMIT_MS = 5000;
 // What the host of a direct link a service gave answers once the link has expired (#180).
-// AllDebrid's documentation does not say how long a link lasts, nor how it answers after.
+// AllDebrid's documentation does not say how long a link lasts, nor how it answers after, and
+// names no code of its own for it.
 const EXPIRED = new Set([403, 410]);
+
+// A web page where the file of a service's direct link was (docs/adr/0022). Its failure is the
+// one of a host that refuses the link, with no status: the row says the link the service gave
+// no longer works, and that "Retry" asks for a new one.
+class NotTheFile extends RemoteError {
+  constructor() {
+    super(DownloadFailure.HttpStatus, false, 'The link the service gave answered a web page.');
+  }
+}
 
 export const ManagerRefusal = {
   NotFound: 'NOT_FOUND',
@@ -889,6 +899,7 @@ export class DownloadManager {
 
   async #run(record: DownloadRecord, running: Running): Promise<void> {
     const { signal } = running.controller;
+    const kept = record.unlockedUrl;
     try {
       const located = await this.#locate(record, signal);
       const { url, headers, remote, kind } = located;
@@ -917,7 +928,8 @@ export class DownloadManager {
         return;
       }
       this.#adopt(record, remote);
-      await this.#runFile(record, running, url, headers, signal);
+      const givenAgain = kept !== null && record.unlockedUrl !== kept;
+      await this.#runFile(record, running, url, headers, givenAgain, signal);
       await this.#finish(record);
     } catch (error) {
       if (running.task !== undefined) this.#keepProgress(record, running.task);
@@ -931,16 +943,20 @@ export class DownloadManager {
 
   // A file's bytes, from those already on the disk. A direct link a service gave that expires on
   // the way is asked for again, and the download goes on from its bytes on the new one — or from
-  // the first byte, if the new link is another file (#adopt). Once for each link that brought
-  // bytes: one that expires before its first byte fails the download, as each request to the
-  // service can count against what the account is allowed of a host (docs/adr/0022).
+  // the first byte, if the new link is another file or its host serves no ranges (#adopt). Only
+  // for a link that brought bytes the download keeps: one that expires before its first byte, or
+  // a link given again on which the download started from the first byte, fails the download, as
+  // each request to the service can count against what the account is allowed of a host
+  // (docs/adr/0022). `givenAgain`: the link was given again in this run, at its first probe.
   async #runFile(
     record: DownloadRecord,
     running: Running,
     url: string,
     headers: RequestHeaders,
+    givenAgain: boolean,
     signal: AbortSignal,
   ): Promise<void> {
+    let last = givenAgain && record.downloadedBytes === 0;
     for (let link = url; ;) {
       let brought = 0;
       const task = new DownloadTask({
@@ -966,12 +982,30 @@ export class DownloadManager {
         this.#keepProgress(record, task);
         return;
       } catch (error) {
-        if (brought === 0 || signal.aborted || !this.#expired(record, error)) throw error;
+        // A pause that lands between the refusal and here: the service is not asked while the
+        // download stops.
+        if (last || brought === 0 || signal.aborted || !this.#expired(record, error)) throw error;
         this.#keepProgress(record, task);
       }
       link = await this.#unlockAgain(record, signal);
-      this.#adopt(record, await this.#deps.source.probe(link, headers, signal));
+      this.#adopt(record, await this.#probe(record, link, headers, signal));
+      last = record.downloadedBytes === 0;
     }
+  }
+
+  // What the host of a link says of its file. A web page from a service's direct link, for a
+  // download whose file is already named — a link kept over a pause or a restart, or given again
+  // — is not that file: most likely what is answered for a link that has expired. It is never
+  // saved over the bytes. A first link that answers a page is the file the service unlocked.
+  async #probe(
+    record: DownloadRecord,
+    url: string,
+    headers: RequestHeaders,
+    signal: AbortSignal,
+  ): Promise<RemoteFile> {
+    const remote = await this.#deps.source.probe(url, headers, signal);
+    if (record.via !== null && record.named && remote.isPage) throw new NotTheFile();
+    return remote;
   }
 
   // The host of a direct link a service gave says the link has expired.
@@ -980,9 +1014,8 @@ export class DownloadManager {
       this.#deps.resolver !== undefined &&
       record.via !== null &&
       record.unlockedUrl !== null &&
-      error instanceof RemoteError &&
-      error.status !== null &&
-      EXPIRED.has(error.status)
+      (error instanceof NotTheFile ||
+        (error instanceof RemoteError && error.status !== null && EXPIRED.has(error.status)))
     );
   }
 
@@ -1145,12 +1178,13 @@ export class DownloadManager {
     const headers = headersOf(record);
     let remote: RemoteFile;
     try {
-      remote = await this.#deps.source.probe(url, headers, signal);
+      remote = await this.#probe(record, url, headers, signal);
     } catch (error) {
-      // A direct link kept from before — a pause, a restart — that expired meanwhile.
+      // A direct link kept from before — a pause, a restart — that expired meanwhile. One the
+      // service has just given has brought nothing: it is not asked for again.
       if (url !== kept || !this.#expired(record, error)) throw error;
       url = await this.#unlockAgain(record, signal);
-      remote = await this.#deps.source.probe(url, headers, signal);
+      remote = await this.#probe(record, url, headers, signal);
     }
     const asItStands = { url, headers, remote, kind: 'file' } as const;
     if (!remote.isPage || record.named || record.via !== null) return asItStands;

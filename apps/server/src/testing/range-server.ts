@@ -16,6 +16,9 @@ export interface RangeServerOptions {
   readonly dropAfterBytes?: number;
   // Answers every request with this status and no body.
   readonly status?: number;
+  // Answers every request but the first byte's with this status and no body: a link that says
+  // what the file is, and gives none of it.
+  readonly refusesRanges?: number;
   // Answers this many requests for a range other than the first byte with 204 No Content,
   // as a direct link of AllDebrid did while the service was, most likely, still fetching the
   // file from its hoster (#65).
@@ -43,9 +46,9 @@ export interface RangeServer {
     readonly acceptEncoding: string | undefined;
   }[];
   // Every link asked for so far — a path and query — expires, as a direct link a service gives
-  // does after a while: what it is sending is cut, and it answers `status` from now on. A link
-  // asked for afterwards is good.
-  expireLinks(status: number): void;
+  // does after a while: what it is sending is cut, and it answers from now on with `answer` — a
+  // status and no body, or a web page. A link asked for afterwards is good.
+  expireLinks(answer: number | 'page'): void;
   // The bytes of bodies sent on a link, by its path and query.
   sentOn(link: string): number;
   close(): Promise<void>;
@@ -87,7 +90,7 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
 
   let noContent = options.noContent ?? 0;
   let firstByteAs200 = options.firstByteAs200 ?? 0;
-  const expired = new Map<string, number>();
+  const expired = new Map<string, number | 'page'>();
   const answering = new Map<ServerResponse, string>();
   const sent = new Map<string, number>();
 
@@ -101,7 +104,16 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
       referer: request.headers.referer,
       acceptEncoding: request.headers['accept-encoding'],
     });
-    const status = options.status ?? expired.get(link);
+    const firstByte = request.headers.range === 'bytes=0-0';
+    const status =
+      options.status ?? expired.get(link) ?? (firstByte ? undefined : options.refusesRanges);
+    if (status === 'page') {
+      const page = Buffer.from('<!doctype html><title>This link has expired</title>');
+      response
+        .writeHead(200, { 'content-type': 'text/html', 'content-length': String(page.length) })
+        .end(page);
+      return;
+    }
     if (status !== undefined) {
       response.writeHead(status).end();
       return;
@@ -111,7 +123,6 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
     const counted = (count: number) => {
       sent.set(link, (sent.get(link) ?? 0) + count);
     };
-    const firstByte = request.headers.range === 'bytes=0-0';
     if (request.headers.range !== undefined && !firstByte && noContent > 0) {
       noContent -= 1;
       response.writeHead(204).end();
@@ -158,8 +169,8 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
     url: `http://127.0.0.1:${String(port)}/files/sample.bin`,
     ranges,
     asked,
-    expireLinks: (status) => {
-      for (const each of asked) expired.set(each.link ?? '', status);
+    expireLinks: (answer) => {
+      for (const each of asked) expired.set(each.link ?? '', answer);
       for (const [response, link] of answering) {
         if (expired.has(link)) response.destroy();
       }

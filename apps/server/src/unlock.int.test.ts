@@ -838,6 +838,7 @@ describe('a link that goes through a service', () => {
     // Slow enough to be caught on the way: four connections of 16 KiB every few milliseconds.
     const slow = { fileName: 'Film.mkv', chunkBytes: 16 * 1024, chunkDelayMs: 5 } as const;
     const nth = (given: number) => `/files/sample.bin?link=${String(given)}`;
+    const PAGE = '<!doctype html><title>This link has expired</title>';
 
     // A new direct link each time the service is asked, as AllDebrid gives: on these hosts in
     // turn, the last one again once they run out.
@@ -924,6 +925,132 @@ describe('a link that goes through a service', () => {
       expect(failed.downloadedBytes).toBeGreaterThan(0);
     });
 
+    it('fails with what the host answers when the link given again says what the file is and refuses its bytes, and asks no more', async () => {
+      const host = await fileHost(slow);
+      const refusing = await fileHost({ refusesRanges: 403 });
+      const alldebrid = await serviceWith({ links: inTurn(host, refusing) });
+      const downloads = await open(await connected(alldebrid));
+      const [added] = downloads.add({ urls: [LINK] });
+      await until(() => host.sentOn(nth(1)) > MIB);
+
+      host.expireLinks(410);
+      const failed = await finished(downloads, added!.id, DownloadStatus.Failed);
+
+      expect(failed.failure).toBe(DownloadFailure.HttpStatus);
+      expect(failed.failureStatus).toBe(403);
+      expect(unlocks(alldebrid)).toHaveLength(2);
+      expect(failed.downloadedBytes).toBeGreaterThan(0);
+    });
+
+    it('fails with what the host answers when the first link the service gives is refused, asking once', async () => {
+      const refusing = await fileHost({ status: 403 });
+      const host = await fileHost(slow);
+      const alldebrid = await serviceWith({ links: inTurn(refusing, host) });
+      const downloads = await open(await connected(alldebrid));
+      const [added] = downloads.add({ urls: [LINK] });
+
+      const failed = await finished(downloads, added!.id, DownloadStatus.Failed);
+
+      expect(failed.failureStatus).toBe(403);
+      expect(unlocks(alldebrid)).toHaveLength(1);
+      expect(host.asked).toEqual([]);
+    });
+
+    // A link given again on which the download started from the first byte keeps nothing of
+    // what came before: asked for again at each expiry, a file that outlives every link would
+    // never end, and the service would be asked without end.
+    it('asks no more once a link given again started from the first byte, on a host that serves no ranges', async () => {
+      const host = await fileHost({ ...slow, ranges: false });
+      const alldebrid = await serviceWith({ links: inTurn(host) });
+      const downloads = await open(await connected(alldebrid));
+      const [added] = downloads.add({ urls: [LINK] });
+      await until(() => host.sentOn(nth(1)) > MIB);
+      host.expireLinks(410);
+      await until(() => host.sentOn(nth(2)) > MIB);
+
+      host.expireLinks(410);
+      const failed = await finished(downloads, added!.id, DownloadStatus.Failed);
+
+      expect(failed.failure).toBe(DownloadFailure.HttpStatus);
+      expect(failed.failureStatus).toBe(410);
+      expect(unlocks(alldebrid)).toHaveLength(2);
+    });
+
+    it('asks no more once a link given again started from the first byte, as another file', async () => {
+      const first = await fileHost({ ...slow, etag: '"a"' });
+      const second = await fileHost({ ...slow, etag: '"b"' });
+      const alldebrid = await serviceWith({ links: inTurn(first, second, first) });
+      const downloads = await open(await connected(alldebrid));
+      const [added] = downloads.add({ urls: [LINK] });
+      await until(() => first.sentOn(nth(1)) > MIB);
+      first.expireLinks(410);
+      await until(() => second.sentOn(nth(2)) > MIB);
+
+      second.expireLinks(410);
+      const failed = await finished(downloads, added!.id, DownloadStatus.Failed);
+
+      expect(failed.failureStatus).toBe(410);
+      expect(unlocks(alldebrid)).toHaveLength(2);
+    });
+
+    it('asks no more once a link given again after a pause started from the first byte', async () => {
+      const first = await fileHost({ ...slow, etag: '"a"' });
+      const second = await fileHost({ ...slow, etag: '"b"' });
+      const alldebrid = await serviceWith({ links: inTurn(first, second, first) });
+      const downloads = await open(await connected(alldebrid));
+      const [added] = downloads.add({ urls: [LINK] });
+      await until(() => first.sentOn(nth(1)) > MIB);
+      await downloads.pause(added!.id);
+      first.expireLinks(403);
+      downloads.resume(added!.id);
+      await until(() => second.sentOn(nth(2)) > MIB);
+
+      second.expireLinks(410);
+      const failed = await finished(downloads, added!.id, DownloadStatus.Failed);
+
+      expect(failed.failureStatus).toBe(410);
+      expect(unlocks(alldebrid)).toHaveLength(2);
+    });
+
+    // A web page where the file was is not the file: most likely what the service or its host
+    // answers for a link that has expired. It is never saved under the file's name.
+    it('asks the service again when the link kept over a pause answers a web page, and goes on from its bytes', async () => {
+      const host = await fileHost(slow);
+      const alldebrid = await serviceWith({ links: inTurn(host) });
+      const downloads = await open(await connected(alldebrid));
+      const [added] = downloads.add({ urls: [LINK] });
+      await until(() => host.sentOn(nth(1)) > 2 * MIB);
+      await downloads.pause(added!.id);
+
+      host.expireLinks('page');
+      downloads.resume(added!.id);
+      await finished(downloads, added!.id, DownloadStatus.Completed);
+
+      expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
+      expect(unlocks(alldebrid)).toHaveLength(2);
+      expect(host.sentOn(nth(2))).toBeLessThan(body.length - MIB);
+    });
+
+    it('fails, saving nothing, when the link given again answers a web page too', async () => {
+      const host = await fileHost(slow);
+      const pages = await fileHost({ body: Buffer.from(PAGE), contentType: 'text/html' });
+      const alldebrid = await serviceWith({ links: inTurn(host, pages) });
+      const downloads = await open(await connected(alldebrid));
+      const [added] = downloads.add({ urls: [LINK] });
+      await until(() => host.sentOn(nth(1)) > MIB);
+      await downloads.pause(added!.id);
+
+      host.expireLinks('page');
+      downloads.resume(added!.id);
+      const failed = await finished(downloads, added!.id, DownloadStatus.Failed);
+
+      expect(failed.failure).toBe(DownloadFailure.HttpStatus);
+      expect(failed.failureStatus).toBeNull();
+      expect(unlocks(alldebrid)).toHaveLength(2);
+      expect(failed.downloadedBytes).toBeGreaterThan(0);
+      expect(existsSync(inDownloads('Film.mkv'))).toBe(false);
+    });
+
     it.each([
       { what: 'of another size', other: randomBytes(3 * MIB + 1), etag: undefined },
       {
@@ -960,12 +1087,18 @@ describe('a link that goes through a service', () => {
       const downloads = await open(await connected(alldebrid));
       const [added] = downloads.add({ urls: [host.url] });
       await until(() => host.sentOn('/files/sample.bin') > MIB);
+      const askedBefore = host.asked.length;
 
       host.expireLinks(403);
       const failed = await finished(downloads, added!.id, DownloadStatus.Failed);
 
       expect(failed.failureStatus).toBe(403);
       expect(unlocks(alldebrid)).toHaveLength(0);
+      // At once: the host is not asked again what the file is, and nothing is said of a new link.
+      expect(host.asked.slice(askedBefore).filter((each) => each.range === 'bytes=0-0')).toEqual(
+        [],
+      );
+      expect(logged.join('\n')).not.toContain('link_unlocked_again');
     });
   });
 
