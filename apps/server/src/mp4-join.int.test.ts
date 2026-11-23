@@ -48,6 +48,17 @@ describe('joinIntoMp4', () => {
     ).rejects.toThrow('paused');
   });
 
+  it('refuses fragmented files that keep samples in their movie, rather than join them without those samples', async () => {
+    await copyFile(join(FIXTURES, 'picture-movie-samples.mp4'), at('picture'));
+    await copyFile(join(FIXTURES, 'sound-movie-samples.m4a'), at('sound'));
+
+    expect(
+      await failureOf(
+        joinIntoMp4(at('picture'), at('sound'), at('joined'), new AbortController().signal),
+      ),
+    ).toBe(PageFailure.FormatUnsupported);
+  });
+
   it('refuses a file cut short as unreadable, and two of one kind as a format it does not join', async () => {
     const { size } = await stat(at('sound'));
     await truncate(at('sound'), size - 100);

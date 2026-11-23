@@ -202,6 +202,17 @@ export interface Movie {
   readonly trex: Uint8Array | undefined;
   readonly fragmentDuration: number | undefined;
   readonly fragmented: boolean;
+  // How many samples its own tables hold: all of them for a movie that is not fragmented, none
+  // for most that are.
+  readonly samples: number;
+}
+
+// The samples a track's tables hold, by their sizes (`stsz`, or the compact `stz2`).
+function samplesOf(trak: Uint8Array): number {
+  const stbl = needChild(needChild(needChild(trak, 'mdia'), 'minf'), 'stbl');
+  const sizes = childOf(stbl, 'stsz') ?? childOf(stbl, 'stz2');
+  if (sizes === undefined) return 0;
+  return viewOf(sizes).getUint32(payloadStart(sizes) + 8);
 }
 
 export function movieOf(moov: Uint8Array): Movie {
@@ -239,6 +250,7 @@ export function movieOf(moov: Uint8Array): Movie {
         ? undefined
         : readWide(viewOf(mehd), payloadStart(mehd) + 4, versionOf(mehd) === 1),
     fragmented: mvex !== undefined,
+    samples: samplesOf(trak),
   };
 }
 
@@ -498,6 +510,9 @@ function fragmentsOf(source: Mp4Source, movie: Movie): Fragment[] {
         at: decodeTime / movie.mediaTimescale,
       });
       pending = undefined;
+    } else if (box.type === 'mdat') {
+      // Media data no fragment names: the movie's own samples, which the plan does not copy.
+      throw unsupported('A fragmented file has media data outside its fragments.');
     }
   }
   if (pending !== undefined) throw unreadable('A fragment has no data.');
@@ -650,14 +665,26 @@ function progressivePlan(
 // The joined mp4, as what is written in order: the picture's track first, the sound's second, the
 // media bytes of both as they are.
 export function joinPlan(pictureSource: Mp4Source, soundSource: Mp4Source): Written[] {
-  const picture = movieIn(pictureSource);
-  const sound = movieIn(soundSource);
-  if (picture.handler !== 'vide') throw unsupported('The picture is not a picture.');
-  if (sound.handler !== 'soun') throw unsupported('The sound is not sound.');
-  if (picture.fragmented !== sound.fragmented) {
-    throw unsupported('One file is fragmented and the other is not.');
+  try {
+    const picture = movieIn(pictureSource);
+    const sound = movieIn(soundSource);
+    if (picture.handler !== 'vide') throw unsupported('The picture is not a picture.');
+    if (sound.handler !== 'soun') throw unsupported('The sound is not sound.');
+    if (picture.fragmented !== sound.fragmented) {
+      throw unsupported('One file is fragmented and the other is not.');
+    }
+    // A fragmented movie may keep its first samples in its own tables, before any fragment
+    // (ISO/IEC 14496-12 allows it; ffmpeg writes it without `empty_moov`). The plan copies
+    // fragments only: such a file is not joined, rather than joined without them.
+    if (picture.fragmented && (picture.samples > 0 || sound.samples > 0)) {
+      throw unsupported('A fragmented file keeps samples in its movie.');
+    }
+    return picture.fragmented
+      ? fragmentedPlan(pictureSource, picture, soundSource, sound)
+      : progressivePlan(pictureSource, picture, soundSource, sound);
+  } catch (error) {
+    // A box too short for the fields it must hold is read past its end.
+    if (error instanceof RangeError) throw unreadable('A box is too short for what it holds.');
+    throw error;
   }
-  return picture.fragmented
-    ? fragmentedPlan(pictureSource, picture, soundSource, sound)
-    : progressivePlan(pictureSource, picture, soundSource, sound);
 }

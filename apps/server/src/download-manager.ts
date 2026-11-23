@@ -59,6 +59,14 @@ import type { DownloadRecord, MagnetRecord, StateStore } from './state-store.ts'
 import { Throttle } from './throttle.ts';
 
 export const PART_SUFFIX = '.scia';
+// What a download keeps beside its name while it runs: its part file, a stream's pieces, and a
+// pair's picture and sound.
+const WORKING_SUFFIXES = [
+  PART_SUFFIX,
+  piecesOf(PART_SUFFIX),
+  pictureOf(PART_SUFFIX),
+  soundOf(PART_SUFFIX),
+] as const;
 
 const DEFAULT_SETTINGS = {
   maxConcurrentDownloads: 3,
@@ -890,8 +898,9 @@ export class DownloadManager {
         );
         record.timeline = null;
       }
-      // So are the picture and the sound of a pair that a new reading made something else.
-      if (kind !== 'pair' && record.named) await this.#removePair(record);
+      // So are the picture and the sound of a pair that a new reading made something else: a
+      // page's video only, the one kind of download that is ever a pair.
+      if (kind !== 'pair' && record.named && record.fromPage) await this.#removePair(record);
       await mkdir(record.directory, { recursive: true }).catch((error: unknown) => {
         throw new DiskError('The folder could not be made.', { cause: error });
       });
@@ -1213,13 +1222,27 @@ export class DownloadManager {
         .filter((other) => other !== record && other.named && other.directory === record.directory)
         .map((other) => other.fileName.toLowerCase()),
     );
-    return uniqueFileName(
-      wanted,
-      (candidate) =>
-        reserved.has(candidate.toLowerCase()) ||
+    // A download keeps files beside its name while it runs — its part file, a stream's pieces, a
+    // pair's picture and sound — and no other file may stand under those names: a name is taken
+    // when one of its working names is, and when it is a working name of a download in the list.
+    const workingOf = (name: string) => WORKING_SUFFIXES.map((suffix) => `${name}${suffix}`);
+    const isWorkingNameOfOne = (lower: string) =>
+      WORKING_SUFFIXES.some(
+        (suffix) =>
+          lower.endsWith(suffix.toLowerCase()) &&
+          reserved.has(lower.slice(0, lower.length - suffix.length)),
+      );
+    return uniqueFileName(wanted, (candidate) => {
+      const lower = candidate.toLowerCase();
+      return (
+        reserved.has(lower) ||
         existsSync(join(record.directory, candidate)) ||
-        existsSync(join(record.directory, `${candidate}${PART_SUFFIX}`)),
-    );
+        workingOf(candidate).some(
+          (name) => reserved.has(name.toLowerCase()) || existsSync(join(record.directory, name)),
+        ) ||
+        isWorkingNameOfOne(lower)
+      );
+    });
   }
 
   async #finish(record: DownloadRecord): Promise<void> {

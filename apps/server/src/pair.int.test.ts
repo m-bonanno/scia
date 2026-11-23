@@ -1,4 +1,4 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { boxHeaderOf, boxOf, childrenOf, DownloadStatus, PageFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -273,6 +273,86 @@ describe('DownloadManager and a picture and a sound offered apart (docs/adr/0021
 
     expect(await readdir(downloadsFolder())).toEqual([]);
   });
+
+  it('removes the picture and the sound when the page, read again, gives one file instead', async () => {
+    // Two files it does not join: a plain picture beside a fragmented sound.
+    const { site, picture, sound } = await pairOf('picture.mp4', 'sound-fragmented.m4a');
+    const single = await host({ body: await fixture('picture.mp4') });
+    let apart = true;
+    const downloads = await open({
+      pageReader: reader(() => ({
+        title: 'Changed',
+        formats: apart
+          ? [pictureAt(picture.url), soundAt(sound.url)]
+          : [format(single.url, { acodec: 'mp4a.40.2' })],
+      })),
+    });
+    const [added] = downloads.add({ urls: [site.url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+    // Kept for a retry: the bytes are there.
+    expect((await readdir(downloadsFolder())).sort()).toEqual([
+      'Changed.mp4.scia.picture',
+      'Changed.mp4.scia.sound',
+    ]);
+
+    apart = false;
+    downloads.resume(added!.id);
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(await readdir(downloadsFolder())).toEqual(['Changed.mp4']);
+  });
+
+  it("never names a download after a file that stands where a pair's picture or sound will", async () => {
+    // A host once named a file after what a pair's picture is called while it is fetched.
+    await mkdir(downloadsFolder(), { recursive: true });
+    const theirs = Buffer.from('a finished file of someone else');
+    await writeFile(join(downloadsFolder(), 'clip.mp4.scia.picture'), theirs);
+    const { site, picture, sound } = await pairOf('picture.mp4', 'sound.m4a');
+    const downloads = await open({
+      pageReader: reader(() => ({
+        title: 'clip',
+        formats: [pictureAt(picture.url), soundAt(sound.url)],
+      })),
+    });
+
+    const [added] = downloads.add({ urls: [site.url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(downloads.find(added!.id).fileName).toBe('clip (1).mp4');
+    expect(await readFile(join(downloadsFolder(), 'clip.mp4.scia.picture'))).toEqual(theirs);
+  });
+
+  it("never gives a file the name of a pair's picture while the pair is fetched", async () => {
+    const site = await host({ body: page, contentType: 'text/html' });
+    const picture = await host({
+      body: Buffer.concat([
+        await fixture('picture.mp4'),
+        Buffer.from(boxOf('free', new Uint8Array(2 * 1024 * 1024))),
+      ]),
+      chunkBytes: 16 * 1024,
+      chunkDelayMs: 5,
+    });
+    const sound = await host({ body: await fixture('sound.m4a') });
+    const named = await host({ body: Buffer.from('a file'), fileName: 'clip.mp4.scia.picture' });
+    const downloads = await open({
+      pageReader: reader(() => ({
+        title: 'clip',
+        formats: [pictureAt(picture.url), soundAt(sound.url)],
+      })),
+    });
+    const [pair] = downloads.add({ urls: [site.url] });
+    await until(() => downloads.find(pair!.id).downloadedBytes > 0);
+
+    const [file] = downloads.add({ urls: [named.url] });
+    await until(() => statusOf(downloads, file!.id) === DownloadStatus.Completed);
+    await until(() => statusOf(downloads, pair!.id) === DownloadStatus.Completed, 30_000);
+
+    expect(downloads.find(file!.id).fileName).not.toBe('clip.mp4.scia.picture');
+    expect(handlersOf(await readFile(join(downloadsFolder(), 'clip.mp4')))).toEqual([
+      'vide',
+      'soun',
+    ]);
+  }, 60_000);
 
   it("never says the sound's address in an answer or in the log", async () => {
     const { site, picture, sound } = await pairOf('picture.mp4', 'sound.m4a', { status: 403 });

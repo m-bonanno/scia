@@ -65,6 +65,8 @@ interface TrackOf {
   readonly duration?: number;
   readonly offsets?: readonly number[];
   readonly edit?: number;
+  // How many samples its own tables hold (`stsz`).
+  readonly samples?: number;
 }
 
 const trak = (track: TrackOf) =>
@@ -76,7 +78,14 @@ const trak = (track: TrackOf) =>
       'mdia',
       mdhd(track.mediaTimescale),
       hdlr(track.handler),
-      boxOf('minf', boxOf('stbl', stco(track.offsets ?? []))),
+      boxOf(
+        'minf',
+        boxOf(
+          'stbl',
+          boxOf('stsz', versionAndFlags(0, 0), u32(0), u32(track.samples ?? 0)),
+          stco(track.offsets ?? []),
+        ),
+      ),
     ),
   );
 
@@ -390,7 +399,10 @@ describe('joinPlan, for two movies that are not fragmented', () => {
     const [pictureTrak] = children(joined, 'trak');
 
     expect(header.byteLength).toBe(16);
-    expect(childrenOf(child(pictureTrak!, 'mdia', 'minf', 'stbl')).map(typeOf)).toEqual(['co64']);
+    expect(childrenOf(child(pictureTrak!, 'mdia', 'minf', 'stbl')).map(typeOf)).toEqual([
+      'stsz',
+      'co64',
+    ]);
     expect(offsetsOf(pictureTrak!)[1]).toBeGreaterThan(0xffffffff);
   });
 
@@ -628,5 +640,62 @@ describe('joinPlan refuses', () => {
 
     expect(refusalOf(() => joinPlan(none, plain('soun')))).toBe(Mp4Refusal.Unreadable);
     expect(refusalOf(() => joinPlan(twice, plain('soun')))).toBe(Mp4Refusal.Unreadable);
+  });
+
+  it('a fragmented file that keeps samples in its movie, or media data outside its fragments, as one it does not join', () => {
+    // ffmpeg without `empty_moov`: the first samples in the movie's tables and an mdat before any fragment.
+    const withSamples = laidOut(
+      FTYP,
+      moov(
+        1000,
+        0,
+        [{ id: 1, handler: 'vide', mediaTimescale: 1000, samples: 10 }],
+        boxOf('mvex', trex(1, 0)),
+      ),
+      moof(1, { trackId: 1, decodeTime: 0 }),
+      { type: 'mdat', size: 8 },
+    );
+    const looseData = laidOut(
+      FTYP,
+      moov(1000, 0, [{ id: 1, handler: 'vide', mediaTimescale: 1000 }], boxOf('mvex', trex(1, 0))),
+      { type: 'mdat', size: 50 },
+      moof(1, { trackId: 1, decodeTime: 0 }),
+      { type: 'mdat', size: 8 },
+    );
+
+    expect(refusalOf(() => joinPlan(withSamples, fragmented('soun')))).toBe(Mp4Refusal.Unsupported);
+    expect(refusalOf(() => joinPlan(fragmented('vide'), withSamples))).toBe(Mp4Refusal.Unsupported);
+    expect(refusalOf(() => joinPlan(looseData, fragmented('soun')))).toBe(Mp4Refusal.Unsupported);
+  });
+
+  it('a box too short for the fields it holds as unreadable, never as an error of another kind', () => {
+    const short = (type: string) => boxOf(type, versionAndFlags(0, 0));
+    const withMvhd = laidOut(
+      FTYP,
+      boxOf('moov', short('mvhd'), trak({ id: 1, handler: 'vide', mediaTimescale: 1 })),
+      {
+        type: 'mdat',
+        size: 8,
+      },
+    );
+    const withTkhd = laidOut(
+      FTYP,
+      boxOf(
+        'moov',
+        mvhd(1000, 0),
+        boxOf('trak', short('tkhd'), boxOf('mdia', mdhd(1), hdlr('vide'))),
+      ),
+      { type: 'mdat', size: 8 },
+    );
+    const withTfhd = laidOut(
+      FTYP,
+      moov(1000, 0, [{ id: 1, handler: 'vide', mediaTimescale: 1000 }], boxOf('mvex', trex(1, 0))),
+      boxOf('moof', boxOf('mfhd', versionAndFlags(0, 0), u32(1)), boxOf('traf', short('tfhd'))),
+      { type: 'mdat', size: 8 },
+    );
+
+    expect(refusalOf(() => joinPlan(withMvhd, plain('soun')))).toBe(Mp4Refusal.Unreadable);
+    expect(refusalOf(() => joinPlan(withTkhd, plain('soun')))).toBe(Mp4Refusal.Unreadable);
+    expect(refusalOf(() => joinPlan(withTfhd, fragmented('soun')))).toBe(Mp4Refusal.Unreadable);
   });
 });

@@ -5,7 +5,7 @@
 // who regenerates them; Scia neither ships nor runs it).
 //
 // Two of each: a plain mp4, its movie before its media, and a fragmented one as a DASH site gives
-// it — one file, a `sidx`, then a fragment a second.
+// it — one file, a `sidx`, then a fragment a second. And one of each Scia refuses to join.
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, renameSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -50,6 +50,17 @@ const ffmpeg = (...args) => ffmpegIn(here, ...args);
 
 ffmpeg(...picture, '-movflags', '+faststart', join(here, 'picture.mp4'));
 ffmpeg(...sound, '-movflags', '+faststart', join(here, 'sound.m4a'));
+// Fragmented, its first samples kept in its movie before any fragment, as ffmpeg writes it without
+// `empty_moov`: a layout Scia does not join (docs/adr/0021).
+ffmpeg(...picture, '-movflags', 'frag_keyframe', join(here, 'picture-movie-samples.mp4'));
+ffmpeg(
+  ...sound,
+  '-movflags',
+  'frag_keyframe',
+  '-frag_duration',
+  '1000000',
+  join(here, 'sound-movie-samples.m4a'),
+);
 
 for (const [name, source] of [
   ['picture-fragmented.mp4', picture],
