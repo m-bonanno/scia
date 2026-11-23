@@ -72,6 +72,8 @@ A notification when a download ends (#45); "Open" and "Show in folder" are alrea
 
 A window that was shown while another was in use can believe it is in front, and Scia is then silent until the person clicks into it and away, or minimises it, or closes it into the tray — a start during which they went back to their work. Under script it did at some starts and not at others, and what decides it is not known; not seen by hand (#62).
 
+**Built** (#62, [ADR 0020](../adr/0020-the-window-in-use-asked-of-windows.md)): on Windows main asks the system which window is in use (`GetForegroundWindow`, through PowerShell) when a notification is about to be decided; a system that does not answer counts as another window in use. **Seen**: specs of the decision (the system believed over the window), of the question asked of Windows (a handle, and nothing when the system cannot be asked), and the E2E suite in CI. **Not seen**: a start by hand, back to another window with no click into Scia, then a download that ends (#13).
+
 ### A second failure notified
 
 When a download fails again within a quarter of a second of being tried again, while something else downloads, its second failure is not said to a person who leaves the window within two seconds (#55).

@@ -5,6 +5,7 @@ import { guardPermissions } from './engine/page-permissions.ts';
 import { hasIntegratedTitleBar, titleBarOverlay, windowFrameOptions } from './engine/title-bar.ts';
 import { windowIconFile } from './engine/window-icon.ts';
 import { isInFront, isPutAway, type WindowState } from './engine/window-state.ts';
+import { foregroundWindow, handleOf } from './foreground-window.ts';
 
 export interface WindowLog {
   warn(message: string, details: object): void;
@@ -132,9 +133,19 @@ export class MainWindow {
     return !this.#window.isDestroyed() && this.#window.isVisible();
   }
 
-  // Whether the person is looking at it (engine/window-state.ts).
-  isInFront(): boolean {
-    return !this.#window.isDestroyed() && isInFront(this.#state());
+  // Whether the person is looking at it (engine/window-state.ts). On Windows the system says which
+  // window is in use (#62, ADR 0020); a system that does not answer counts as another window in
+  // use: a notification too many is better than one that never comes.
+  async isInFront(): Promise<boolean> {
+    if (this.#window.isDestroyed()) return false;
+    let inUse: boolean | undefined;
+    if (process.platform === 'win32') {
+      const foreground = await foregroundWindow();
+      if (this.#window.isDestroyed()) return false;
+      inUse =
+        foreground !== undefined && foreground === handleOf(this.#window.getNativeWindowHandle());
+    }
+    return isInFront(this.#state(), inUse);
   }
 
   // Whether it was put away for the tray to bring back — not merely minimised.

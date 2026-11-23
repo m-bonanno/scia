@@ -189,11 +189,13 @@ async function boot(): Promise<void> {
         clearTimeout(timer);
       };
     },
-    deliver: notifyEnded,
+    deliver: (downloads) => {
+      void notifyEnded(downloads);
+    },
   });
 
-  function notifyEnded(downloads: readonly Ended[]): void {
-    const inFront = window.isInFront();
+  async function notifyEnded(downloads: readonly Ended[]): Promise<void> {
+    const inFront = await window.isInFront();
     // Idle in the tray: the window was put away and nothing is running or waiting any more.
     const lastOfHiddenScia = window.isPutAway() && unfinished(activityOf(latest)) === 0;
     const completed = downloads.filter((download) => download.ending === Ending.Completed).length;
@@ -236,11 +238,11 @@ async function boot(): Promise<void> {
     read: () => clipboard.readText(),
     offer: (links) => offerToEngine(links, engine(), OFFER_ANSWER_LIMIT_MS),
     added: (added) => {
-      notifyOffered('clipboard_links_added', added, offeredNotice);
+      void notifyOffered('clipboard_links_added', added, offeredNotice);
     },
     offerMagnets: (magnets) => offerMagnetsToEngine(magnets, engine(), OFFER_ANSWER_LIMIT_MS),
     sent: (sent) => {
-      notifyOffered('clipboard_magnets_sent', sent, sentNotice);
+      void notifyOffered('clipboard_magnets_sent', sent, sentNotice);
     },
     every: (ms, run) => {
       const timer = setInterval(run, ms);
@@ -251,12 +253,12 @@ async function boot(): Promise<void> {
     log,
   });
 
-  function notifyOffered(
+  async function notifyOffered(
     event: string,
     added: number,
     noticeOf: (count: number) => { title: string; body: string },
-  ): void {
-    const inFront = window.isInFront();
+  ): Promise<void> {
+    const inFront = await window.isInFront();
     log.info(event, { added, inFront });
     if (added === 0 || isQuitting() || inFront || !Notification.isSupported()) return;
     const text = noticeOf(added);

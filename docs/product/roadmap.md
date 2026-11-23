@@ -14,7 +14,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 
 ### Build
 
-- [ ] The window really in use before Scia stays silent (#62) — a native call and an ADR.
+- [ ] The window really in use before Scia stays silent (#62): built ([ADR 0020](../adr/0020-the-window-in-use-asked-of-windows.md)), to be seen by hand (#13).
 - [ ] The `--inspect` fuse off in the shipped app, and the installer's smoke test driving it by the page's debugging port (#115).
 - [ ] A video and its sound offered apart, joined into one mp4 (#99), piece 3 of the video of a page (#89).
 - [ ] A link that expires during a long download, unlocked again keeping the bytes (#180).
@@ -73,7 +73,7 @@ None open: all were settled on 21 November 2026 ([decisions.md](./decisions.md#2
 | [Speed limit for all downloads](./evidence.md#the-speed-limit)                                                            | #41, #43   | yes   | E2E, Script                          | a hand on the menu; HTTPS in the app                        | yes       |
 | [The speed limit of one download](./evidence.md#the-speed-limit)                                                          | #42        | no    | —                                    | —                                                           | no        |
 | [A notification when a download ends](./evidence.md#the-notification-when-a-download-ends)                                | #45        | yes   | Script (main's log)                  | a notification looked at or clicked                         | yes       |
-| [The window really in use](./evidence.md#the-window-really-in-use)                                                        | #62        | no    | —                                    | —                                                           | yes       |
+| [The window really in use](./evidence.md#the-window-really-in-use)                                                        | #62        | yes   | Specs                                | a start by hand, back to another window                     | yes       |
 | [A second failure notified](./evidence.md#a-second-failure-notified)                                                      | #55        | no    | —                                    | —                                                           | no        |
 | [A click on a notification leads to the row](./evidence.md#the-notification-when-a-download-ends)                         | #57        | no    | —                                    | —                                                           | no        |
 | [Clipboard watching (optional)](./evidence.md#links-taken-from-the-clipboard)                                             | #128, #134 | yes   | E2E, Hand                            | a ready row through a service; the packaged app             | yes       |

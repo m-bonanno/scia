@@ -20,6 +20,21 @@ describe('isInFront', () => {
   });
 });
 
+describe('isInFront, with what the system says (#62)', () => {
+  it('believes the system over the window: a window that believes it is focused, while another is in use, is not in front', () => {
+    expect(isInFront(shown, false)).toBe(false);
+  });
+
+  it('is in front when the system says it is the window in use, whatever the window believes', () => {
+    expect(isInFront({ ...shown, focused: false }, true)).toBe(true);
+  });
+
+  it('is never in front hidden or minimised, whatever the system says', () => {
+    expect(isInFront({ ...shown, visible: false }, true)).toBe(false);
+    expect(isInFront({ ...shown, minimised: true }, true)).toBe(false);
+  });
+});
+
 describe('isPutAway', () => {
   it('is put away, for the tray to bring back, when it was shown and is not shown at all now', () => {
     expect(isPutAway({ ...shown, visible: false, focused: false })).toBe(true);
