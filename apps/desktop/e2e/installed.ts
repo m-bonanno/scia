@@ -30,6 +30,8 @@ export interface InstalledScia {
 // What Chromium writes to stderr once its debugging port is open (port 0: one the system chose),
 // read once its line has ended.
 const DEVTOOLS = /DevTools listening on (ws:\/\/\S+)\r?\n/;
+// Chromium lists its targets in milliseconds.
+const TARGETS_LIMIT_MS = 2_000;
 // The page the engine serves, once the window has loaded it.
 const APP_PAGE = /^http:\/\/127\.0\.0\.1:\d+\//;
 
@@ -52,7 +54,9 @@ async function targetsOf(endpoint: string): Promise<Target[]> {
   list.protocol = 'http:';
   list.pathname = '/json/list';
   try {
-    return (await (await fetch(list)).json()) as Target[];
+    // Bounded: a port that holds the answer must not outlast the start's limit (.claude/gotchas.md).
+    const answer = await fetch(list, { signal: AbortSignal.timeout(TARGETS_LIMIT_MS) });
+    return (await answer.json()) as Target[];
   } catch {
     return [];
   }
