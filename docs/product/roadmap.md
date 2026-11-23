@@ -18,8 +18,8 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [x] The `--inspect` fuse off in the shipped app, and the installer's smoke test driving it by the page's debugging port (#115).
 - [ ] A video and its sound offered apart, joined into one mp4 (#99), piece 3 of the video of a page (#89): built ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)), to be seen on a site by the owner on the beta after the merge.
 - [ ] A link that expires during a long download, unlocked again keeping the bytes (#180): built and held by specs ([ADR 0022](../adr/0022-a-direct-link-that-expires.md)), to be seen in the app.
-- [ ] A link that unlocks into several files, shown as a list to tick (#181): built and held by specs ([ADR 0025](../adr/0025-a-link-that-opens-into-several-files.md)), an E2E spec for CI; to be seen in the app, and against the real service, whose answer to a folder nobody has seen.
-- [ ] #7's README and ADR point, once #180 and #181 land.
+- [ ] A link that unlocks into several files, shown as a list to tick: built ([ADR 0025](../adr/0025-a-link-that-opens-into-several-files.md)), held by specs and by CI's E2E (#181, closed by its merge); what is left is to see it in the app and against the real service, whose answer to a folder nobody has seen, in the owner's sitting below (#7).
+- [x] #7's README and ADR point: AllDebrid's row in the README's Integrations table, the roadmap, and the port a service plugs into, [ADR 0005](../adr/0005-a-service-resolves-a-link.md), with [ADR 0025](../adr/0025-a-link-that-opens-into-several-files.md) beside it (#180 and #181 landed).
 - [x] A key sealed just before the app was killed, read back (#69): built ([ADR 0023](../adr/0023-a-key-said-kept-once-it-can-be-read-back.md)), and proven by the E2E suite in CI — the built app killed right after a connection on three new profiles, each key read back.
 - [ ] A save of `state.json` not lost while another process has the file open (#151).
 - [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#13), the folder's button (#40), a paused bar's tone (#58), the key's placeholder (#66: built, held by specs and by CI's E2E in both variants; to be seen in the app, with its capture, in #156), the clipboard's first read (#134), room under notices (#143), the popover's note (#159), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
@@ -33,8 +33,8 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 
 One sitting, from one checklist, on a beta built as a release candidate:
 
-- [ ] AllDebrid with the owner's real key: a hoster link downloaded to the end, the connection by a code, a pasted magnet and the account's magnets, a file host's folder opened into its files (#7, #137, #138, #181).
-- [ ] The real clipboard: links and a magnet copied (#128, #139).
+- [ ] AllDebrid with the owner's real key: a hoster link downloaded to the end, the connection by a code, a pasted magnet and the account's magnets, a file host's folder opened into its files, a protector's link, and a shortener's link to one file (#7, #137, #138, #181).
+- [ ] The real clipboard: links, a magnet and a file host's folder copied (#128, #139, #181).
 - [ ] The tray by hand: the icon, its click, its menu, its tooltip, a notification looked at and clicked (#13).
 - [ ] The installer downloaded by hand through SmartScreen, and run over a previous version with the app started afterwards (#70).
 - [ ] The icon on screen: taskbar, tray, Start menu, desktop, Alt+Tab (#85, #199).

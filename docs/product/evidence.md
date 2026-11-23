@@ -233,7 +233,7 @@ M3 does not wait for M2: a hoster link pasted into Scia needs nothing from it. O
 
 Integrations arrive one at a time. Each is visible in three places: an **Integrations** section in Settings that lists the services and shows which are connected; the Integrations table in the README; the release notes of the version that brings it (`feat(integrations): …`). Every integration, with its ADRs, issues and state, is also recorded in [integrations.md](./integrations.md).
 
-AllDebrid (#7), connected once in Settings (API key kept by the operating system). From then on a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically, with nothing else to do — as a direct link would be. It has to be built and proven against a simulated service; the verification with a real account is the owner's, who pastes their own key into Settings. It is built in small PRs, each with its issue. Of #7's nine points, six are ticked by merged PRs (the audit of #7, 21 November 2026); #180 and #181 are built and held by specs, not yet seen in the app ([a link that expires](#a-link-that-expires), [a link into several files](#a-link-into-several-files)); the README and ADR point stays open until both land.
+AllDebrid (#7), connected once in Settings (API key kept by the operating system). From then on a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically, with nothing else to do — as a direct link would be. It has to be built and proven against a simulated service; the verification with a real account is the owner's, who pastes their own key into Settings. It is built in small PRs, each with its issue. Of #7's nine points, six are ticked by merged PRs (the audit of #7, 21 November 2026); #180 and #181 are built and held by specs, not yet seen in the app ([a link that expires](#a-link-that-expires), [a link into several files](#a-link-into-several-files)); with both landed, the README and ADR point is ticked: the README's row, the roadmap, and ADR 0005 with ADR 0025 beside it.
 
 The first stable release waits for every line of M3 but a second service — the connection by a code, magnets and their follow-ups (#146, #150) included ([decisions.md](./decisions.md#21-november-2026)). When they were planned it did not wait for the code and magnets: the lines it waited for were what #7 lists under "Done when", which has more that has no line here. It does not wait for the link sent by the extension (M2).
 
@@ -269,30 +269,33 @@ Not seen: any of it in the app (no run of the real app was made for this PR); ho
 
 ### A link into several files
 
-A link that unlocks into several files shows the list before downloading (#181): a list to tick, all ticked ([ADR 0025](../adr/0025-a-link-that-opens-into-several-files.md)). AllDebrid's documentation gives several files for one link only through its redirector, which opens "a redirector or link protector"; the owner decided on 23 November 2026 that a file host's folder and the protectors' and shorteners' links it opens are taken, known by a list Scia keeps, and wait on a row of their own.
+A link that unlocks into several files shows the list before downloading (#181): a list to tick, all ticked ([ADR 0025](../adr/0025-a-link-that-opens-into-several-files.md)). AllDebrid's documentation gives several files for one link only through its redirector, which opens "a redirector or link protector"; the owner decided on 23 November 2026 that a file host's folder and the protectors' and shorteners' links it opens are taken, known by a list Scia keeps, and wait on a row of their own; and, on the review of #263, that a shortener's link the service gives nothing for downloads as it stands, that a folder of more than 1,000 files offers its first 1,000, and that a copied folder is offered ready.
 
 **Written and covered by specs, against the simulated AllDebrid and real local hosts**:
 
-- AllDebrid's client against the simulated service: the redirector and the infos of its links, a hundred to a request; files it says nothing of counted; nothing or more than 1,000 files said as such; its refusals; a service that cannot be asked at first; a stop.
+- AllDebrid's client against the simulated service: the redirector and the infos of its links, a hundred to a request; files it says nothing of counted, an entry that is no link among them; each entry of the infos matched to its link in whatever order, `https` for `http`, else by its place; nothing said as such; the first 1,000 of 1,003 listed and 3 left out, never asked about; 1,000 listed whole; its refusals; a service that cannot be asked at first; a stop.
 - The manager, from the paste to the bytes:
   - a pasted 1fichier folder opened, its three files listed, nothing asked of a host before the choice, and the two left ticked downloaded byte for byte into a folder named after the link;
   - a link of one file downloaded straight into the download folder;
   - links pasted together opened one after the other;
-  - a folder named beside a file of its name, and a service's name that tries to climb out of it;
+  - a folder named beside a file of its name, and a service's name that tries to climb out of it, listed under the name the file gets;
+  - the service's name kept over the one the file's host gives, and the host's taken when the service gave none;
+  - a folder of 1,002 files offering 1,000 and saying 2 left out;
+  - a shortener's link refused by the redirector, and one opened into nothing the service can get, fetched as they stand with the page they were added from; one whose service left while it waited, into the folder it was added for; a folder whose service left failing `SERVICE_NEEDED`;
   - a folder with no service connected failing `SERVICE_NEEDED`, then opened at Retry once connected;
   - a shortener's link fetched as it stands with no service connected;
   - each refusal;
   - a restart that keeps the files to choose from without asking, and asks again about one being opened;
-  - Remove while the service is asked;
-  - a choice refused;
-  - a copied link left out;
-  - neither the link nor the service's links in the log or in an answer.
+  - Remove while the service is asked, its question one that never answers; an answer that lands after Remove kept for nothing; a link removed while it waited its turn never asked about; a failure the service never said is `SERVICE_UNAVAILABLE`;
+  - a choice refused, `[0, 99]` among them, with nothing started;
+  - a copied folder offered ready while a service is connected and opened into its files at Start and at "Start all"; a copied shortener's link whose path names no file left out; a copied folder left out with no service;
+  - the pasted link in no log and no answer, before and after the start, the service's links in no log and in no answer before the start; each started file a download known by the service's link.
 - The routes, for the app's token alone: the extension's add answering no download for such a link.
-- The row: every file ticked, "All files", "Download N files", one press however repeated, Retry and Remove.
+- The row: every file ticked, "All files", "Download N files", the files left out counted, one press however repeated (Remove's held Enter among them), the choice held while it is on its way and given back at a refusal, Retry and Remove.
 
-An E2E spec ([`bundles.e2e.test.ts`](../../apps/desktop/e2e/bundles.e2e.test.ts)) drives the built app through a folder's paste, an untick and its download: it runs in CI only, and its first run is that of the PR.
+An E2E spec ([`bundles.e2e.test.ts`](../../apps/desktop/e2e/bundles.e2e.test.ts)) drives the built app through a folder's paste, an untick and its download, and Tabs through a list of 40 files to a box below its fold, which is scrolled into sight with its focus outline whole: it runs in CI only.
 
-Not seen: any of it in the app (no run of the real app was made for this PR); **how the real AllDebrid answers a file host's folder** — its documentation never says that the redirector opens one, and the simulated service answers as the documentation's examples do; whether the infos of an encrypted link carry a name for the real service; a protector's or a shortener's link against the real service; a list of hundreds of files on screen; a hand on the boxes (specs pressed them); Linux; the packaged app.
+Not seen: any of it in the app (no run of the real app was made for this PR); **how the real AllDebrid answers a file host's folder** — its documentation never says that the redirector opens one, and the simulated service answers as the documentation's examples do; whether the infos of an encrypted link carry a name for the real service; a protector's or a shortener's link against the real service; a folder copied to the real clipboard; a list of hundreds of files on screen; a hand on the boxes (specs pressed them); Linux; the packaged app.
 
 ### A file host without a service
 
