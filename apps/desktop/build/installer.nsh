@@ -314,71 +314,120 @@ FunctionEnd
 ; SendMessageTimeout's SMTO_ABORTIFHUNG, and how long a window has to take the message.
 !define SCIA_ABORT_IF_HUNG 0x0002
 !define SCIA_MESSAGE_LIMIT_MS 5000
-; PROCESS_QUERY_LIMITED_INFORMATION: enough to read which program a process runs.
-!define SCIA_QUERY_LIMITED 0x1000
-; How long the program has to end once told: Scia's engine has five seconds to stop and write its
-; state, and is stopped after them (apps/desktop/src/server-process.ts).
+; SYNCHRONIZE | PROCESS_QUERY_LIMITED_INFORMATION: enough to read which program a process runs,
+; and to wait for it to end.
+!define SCIA_QUERY_AND_WAIT 0x101000
+; How long, from the first message, the programs told have to end: Scia's engine has five seconds
+; to stop and write its state, and is stopped after them (apps/desktop/src/server-process.ts).
 !define SCIA_CLOSE_LIMIT_MS 15000
-!define SCIA_CLOSE_STEP_MS 250
+; WaitForSingleObject's answer for an object that was signalled: the process ended.
+!define SCIA_WAIT_OBJECT_0 0
 ; Chromium's class for a top-level window: a BrowserWindow's, among others.
 !define SCIA_WINDOW_CLASS "Chrome_WidgetWin_1"
 
 Var SciaTarget
-Var SciaTell
 Var SciaTold
 Var SciaLeft
-Var SciaWaited
 Var SciaWindow
 Var SciaPid
 Var SciaProcess
 Var SciaImage
+Var SciaToldWindows
+Var SciaToldPids
+Var SciaHandles
+Var SciaStarted
+Var SciaRemaining
+Var SciaWaitResult
 
-; $SciaLeft: how many top-level windows of Chromium's class, hidden ones included, belong to a
-; process that runs the program $SciaTarget. With $SciaTell 1, each is told its session ends.
-Function SciaWindowsOf
-  StrCpy $SciaLeft 0
+; $SciaFound 1 when the text pushed last holds the text pushed before it. The text goes to the
+; System plug-in by the stack, never inside its call.
+Function SciaHolds
+  System::Call 'shlwapi::StrStrW(w s, w s) p .s'
+  Pop $SciaFound
+  ${If} $SciaFound != 0
+    StrCpy $SciaFound 1
+  ${EndIf}
+FunctionEnd
+
+; Tells every top-level window of Chromium's class, hidden ones included, whose process runs the
+; program $SciaTarget that its session ends, and keeps a handle on each such process to wait on.
+; Once told, a Scia closes its window at once (#262): the walk starts again from the first window
+; after each, and passes over the windows already told.
+Function SciaTellWindowsOf
+  StrCpy $SciaTold 0
+  StrCpy $SciaToldWindows "|"
+  StrCpy $SciaToldPids "|"
+  StrCpy $SciaHandles ""
   StrCpy $SciaWindow ""
   ${Do}
     FindWindow $SciaWindow "${SCIA_WINDOW_CLASS}" "" "" $SciaWindow
     ${If} $SciaWindow == 0
       ${Break}
     ${EndIf}
+    Push "|$SciaWindow|"
+    Push $SciaToldWindows
+    Call SciaHolds
+    ${If} $SciaFound == 1
+      ${Continue}
+    ${EndIf}
     System::Call 'user32::GetWindowThreadProcessId(p $SciaWindow, *i .s)'
     Pop $SciaPid
-    System::Call 'kernel32::OpenProcess(i ${SCIA_QUERY_LIMITED}, i 0, i $SciaPid) p .s'
+    System::Call 'kernel32::OpenProcess(i ${SCIA_QUERY_AND_WAIT}, i 0, i $SciaPid) p .s'
     Pop $SciaProcess
-    ${If} $SciaProcess != 0
-      System::Call 'kernel32::QueryFullProcessImageNameW(p $SciaProcess, i 0, w .s, *i ${NSIS_MAX_STRLEN})'
-      Pop $SciaImage
-      System::Call 'kernel32::CloseHandle(p $SciaProcess)'
-      ; LogicLib's == ignores case, as Windows' paths do.
-      ${If} $SciaImage == $SciaTarget
-        IntOp $SciaLeft $SciaLeft + 1
-        ${If} $SciaTell == 1
-          System::Call 'user32::SendMessageTimeoutW(p $SciaWindow, i ${SCIA_WM_ENDSESSION}, p 1, p ${SCIA_ENDSESSION_CLOSEAPP}, i ${SCIA_ABORT_IF_HUNG}, i ${SCIA_MESSAGE_LIMIT_MS}, p 0)'
-        ${EndIf}
-      ${EndIf}
+    ${If} $SciaProcess == 0
+      ${Continue}
     ${EndIf}
+    System::Call 'kernel32::QueryFullProcessImageNameW(p $SciaProcess, i 0, w .s, *i ${NSIS_MAX_STRLEN})'
+    Pop $SciaImage
+    ; LogicLib's == ignores case, as Windows' paths do. A path spelled otherwise — the folder's short
+    ; 8.3 name — is not taken for this one: that Scia is ended by electron-builder's check.
+    ${If} $SciaImage != $SciaTarget
+      System::Call 'kernel32::CloseHandle(p $SciaProcess)'
+      ${Continue}
+    ${EndIf}
+    System::Call 'user32::SendMessageTimeoutW(p $SciaWindow, i ${SCIA_WM_ENDSESSION}, p 1, p ${SCIA_ENDSESSION_CLOSEAPP}, i ${SCIA_ABORT_IF_HUNG}, i ${SCIA_MESSAGE_LIMIT_MS}, p 0)'
+    IntOp $SciaTold $SciaTold + 1
+    StrCpy $SciaToldWindows "$SciaToldWindows$SciaWindow|"
+    Push "|$SciaPid|"
+    Push $SciaToldPids
+    Call SciaHolds
+    ${If} $SciaFound == 1
+      System::Call 'kernel32::CloseHandle(p $SciaProcess)'
+    ${Else}
+      StrCpy $SciaToldPids "$SciaToldPids$SciaPid|"
+      StrCpy $SciaHandles "$SciaHandles$SciaProcess "
+    ${EndIf}
+    StrCpy $SciaWindow ""
   ${Loop}
 FunctionEnd
 
-; Tells every window of a program running $SciaTarget that its session ends, then waits for them
-; to be gone, SCIA_CLOSE_LIMIT_MS at most: a Scia told so writes its state, stops its engine and
-; ends, and its downloads go on at its next start (#13). $SciaTold: how many windows were told.
+; Tells every window of a program running $SciaTarget that its session ends, then waits for each
+; process told to end, SCIA_CLOSE_LIMIT_MS at most from the first message: a Scia told so writes
+; its state, stops its engine and ends, and its downloads go on at its next start (#13). Its
+; windows are no sign of it: it closes them at once (#262). $SciaTold: how many windows were told;
+; $SciaLeft: how many processes told had not ended within the bound.
 Function SciaEndSessionOf
-  StrCpy $SciaTell 1
-  Call SciaWindowsOf
-  StrCpy $SciaTold $SciaLeft
-  StrCpy $SciaTell 0
-  StrCpy $SciaWaited 0
-  ${Do}
-    ${If} $SciaLeft == 0
-    ${OrIf} $SciaWaited >= ${SCIA_CLOSE_LIMIT_MS}
-      ${Break}
+  System::Call 'kernel32::GetTickCount() i .s'
+  Pop $SciaStarted
+  Call SciaTellWindowsOf
+  StrCpy $SciaLeft 0
+  StrCpy $SciaSeparator " "
+  StrCpy $SciaRest $SciaHandles
+  ${DoUntil} $SciaRest == ""
+    Call SciaSplit
+    System::Call 'kernel32::GetTickCount() i .s'
+    Pop $SciaRemaining
+    IntOp $SciaRemaining $SciaRemaining - $SciaStarted
+    IntOp $SciaRemaining ${SCIA_CLOSE_LIMIT_MS} - $SciaRemaining
+    ${If} $SciaRemaining < 0
+      StrCpy $SciaRemaining 0
     ${EndIf}
-    Sleep ${SCIA_CLOSE_STEP_MS}
-    IntOp $SciaWaited $SciaWaited + ${SCIA_CLOSE_STEP_MS}
-    Call SciaWindowsOf
+    System::Call 'kernel32::WaitForSingleObject(p $SciaHead, i $SciaRemaining) i .s'
+    Pop $SciaWaitResult
+    ${If} $SciaWaitResult != ${SCIA_WAIT_OBJECT_0}
+      IntOp $SciaLeft $SciaLeft + 1
+    ${EndIf}
+    System::Call 'kernel32::CloseHandle(p $SciaHead)'
   ${Loop}
 FunctionEnd
 

@@ -98,7 +98,8 @@ SectionEnd
 
 // A program made of the include's own SciaEndSessionOf, which tells the program named by /target=
 // that its session ends, as the installer tells a Scia that runs: it writes how many windows it
-// told, how many were left when it stopped waiting, and what is on top of NSIS's stack.
+// told, how many of their processes had not ended when it stopped waiting, and what is on top of
+// NSIS's stack.
 const ending = (include: string) => `
 Unicode true
 Name "ending"
