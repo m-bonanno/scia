@@ -1,6 +1,6 @@
 # ADR 0004 — The key of a connected service is kept by the operating system, and reaches the engine through main
 
-- **Status**: accepted; the PIN flow its alternatives left for later is taken up by [ADR 0013](./0013-a-key-that-arrives-by-a-code.md): a key also arrives by a code, and is kept as this ADR says
+- **Status**: accepted; the PIN flow its alternatives left for later is taken up by [ADR 0013](./0013-a-key-that-arrives-by-a-code.md): a key also arrives by a code, and is kept as this ADR says; a key is said kept only once what opens it is on disk, and a key that cannot be read back at a start is said — its consequences on a key that cannot be read amended — by [ADR 0023](./0023-a-key-said-kept-once-it-can-be-read-back.md)
 - **Date**: 2026-11-20
 
 ## Context

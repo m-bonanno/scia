@@ -1,6 +1,6 @@
 # ADR 0006 — A file host's link with no service connected asks the service's public list
 
-- **Status**: accepted
+- **Status**: accepted; while a kept key cannot be read back, the list its account gave in an earlier run decides too: [ADR 0023](./0023-a-key-said-kept-once-it-can-be-read-back.md), point 5
 - **Date**: 2026-11-20
 
 ## Context

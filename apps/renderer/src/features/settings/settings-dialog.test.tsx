@@ -32,7 +32,7 @@ describe('SettingsDialog', () => {
   beforeEach(() => {
     vi.spyOn(api, 'settings').mockResolvedValue(settings);
     vi.spyOn(api, 'integrations').mockResolvedValue([
-      { id: 'alldebrid', connected: false, account: null, failure: null },
+      { id: 'alldebrid', connected: false, account: null, failure: null, keyNotRead: false },
     ]);
   });
   afterEach(() => {
