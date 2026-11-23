@@ -15,6 +15,7 @@ import { type Added, AddBar } from '@/features/downloads/add-bar.tsx';
 import { type Pasted, pastedIn } from '@/features/downloads/pasted.ts';
 import { DownloadList } from '@/features/downloads/download-list.tsx';
 import type { RowActions } from '@/features/downloads/download-row.tsx';
+import type { BundleActions } from '@/features/downloads/bundle-row.tsx';
 import type { MagnetActions } from '@/features/downloads/magnet-row.tsx';
 import { FilterTabs, type FilterTabsHandle } from '@/features/downloads/filter-tabs.tsx';
 import { countByFilter, Filter, matchesFilter } from '@/features/downloads/filters.ts';
@@ -26,6 +27,7 @@ import { api, ApiError } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { Connection, useLive } from '@/lib/live.ts';
 import {
+  bundleActionMessage,
   ENGINE_UNREACHABLE,
   errorMessage,
   FILE_NOT_OPENED,
@@ -189,10 +191,15 @@ export function App(): ReactNode {
     };
   }, [add]);
 
+  // The rows a press may make leave the list, by the id it named: a copied folder at its Start, a
+  // link of several files at "Download" and at Remove (#181). A row that leaves by itself — an
+  // album read, a link that opens into one file — is not among them, and moves no focus.
+  const pressedRows = useRef(new Set<string>());
   const actions = useMemo((): RowActions => {
     const shell = bridge();
     return {
       start: (id) => {
+        pressedRows.current.add(id);
         api.start(id).catch(report);
       },
       pause: (id) => {
@@ -220,6 +227,33 @@ export function App(): ReactNode {
             },
     };
   }, [report, tell]);
+
+  const bundleActions = useMemo(
+    (): BundleActions => ({
+      start: (id, files) => {
+        pressedRows.current.add(id);
+        return api.startBundle(id, files).then(
+          () => true,
+          (error: unknown) => {
+            tell(bundleActionMessage(error, 'start'));
+            return false;
+          },
+        );
+      },
+      retry: (id) => {
+        api.retryBundle(id).catch((error: unknown) => {
+          tell(bundleActionMessage(error, 'retry'));
+        });
+      },
+      remove: (id) => {
+        pressedRows.current.add(id);
+        api.removeBundle(id).catch((error: unknown) => {
+          tell(bundleActionMessage(error, 'remove'));
+        });
+      },
+    }),
+    [tell],
+  );
 
   const magnetActions = useMemo(
     (): MagnetActions => ({
@@ -255,6 +289,19 @@ export function App(): ReactNode {
       filterTabs.current?.focus();
     }
   }, [hasReady]);
+  // So does a row that leaves under its own press (`pressedRows`).
+  const rowIds = [...live.downloads, ...live.bundles].map((row) => row.id).join(' ');
+  const rowsBefore = useRef(rowIds);
+  useEffect(() => {
+    const now = new Set(rowIds.split(' '));
+    const left = rowsBefore.current.split(' ').filter((id) => id !== '' && !now.has(id));
+    rowsBefore.current = rowIds;
+    const pressed = left.filter((id) => pressedRows.current.delete(id));
+    if (pressed.length === 0) return;
+    if (document.activeElement === null || document.activeElement === document.body) {
+      filterTabs.current?.focus();
+    }
+  }, [rowIds]);
 
   // How tall the notices are, for the room every area that scrolls beneath them keeps under its
   // end (`room-under-notices` in styles.css). Settings, inside this element, keeps its own.
@@ -322,7 +369,7 @@ export function App(): ReactNode {
               <FilterTabs
                 ref={filterTabs}
                 filter={filter}
-                counts={countByFilter(live.downloads, live.magnets.length)}
+                counts={countByFilter(live.downloads, live.magnets.length + live.bundles.length)}
                 onChange={setFilter}
               />
               {hasReady && (
@@ -344,9 +391,11 @@ export function App(): ReactNode {
                 <DownloadList
                   downloads={visible}
                   magnets={live.magnets}
+                  bundles={live.bundles}
                   filter={filter}
                   actions={actions}
                   magnetActions={magnetActions}
+                  bundleActions={bundleActions}
                 />
               )}
             </div>

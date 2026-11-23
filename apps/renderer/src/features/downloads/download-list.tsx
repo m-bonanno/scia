@@ -1,6 +1,7 @@
-import type { Download, Magnet } from '@scia/contracts';
+import type { Bundle, Download, Magnet } from '@scia/contracts';
 import type { ReactNode } from 'react';
 import { Logo } from '@/app/logo.tsx';
+import { type BundleActions, BundleRow } from './bundle-row.tsx';
 import { DownloadRow, type RowActions } from './download-row.tsx';
 import { Filter } from './filters.ts';
 import { type MagnetActions, MagnetRow } from './magnet-row.tsx';
@@ -8,9 +9,11 @@ import { type MagnetActions, MagnetRow } from './magnet-row.tsx';
 interface DownloadListProps {
   readonly downloads: readonly Download[];
   readonly magnets: readonly Magnet[];
+  readonly bundles: readonly Bundle[];
   readonly filter: Filter;
   readonly actions: RowActions;
   readonly magnetActions: MagnetActions;
+  readonly bundleActions: BundleActions;
 }
 
 const EMPTY: Readonly<Record<Filter, { readonly title: string; readonly hint: string }>> = {
@@ -25,14 +28,19 @@ const EMPTY: Readonly<Record<Filter, { readonly title: string; readonly hint: st
 export function DownloadList({
   downloads,
   magnets,
+  bundles,
   filter,
   actions,
   magnetActions,
+  bundleActions,
 }: DownloadListProps): ReactNode {
-  // A magnet is not finished: it is in "All" and "In progress", above the downloads — newest first,
-  // as they are.
-  const shownMagnets = filter === Filter.Completed ? [] : [...magnets].reverse();
-  if (downloads.length === 0 && shownMagnets.length === 0) {
+  // A magnet, and a link whose files wait for a choice, are not finished: they are in "All" and
+  // "In progress", above the downloads — newest first, as they are. A link waits for the person,
+  // so it comes first.
+  const waiting = filter !== Filter.Completed;
+  const shownBundles = waiting ? [...bundles].reverse() : [];
+  const shownMagnets = waiting ? [...magnets].reverse() : [];
+  if (downloads.length === 0 && shownMagnets.length === 0 && shownBundles.length === 0) {
     const { title, hint } = EMPTY[filter];
     return (
       <div className="flex flex-col items-center gap-2 px-6 pt-20 text-center">
@@ -46,6 +54,9 @@ export function DownloadList({
   }
   return (
     <ul className="flex flex-col gap-2">
+      {shownBundles.map((bundle) => (
+        <BundleRow key={bundle.id} bundle={bundle} actions={bundleActions} />
+      ))}
       {shownMagnets.map((magnet) => (
         <MagnetRow key={magnet.id} magnet={magnet} actions={magnetActions} />
       ))}

@@ -1,4 +1,4 @@
-import { ApiErrorCode, type Download, type Magnet } from '@scia/contracts';
+import { ApiErrorCode, type Bundle, type Download, type Magnet } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -22,10 +22,16 @@ const settings = {
 
 // What the page hears of the engine: changed by a spec, then the page is rendered again.
 const live = vi.hoisted(
-  (): { connection: Live.Connection; downloads: Download[]; magnets: Magnet[] } => ({
+  (): {
+    connection: Live.Connection;
+    downloads: Download[];
+    magnets: Magnet[];
+    bundles: Bundle[];
+  } => ({
     connection: 'live',
     downloads: [],
     magnets: [],
+    bundles: [],
   }),
 );
 vi.mock('@/lib/live.ts', async (original) => ({
@@ -34,6 +40,7 @@ vi.mock('@/lib/live.ts', async (original) => ({
     connection: live.connection,
     downloads: live.downloads,
     magnets: live.magnets,
+    bundles: live.bundles,
   }),
 }));
 
@@ -51,6 +58,7 @@ beforeEach(() => {
   live.connection = 'live';
   live.downloads = [];
   live.magnets = [];
+  live.bundles = [];
   vi.spyOn(api, 'settings').mockResolvedValue(settings);
   vi.spyOn(api, 'integrations').mockResolvedValue([alldebrid(false)]);
 });
@@ -845,6 +853,243 @@ describe('App', () => {
         expect(notices).toHaveTextContent('This magnet is no longer in the list.');
       });
       expect(notices).toHaveTextContent('This magnet is already being sent again.');
+    });
+  });
+
+  describe('links that open into several files (#181)', () => {
+    const bundle: Bundle = {
+      id: 'b1',
+      name: 'Holiday films',
+      status: 'choosing',
+      failure: null,
+      files: [
+        { name: 'Day 1.mkv', size: 1024 },
+        { name: 'Day 2.mkv', size: 2048 },
+      ],
+      unavailable: 0,
+      leftOut: 0,
+      createdAt: '2026-11-23T12:00:00.000Z',
+    };
+
+    it('lists such a link above the magnets and the downloads, newest first, not among the completed, and counts it in progress', async () => {
+      live.bundles = [
+        bundle,
+        { ...bundle, id: 'b2', name: 'Concert', createdAt: '2026-11-23T12:05:00.000Z' },
+      ];
+      live.magnets = [
+        {
+          id: 'm1',
+          name: 'A magnet',
+          status: 'fetching',
+          totalBytes: null,
+          downloadedBytes: 0,
+          bytesPerSecond: 0,
+          failure: null,
+          createdAt: '2026-11-23T12:10:00.000Z',
+        },
+      ];
+      render(<App />);
+
+      const rows = screen.getAllByRole('listitem');
+      expect(within(rows[0] ?? document.body).getByText('Concert')).toBeInTheDocument();
+      expect(within(rows[1] ?? document.body).getByText('Holiday films')).toBeInTheDocument();
+      expect(within(rows[2] ?? document.body).getByText('A magnet')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^In progress/ })).toHaveTextContent(/3$/);
+      await userEvent.click(screen.getByRole('button', { name: /^Completed/ }));
+      expect(screen.queryByText('Holiday films')).not.toBeInTheDocument();
+    });
+
+    it('starts the files left ticked at Download, and the engine is told which', async () => {
+      live.bundles = [bundle];
+      const start = vi.spyOn(api, 'startBundle').mockResolvedValue([]);
+      render(<App />);
+
+      await userEvent.click(screen.getByRole('checkbox', { name: /Day 1\.mkv/ }));
+      await userEvent.click(screen.getByRole('button', { name: 'Download 1 file' }));
+
+      expect(start).toHaveBeenCalledExactlyOnceWith('b1', [1]);
+    });
+
+    it('sends the choice once while it is on its way, and says nothing of a start that worked', async () => {
+      live.bundles = [bundle];
+      let answer: (downloads: Download[]) => void = () => undefined;
+      const start = vi.spyOn(api, 'startBundle').mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve;
+        }),
+      );
+      const { rerender } = render(<App />);
+      const download = screen.getByRole('button', { name: 'Download 2 files' });
+
+      await userEvent.click(download);
+      await userEvent.click(screen.getByRole('checkbox', { name: /Day 2\.mkv/ }));
+      await userEvent.click(download);
+      answer([]);
+      // Taken: the row waits for the next list to leave, and is still held.
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      await userEvent.click(download);
+      live.bundles = [];
+      rerender(<App />);
+
+      expect(start).toHaveBeenCalledExactlyOnceWith('b1', [0, 1]);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
+    });
+
+    it('gives the row back with a notice when the start is refused', async () => {
+      live.bundles = [bundle];
+      vi.spyOn(api, 'startBundle').mockRejectedValue(
+        new ApiError(409, ApiErrorCode.Conflict, 'not waiting'),
+      );
+      render(<App />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Download 2 files' }));
+
+      await screen.findByRole('list', { name: 'Notices' });
+      await vi.waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Download 2 files' })).not.toHaveAttribute(
+          'aria-disabled',
+        );
+      });
+    });
+
+    it('hands the focus to the filter in use when a copied folder leaves under its Start, another link still ready', async () => {
+      const folder = aDownload({
+        id: 'f1',
+        url: 'https://1fichier.com/dir/Holiday',
+        fileName: 'Holiday',
+        status: DownloadStatus.Ready,
+      });
+      const report = aDownload({ id: 'r1', fileName: 'report.pdf', status: DownloadStatus.Ready });
+      vi.spyOn(api, 'start').mockResolvedValue({ ...folder, status: DownloadStatus.Queued });
+      live.downloads = [folder, report];
+      const { rerender } = render(<App />);
+      const row = screen.getByText('Holiday').closest('li') ?? document.body;
+      within(row).getByRole('button', { name: 'Start' }).focus();
+
+      await userEvent.keyboard('{Enter}');
+      live.downloads = [report];
+      live.bundles = [{ ...bundle, id: 'b9', name: 'Holiday', status: 'opening', files: [] }];
+      rerender(<App />);
+
+      expect(screen.getByRole('button', { name: /^All/ })).toHaveFocus();
+    });
+
+    it('hands the focus to the filter in use when the row leaves under Download', async () => {
+      live.bundles = [bundle];
+      vi.spyOn(api, 'startBundle').mockResolvedValue([]);
+      const { rerender } = render(<App />);
+      screen.getByRole('button', { name: 'Download 2 files' }).focus();
+
+      await userEvent.keyboard('{Enter}');
+      live.bundles = [];
+      rerender(<App />);
+
+      expect(screen.getByRole('button', { name: /^All/ })).toHaveFocus();
+    });
+
+    it('hands the focus to the filter in use when the row leaves under its Remove', async () => {
+      live.bundles = [bundle];
+      vi.spyOn(api, 'removeBundle').mockResolvedValue(undefined);
+      const { rerender } = render(<App />);
+      screen.getByRole('button', { name: 'Remove' }).focus();
+
+      await userEvent.keyboard('{Enter}');
+      live.bundles = [];
+      rerender(<App />);
+
+      expect(screen.getByRole('button', { name: /^All/ })).toHaveFocus();
+    });
+
+    it('keeps a focus that went elsewhere between the press and the row leaving', async () => {
+      live.bundles = [bundle];
+      vi.spyOn(api, 'removeBundle').mockResolvedValue(undefined);
+      const { rerender } = render(<App />);
+      screen.getByRole('button', { name: 'Remove' }).focus();
+
+      await userEvent.keyboard('{Enter}');
+      const field = screen.getByRole('textbox', { name: 'Links to download' });
+      field.focus();
+      live.bundles = [];
+      rerender(<App />);
+
+      expect(field).toHaveFocus();
+    });
+
+    describe('moves no focus when a row leaves under no press of its own', () => {
+      // An album read in the background (#259), a link that opens into one file: both leave by
+      // themselves, and so do the rows here.
+      const album = aDownload({ id: 'a1', fileName: 'Album', status: DownloadStatus.Downloading });
+      const other = aDownload({
+        id: 'o1',
+        fileName: 'other.iso',
+        status: DownloadStatus.Downloading,
+      });
+
+      it('keeps it in the field', () => {
+        live.downloads = [album];
+        live.bundles = [bundle];
+        const { rerender } = render(<App />);
+        const field = screen.getByRole('textbox', { name: 'Links to download' });
+        field.focus();
+
+        live.downloads = [];
+        live.bundles = [];
+        rerender(<App />);
+
+        expect(field).toHaveFocus();
+      });
+
+      it("keeps it on another row's button", () => {
+        live.downloads = [album, other];
+        live.bundles = [bundle];
+        const { rerender } = render(<App />);
+        const cancel = within(
+          screen.getByText('other.iso').closest('li') ?? document.body,
+        ).getByRole('button', { name: 'Cancel and delete' });
+        cancel.focus();
+
+        live.downloads = [other];
+        live.bundles = [];
+        rerender(<App />);
+
+        expect(cancel).toHaveFocus();
+      });
+
+      it('leaves a focus that was on nothing where it is', () => {
+        live.downloads = [album, other];
+        live.bundles = [bundle];
+        const { rerender } = render(<App />);
+        screen.getByRole('textbox', { name: 'Links to download' }).blur();
+
+        live.downloads = [other];
+        live.bundles = [];
+        rerender(<App />);
+
+        expect(document.body).toHaveFocus();
+      });
+    });
+
+    it('asks again at Retry and forgets it at Remove, and says in its words that it moved on meanwhile', async () => {
+      live.bundles = [{ ...bundle, status: 'failed', failure: 'BUNDLE_EMPTY', files: [] }];
+      const retry = vi
+        .spyOn(api, 'retryBundle')
+        .mockRejectedValue(new ApiError(409, ApiErrorCode.Conflict, 'not failed'));
+      const remove = vi
+        .spyOn(api, 'removeBundle')
+        .mockRejectedValue(new ApiError(404, ApiErrorCode.NotFound, 'none'));
+      render(<App />);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Remove' }));
+
+      expect(retry).toHaveBeenCalledExactlyOnceWith('b1');
+      expect(remove).toHaveBeenCalledExactlyOnceWith('b1');
+      const notices = await screen.findByRole('list', { name: 'Notices' });
+      await vi.waitFor(() => {
+        expect(notices).toHaveTextContent('This link is no longer in the list.');
+      });
+      expect(notices).toHaveTextContent('This link is already being opened again.');
     });
   });
 

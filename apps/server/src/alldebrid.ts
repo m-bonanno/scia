@@ -7,6 +7,7 @@ import {
   isServiceSite,
 } from '@scia/contracts';
 import {
+  BundleFailure,
   hashOfMagnet,
   MagnetFailure,
   PREPARE_LIMIT_SECONDS,
@@ -67,6 +68,9 @@ const FAILURE_OF: ReadonlyMap<string, ServiceFailure | UnlockFailure> = new Map<
   ['LINK_NOT_SUPPORTED', UnlockFailure.LinkRefused],
   ['LINK_ERROR', UnlockFailure.LinkRefused],
   ['DELAYED_INVALID_ID', UnlockFailure.LinkRefused],
+  // The redirector's: a site it does not open, and one it could not (#181).
+  ['REDIRECTOR_NOT_SUPPORTED', UnlockFailure.LinkRefused],
+  ['REDIRECTOR_ERROR', UnlockFailure.LinkRefused],
 ]);
 
 // Said of every magnet of a request at once: an answer to magnets alone.
@@ -110,6 +114,11 @@ function asMagnetsRefusal(error: unknown): never {
   throw refused(failure, `AllDebrid answered ${code}.`);
 }
 
+// The most files of one link Scia lists for a person to tick through (#181): the rest are counted.
+export const LINK_FILES_AT_MOST = 1000;
+// How many links one request asks the infos of: the documentation gives no limit.
+const INFOS_AT_ONCE = 100;
+
 // A torrent's folders are not this deep, nor its files this many: an answer that is, is not one.
 const MAGNET_TREE_DEPTH = 32;
 const MAGNET_FILES_AT_MOST = 100_000;
@@ -152,6 +161,21 @@ const unlockSchema = z.object({
   filename: z.string().nullish(),
   // The id to ask about a link that needs time; absent or 0 for one that is ready.
   delayed: z.coerce.number().nullish(),
+});
+
+// The links a redirector or a protector opens into, encrypted: they work with the unlock and the
+// infos of a link alone (https://docs.alldebrid.com, "Redirector"). Each is read on its own.
+const redirectorSchema = z.object({ links: z.array(z.unknown()) });
+
+// One entry for each link asked, in the order asked: what its host calls the file and its size, or
+// why not (https://docs.alldebrid.com, "Link infos"). Each is read on its own.
+const infosSchema = z.object({ infos: z.array(z.unknown()) });
+// The link an entry is of, a file's or a refusal's alike: read before what it says of it.
+const linkOfSchema = z.object({ link: z.string() });
+const infoSchema = z.object({
+  link: z.string(),
+  filename: z.string(),
+  size: z.coerce.number().int().nonnegative(),
 });
 
 const delayedSchema = z.object({
@@ -284,6 +308,27 @@ function filesOfTree(nodes: unknown, folders: readonly string[], into: MagnetFil
     }
   }
   return true;
+}
+
+// A file behind a link that opens into several (#181): the service's link to it, unlocked as a
+// hoster's is, what its host calls it — a name from a host — and its size.
+export interface LinkFile {
+  readonly link: string;
+  readonly name: string;
+  readonly size: number;
+}
+
+// What a link opens into: the files the service can say what they are, how many it cannot, and
+// how many were left out past the most a person ticks through.
+export interface OpenedLink {
+  readonly files: readonly LinkFile[];
+  readonly unavailable: number;
+  readonly leftOut: number;
+}
+
+function sameLink(written: string | undefined, asked: string): boolean {
+  const schemeAside = (link: string) => link.replace(/^https?:/, '');
+  return written !== undefined && schemeAside(written) === schemeAside(asked);
 }
 
 // A code to confirm on the service's site (https://docs.alldebrid.com, "Pin auth"). `check` is
@@ -546,6 +591,50 @@ export class AllDebrid {
       else answered.set(id, files.length === 0 ? MagnetFailure.Failed : files);
     }
     return answered;
+  }
+
+  // The files a folder, a protector's or a shortener's link opens into (#181): its links through the
+  // redirector, then what each is through their infos, a hundred at a time. A file the service says
+  // nothing of — refused, not an http address — is counted, not listed; a link given twice is one
+  // file. Of more than a person ticks through, the first are listed and the rest counted, never
+  // asked about (the owner, #181). Nothing to list is said as such.
+  async openLink(
+    apiKey: string,
+    link: string,
+    signal?: AbortSignal,
+  ): Promise<OpenedLink | typeof BundleFailure.Empty> {
+    const { links } = await this.#insist(
+      () => this.#ask('/v4/link/redirector', apiKey, redirectorSchema, { link }, signal),
+      signal,
+    );
+    const strings = [...new Set(links.filter((each) => typeof each === 'string'))];
+    const usable = strings.filter((each) => isHttpAddress(each));
+    const listed = usable.slice(0, LINK_FILES_AT_MOST);
+    // What is no link Scia fetches: not a string, not an http address.
+    let unavailable =
+      links.filter((each) => typeof each !== 'string').length + strings.length - usable.length;
+    const files: LinkFile[] = [];
+    for (let start = 0; start < listed.length; start += INFOS_AT_ONCE) {
+      const asked = listed.slice(start, start + INFOS_AT_ONCE);
+      const { infos } = await this.#insist(
+        () => this.#ask('/v4/link/infos', apiKey, infosSchema, { 'link[]': asked }, signal),
+        signal,
+      );
+      asked.forEach((each, index) => {
+        // By the link it names — written in https for one asked in http, as the documentation's
+        // example answers — else by its place, the order asked.
+        const said =
+          infos.find((info) => sameLink(linkOfSchema.safeParse(info).data?.link, each)) ??
+          infos[index];
+        const info = infoSchema.safeParse(said);
+        if (info.success)
+          files.push({ link: each, name: info.data.filename, size: info.data.size });
+        else unavailable += 1;
+      });
+    }
+    return files.length === 0
+      ? BundleFailure.Empty
+      : { files, unavailable, leftOut: usable.length - listed.length };
   }
 
   // The direct link for a hoster's. A link the service needs time to prepare is waited for,
