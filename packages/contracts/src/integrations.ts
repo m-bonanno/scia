@@ -1,9 +1,12 @@
 import { CodeFailure, ServiceFailure } from '@scia/core';
 import { z } from 'zod';
 
-// The services Scia can be connected to. What each is called lives in the renderer.
+// The services Scia can be connected to.
 export const IntegrationId = { AllDebrid: 'alldebrid' } as const;
 export type IntegrationId = (typeof IntegrationId)[keyof typeof IntegrationId];
+
+// What each is called: by the page, and by the notification main shows once one connects (#146).
+export const SERVICE_NAME: Readonly<Record<IntegrationId, string>> = { alldebrid: 'AllDebrid' };
 
 export function isIntegrationId(value: unknown): value is IntegrationId {
   return Object.values(IntegrationId).some((id) => id === value);

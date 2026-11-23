@@ -29,7 +29,7 @@ function aDownload(id: string, status: string) {
 }
 
 const snapshot = (...downloads: unknown[]) =>
-  `event: snapshot\ndata: ${JSON.stringify({ downloads, magnets: [], bundles: [], watchClipboard: false })}\n\n`;
+  `event: snapshot\ndata: ${JSON.stringify({ downloads, magnets: [], bundles: [], watchClipboard: false, connectedServices: [] })}\n\n`;
 
 // An answer of the engine whose body the spec writes piece by piece, and ends when it likes.
 function aStream() {
@@ -61,6 +61,7 @@ function following(
   const stopped = new AbortController();
   const seen: string[][] = [];
   const watching: boolean[] = [];
+  const connected: (readonly string[])[] = [];
   const warnings: string[] = [];
   const said: string[] = [];
   const waits: number[] = [];
@@ -78,9 +79,10 @@ function following(
       asked += 1;
       return { origin, apiToken: 'token', fetch };
     },
-    onSnapshot: ({ downloads, watchClipboard }: Snapshot) => {
+    onSnapshot: ({ downloads, watchClipboard, connectedServices }: Snapshot) => {
       seen.push(downloads.map((download) => `${download.id}:${download.status}`));
       watching.push(watchClipboard);
+      connected.push(connectedServices);
     },
     signal: stopped.signal,
     answerLimitMs: 50,
@@ -94,7 +96,7 @@ function following(
       info: (message) => said.push(message),
     },
   });
-  return { stopped, seen, watching, warnings, said, waits, fetch, done };
+  return { stopped, seen, watching, connected, warnings, said, waits, fetch, done };
 }
 
 describe('SseFrames', () => {
@@ -198,10 +200,26 @@ describe('followDownloads', () => {
 
     stream.say(snapshot(aDownload('a', 'ready')));
     stream.say(
-      `event: snapshot\ndata: ${JSON.stringify({ downloads: [], magnets: [], bundles: [], watchClipboard: true })}\n\n`,
+      `event: snapshot\ndata: ${JSON.stringify({ downloads: [], magnets: [], bundles: [], watchClipboard: true, connectedServices: [] })}\n\n`,
     );
     await vi.waitFor(() => {
       expect(follow.watching).toEqual([false, true]);
+    });
+
+    follow.stopped.abort();
+    await follow.done;
+  });
+
+  it('hands over, with each list, which services are connected (#146)', async () => {
+    const stream = aStream();
+    const follow = following([async () => stream.response]);
+
+    stream.say(snapshot(aDownload('a', 'ready')));
+    stream.say(
+      `event: snapshot\ndata: ${JSON.stringify({ downloads: [], magnets: [], bundles: [], watchClipboard: false, connectedServices: ['alldebrid'] })}\n\n`,
+    );
+    await vi.waitFor(() => {
+      expect(follow.connected).toEqual([[], ['alldebrid']]);
     });
 
     follow.stopped.abort();

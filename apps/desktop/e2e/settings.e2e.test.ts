@@ -163,6 +163,73 @@ describe('the real app, with what Settings says', () => {
     // The key reached Scia from the service alone, and nowhere a person reads.
     expect(await profile.log()).not.toContain(KEY);
   });
+
+  // The owner, #146: with Settings closed before the code is confirmed, Scia keeps waiting for it
+  // and connects when it is confirmed, saying so by the system while nobody looks at the window.
+  async function codeLeftWaiting(scia: Awaited<ReturnType<typeof run.launch>>): Promise<string> {
+    const { page } = scia;
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Connect with a code' }).click();
+    const code = (await page.locator('p.font-mono').textContent()) ?? '';
+    expect(code).toMatch(/^[A-Z0-9]{4}$/);
+    await page.getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'hidden' });
+    return code;
+  }
+
+  it('connects a code confirmed once Settings closed, and the system says so while the window is minimised', async () => {
+    const profile = await run.profile();
+    const service = run.keep(
+      await startAllDebridServer({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+      }),
+    );
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const code = await codeLeftWaiting(scia);
+    await scia.app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.minimize();
+    });
+
+    service.confirmCode(code, KEY);
+
+    await until(async () => (await profile.log()).includes('connected_notice_asked'));
+    expect(await profile.log()).toMatch(/connected_notice_asked {[^}]*'AllDebrid is connected'/);
+    await scia.app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.restore();
+    });
+    // The page heard it in the engine's events: the account's magnets are offered.
+    await scia.page.getByRole('button', { name: 'AllDebrid magnets' }).waitFor();
+    await scia.page.getByRole('button', { name: 'Settings' }).click();
+    await scia.page.getByText(/^Connected as ada/).waitFor();
+    expect(await profile.log()).not.toContain(KEY);
+  });
+
+  it('connects a code confirmed once Settings closed, said by no notification while the window is in front, and shows the code again meanwhile', async () => {
+    const profile = await run.profile();
+    const service = run.keep(
+      await startAllDebridServer({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+      }),
+    );
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const { page } = scia;
+    const code = await codeLeftWaiting(scia);
+
+    // Opened again before it is confirmed, Settings shows the code the engine still waits for.
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.locator('p.font-mono', { hasText: code }).waitFor();
+    await page.getByRole('button', { name: 'Close' }).click();
+    await page.getByRole('dialog', { name: 'Settings' }).waitFor({ state: 'hidden' });
+
+    service.confirmCode(code, KEY);
+
+    await page.getByRole('button', { name: 'AllDebrid magnets' }).waitFor();
+    await until(async () => (await profile.log()).includes('service_connected_heard'));
+    const log = await profile.log();
+    // Windows itself said which window was in use, inside the built app (ADR 0020).
+    expect(log).toMatch(/service_connected_heard {[^}]*inFront: true[^}]*asked: 'answered'/);
+    expect(log).not.toContain('connected_notice_asked');
+  });
 });
 
 // The ratio of WCAG 2.2 between two opaque colours as the page computes them, `rgb(r, g, b)`.

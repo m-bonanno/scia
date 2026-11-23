@@ -52,3 +52,7 @@ The issue asked that ADR 0014 gain these reads. An ADR is never rewritten, and t
 - A magnet of the account taken into Scia's list is a row of the main list until its files are downloads, like a pasted one.
 - A magnet taken from the account a second time, after its files arrived, downloads them again under free names, as a pasted one does (#150).
 - Untried against the real AllDebrid: the order and the dates it lists magnets with, and an account with many magnets. These are the owner's to try. A hidden window was tried in the real app started by Electron itself (playwright-core keeps a page `visible`): minimised or hidden, the page was `hidden` and asked nothing for twelve seconds, and asked once within two seconds of being shown.
+
+## Amendment — learned also when the engine's events say the services changed (2026-11-23, #146, #286)
+
+Point 6 is amended: the page also learns whether AllDebrid is connected **when the engine's events say the connected services changed** (`connectedServices`), beside when the engine is reached and whenever Settings closes. A code confirmed once Settings closed connects AllDebrid with nobody in Settings ([ADR 0013](./0013-a-key-that-arrives-by-a-code.md), amendment of #146), and the panel's button appears then.

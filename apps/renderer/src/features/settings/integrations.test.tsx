@@ -1022,10 +1022,13 @@ describe('IntegrationsSection', () => {
       expect(read).not.toHaveBeenCalled();
     });
 
-    it('tells the engine to forget the code when Settings closes, and shows none at the next visit', async () => {
+    // The owner, #146: with Settings closed before the code is confirmed, Scia keeps waiting for
+    // it, and connects when it is confirmed.
+    it('leaves the engine waiting for a code shown when Settings closes, and stops reading it', async () => {
       const user = setUp();
       listing([notConnected]);
       vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const read = vi.spyOn(api, 'integrationCode').mockResolvedValue(given);
       const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
       const { rerender } = render(<IntegrationsSection open onError={ignore} />);
       const service = await theService();
@@ -1033,12 +1036,134 @@ describe('IntegrationsSection', () => {
       await service.findByText('ABCD', { selector: 'p' });
 
       rerender(<IntegrationsSection open={false} onError={ignore} />);
+      const readings = read.mock.calls.length;
+      await nextReading();
+      await nextReading();
 
-      expect(cancel).toHaveBeenCalledExactlyOnceWith('alldebrid');
+      expect(cancel).not.toHaveBeenCalled();
+      expect(read).toHaveBeenCalledTimes(readings);
+    });
+
+    it('shows again, at the next visit, a code it left waiting, and goes on reading it', async () => {
+      const user = setUp();
+      withMain();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const read = vi.spyOn(api, 'integrationCode').mockResolvedValue(given);
+      const { rerender } = render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await service.findByText('ABCD', { selector: 'p' });
+      rerender(<IntegrationsSection open={false} onError={ignore} />);
+
+      read.mockResolvedValue({ ...given, expiresAt: new Date(Date.now() + 240_000).toISOString() });
+      rerender(<IntegrationsSection open onError={ignore} />);
+
+      const again = await theService();
+      expect(await again.findByText('ABCD', { selector: 'p' })).toBeInTheDocument();
+      // What is left of it, not what it was given with.
+      expect(again.getByText(/The code works for 4\smin\.$/)).toBeInTheDocument();
+      expect(again.getByRole('button', { name: 'Open AllDebrid' })).toBeInTheDocument();
+      expect(again.queryByRole('button', { name: 'Connect with a code' })).not.toBeInTheDocument();
+      const readings = read.mock.calls.length;
+      read.mockResolvedValue({ ...given, status: 'connected' });
+      listing([connected]);
+      await nextReading();
+      expect(read.mock.calls.length).toBeGreaterThan(readings);
+      expect(await again.findByText(/^Connected as ada/)).toBeInTheDocument();
+    });
+
+    it('forgets at Cancel a code shown again, and asks about it at no later visit', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const read = vi.spyOn(api, 'integrationCode').mockResolvedValue(given);
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      const { rerender } = render(<IntegrationsSection open onError={ignore} />);
+      await user.click((await theService()).getByRole('button', { name: 'Connect with a code' }));
+      await screen.findByText('ABCD', { selector: 'p' });
+      rerender(<IntegrationsSection open={false} onError={ignore} />);
       rerender(<IntegrationsSection open onError={ignore} />);
       const again = await theService();
+      await again.findByText('ABCD', { selector: 'p' });
+
+      await user.click(again.getByRole('button', { name: 'Cancel' }));
+
+      expect(cancel).toHaveBeenCalledExactlyOnceWith('alldebrid');
+      const readings = read.mock.calls.length;
+      rerender(<IntegrationsSection open={false} onError={ignore} />);
+      rerender(<IntegrationsSection open onError={ignore} />);
+      expect(
+        await (await theService()).findByRole('button', { name: 'Connect with a code' }),
+      ).toBeInTheDocument();
+      expect(read).toHaveBeenCalledTimes(readings);
+    });
+
+    it('shows no code at the next visit when the one it left no longer waits, nor when it connected', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const read = vi.spyOn(api, 'integrationCode').mockResolvedValue(given);
+      const { rerender } = render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await service.findByText('ABCD', { selector: 'p' });
+      rerender(<IntegrationsSection open={false} onError={ignore} />);
+
+      read.mockResolvedValue({ ...given, status: 'failed', failure: 'CODE_EXPIRED' });
+      rerender(<IntegrationsSection open onError={ignore} />);
+      const again = await theService();
+      expect(await again.findByRole('button', { name: 'Connect with a code' })).toBeInTheDocument();
       expect(again.queryByText('ABCD', { selector: 'p' })).not.toBeInTheDocument();
-      expect(again.getByRole('button', { name: 'Connect with a code' })).toBeInTheDocument();
+      expect(again.queryByRole('alert')).not.toBeInTheDocument();
+
+      // Connected while Settings was closed: the code is not asked about.
+      await user.click(again.getByRole('button', { name: 'Connect with a code' }));
+      await again.findByText('ABCD', { selector: 'p' });
+      rerender(<IntegrationsSection open={false} onError={ignore} />);
+      listing([connected]);
+      const readings = read.mock.calls.length;
+      rerender(<IntegrationsSection open onError={ignore} />);
+      expect(await screen.findByText(/^Connected as ada/)).toBeInTheDocument();
+      expect(read).toHaveBeenCalledTimes(readings);
+      expect(screen.queryByText('ABCD', { selector: 'p' })).not.toBeInTheDocument();
+    });
+
+    it('asks the engine about no code at a visit when none was left waiting', async () => {
+      const user = setUp();
+      listing([notConnected]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      const cancel = vi.spyOn(api, 'cancelIntegrationCode').mockResolvedValue();
+      const read = vi.spyOn(api, 'integrationCode').mockResolvedValue(given);
+      const { rerender } = render(<IntegrationsSection open onError={ignore} />);
+      const reopen = async () => {
+        rerender(<IntegrationsSection open={false} onError={ignore} />);
+        rerender(<IntegrationsSection open onError={ignore} />);
+        return within(await screen.findByRole('listitem'));
+      };
+      await theService();
+      let service = await reopen();
+      await service.findByRole('button', { name: 'Connect with a code' });
+      expect(read).not.toHaveBeenCalled();
+
+      // A code left at Cancel.
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await user.click(await service.findByRole('button', { name: 'Cancel' }));
+      service = await reopen();
+      await service.findByRole('button', { name: 'Connect with a code' });
+      expect(read).not.toHaveBeenCalled();
+
+      // A code that failed before Settings closed: the engine is told to forget it.
+      read.mockResolvedValue({ ...given, status: 'failed', failure: 'CODE_EXPIRED' });
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await nextReading();
+      await service.findByRole('button', { name: 'Get a new code' });
+      const readings = read.mock.calls.length;
+      const cancels = cancel.mock.calls.length;
+      service = await reopen();
+      await service.findByRole('button', { name: 'Connect with a code' });
+      expect(read).toHaveBeenCalledTimes(readings);
+      expect(cancel).toHaveBeenCalledTimes(cancels + 1);
     });
     // A code still on its way, held open by the spec.
     function codeComing() {

@@ -161,6 +161,9 @@ export class Integrations implements LinkResolver, MagnetService {
   #code: PendingCode | undefined;
   // Moved on by every end of a wait: a code the service gives after it is nobody's.
   #codeTurn = 0;
+  // Told whenever a service is connected or let go, whoever did it: a code confirmed while
+  // Settings is closed is heard by main and the page in the engine's events (#146).
+  readonly #listeners = new Set<() => void>();
 
   // A key was kept and could not be read back at this start (docs/adr/0023): said in Settings
   // until a key is connected again or the service disconnected.
@@ -203,6 +206,22 @@ export class Integrations implements LinkResolver, MagnetService {
     ]);
     given.abort();
     return [this.#view()];
+  }
+
+  // The services Scia holds a key for. One there is: a second has a key of its own.
+  connected(): IntegrationId[] {
+    return this.#key === undefined ? [] : [IntegrationId.AllDebrid];
+  }
+
+  onChange(listener: () => void): () => void {
+    this.#listeners.add(listener);
+    return () => {
+      this.#listeners.delete(listener);
+    };
+  }
+
+  #tell(): void {
+    for (const listener of this.#listeners) listener();
   }
 
   // Asks the service whose key it is, and only then keeps it. Rejects with a ServiceError when
@@ -348,6 +367,7 @@ export class Integrations implements LinkResolver, MagnetService {
     this.#failure = null;
     this.#askedAt = this.#now();
     this.#deps.logger.info('service_connected', { service: id });
+    this.#tell();
     return this.#view();
   }
 
@@ -372,6 +392,7 @@ export class Integrations implements LinkResolver, MagnetService {
     this.#failure = null;
     this.#askedAt = undefined;
     this.#deps.logger.info('service_disconnected', { service: id });
+    this.#tell();
   }
 
   async serviceFor(url: string, signal: AbortSignal): Promise<IntegrationId | undefined> {

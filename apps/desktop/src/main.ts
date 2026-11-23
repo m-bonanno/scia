@@ -3,12 +3,18 @@ import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { BridgeChannel, UpdateRestart } from '@scia/contracts/bridge';
-import { DEFAULT_API_PORT, type Download, EVENTS_KEEP_ALIVE_MS } from '@scia/contracts';
+import {
+  DEFAULT_API_PORT,
+  type Download,
+  EVENTS_KEEP_ALIVE_MS,
+  type IntegrationId,
+} from '@scia/contracts';
 import { app, clipboard, dialog, Notification, shell } from 'electron';
 import log from 'electron-log/main';
 import { APP_ID } from './engine/app-identity.ts';
 import { ClipboardWatch } from './engine/clipboard-watch.ts';
 import { CloseOutcome, WindowCloser } from './engine/close-policy.ts';
+import { connectedNotice, NewlyConnected } from './engine/connected-services.ts';
 import { activityOf, downloadActivity, unfinished } from './engine/download-activity.ts';
 import { chooseDownloadFolder, oneAtATime } from './engine/download-folder.ts';
 import { completedDownloadPath } from './engine/download-location.ts';
@@ -58,9 +64,9 @@ const EVENTS_RETRY_MS = 1000;
 // The engine says it is still there every EVENTS_KEEP_ALIVE_MS: three of them missed are an
 // engine that stopped talking.
 const EVENTS_SILENCE_LIMIT_MS = 3 * EVENTS_KEEP_ALIVE_MS;
-// How many notifications — of ended downloads, of links taken from the clipboard — are held so that
-// a click on them still opens the window: the ones on screen and the last ones in the system's list
-// of notifications.
+// How many notifications — of ended downloads, of links taken from the clipboard, of a service
+// connected — are held so that a click on them still opens the window: the ones on screen and the
+// last ones in the system's list of notifications.
 const HELD_NOTICES = 20;
 
 const launch = parseLaunchOptions(process.argv, process.cwd());
@@ -311,6 +317,30 @@ async function boot(): Promise<void> {
     shown.show();
   }
 
+  // A service connected while nobody looks — a code confirmed on the service's site once Settings
+  // closed, or while another window is in use (#146; docs/adr/0013) — is said by the system, as an
+  // ended download is. A person looking at the window sees Settings, or the account's button, change.
+  const newlyConnected = new NewlyConnected();
+
+  function notifyConnected(id: IntegrationId): void {
+    const { inFront, asked } = window.isInFront();
+    log.info('service_connected_heard', { service: id, inFront, asked });
+    if (isQuitting() || inFront || !Notification.isSupported()) return;
+    const text = connectedNotice(id);
+    const shown = new Notification(text);
+    heldNotices.keep(shown);
+    shown.on('click', () => {
+      heldNotices.release(shown);
+      openFromNotice();
+    });
+    shown.on('failed', (_event, error) => {
+      heldNotices.release(shown);
+      log.warn('connected_notice_failed', { error });
+    });
+    log.info('connected_notice_asked', { title: text.title });
+    shown.show();
+  }
+
   async function closeRequested(): Promise<void> {
     const result = await closer.close();
     if (result.outcome !== CloseOutcome.Hidden) return;
@@ -520,10 +550,11 @@ async function boot(): Promise<void> {
   // listens is taken for what had already ended — never said.
   void followDownloads({
     engine,
-    onSnapshot: ({ downloads, watchClipboard }) => {
+    onSnapshot: ({ downloads, watchClipboard, connectedServices }) => {
       latest = downloads;
       updates?.engineSays({ idle: unfinished(activityOf(downloads)) === 0 });
       endedBatch.add(ended.seen(downloads));
+      for (const id of newlyConnected.seen(connectedServices)) notifyConnected(id);
       // Heard here the moment it changes, whoever changed it; never after a quit has begun.
       clipboardWatch.watch(watchClipboard && !isQuitting());
     },

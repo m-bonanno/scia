@@ -763,5 +763,63 @@ describe('Integrations', () => {
       await integrations.connect(IntegrationId.AllDebrid, KEY);
       expect(integrations.code(IntegrationId.AllDebrid)).toBeUndefined();
     });
+
+    // Settings closed while the code waits ends nothing (#146): nobody reads the code any more, and
+    // whoever listens hears the service connected once it is confirmed.
+    it('connects a code confirmed while nobody reads it, and tells whoever listens', async () => {
+      const integrations = await open();
+      const heard: (readonly string[])[] = [];
+      integrations.onChange(() => {
+        heard.push(integrations.connected());
+      });
+      const { code } = await integrations.startCode(IntegrationId.AllDebrid);
+      await until(() => lastCheck() !== '');
+      expect(heard).toEqual([]);
+
+      service.confirmCode(code, KEY);
+      await until(() => heard.length > 0);
+
+      expect(heard).toEqual([[IntegrationId.AllDebrid]]);
+      expect(integrations.connected()).toEqual([IntegrationId.AllDebrid]);
+    });
+  });
+
+  describe('which services are connected', () => {
+    it('says none, then the one a key connects, then none once it is disconnected — telling each change', async () => {
+      const integrations = await open();
+      let told = 0;
+      const stop = integrations.onChange(() => {
+        told += 1;
+      });
+      expect(integrations.connected()).toEqual([]);
+
+      await integrations.connect(IntegrationId.AllDebrid, KEY);
+      expect(integrations.connected()).toEqual([IntegrationId.AllDebrid]);
+      expect(told).toBe(1);
+
+      await integrations.disconnect(IntegrationId.AllDebrid);
+      expect(integrations.connected()).toEqual([]);
+      expect(told).toBe(2);
+
+      stop();
+      await integrations.connect(IntegrationId.AllDebrid, KEY);
+      expect(told).toBe(2);
+    });
+
+    it('says the one whose key was kept at a start, and tells nothing of a key refused', async () => {
+      const vault = new MemoryVault();
+      await vault.write(IntegrationId.AllDebrid, KEY);
+      const integrations = await open(vault);
+      let told = 0;
+      integrations.onChange(() => {
+        told += 1;
+      });
+
+      expect(integrations.connected()).toEqual([IntegrationId.AllDebrid]);
+      await expect(integrations.connect(IntegrationId.AllDebrid, REVOKED)).rejects.toThrow(
+        ServiceError,
+      );
+      expect(told).toBe(0);
+    });
   });
 });

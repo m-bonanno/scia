@@ -102,8 +102,9 @@ export function App(): ReactNode {
     [askOffer],
   );
 
-  // Learned when the engine is reached and whenever Settings closes, where a service is connected
-  // or let go; an answer to an ask that is no longer the last is not kept.
+  // Learned when the engine is reached, whenever Settings closes, where a service is connected or
+  // let go, and when the engine's events say the services changed; an answer to an ask that is no
+  // longer the last is not kept.
   const learnConnected = useCallback(() => {
     connectedAsks.current += 1;
     const ask = connectedAsks.current;
@@ -144,9 +145,12 @@ export function App(): ReactNode {
     };
   }, [reached, keepSettings]);
 
+  // Asked again when the engine says its services changed: a code confirmed once Settings closed
+  // connects one with nobody in Settings (#146).
+  const services = live.connectedServices.join(' ');
   useEffect(() => {
     if (reached) learnConnected();
-  }, [reached, learnConnected]);
+  }, [reached, services, learnConnected]);
 
   // From the field, a refusal of what was sent is the field's to say; anything else, and any
   // failure of links pasted on the page, is a notice. Links and magnets are sent apart: when one

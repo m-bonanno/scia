@@ -3,6 +3,7 @@ import {
   type IntegrationCode,
   IntegrationCodeFailure,
   IntegrationCodeStatus,
+  type IntegrationId,
 } from '@scia/contracts';
 import { Unplug } from 'lucide-react';
 import {
@@ -37,21 +38,49 @@ interface IntegrationsSectionProps {
   readonly onError: (error: unknown) => void;
 }
 
+// The services, and the code each row left waiting when Settings last closed, if it still waits:
+// the engine waits for it as long as it works (#146), and the row shows it again.
+async function readServices(
+  left: ReadonlySet<IntegrationId>,
+): Promise<{ integrations: Integration[]; waiting: ReadonlyMap<IntegrationId, IntegrationCode> }> {
+  const integrations = await api.integrations();
+  const waiting = new Map<IntegrationId, IntegrationCode>();
+  await Promise.all(
+    integrations
+      .filter((integration) => !integration.connected && left.has(integration.id))
+      .map(async ({ id }) => {
+        // A code the engine no longer has, or cannot say, is not shown: a new one is asked for.
+        const code = await api.integrationCode(id).catch(() => null);
+        if (code?.status === IntegrationCodeStatus.Waiting) waiting.set(id, code);
+      }),
+  );
+  return { integrations, waiting };
+}
+
 export function IntegrationsSection({ open, onError }: IntegrationsSectionProps): ReactNode {
   const titleId = useId();
   const [integrations, setIntegrations] = useState<Integration[] | null>(null);
+  const [waiting, setWaiting] = useState<ReadonlyMap<IntegrationId, IntegrationCode>>(new Map());
+  // The rows that left a code waiting when Settings closed: asked about at the next visit alone.
+  const leftWaiting = useRef(new Set<IntegrationId>());
 
   useEffect(() => {
     if (!open) return undefined;
     let current = true;
-    api
-      .integrations()
-      .then((listed) => {
-        if (current) setIntegrations(listed);
+    const left = new Set(leftWaiting.current);
+    leftWaiting.current.clear();
+    readServices(left)
+      .then((read) => {
+        if (!current) return;
+        setWaiting(read.waiting);
+        setIntegrations(read.integrations);
       })
       .catch(onError);
     return () => {
       current = false;
+      // Nothing of a visit is drawn at the next before the engine has said it again: a row drawn
+      // from the last visit's list would not show the code it left.
+      setIntegrations(null);
     };
   }, [open, onError]);
 
@@ -71,6 +100,10 @@ export function IntegrationsSection({ open, onError }: IntegrationsSectionProps)
           <IntegrationRow
             key={integration.id}
             integration={integration}
+            waitingCode={waiting.get(integration.id)}
+            onLeftWaiting={() => {
+              leftWaiting.current.add(integration.id);
+            }}
             onChange={(changed) => {
               setIntegrations((listed) =>
                 (listed ?? []).map((other) => (isSameService(other, changed) ? changed : other)),
@@ -112,20 +145,31 @@ function accountLine(integration: Integration): string {
 
 interface IntegrationRowProps {
   readonly integration: Integration;
+  // A code this row left waiting at the visit before, which still waits: shown from the start.
+  readonly waitingCode: IntegrationCode | undefined;
+  // The row leaves with a code shown that waits: the engine goes on waiting for it (#146).
+  readonly onLeftWaiting: () => void;
   readonly onChange: (integration: Integration) => void;
 }
 
-function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNode {
+function IntegrationRow({
+  integration,
+  waitingCode,
+  onLeftWaiting,
+  onChange,
+}: IntegrationRowProps): ReactNode {
   const { id } = integration;
   const name = SERVICE_NAME[id];
   const fieldId = useId();
   const hintId = useId();
   const alertId = useId();
   // A code to confirm on the service's site is the main way to connect; a key is the other (#136).
-  const [mode, setMode] = useState<'idle' | 'code' | 'key'>('idle');
+  const [mode, setMode] = useState<'idle' | 'code' | 'key'>(
+    waitingCode === undefined ? 'idle' : 'code',
+  );
   const [apiKey, setApiKey] = useState('');
   const [busy, setBusy] = useState(false);
-  const [code, setCode] = useState<IntegrationCode | null>(null);
+  const [code, setCode] = useState<IntegrationCode | null>(waitingCode ?? null);
   const [asking, setAsking] = useState(false);
   // A disconnection is on its way: no way to connect opens before it answers, so that a refusal
   // that comes back is said by the row, never by a form or a code opened meanwhile.
@@ -135,9 +179,8 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
   // Set when what the focus is on is about to leave the page: the control named here takes the
   // focus as it arrives.
   const handFocusOn = useRef<FocusTarget | null>(null);
-  // The engine holds a code for this row, or is being asked for one: it is cancelled when the row
-  // leaves the page.
-  const holdsCode = useRef(false);
+  // The engine holds a code for this row, or is being asked for one.
+  const holdsCode = useRef(waitingCode !== undefined);
   // Moved on whenever the person leaves the code — Cancel, "Use an API key", Settings closed — and
   // at every new ask: an answer to an ask that is no longer the last one is not shown.
   const askTurn = useRef(0);
@@ -152,15 +195,6 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
     handFocusOn.current = null;
     control.focus();
   };
-
-  // Settings closed, or the row left: a code nobody can see is not waited for.
-  useEffect(
-    () => () => {
-      askTurn.current += 1;
-      if (holdsCode.current) void api.cancelIntegrationCode(id).catch(() => undefined);
-    },
-    [id],
-  );
 
   // What a reading of the code says, with what the row knows now, not when the wait began.
   const learnCode = useEffectEvent((now: IntegrationCode, connected: Integration | undefined) => {
@@ -193,6 +227,21 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
   });
 
   const waiting = mode === 'code' && code?.status === IntegrationCodeStatus.Waiting;
+
+  // Settings closed, or the row left: a code on screen that waits is waited for by the engine as long
+  // as it works, and confirmed later it connects (#146); one still being asked for, which nobody has
+  // seen, or one that failed, is forgotten.
+  const leaveRow = useEffectEvent(() => {
+    askTurn.current += 1;
+    if (waiting) onLeftWaiting();
+    else if (holdsCode.current) void api.cancelIntegrationCode(id).catch(() => undefined);
+  });
+  useEffect(
+    () => () => {
+      leaveRow();
+    },
+    [],
+  );
   useEffect(() => {
     if (!waiting) return undefined;
     let current = true;

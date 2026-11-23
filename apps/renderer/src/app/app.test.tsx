@@ -1,4 +1,10 @@
-import { ApiErrorCode, type Bundle, type Download, type Magnet } from '@scia/contracts';
+import {
+  ApiErrorCode,
+  type Bundle,
+  type Download,
+  type IntegrationId,
+  type Magnet,
+} from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -27,11 +33,13 @@ const live = vi.hoisted(
     downloads: Download[];
     magnets: Magnet[];
     bundles: Bundle[];
+    connectedServices: IntegrationId[];
   } => ({
     connection: 'live',
     downloads: [],
     magnets: [],
     bundles: [],
+    connectedServices: [],
   }),
 );
 vi.mock('@/lib/live.ts', async (original) => ({
@@ -41,6 +49,7 @@ vi.mock('@/lib/live.ts', async (original) => ({
     downloads: live.downloads,
     magnets: live.magnets,
     bundles: live.bundles,
+    connectedServices: live.connectedServices,
   }),
 }));
 
@@ -59,6 +68,7 @@ beforeEach(() => {
   live.downloads = [];
   live.magnets = [];
   live.bundles = [];
+  live.connectedServices = [];
   vi.spyOn(api, 'settings').mockResolvedValue(settings);
   vi.spyOn(api, 'integrations').mockResolvedValue([alldebrid(false)]);
 });
@@ -1134,6 +1144,27 @@ describe('App', () => {
       await userEvent.click(button);
       await userEvent.click(button);
       expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
+    });
+
+    // A code confirmed once Settings closed connects AllDebrid with nobody in Settings (#146): the
+    // engine's events say it, and the page asks again.
+    it('learns again whether AllDebrid is connected when the engine says its services changed', async () => {
+      const integrations = vi.spyOn(api, 'integrations').mockResolvedValue([alldebrid(false)]);
+      const { rerender } = render(<App />);
+      await vi.waitFor(() => {
+        expect(integrations).toHaveBeenCalledOnce();
+      });
+      rerender(<App />);
+      expect(integrations).toHaveBeenCalledOnce();
+
+      integrations.mockResolvedValue([alldebrid(true)]);
+      live.connectedServices = ['alldebrid'];
+      rerender(<App />);
+
+      await vi.waitFor(() => {
+        expect(toggle()).toHaveAttribute('aria-expanded', 'false');
+      });
+      expect(integrations).toHaveBeenCalledTimes(2);
     });
 
     it('learns again whether AllDebrid is connected when Settings closes, and folds the panel away when it is not', async () => {

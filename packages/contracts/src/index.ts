@@ -124,6 +124,9 @@ export const snapshotSchema = z.object({
   // Whether main reads the clipboard: main follows the engine's events, and hears the switch
   // there the moment it changes, whoever changed it.
   watchClipboard: z.boolean(),
+  // The services Scia holds a key for: main and the page hear one connected while Settings is
+  // closed — a code confirmed after it closed (#146) — the moment it is.
+  connectedServices: z.array(z.enum(IntegrationId)),
 });
 export type Snapshot = z.infer<typeof snapshotSchema>;
 
