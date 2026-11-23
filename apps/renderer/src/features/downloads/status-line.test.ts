@@ -1,5 +1,6 @@
 import type { Download } from '@scia/contracts';
 import {
+  AlbumFailure,
   DownloadFailure,
   DownloadStatus,
   PageFailure,
@@ -270,6 +271,21 @@ describe('statusLine', () => {
   ] as const)('says why the video of a page was not downloaded when it was %s', (failure, text) => {
     expect(statusLine(aDownload({ status: DownloadStatus.Failed, failure }))).toBe(text);
   });
+
+  it.each([
+    [AlbumFailure.Gone, 'The site no longer has this, or the link is wrong.'],
+    [AlbumFailure.Refused, 'The site refuses to show this to Scia.'],
+    [
+      AlbumFailure.Unrecognised,
+      'Scia could not read this page of the site. A later version of Scia may read it.',
+    ],
+    [AlbumFailure.Empty, 'This album has no files.'],
+  ] as const)(
+    'says why an album, or a file of one, gave no file when it was %s',
+    (failure, text) => {
+      expect(statusLine(aDownload({ status: DownloadStatus.Failed, failure }))).toBe(text);
+    },
+  );
 
   it('names no service for a link that was never known to be one', () => {
     expect(
