@@ -18,6 +18,7 @@ import { type Ended, EndedDownloads, Ending } from './engine/ended-downloads.ts'
 import { endedNotice, STILL_IN_TRAY } from './engine/ended-notice.ts';
 import type { EngineAccess } from './engine/engine-access.ts';
 import { Kept } from './engine/kept.ts';
+import { lastAsked } from './engine/last-asked.ts';
 import { followDownloads } from './engine/engine-events.ts';
 import { EngineFailure, engineFailureNotice } from './engine/engine-failure.ts';
 import { betasOfEngine } from './engine/engine-settings.ts';
@@ -324,9 +325,12 @@ async function boot(): Promise<void> {
   // The window's own colours are the theme's, which the engine keeps: asked before the page
   // loads, and whenever the page says the theme changed. An engine that does not say leaves
   // the window as it is. Main keeps what it said, for the window of the next start.
+  // An answer that comes back after a later ask — a restart, a change in Settings — is dropped.
+  const askTheme = lastAsked(() => themeOfEngine(engine(), ENGINE_ANSWER_LIMIT_MS));
   const wearTheme = async () => {
     try {
-      const chosen = await themeOfEngine(engine(), ENGINE_ANSWER_LIMIT_MS);
+      const chosen = await askTheme();
+      if (chosen === undefined) return;
       window.wear(chosen);
       // Never waited for: the page loads without it, and it never rejects.
       void theme.keep(chosen);

@@ -15,6 +15,8 @@ const isTheme = (value: unknown): value is Theme => THEMES.some((theme) => theme
 export class RememberedTheme {
   readonly #store: ThemeStore;
   #kept: Theme | undefined;
+  #wanted: Theme | undefined;
+  #writing: Promise<void> | undefined;
 
   constructor(store: ThemeStore) {
     this.#store = store;
@@ -29,13 +31,31 @@ export class RememberedTheme {
     return theme;
   }
 
-  async keep(theme: Theme): Promise<void> {
-    if (theme === this.#kept) return;
+  // One write at a time, the theme asked last winning: two writes of one file at once land in the
+  // order they like, and a late one, or a torn one, would start the next window in another theme.
+  // What is kept is what landed: a write that failed leaves it unknown, so the next is made.
+  keep(theme: Theme): Promise<void> {
+    this.#wanted = theme;
+    if (this.#writing !== undefined) return this.#writing;
+    if (theme === this.#kept) return Promise.resolve();
+    this.#writing = this.#writeWanted();
+    return this.#writing;
+  }
+
+  async #writeWanted(): Promise<void> {
     try {
-      await this.#store.write({ theme });
-      this.#kept = theme;
-    } catch {
-      // Written again the next time the engine says it.
+      for (let theme = this.#wanted; theme !== this.#kept; theme = this.#wanted) {
+        try {
+          await this.#store.write({ theme });
+          this.#kept = theme;
+        } catch {
+          // Written again the next time the engine says it — or now, when it has said another.
+          this.#kept = undefined;
+          if (this.#wanted === theme) return;
+        }
+      }
+    } finally {
+      this.#writing = undefined;
     }
   }
 }
