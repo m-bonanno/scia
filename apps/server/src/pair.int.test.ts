@@ -93,7 +93,7 @@ describe('DownloadManager and a picture and a sound offered apart (docs/adr/0021
     return server;
   }
   function reader(answer: () => PageMedia): PageReader {
-    return { read: () => Promise.resolve(answer()) };
+    return { read: () => Promise.resolve(answer()), readTitle: () => Promise.resolve(undefined) };
   }
   async function open(overrides: Partial<ManagerDeps> = {}) {
     manager = await DownloadManager.open({

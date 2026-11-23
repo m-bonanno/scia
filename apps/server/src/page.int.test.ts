@@ -31,6 +31,7 @@ function aReader(answer: (url: string) => Promise<PageMedia | undefined>) {
       asked.push(url);
       return answer(url);
     },
+    readTitle: () => Promise.resolve(undefined),
   };
   return { reader, asked };
 }

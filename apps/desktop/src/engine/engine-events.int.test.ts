@@ -8,6 +8,7 @@ function aDownload(id: string, status: string) {
     id,
     url: 'https://example.com/file.bin',
     fileName: `${id}.bin`,
+    title: null,
     directory: 'downloads',
     kind: 'other',
     status,

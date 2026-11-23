@@ -153,6 +153,48 @@ describe('DownloadRow', () => {
     expect(screen.getByTitle('watch')).toBeInTheDocument();
   });
 
+  it('names a video’s page by the title its site gives, as text, until the file is named (#285)', () => {
+    const page = {
+      url: 'https://www.youtube.com/watch?v=aqz-KE-bpKQ',
+      fileName: 'watch',
+      kind: FileKind.Other,
+      title: 'A <b>trip</b> & <img src=x onerror=alert(1)>',
+    };
+    const { container, rerender } = render(
+      <DownloadRow
+        download={aDownload({ ...page, status: DownloadStatus.Ready, totalBytes: null })}
+        actions={actions()}
+      />,
+    );
+    const name = screen.getByTitle(page.title);
+    expect(name).toHaveTextContent(page.title);
+    // A title comes in any script: its own direction decides where it begins and where it is cut.
+    expect(name).toHaveAttribute('dir', 'auto');
+    // Markup a site writes is text: no element of its own.
+    expect(container.querySelector('b, img')).toBeNull();
+    expect(screen.queryByText(/youtube\.com/)).toBeNull();
+    // Its Start is there whatever the title.
+    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
+
+    // Started, while the site is read and before the file is named: still the title.
+    rerender(
+      <DownloadRow
+        download={aDownload({ ...page, status: DownloadStatus.Downloading, totalBytes: null })}
+        actions={actions()}
+      />,
+    );
+    expect(screen.getByTitle(page.title)).toBeInTheDocument();
+
+    // Named, the engine says no title: the file's name says it.
+    rerender(
+      <DownloadRow
+        download={aDownload({ ...page, fileName: 'A trip.mp4', kind: FileKind.Video, title: null })}
+        actions={actions()}
+      />,
+    );
+    expect(screen.getByTitle('A trip.mp4')).toBeInTheDocument();
+  });
+
   it('shows the whole sentence of a failure, remedy included, where a running line is cut', () => {
     const failed = aDownload({
       status: DownloadStatus.Failed,

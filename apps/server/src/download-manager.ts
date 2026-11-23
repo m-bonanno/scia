@@ -54,10 +54,10 @@ import type { MagnetFile, MagnetService } from './magnet-service.ts';
 import { MagnetWatch, nameOfMagnet } from './magnet-watch.ts';
 import { chooseMedia, type MediaKind, type MediaSource, PageError } from './media-choice.ts';
 import { PairTask, pictureOf, soundOf } from './pair-task.ts';
-import { offeredAs } from './offered-links.ts';
+import { Offered, offeredAs } from './offered-links.ts';
 import { type MarkDownloaded, markerFor } from './origin-mark.ts';
 import { type MarkSparse, sparseMarkerFor } from './sparse-file.ts';
-import type { PageReader } from './page-reader.ts';
+import type { PageMedia, PageReader } from './page-reader.ts';
 import {
   DiskError,
   RemoteError,
@@ -334,6 +334,17 @@ export class DownloadManager {
   #bundles: BundleRecord[];
   // Those the service is being asked about, each with what stops the question.
   readonly #opening = new Map<string, AbortController>();
+  // The ready rows of videos' pages whose title is wanted (#285), in the order they were copied,
+  // and those whose title is being read, each with what stops the read, in the order they began.
+  #titlesWanted: DownloadRecord[] = [];
+  readonly #titles = new Map<DownloadRecord, AbortController>();
+  // Every title read until it has settled, a stopped one included: `close()` waits for them, as
+  // for a download, so that yt-dlp has ended and its folder is gone when the engine exits.
+  readonly #titleReads = new Set<Promise<void>>();
+  // The pages being read for downloads: they and the titles share the queue's limit.
+  #pageReads = 0;
+  // Set at the first moment of `close()`: no title is read from then on.
+  #stopping = false;
   // They are opened one after the other: a paste of many is not as many questions at once.
   #openings: Promise<void> = Promise.resolve();
   #settings: Settings;
@@ -555,6 +566,13 @@ export class DownloadManager {
       this.#records.push(...added);
       this.#changed();
     }
+    // A video's page is named by its title, read at once by the reader of pages (the owner, #285).
+    if (this.#deps.pageReader !== undefined) {
+      this.#titlesWanted.push(
+        ...added.filter((record) => offeredAs(record.url) === Offered.VideoPage),
+      );
+      this.#readTitles();
+    }
     return added.map((record) => this.#view(record));
   }
 
@@ -656,6 +674,8 @@ export class DownloadManager {
   // into its files as a pasted one is (the owner, #181).
   #queue(record: DownloadRecord): void {
     record.status = DownloadStatus.Queued;
+    // Its own read names it: the title is not waited for, nor read twice.
+    this.#forgetTitle(record);
     if (!this.#opensIntoSeveral(record.url)) return;
     this.#records.splice(this.#records.indexOf(record), 1);
     this.#addBundle(record.url, record.referrer, record.directory);
@@ -697,6 +717,7 @@ export class DownloadManager {
   // The unfinished bytes always go; the finished file only when asked.
   async remove(id: string, deleteFile: boolean): Promise<void> {
     const record = this.#record(id);
+    this.#forgetTitle(record);
     const running = this.#running.get(id);
     if (running !== undefined) await this.#stop(running, StopIntent.Remove);
     if (record.named) {
@@ -1042,14 +1063,20 @@ export class DownloadManager {
   async close(): Promise<void> {
     // A link being opened stays so: it is asked about again at the next start.
     for (const stop of this.#opening.values()) stop.abort();
+    // A title not read by now is not read: the row keeps its address. Before the first wait, so
+    // that a copy that lands while the engine stops starts no reader.
+    this.#stopping = true;
+    this.#titlesWanted = [];
+    for (const stop of this.#titles.values()) stop.abort();
     await this.#magnetWatch.close();
     this.#unheard();
     this.#closed = true;
     clearInterval(this.#checkpoint);
     this.#checkpoint = undefined;
-    await Promise.all(
-      [...this.#running.values()].map((running) => this.#stop(running, StopIntent.Shutdown)),
-    );
+    await Promise.all([
+      ...[...this.#running.values()].map((running) => this.#stop(running, StopIntent.Shutdown)),
+      Promise.allSettled(this.#titleReads),
+    ]);
     await this.#save();
     for (const wake of this.#waiters.splice(0)) wake();
   }
@@ -1065,6 +1092,7 @@ export class DownloadManager {
       referrer,
       directory: this.#settings.downloadDirectory,
       fileName: fileNameFromUrl(url),
+      title: null,
       named: false,
       status,
       totalBytes: null,
@@ -1125,6 +1153,8 @@ export class DownloadManager {
       id: record.id,
       url: record.url,
       fileName: record.fileName,
+      // Once the file is named, its name says what the video is.
+      title: record.named ? null : record.title,
       directory: record.directory,
       kind: fileKindOfName(record.fileName),
       status: record.status,
@@ -1175,6 +1205,67 @@ export class DownloadManager {
       this.#start(this.#record(id));
     }
     this.#keepCheckpointing();
+    // The queue's limit may have grown.
+    this.#readTitles();
+  }
+
+  // The titles wanted are read as the queue's limit makes room for them, the pages being read for
+  // downloads counted with them (#285): a title takes a turn only while yt-dlp reads fewer pages
+  // than the queue starts downloads. A download never waits for a title (`#yieldToPage`).
+  #readTitles(): void {
+    const reader = this.#deps.pageReader;
+    if (reader === undefined || this.#stopping) return;
+    while (this.#pageReads + this.#titles.size < this.#settings.maxConcurrentDownloads) {
+      const record = this.#titlesWanted.shift();
+      if (record === undefined) return;
+      const stop = new AbortController();
+      this.#titles.set(record, stop);
+      const read: Promise<void> = this.#readTitle(reader, record, stop.signal).finally(() => {
+        // A read stopped and begun again has another entry, which is not this one's to take.
+        if (this.#titles.get(record) === stop) this.#titles.delete(record);
+        this.#titleReads.delete(read);
+        this.#readTitles();
+      });
+      this.#titleReads.add(read);
+    }
+  }
+
+  // A download's page about to be read takes the turn of the newest title, which waits again
+  // first in line: yt-dlp never reads more pages at once than the queue starts downloads, and the
+  // download does not wait. The title stopped is read again from its start.
+  #yieldToPage(): void {
+    for (const [record, stop] of [...this.#titles].reverse()) {
+      if (this.#pageReads + this.#titles.size <= this.#settings.maxConcurrentDownloads) return;
+      stop.abort();
+      this.#titles.delete(record);
+      this.#titlesWanted.unshift(record);
+    }
+  }
+
+  // Read once, when the row was added: one that fails keeps its address, and is not asked again.
+  async #readTitle(reader: PageReader, record: DownloadRecord, signal: AbortSignal): Promise<void> {
+    try {
+      const title = await reader.readTitle(record.url, signal);
+      // Started, removed or stopped meanwhile: what the read answers all the same is not kept.
+      if (signal.aborted) return;
+      record.title = title ?? null;
+      this.#deps.logger.info('ready_title_read', { id: record.id, title: title !== undefined });
+      this.#changed();
+    } catch (error) {
+      if (signal.aborted) return;
+      // What failed, never the page nor what it is called: what a person copies is theirs.
+      this.#deps.logger.info('ready_title_not_read', {
+        id: record.id,
+        failure: error instanceof PageError ? error.failure : 'unknown',
+      });
+    }
+  }
+
+  // A row that starts or leaves wants its title no longer.
+  #forgetTitle(record: DownloadRecord): void {
+    this.#titlesWanted = this.#titlesWanted.filter((wanted) => wanted !== record);
+    this.#titles.get(record)?.abort();
+    this.#titles.delete(record);
   }
 
   #keepCheckpointing(): void {
@@ -1645,7 +1736,15 @@ export class DownloadManager {
   async #readPage(record: DownloadRecord, signal: AbortSignal): Promise<VideoSource | undefined> {
     const reader = this.#deps.pageReader;
     if (reader === undefined) return undefined;
-    const found = await reader.read(record.url, signal);
+    this.#pageReads += 1;
+    this.#yieldToPage();
+    let found: PageMedia | undefined;
+    try {
+      found = await reader.read(record.url, signal);
+    } finally {
+      this.#pageReads -= 1;
+      this.#readTitles();
+    }
     if (found === undefined) return undefined;
     const chosen = chooseMedia(found.formats, record.named ? containerOf(record) : undefined);
     const source: VideoSource = {

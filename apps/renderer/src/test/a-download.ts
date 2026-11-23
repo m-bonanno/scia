@@ -9,6 +9,7 @@ export function aDownload(overrides: Partial<Download> = {}): Download {
     id: 'd1',
     url: 'https://example.com/film.mkv',
     fileName: 'film.mkv',
+    title: null,
     directory: '/downloads',
     kind: FileKind.Video,
     status: DownloadStatus.Downloading,

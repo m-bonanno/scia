@@ -7,6 +7,7 @@ import {
   DownloadStatus,
   MagnetFailure,
   MagnetStatus,
+  TITLE_MOST_CHARS,
 } from '@scia/core';
 import {
   IntegrationId,
@@ -24,6 +25,9 @@ export const recordSchema = z.object({
   referrer: z.string().nullable(),
   directory: z.string(),
   fileName: z.string(),
+  // What the site calls the video of a page copied, read while it was ready (#285). A state
+  // written before titles were read has none, and so has one that holds no title a row shows.
+  title: z.string().min(1).max(TITLE_MOST_CHARS).nullable().catch(null),
   // The name is final and its part file reserved: the host was asked, the folder checked.
   named: z.boolean(),
   status: z.enum(DownloadStatus),

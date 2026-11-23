@@ -42,15 +42,18 @@ What it adds: the video a page plays, on the sites yt-dlp has a reader of its ow
 - an HLS stream, made into an mp4;
 - a picture and its sound offered apart, joined into one mp4.
 
+And the title of a video's page taken from the clipboard, read the moment it is taken, for that title alone, so that its "Ready" row names the video instead of its address: the same request a Start would make, before any Start and also for a video the person never starts ([ADR 0012](../adr/0012-links-taken-from-the-clipboard.md), amended by #285).
+
 No ffmpeg. yt-dlp is kept up to date by Scia from its signed releases.
 
-ADRs: [0009](../adr/0009-the-video-of-a-page.md), [0010](../adr/0010-a-stream-made-into-an-mp4-inside-scia.md), [0011](../adr/0011-yt-dlp-kept-up-to-date.md), [0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md). Issues: #89, #97, #98, #99, #100.
+ADRs: [0009](../adr/0009-the-video-of-a-page.md), [0010](../adr/0010-a-stream-made-into-an-mp4-inside-scia.md), [0011](../adr/0011-yt-dlp-kept-up-to-date.md), [0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md), [0012](../adr/0012-links-taken-from-the-clipboard.md). Issues: #89, #97, #98, #99, #100, #285.
 
 **State:**
 
 - **One file** (#97): seen in the real app with a video of archive.org. Other sites were not tried.
 - **Streams** (#98) and **picture and sound** (#99): held by specs against local hosts. A real site's is the owner's check, on a beta.
 - **The update of yt-dlp** (#100): seen in the real app against a local host that publishes a release again under a newer name. A real new release taken from GitHub is not seen.
+- **The title of a ready row** (#285): held by specs against a stand-in for yt-dlp, and the row by CI's E2E suite on the built app, from a state that holds a title. How the shipped build prints a title was seen in a run of it on a page's description saved as a file, with nothing asked of the network. A real site's title is not seen.
 
 ### Bunkr's albums (Scia's own)
 
