@@ -5,6 +5,7 @@ import {
   fileNameFromHost,
   fileNameFromUrl,
   sanitizeFileName,
+  isNameTaken,
   uniqueFileName,
 } from './file-name.ts';
 
@@ -131,5 +132,45 @@ describe('uniqueFileName', () => {
 
   it('numbers a name without extension at its end', () => {
     expect(uniqueFileName('LICENSE', (name) => name === 'LICENSE')).toBe('LICENSE (1)');
+  });
+});
+
+describe('isNameTaken', () => {
+  // What a download keeps beside its name while it runs, as the engine names them.
+  const WORKING = ['.scia', '.scia.pieces', '.scia.picture', '.scia.sound'];
+  const folder = (inList: readonly string[], onDisk: readonly string[]) => ({
+    inList: new Set(inList.map((name) => name.toLowerCase())),
+    onDisk: (name: string) => onDisk.includes(name),
+  });
+
+  it('takes a name in the list or on disk, whatever its case in the list', () => {
+    expect(isNameTaken('clip.mp4', folder(['Clip.MP4'], []), WORKING)).toBe(true);
+    expect(isNameTaken('clip.mp4', folder([], ['clip.mp4']), WORKING)).toBe(true);
+    expect(isNameTaken('clip.mp4', folder(['other.mp4'], ['other.mp4']), WORKING)).toBe(false);
+  });
+
+  it.each(WORKING)(
+    'takes a name whose working name %s is on disk, or is a name in the list',
+    (suffix) => {
+      expect(isNameTaken('clip.mp4', folder([], [`clip.mp4${suffix}`]), WORKING)).toBe(true);
+      expect(isNameTaken('clip.mp4', folder([`clip.mp4${suffix}`], []), WORKING)).toBe(true);
+    },
+  );
+
+  it.each(WORKING)(
+    'takes a name that is the working name %s of a download in the list, never of a file alone',
+    (suffix) => {
+      expect(isNameTaken(`clip.mp4${suffix}`, folder(['clip.mp4'], []), WORKING)).toBe(true);
+      expect(
+        isNameTaken(`CLIP.MP4${suffix.toUpperCase()}`, folder(['clip.mp4'], []), WORKING),
+      ).toBe(true);
+      // A finished file has nothing beside it: a name ending as a working name is free then.
+      expect(isNameTaken(`clip.mp4${suffix}`, folder([], ['clip.mp4']), WORKING)).toBe(false);
+    },
+  );
+
+  it('gives uniqueFileName a name it can always number past', () => {
+    const used = folder(['x'], []);
+    expect(uniqueFileName('x.scia', (name) => isNameTaken(name, used, WORKING))).toBe('x (1).scia');
   });
 });

@@ -18,8 +18,8 @@ const PAGE_NOT_DOWNLOADED: Readonly<Record<PageFailure, string>> = {
     'The video on this page is protected. Scia does not download protected videos.',
   [PageFailure.VideoUnavailable]:
     'The site says this video cannot be played. It may be private, removed, or not available in your country.',
-  // DASH, picture and sound as two files, or a stream that changes partway — the page may offer
-  // another form beside it: the sentence is true of all of them.
+  // DASH, picture and sound apart in a form Scia does not join (docs/adr/0021), or a stream that
+  // changes partway — the page may offer another form beside it: the sentence is true of all.
   [PageFailure.FormatUnsupported]: 'The site offers this video in a form Scia cannot download yet.',
   // A list of videos, of tracks, of episodes: the sentence names none of them.
   [PageFailure.Playlist]:

@@ -43,9 +43,18 @@ export const recordSchema = z.object({
         .object({
           url: z.string(),
           headers: z.record(z.string(), z.string()),
-          // One file, or the playlist of an HLS stream. A state written before streams has files.
-          kind: z.enum(['file', 'hls']).catch('file'),
+          // One file, the playlist of an HLS stream, or a picture whose sound is offered apart
+          // (docs/adr/0021). A state written before streams has files.
+          kind: z.enum(['file', 'hls', 'pair']).catch('file'),
+          // The sound of a pair; none for the others. A state written before pairs has none.
+          sound: z
+            .object({ url: z.string(), headers: z.record(z.string(), z.string()) })
+            .nullable()
+            .catch(null)
+            .default(null),
         })
+        // A pair without its sound would be fetched as a picture alone: the page is read again.
+        .refine((source) => (source.kind === 'pair') === (source.sound !== null))
         .nullable(),
     })
     .nullable()

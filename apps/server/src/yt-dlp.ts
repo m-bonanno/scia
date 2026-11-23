@@ -1,7 +1,7 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { AUDIO_CONTAINERS, PageFailure } from '@scia/core';
+import { AUDIO_CONTAINERS, type AudioContainer, PageFailure } from '@scia/core';
 import { mediaSchema } from '@scia/contracts';
 import { z } from 'zod';
 import { PageError, type PageFormat } from './media-choice.ts';
@@ -40,6 +40,11 @@ const MOST_ERROR_BYTES = 64 * 1024;
 const height = z
   .unknown()
   .transform((value) => mediaSchema.shape.height.safeParse(value).data ?? null);
+const bitrate = z
+  .unknown()
+  .transform((value) =>
+    typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null,
+  );
 const formatSchema = z.object({
   url: z.string(),
   protocol: z.string().optional(),
@@ -50,6 +55,14 @@ const formatSchema = z.object({
   height: height.optional(),
   has_drm: z.unknown().optional(),
   http_headers: z.record(z.string(), z.string()).optional(),
+  // Of a sound offered apart (docs/adr/0021): its bitrate in kbit/s, and how much the site
+  // prefers its language.
+  abr: bitrate.optional(),
+  tbr: bitrate.optional(),
+  language_preference: z
+    .unknown()
+    .transform((value) => (Number.isSafeInteger(value) ? (value as number) : null))
+    .optional(),
 });
 const infoSchema = formatSchema.partial({ url: true }).extend({
   _type: z.string().optional(),
@@ -91,9 +104,15 @@ function isSoundAlone(format: Format): boolean {
   return (format.vcodec ?? undefined) === undefined && SOUND_CONTAINERS.has(format.ext ?? '');
 }
 
+// A container of sound, for a format that is sound alone: the sound of a picture offered apart.
+function soundContainerOf(format: Format): AudioContainer | undefined {
+  const ext = format.ext ?? '';
+  return isSoundAlone(format) && SOUND_CONTAINERS.has(ext) ? (ext as AudioContainer) : undefined;
+}
+
 function toFormat(format: Format): PageFormat | undefined {
-  const ext = mediaSchema.shape.ext.safeParse(format.ext ?? 'mp4').data;
-  // Not a container of a video — an audio file, a document, a program — or none at all.
+  const ext = mediaSchema.shape.ext.safeParse(format.ext ?? 'mp4').data ?? soundContainerOf(format);
+  // Not a container of a video, nor of a sound alone — a document, a program — or none at all.
   if (ext === undefined) return undefined;
   return {
     url: format.url,
@@ -105,6 +124,8 @@ function toFormat(format: Format): PageFormat | undefined {
     // yt-dlp says `true`, or "maybe" when it cannot tell: either is not taken.
     hasDrm: format.has_drm !== undefined && format.has_drm !== false && format.has_drm !== null,
     headers: headersOf(format.http_headers),
+    bitrate: format.abr ?? format.tbr ?? null,
+    languagePreference: format.language_preference ?? null,
   };
 }
 

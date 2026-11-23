@@ -108,6 +108,56 @@ else if (url.includes('/one-url')) {
       formats: [format({ url: 'https://cdn.example/a.mp4', vcodec: 'none', height: null })],
     }),
   );
+} else if (url.includes('/apart')) {
+  // A picture and its sound offered apart, as a site of videos gives its best quality: the sound
+  // in an m4a, its bitrate (`abr`, or `tbr` alone) and the preference of its language said.
+  process.stdout.write(
+    JSON.stringify({
+      _type: 'video',
+      title: 'Apart',
+      formats: [
+        format({
+          url: 'https://cdn.example/sound.m4a',
+          ext: 'm4a',
+          vcodec: 'none',
+          acodec: 'mp4a.40.2',
+          height: null,
+          abr: 129.5,
+          language_preference: 10,
+        }),
+        format({
+          url: 'https://cdn.example/total.m4a',
+          ext: 'm4a',
+          vcodec: 'none',
+          acodec: 'mp4a.40.5',
+          height: null,
+          tbr: 48,
+        }),
+        format({
+          url: 'https://cdn.example/odd.m4a',
+          ext: 'm4a',
+          vcodec: 'none',
+          acodec: 'mp4a.40.2',
+          height: null,
+          abr: -3,
+          language_preference: 'first',
+        }),
+        format({
+          url: 'https://cdn.example/sound.exe',
+          ext: 'exe',
+          vcodec: 'none',
+          acodec: 'mp4a.40.2',
+          height: null,
+        }),
+        format({
+          url: 'https://cdn.example/picture.mp4',
+          vcodec: 'avc1.640028',
+          acodec: 'none',
+          height: 1080,
+        }),
+      ],
+    }),
+  );
 } else if (url.includes('/other-container')) {
   // Picture, in containers Scia does not list.
   process.stdout.write(
