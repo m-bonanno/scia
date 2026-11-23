@@ -78,6 +78,8 @@ describe('the real app, with links copied to the clipboard', () => {
     // Nothing was fetched before a Start, and nothing was notified to a person looking at the list
     // — read once both copies were decided: main asks Windows first, which takes a moment (#62).
     await logged(profile, 'clipboard_links_added', 2);
+    // Windows itself said which window was in use, inside the built app (ADR 0020).
+    expect(await profile.log()).toMatch(/clipboard_links_added .*asked: 'answered'/);
     expect(host.ranges).toEqual([]);
     expect(await profile.log()).not.toContain('offered_notice_asked');
 

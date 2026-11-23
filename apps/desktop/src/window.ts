@@ -6,7 +6,7 @@ import { hasIntegratedTitleBar, titleBarOverlay, windowFrameOptions } from './en
 import { windowIconFile } from './engine/window-icon.ts';
 import { isInFront, isPutAway, type WindowState } from './engine/window-state.ts';
 import { windowInUse } from './engine/foreground.ts';
-import { foreground, handleOf } from './foreground-window.ts';
+import { foregroundWindow, handleOf } from './foreground-window.ts';
 
 export interface WindowLog {
   warn(message: string, details: object): void;
@@ -139,16 +139,15 @@ export class MainWindow {
   // use: a notification too many is better than one that never comes.
   // `asked` says what the system answered, for the log: "answered", "unanswered" (counted as
   // another window in use), or "not asked" off Windows.
-  async isInFront(): Promise<{ inFront: boolean; asked: 'answered' | 'unanswered' | 'not asked' }> {
+  isInFront(): { inFront: boolean; asked: 'answered' | 'unanswered' | 'not asked' } {
     if (this.#window.isDestroyed()) return { inFront: false, asked: 'not asked' };
     if (process.platform !== 'win32')
       return { inFront: isInFront(this.#state()), asked: 'not asked' };
-    const inUseNow = await foreground.ask();
-    if (this.#window.isDestroyed()) return { inFront: false, asked: 'not asked' };
-    const inUse = windowInUse(inUseNow, handleOf(this.#window.getNativeWindowHandle()));
+    const foreground = foregroundWindow();
+    const inUse = windowInUse(foreground, handleOf(this.#window.getNativeWindowHandle()));
     return {
       inFront: isInFront(this.#state(), inUse),
-      asked: inUseNow === undefined ? 'unanswered' : 'answered',
+      asked: foreground === undefined ? 'unanswered' : 'answered',
     };
   }
 

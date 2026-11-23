@@ -1,4 +1,4 @@
-import { foreground } from './foreground-window.ts';
+import { loadForeground } from './foreground-window.ts';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -73,9 +73,8 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function boot(): Promise<void> {
-  // Its first start takes seconds on a cold machine: started now, asked only when a notification
-  // is decided (ADR 0020).
-  foreground.warm();
+  // Asked only when a notification is decided (ADR 0020); loaded now, in milliseconds.
+  void loadForeground();
   const layout = resolveRuntimeLayout({
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
@@ -193,13 +192,11 @@ async function boot(): Promise<void> {
         clearTimeout(timer);
       };
     },
-    deliver: (downloads) => {
-      void notifyEnded(downloads);
-    },
+    deliver: notifyEnded,
   });
 
-  async function notifyEnded(downloads: readonly Ended[]): Promise<void> {
-    const { inFront, asked } = await window.isInFront();
+  function notifyEnded(downloads: readonly Ended[]): void {
+    const { inFront, asked } = window.isInFront();
     // Idle in the tray: the window was put away and nothing is running or waiting any more.
     const lastOfHiddenScia = window.isPutAway() && unfinished(activityOf(latest)) === 0;
     const completed = downloads.filter((download) => download.ending === Ending.Completed).length;
@@ -243,11 +240,11 @@ async function boot(): Promise<void> {
     read: () => clipboard.readText(),
     offer: (links) => offerToEngine(links, engine(), OFFER_ANSWER_LIMIT_MS),
     added: (added) => {
-      void notifyOffered('clipboard_links_added', added, offeredNotice);
+      notifyOffered('clipboard_links_added', added, offeredNotice);
     },
     offerMagnets: (magnets) => offerMagnetsToEngine(magnets, engine(), OFFER_ANSWER_LIMIT_MS),
     sent: (sent) => {
-      void notifyOffered('clipboard_magnets_sent', sent, sentNotice);
+      notifyOffered('clipboard_magnets_sent', sent, sentNotice);
     },
     every: (ms, run) => {
       const timer = setInterval(run, ms);
@@ -258,12 +255,12 @@ async function boot(): Promise<void> {
     log,
   });
 
-  async function notifyOffered(
+  function notifyOffered(
     event: string,
     added: number,
     noticeOf: (count: number) => { title: string; body: string },
-  ): Promise<void> {
-    const { inFront, asked } = await window.isInFront();
+  ): void {
+    const { inFront, asked } = window.isInFront();
     log.info(event, { added, inFront, asked });
     if (added === 0 || isQuitting() || inFront || !Notification.isSupported()) return;
     const text = noticeOf(added);

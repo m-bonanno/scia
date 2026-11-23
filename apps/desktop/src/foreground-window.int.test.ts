@@ -1,41 +1,18 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import { until } from '../../server/src/testing/scratch.ts';
-import { ForegroundWindow, handleOf } from './foreground-window.ts';
+import { describe, expect, it } from 'vitest';
+import { foregroundWindow, handleOf, loadForeground } from './foreground-window.ts';
 
-describe.runIf(process.platform === 'win32')('ForegroundWindow, asking Windows (#62)', () => {
-  let foreground: ForegroundWindow | undefined;
-  afterEach(() => {
-    foreground?.stop();
-    foreground = undefined;
-    vi.unstubAllEnvs();
-  });
+describe.runIf(process.platform === 'win32')('foregroundWindow, asking Windows (#62)', () => {
+  it('answers nothing before koffi is loaded, then the window in use, in well under a millisecond', async () => {
+    expect(foregroundWindow()).toBeUndefined();
 
-  it('answers nothing before it is ready, then the window in use, in well under a second', async () => {
-    foreground = new ForegroundWindow();
-    foreground.warm();
-    expect(await foreground.ask()).toBeUndefined();
-
-    // Its first start compiles the declaration: seconds on a cold runner, once.
-    let first: bigint | undefined;
-    await until(async () => {
-      first = await foreground!.ask();
-      return first !== undefined;
-    }, 60_000);
+    await loadForeground();
     const startedAt = performance.now();
-    const second = await foreground.ask();
+    const handle = foregroundWindow();
     const took = performance.now() - startedAt;
 
-    expect(first! >= 0n).toBe(true);
-    expect(typeof second).toBe('bigint');
-    expect(took).toBeLessThan(500);
-  }, 90_000);
-
-  it('answers nothing when the system cannot be asked, never a guess', async () => {
-    vi.stubEnv('SystemRoot', 'C:\\no-windows-here');
-    foreground = new ForegroundWindow();
-    foreground.warm();
-
-    expect(await foreground.ask()).toBeUndefined();
+    expect(typeof handle).toBe('bigint');
+    expect(handle! >= 0n).toBe(true);
+    expect(took).toBeLessThan(5);
   });
 });
 
