@@ -12,25 +12,43 @@ import { downloadsOf, type Profile, rowOf, until, useRun } from './scia.ts';
 const KEY = 'e2e-made-up-key-0123456789';
 
 interface Copied {
+  // The text on the clipboard; '' for one that holds none — empty, a picture.
   sciaCopied?: string;
+  // The system keeps the clipboard closed: Electron reads '' while its formats still say text.
+  sciaClosed?: boolean;
+  sciaReads?: number;
 }
 
 // The system's clipboard is the one thing answered for the person, in main, as the folder dialog
 // is in settings.e2e: a process started under a job that limits the desktop — as a sandboxed shell
 // is — cannot open it, and a spec must not take a person's clipboard either.
-// Everything after Electron's read is the app's own.
+// Everything after Electron's read of the text and of the formats is the app's own.
 const answerClipboard = (app: ElectronApplication) =>
   app.evaluate(({ clipboard }) => {
     const copied = globalThis as Copied;
     // Something was copied before Scia read the clipboard, as it nearly always is.
     copied.sciaCopied = 'copied before the switch was turned on';
-    clipboard.readText = () => Promise.resolve(copied.sciaCopied ?? '');
+    copied.sciaReads = 0;
+    clipboard.readText = () => {
+      copied.sciaReads = (copied.sciaReads ?? 0) + 1;
+      return Promise.resolve(copied.sciaClosed === true ? '' : (copied.sciaCopied ?? ''));
+    };
+    clipboard.has = (format) =>
+      Promise.resolve(format === 'text/plain' && (copied.sciaCopied ?? '') !== '');
   });
 
 const copy = (app: ElectronApplication, text: string) =>
   app.evaluate((_electron, copied) => {
     (globalThis as Copied).sciaCopied = copied;
   }, text);
+
+const closeClipboard = (app: ElectronApplication, closed: boolean) =>
+  app.evaluate((_electron, yes) => {
+    (globalThis as Copied).sciaClosed = yes;
+  }, closed);
+
+const readsOf = (app: ElectronApplication) =>
+  app.evaluate(() => (globalThis as Copied).sciaReads ?? 0);
 
 // Main says in its log when it starts and stops reading the clipboard: what is copied before it
 // reads is what was there already, which it does not take.
@@ -122,6 +140,44 @@ describe('the real app, with links copied to the clipboard', () => {
     expect(log).toContain('links_offered');
     expect(log).not.toContain('archive.zip');
     expect(log).not.toContain('blog/post');
+  });
+
+  it('takes the first link copied after a start with no text on the clipboard, and nothing that was there behind a clipboard kept closed (#134)', async () => {
+    const profile = await run.profile();
+    const host = run.keep(await startRangeServer({ body: randomBytes(1024) }));
+    const at = (name: string) => host.url.replace('sample.bin', name);
+    const { app, page } = await run.launch(profile);
+    await answerClipboard(app);
+
+    // A picture on the clipboard: no text. A link copied as soon as Scia has looked is a copy.
+    await copy(app, '');
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await turn(page, true);
+    await page.getByRole('button', { name: 'Close' }).click();
+    await until(async () => /clipboard_start_known {\s*text: false\s*}/.test(await profile.log()));
+    await copy(app, at('first.zip'));
+    await rowOf(page, 'first.zip').getByText('Ready', { exact: true }).waitFor();
+
+    // A link on the clipboard, which the system keeps closed for longer than the reading once
+    // waited: it is what was there, and is not taken when the clipboard opens.
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await turn(page, false);
+    await logged(profile, 'clipboard_watch_off', 0);
+    await copy(app, at('before.zip'));
+    await closeClipboard(app, true);
+    await turn(page, true);
+    await page.getByRole('button', { name: 'Close' }).click();
+    await logged(profile, 'clipboard_watch_on', 1);
+    const reads = await readsOf(app);
+    await until(async () => (await readsOf(app)) >= reads + 5);
+    await closeClipboard(app, false);
+    await until(async () => /clipboard_start_known {\s*text: true\s*}/.test(await profile.log()));
+    await copy(app, at('after.zip'));
+    await rowOf(page, 'after.zip').getByText('Ready', { exact: true }).waitFor();
+    expect((await downloadsOf(page)).map((download) => download.fileName)).toEqual([
+      'first.zip',
+      'after.zip',
+    ]);
   });
 
   it('sends a copied magnet to a connected AllDebrid at once, and leaves one out with none (#139)', async () => {

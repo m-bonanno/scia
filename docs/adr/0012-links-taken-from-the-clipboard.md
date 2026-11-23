@@ -1,6 +1,6 @@
 # ADR 0012 — Links taken from the clipboard: main reads, the engine keeps what it knows
 
-- **Status**: accepted; point 4 amended by [ADR 0017](./0017-a-magnet-taken-from-the-clipboard.md)
+- **Status**: accepted; point 4 amended by [ADR 0017](./0017-a-magnet-taken-from-the-clipboard.md); point 3 and its consequence on the three empty reads amended below, "Amendment — the clipboard's formats read before it is called empty" (#134)
 - **Date**: 2026-11-21
 
 ## Context
@@ -46,3 +46,25 @@ The clipboard is a new kind of input: until now Scia read only what the person p
 - A video on a site not in `VIDEO_SITES` is not taken from the clipboard; pasted, it is read as before. The list is kept by hand, and a site that changes the shape of its addresses is missed until it is changed.
 - A process started under a job that limits the desktop cannot open the clipboard: every read is refused, and nothing is taken. A sandboxed shell on the owner's machine runs so: the E2E spec answers Electron's read in main, as it answers the folder dialog, and the real clipboard is tried by a person.
 - Linux has a second clipboard, the selection: Scia reads the clipboard only, and Linux is untried.
+
+## Amendment — the clipboard's formats read before it is called empty (2026-11-23, #134)
+
+The owner decided (21 November 2026, #134): what is on the clipboard when the reading starts is never taken — the clipboard's formats are read before it is called empty, or the reading waits longer — and the exception of the three empty reads goes. `v1.0.0` waits for it.
+
+Point 3 is amended: **until a turn knows what was there, each beat asks the clipboard's formats first, then its text** (`holdsText`, `clipboard.has('text/plain')` in main). The three empty reads are gone, and nothing is called empty by counting.
+
+- **Formats with no text** — empty, a picture, files copied in Explorer — are known at once: the clipboard held no text, and a text read after that answer, in the same beat or later, is a copy, offered as any other. A link copied a moment after the switch is turned on is taken.
+- **Formats with text** make the turn wait for the text itself, however long the system keeps the clipboard closed: an empty read is passed over, and the first text read is what was there, not taken.
+- **Formats the system will not tell** (a rejection) tell nothing: the beat is passed over, as a refused read is.
+- Once the turn knows, the formats are not asked again: each beat reads the text alone.
+- Main's log says once a turn whether the clipboard held text when it started (`clipboard_start_known`, `text: true` or `false`), never what.
+
+Why the formats can be believed when the text cannot: Electron 44 builds `has` on the list `clipboard.read()` exposes, whose standard types Chromium takes on Windows from `IsClipboardFormatAvailable`, which answers without opening the clipboard (`electron_api_clipboard.cc` at v44.10.1). A clipboard another program holds open still says it holds text. Under a job that limits the desktop the same call answers no format, as `OpenClipboard` there is refused (seen in a sandboxed shell on the owner's machine, 23 November 2026, from PowerShell): every read of the text there answers `''`, so nothing is taken, as before.
+
+The first consequence about the three empty reads is replaced by these:
+
+- A link copied after the reading has looked is taken, whatever the clipboard held: no wait at the start.
+- A clipboard that holds text the system keeps closed is waited for, beat after beat, and what it held is not taken once it opens. A copy made while it stays closed is not seen before it opens, and is then taken for what was there: the safe side, as the owner chose.
+- A clipboard whose text is empty — a text format with nothing in it, which few programs write — is one that holds text: the turn waits, and the first text copied after it is taken for what was there and not offered.
+- A text copied in the instant between the formats' answer and the read of the text is read with that answer: no text before it, so it is offered; one copied before the formats are asked is what was there.
+- What Electron's `has('text/plain')` answers is read in its source and held by specs and the E2E suite, where main answers it as it answers the text; the real clipboard is tried by a person, as for the rest of this ADR.
