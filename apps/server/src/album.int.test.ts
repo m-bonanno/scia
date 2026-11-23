@@ -16,6 +16,7 @@ import {
   type BunkrServerOptions,
   type SimulatedFile,
   albumPageOf,
+  filePageOf,
   startBunkrServer,
 } from './testing/bunkr-server.ts';
 import {
@@ -437,6 +438,86 @@ describe('a Bunkr album', () => {
     expect(Buffer.compare(await readFile(inDownloads('Notes of the trip.txt')), notes)).toBe(0);
   });
 
+  it('keeps a file pasted by itself in the download folder, whatever its page calls it', async () => {
+    const files: SimulatedFile[] = [
+      { id: '7', slug: 'esc', heading: '..\\..\\escape.txt', link: await host(notes) },
+    ];
+    const on = await bunkr({ albums: { x: { files } } });
+    const downloads = await open(on);
+
+    const [file] = downloads.add({ urls: [`${on.url}/f/esc`] });
+    await until(() => downloads.find(file!.id).status === DownloadStatus.Completed);
+
+    expect(await readdir(inDownloads())).toEqual(['escape.txt']);
+    expect((await readdir(folder.path)).sort()).toEqual(['data', 'downloads']);
+  });
+
+  it('puts the files of an album in its place in the list, between what was added with it', async () => {
+    const before = await host(notes, { fileName: 'before.bin' });
+    const after = await host(notes, { fileName: 'after.bin' });
+    const on = await bunkr();
+    const downloads = await open(on);
+
+    downloads.add({ urls: [before, `${on.url}/a/AbCd12`, after] });
+    await until(() => allDone(downloads, 5));
+
+    expect(downloads.snapshot().downloads.map(({ fileName }) => fileName)).toEqual([
+      'before.bin',
+      'Day 1.mp4',
+      "Ada's notes.txt",
+      'photo-IjKl.jpg',
+      'after.bin',
+    ]);
+  });
+
+  it('writes a slug into the address of its page, and reads an album id out of its own', async () => {
+    const files: SimulatedFile[] = [
+      { id: '1', slug: 'Day 1#x?y', original: 'x.bin', link: await host(notes) },
+    ];
+    const on = await bunkr({ albums: { 'My album': { files } } });
+    const downloads = await open(on);
+
+    downloads.add({ urls: [`${on.url}/a/My%20album`] });
+    await until(() => allDone(downloads, 1));
+
+    expect(await readdir(inDownloads('My album'))).toEqual(['x.bin']);
+    expect(downloads.snapshot().downloads[0]?.url).toBe(`${on.url}/f/Day%201%23x%3Fy`);
+  });
+
+  it('reads a page or an answer up to its bound, and none past it', async () => {
+    const KIB = 1024;
+    const page = (padding: number) =>
+      `${filePageOf({ id: '102', name: 'notes.txt' })}${' '.repeat(padding)}`;
+    const on = await bunkr({
+      pages: { '/f/within': page(2 * MIB - 4 * KIB), '/f/past': page(2 * MIB + KIB) },
+    });
+    const downloads = await open(on);
+    const [within, past] = downloads.add({ urls: [`${on.url}/f/within`, `${on.url}/f/past`] });
+    await until(() => downloads.find(within!.id).status === DownloadStatus.Completed);
+    expect(await failureOf(downloads, past!.id)).toBe(AlbumFailure.Unrecognised);
+    await manager?.close();
+    manager = undefined;
+
+    for (const [padding, completes] of [
+      [60 * KIB, true],
+      [65 * KIB, false],
+    ] as const) {
+      await site?.close();
+      const link = await host(notes);
+      const api = await bunkr({
+        apiAnswer: `${JSON.stringify({ encrypted: false, url: link })}${' '.repeat(padding)}`,
+      });
+      const again = await open(api);
+      const [file] = again.add({ urls: [`${api.url}/f/notes-EfGh`] });
+      if (completes) {
+        await until(() => again.find(file!.id).status === DownloadStatus.Completed);
+      } else {
+        expect(await failureOf(again, file!.id)).toBe(AlbumFailure.Unrecognised);
+      }
+      await again.close();
+    }
+  });
+
   it('follows a redirect to a host of the list, and never one off it', async () => {
     const other = await startBunkrServer({
       albums: { AbCd12: { title: 'Moved', files: await holiday() } },
@@ -447,6 +528,8 @@ describe('a Bunkr album', () => {
           '/a/old': `${other.url}/a/AbCd12`,
           '/a/away': 'http://localhost:9/a/x',
           '/a/loop': '/a/loop',
+          // A host of the list, by another scheme than the web's.
+          '/a/ftp': `ftp://127.0.0.1/a/AbCd12`,
         },
       });
       const downloads = await open(on);
@@ -463,6 +546,8 @@ describe('a Bunkr album', () => {
       const [loop] = downloads.add({ urls: [`${on.url}/a/loop`] });
       expect(await failureOf(downloads, loop!.id)).toBe(AlbumFailure.Unrecognised);
       expect(on.asked.filter(({ path }) => path === '/a/loop')).toHaveLength(6);
+      const [ftp] = downloads.add({ urls: [`${on.url}/a/ftp`] });
+      expect(await failureOf(downloads, ftp!.id)).toBe(AlbumFailure.Unrecognised);
     } finally {
       await other.close();
     }

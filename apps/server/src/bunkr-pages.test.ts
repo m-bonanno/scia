@@ -180,6 +180,17 @@ describe('readFilePage', () => {
     expect(readFilePage('<h1>a.mp4</h1>')).toBeUndefined();
     expect(readFilePage(filePageOf({ id: '../4521', name: 'a.mp4' }))).toBeUndefined();
     expect(readFilePage(filePageOf({ id: '', name: 'a.mp4' }))).toBeUndefined();
+    // Sixty-four characters at most: an id is a short word, sent as it stands to the API.
+    expect(readFilePage(filePageOf({ id: 'a'.repeat(64), name: 'a.mp4' }))?.id).toBe(
+      'a'.repeat(64),
+    );
+    expect(readFilePage(filePageOf({ id: 'a'.repeat(65), name: 'a.mp4' }))).toBeUndefined();
+  });
+
+  it('keeps a reference to no character as it is written, rather than failing on it', () => {
+    expect(readFilePage(filePageOf({ id: '1', name: 'a&#x110000;b&#0;c.mp4' }))?.name).toBe(
+      'a&#x110000;b&#0;c.mp4',
+    );
   });
 });
 
@@ -212,10 +223,15 @@ describe('linkOfAnswer', () => {
       { encrypted: false, url: '/a.mp4' },
       { encrypted: true, url: ENCRYPTED },
       { encrypted: true, timestamp: '1795000000', url: ENCRYPTED },
-      { encrypted: true, timestamp: -1, url: ENCRYPTED },
+      // An address hidden under the key of a time before 1970: read, it would be an address.
+      { encrypted: true, timestamp: -3600, url: 'OzE3IjZucGQmanFISTIoMz4gejEuMXY+A1wjcQ==' },
+      // Only `true` says the address is hidden: read as hidden, this one would be an address.
+      { encrypted: 'true', timestamp: 1795000000, url: ENCRYPTED },
       // Another key: what comes out is no address.
       { encrypted: true, timestamp: 0, url: ENCRYPTED },
       { encrypted: true, timestamp: 1795000000, url: 'not base64!' },
+      // Bytes that are no UTF-8 after the XOR: read leniently, they end in U+FFFD, an address.
+      { encrypted: true, timestamp: 1795000000, url: 'OzE3IjZucGQmanFRQVlbQV02ay03MXs+tA==' },
     ]) {
       expect(linkOfAnswer(answer), JSON.stringify(answer)).toBeUndefined();
     }
@@ -226,6 +242,7 @@ describe('isMaintenance', () => {
   it("is the name Bunkr's file servers land a link on while they are in maintenance", () => {
     expect(isMaintenance('maint.mp4')).toBe(true);
     expect(isMaintenance('maintenance-vid.mp4')).toBe(true);
+    expect(isMaintenance('MAINT.MP4')).toBe(true);
     expect(isMaintenance('Day 1.mp4')).toBe(false);
     expect(isMaintenance(undefined)).toBe(false);
   });
