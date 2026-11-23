@@ -342,28 +342,8 @@ describe('the real app, with a magnet', () => {
       await capture(scia, 'dark', 'via-a-service.png', true);
     });
 
-    it('of Settings with AllDebrid connected', async () => {
-      const profile = await run.profile();
-      const service = run.keep(
-        await startAllDebridServer({
-          accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
-        }),
-      );
-      const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
-      const { page } = scia;
-      await answerClipboard(scia);
-      await connect(page);
-      await viewportOf(page, 1040, 900);
-
-      const settings = page.getByRole('dialog', { name: 'Settings' });
-      await page.getByRole('button', { name: 'Settings' }).click();
-      const watch = settings.getByRole('switch', { name: 'Take links from the clipboard' });
-      await watch.click();
-      await until(() => watch.isChecked());
-      await settings.getByText('Connected as ada').waitFor();
-      await capture(scia, 'dark', 'settings.png');
-      await capture(scia, 'light', 'settings-light.png');
-    });
+    // settings.png and its light twin are settings.e2e's ("takes the captures of Settings"), taken
+    // once AllDebrid is connected and Settings closed: they show the field as it is now too.
 
     it("of the panel of the account's magnets, beside the list and at its narrowest", async () => {
       const profile = await run.profile();
