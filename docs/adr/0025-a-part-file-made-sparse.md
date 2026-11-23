@@ -1,0 +1,39 @@
+# ADR 0025 — A part file made sparse, its room looked at instead of reserved
+
+- **Status**: accepted
+- **Date**: 2026-11-23
+
+## Context
+
+A download with ranges makes its part file at the file's full size before the first byte arrives (`download-task.ts`, since M0), so that a full disk says so at once — the size is the room, taken — and every connection writes its bytes where they belong. [ADR 0001](./0001-electron-and-a-local-engine.md) left open what that costs on NTFS, "to be measured before M1 closes".
+
+#182 measured it on 23 November 2026, with the engine's own `DownloadTask` and `HttpSource` fetching from a local host ([evidence](../product/evidence.md#zero-filling-on-ntfs)). Setting the size takes milliseconds. A write far into the file then waits while Windows writes zeros up to it, and it waits on one of the four threads Node gives the disk: with eight connections all four were held, and nothing of the engine reached the disk — the download's first connection, a save of `state.json`, the page's files. A 32 GiB file on an NVMe SSD wrote nothing for 32 s, and a tiny `stat` of another file waited as long; a 4 GiB file on a USB hard disk wrote nothing for over 45 s. The whole of the 32 GiB file took 72 to 81 s, against 47 s with the part file sparse, whose every connection wrote at once.
+
+The owner decided (23 November 2026, on #182) that the part file is made sparse on Windows, with the room on the disk looked at when a download starts so that a full disk is still said early, and that the engine gets more disk threads; and that `v1.0.0` waits for it.
+
+## Decision
+
+1. **A ranged part file is made sparse before its size is set** (`sparseMarkerFor`, `sparse-file.ts`): a new one while it is still empty, a kept one asked again, which changes nothing of one already sparse. A sparse file is not filled with zeros: what was never written is read as zeros and takes no room.
+2. **On Windows the system's own `fsutil sparse setflag` does it**, started by the engine by its full path under `SystemRoot` — the engine's environment has no `PATH` — with an environment built from nothing but `SystemRoot`, hidden, and ended after `SPARSE_LIMIT_MS` (5 s). It needs no administrator: it ran on a file of the person's own from an account that was not elevated. Elsewhere nothing is asked: a size set with `truncate` is a hole already on the file systems Linux uses.
+3. **A refusal never fails a download.** `fsutil` missing, refused, or slow: the log says `part_file_not_sparse` with the download's id, and the download goes on with its part file dense, as before this ADR — slow to start on NTFS, whole all the same. A picture and its sound ([ADR 0021](./0021-picture-and-sound-joined-into-one-mp4.md)) are two part files, each marked and each said.
+4. **The room is looked at, not reserved.** Before the part file is made, or opened again, the room left to the person on its disk (`statfs`: `bavail × bsize`) is compared with the bytes still to come — the bytes the segments already hold are not counted again. Less, and the download fails `DISK` (`DownloadFailure.Disk`, which the row already says) before its host is asked for a byte, and no part file is made. A disk that does not say its room is not checked. This replaces the reservation that setting the full size made on NTFS: a sparse file takes its room as its bytes arrive. It holds on every system.
+5. **The engine starts with a thread for every write it can have at once, and four to spare** (`ENGINE_THREADPOOL_SIZE` in `@scia/contracts`: the most downloads at once times the most connections, plus four — 164): `UV_THREADPOOL_SIZE` in its environment, which main's `server-env.ts` and `npm run dev` give it, and which Node reads once, as the process starts. Each connection waits for its own write before the next, so no write of a download waits for another's thread, and a save of `state.json` or a file of the page never waits behind a write that is slow for any reason.
+
+## Alternatives considered
+
+- **`FSCTL_SET_SPARSE` called by the engine itself**, through koffi or a native module. Rejected: the engine has no native module, and one would be a new class of dependency ([`apps/desktop/CLAUDE.md`](../../apps/desktop/CLAUDE.md), "Packaging"), with its own build per system and its own unpacking from the asar, for a call that a program Windows ships makes in 25 ms.
+- **`SetFileValidData`**, which tells NTFS the zeros are already written. Rejected: it needs the privilege to manage volumes (an administrator), and what the disk held before shows through the file until it is written.
+- **The part file dense, and its writes kept close together**: segments fetched in order, near the start of the file, so that the zeros never run far ahead. Rejected: it changes how segments are planned and split (`@scia/core`) for every system to cure one file system, and the first write of every later range still waits for the zeros before it.
+- **The zeros written once, before the connections start.** The same wait, moved: 30 s of "Connecting…" for 32 GiB.
+- **More threads alone.** Measured: they keep the engine's other disk work from waiting (a `stat` waited 13 ms at most), and the download still wrote nothing for 26 s.
+- **No room checked, as Linux already did.** Rejected by the owner: a full disk is said at the start, not after hours at the last gigabytes.
+
+## Consequences
+
+- Measured with the fix, the 32 GiB file on the NVMe SSD, eight connections, the engine's marker and 164 threads: every connection wrote its first byte 61 ms after the start, the marker's `fsutil` included; 0.32 GiB was on the disk after the first second; no `stat` waited over 10 ms; the whole file took 49.2 s, against 72.1 and 81.1 s before ([evidence](../product/evidence.md#zero-filling-on-ntfs)). Not seen in the app: the engine was run by a script, never Electron.
+- A full disk is still said before a byte when the room is short at the start. What fills the disk afterwards — another download, which saw the same room, or another program — is said by the write that finds it full, as `DISK` on the row, where before this ADR the reservation had taken the room.
+- One process more per download that makes a part file on Windows: `fsutil`, 22 to 39 ms. A Windows where it is missing or refused downloads as before #182, and says so in the log; none was found.
+- 164 threads where Node starts with four: 9 MiB more of the engine's memory, measured under plain Node (76 to 85 MiB). `UV_THREADPOOL_SIZE` reaching the engine inside the app — Electron's `utilityProcess` — is not seen: the specs read what main gives, and no run of the app read it back.
+- A finished file stays sparse, its every byte written: it takes the room a dense one does. How a sparse file is fragmented on a full NTFS volume, and what other programs make of the flag, is not measured.
+- A part file kept from a dense attempt — made before this ADR, or whose marking was refused — keeps the room it was given: setting the flag frees nothing already allocated. Whether a write far into it still waits for zeros is not measured.
+- Linux is untried, as the rest of Scia there: its part files are holes already, and its room is now looked at as on Windows.

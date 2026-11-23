@@ -176,7 +176,19 @@ Each run is set against the same part file marked sparse (`fsutil sparse setflag
 
 A part file made at its full size takes its room on the disk at once (a 32 GiB file: 32 GiB less free), so that a full disk says so at the start; marked sparse, it takes none (0 GiB less free) until its bytes are written.
 
-**Not seen**: the real app; a network slower than the disk, where the zeros are written while the connections would otherwise wait on the host; a disk with Defender's real-time protection off; a resumed download, whose part file keeps the zeros already written; a finished file left sparse, and what other programs make of it.
+**The fix** ([ADR 0025](../adr/0025-a-part-file-made-sparse.md); the owner's decision on #182): a ranged part file is made sparse by the system's `fsutil` before its size is set, its room on the disk is looked at instead of reserved — less room than the bytes to come fails `DISK` before a byte is asked for — and the engine starts with 164 disk threads (`UV_THREADPOOL_SIZE`). **Held by specs**: a new part file asked to be made sparse while it is empty, and on Windows read back sparse with `fsutil sparse queryflag` (the task, and a download of the manager); a download whose part file cannot be made sparse finished and logged `part_file_not_sparse`, a pair's two files each; a file larger than the room left refused before its host is asked, with no part file made; only the bytes still to come counted against the room; a disk that does not say its room not checked; main giving the engine the threads. Each line of the fix was taken away, or turned, one at a time, and a spec failed for each (15 of 15).
+
+**Measured again with the fix**, the same day, machine and script, the 32 GiB file on the NVMe SSD over 8 connections, with the engine's own marker and `UV_THREADPOOL_SIZE=164`; and the part file dense with the 164 threads alone:
+
+| Run                    | Last first write | Nothing written for | Longest `stat` | First second | Whole          |
+| ---------------------- | ---------------- | ------------------- | -------------- | ------------ | -------------- |
+| Sparse, 164 threads    | 61 ms            | —                   | 10 ms          | 0.32 GiB     | 49.2 s         |
+| Dense, 164 threads     | 27.1 s           | 26 s                | 13 ms          | 0            | 68.0 s         |
+| Before (dense, 4), × 2 | 32.5 s, 33.2 s   | 32 s                | 32.4 s, 29.5 s | 0            | 81.1 s, 72.1 s |
+
+The first writes' 61 ms include `fsutil` and the look at the room. `fsutil sparse setflag` took 22 to 39 ms (median 25, of 20); the 164 threads took 9 MiB more of a Node process (76 to 85 MiB). The threads alone keep the engine's other disk work from waiting; the download still waits for the zeros.
+
+**Not seen**: the real app — `fsutil` started by the engine inside it, and `UV_THREADPOOL_SIZE` reaching its `utilityProcess`; the USB hard disk with the fix; a network slower than the disk, where the zeros are written while the connections would otherwise wait on the host; a disk with Defender's real-time protection off; a resumed download whose part file was made dense; a full disk met by a download whose room was there at its start; a finished file left sparse, and what other programs make of it; Linux.
 
 ## M2 — The whole extension
 
