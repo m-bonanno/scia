@@ -14,6 +14,7 @@ import {
 } from '@scia/contracts';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
 import {
+  AlbumFailure,
   BundleFailure,
   BundleStatus,
   canPause,
@@ -42,6 +43,8 @@ import {
   UnlockFailure,
 } from '@scia/core';
 import { BundleKind, bundleKindOf, bundleName } from './bundle-links.ts';
+import type { Bunkr } from './bunkr.ts';
+import { isMaintenance } from './bunkr-pages.ts';
 import { DownloadTask } from './download-task.ts';
 import { HlsTask, piecesOf, type Timeline } from './hls-task.ts';
 import type { LinkResolver } from './link-resolver.ts';
@@ -144,6 +147,9 @@ export interface ManagerDeps {
   // What finds the video a page plays, when a link is a page. Without it every page is fetched
   // as it stands.
   readonly pageReader?: PageReader;
+  // What reads Bunkr's albums and its files' pages (docs/adr/0024). Without it, their links are
+  // fetched as they stand.
+  readonly bunkr?: Bunkr;
   // What marks a finished file as coming from the network; the running system's by default.
   readonly markDownloaded?: MarkDownloaded;
   // What makes a new part file sparse; the running system's by default.
@@ -275,6 +281,31 @@ const AS_IT_STANDS: ReadonlySet<BundleFailure> = new Set([
   BundleFailure.Empty,
   BundleFailure.NeedsService,
 ]);
+
+// A refusal from the address a site gave a file at this run (docs/adr/0024): the row says that
+// address stopped working, not the link the person pasted, and that a retry asks for a new one.
+// Only a refusal that cannot heal, a 4xx: a busy server (5xx, 429, 408, 425, a 204 — what
+// `HttpSource` marks retryable) is no dead link, and keeps the sentence of a busy server, as does
+// a host that ignored a range (a 200).
+function ofTheSitesLink(error: unknown): unknown {
+  if (
+    !(error instanceof RemoteError) ||
+    error.retryable ||
+    error.status === null ||
+    error.status < 400
+  ) {
+    return error;
+  }
+  return new RemoteError(
+    AlbumFailure.LinkFailed,
+    false,
+    'The link the site gave no longer works.',
+    {
+      cause: error,
+      status: error.status,
+    },
+  );
+}
 
 function partPathOf(record: DownloadRecord): string {
   return join(record.directory, `${record.fileName}${PART_SUFFIX}`);
@@ -1182,6 +1213,11 @@ export class DownloadManager {
     const { signal } = running.controller;
     const kept = record.unlockedUrl;
     try {
+      const { bunkr } = this.#deps;
+      if (bunkr?.isAlbum(record.url) === true) {
+        await this.#openAlbum(record, bunkr, signal);
+        return;
+      }
       const located = await this.#locate(record, signal);
       const { url, headers, remote, kind } = located;
       // A stream of its own — named, with pieces kept — that a new reading made a file or a pair:
@@ -1210,7 +1246,12 @@ export class DownloadManager {
       }
       this.#adopt(record, remote);
       const givenAgain = kept !== null && record.unlockedUrl !== kept;
-      await this.#runFile(record, running, url, headers, givenAgain, signal);
+      const fromSite = bunkr?.isFile(record.url) === true;
+      await this.#runFile(record, running, url, headers, givenAgain, signal).catch(
+        (error: unknown) => {
+          throw fromSite ? ofTheSitesLink(error) : error;
+        },
+      );
       await this.#finish(record);
     } catch (error) {
       if (running.task !== undefined) this.#keepProgress(record, running.task);
@@ -1220,6 +1261,31 @@ export class DownloadManager {
       this.#changed();
       this.#schedule();
     }
+  }
+
+  // An album read (docs/adr/0024): it leaves the list, and its files take its place, each a
+  // download of its own page, in a folder named after the album — the first free name beside it
+  // when a file stands under that name; a folder of that name is shared, as its files take free
+  // names inside it, a magnet's rule. Each is named as the album names it, a name from a host.
+  async #openAlbum(record: DownloadRecord, bunkr: Bunkr, signal: AbortSignal): Promise<void> {
+    // A pause, a removal or a shutdown while the page is read ends the read: nothing is added.
+    const album = await bunkr.readAlbum(record.url, signal);
+    const folder = uniqueFileName(sanitizeFileName(album.name), (candidate) =>
+      isFileThere(join(record.directory, candidate)),
+    );
+    const files = album.files.map((file) => {
+      const download = this.#newRecord(file.url, null, DownloadStatus.Queued);
+      download.directory = join(record.directory, folder);
+      const named = file.name === undefined ? undefined : fileNameFromHost(file.name);
+      if (named !== undefined) {
+        download.fileName = named;
+        download.nameKept = true;
+      }
+      return download;
+    });
+    this.#records.splice(this.#records.indexOf(record), 1, ...files);
+    // How many, never which: an album is a person's.
+    this.#deps.logger.info('album_read', { files: files.length });
   }
 
   // A file's bytes, from those already on the disk. A direct link a service gave that expires on
@@ -1464,6 +1530,8 @@ export class DownloadManager {
   // again. A link that went through a service is not read: the service said what it is.
   async #locate(record: DownloadRecord, signal: AbortSignal): Promise<Located> {
     if (record.video !== null || record.fromPage) return this.#locateVideo(record, signal);
+    const { bunkr } = this.#deps;
+    if (bunkr?.isFile(record.url) === true) return this.#locateBunkrFile(record, bunkr, signal);
     const kept = record.unlockedUrl;
     let url = await this.#address(record, signal);
     const headers = headersOf(record);
@@ -1482,6 +1550,35 @@ export class DownloadManager {
     const chosen = await this.#readPage(record, signal);
     if (chosen === undefined) return asItStands;
     return this.#locateVideo(record, signal);
+  }
+
+  // A file of Bunkr (docs/adr/0024): its page and Bunkr's API are asked at every run for its
+  // link, which is kept nowhere, and no service is asked about it. A file pasted by itself is
+  // named after its page. What its link lands on is the file, or the run fails: a file server
+  // in maintenance answers a video that says so, and a web page is never saved as the file.
+  async #locateBunkrFile(
+    record: DownloadRecord,
+    bunkr: Bunkr,
+    signal: AbortSignal,
+  ): Promise<Located> {
+    const found = await bunkr.locateFile(record.url, signal);
+    const named = found.name === undefined ? undefined : fileNameFromHost(found.name);
+    if (!record.named && !record.nameKept && named !== undefined) {
+      record.fileName = named;
+      record.nameKept = true;
+    }
+    const remote = await this.#deps.source
+      .probe(found.url, found.headers, signal)
+      .catch((error: unknown) => {
+        throw ofTheSitesLink(error);
+      });
+    if (isMaintenance(remote.fileName)) {
+      throw new RemoteError(PageFailure.SiteBusy, false, 'The file server is in maintenance.');
+    }
+    if (remote.isPage) {
+      throw new RemoteError(AlbumFailure.LinkFailed, false, 'The link answered a web page.');
+    }
+    return { url: found.url, headers: found.headers, remote, kind: 'file' };
   }
 
   async #locateVideo(record: DownloadRecord, signal: AbortSignal): Promise<Located> {

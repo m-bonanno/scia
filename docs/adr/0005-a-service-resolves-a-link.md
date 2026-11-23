@@ -1,6 +1,6 @@
 # ADR 0005 — A debrid service plugs in as a link resolver, at the start of a download
 
-- **Status**: accepted; its last consequence — a hoster's link with no service connected — amended by [ADR 0006](./0006-a-file-host-without-a-service.md); its consequence on a direct link that has expired, by [ADR 0022](./0022-a-direct-link-that-expires.md); what it did not handle of a link that opens into several files, a redirector's included, by [ADR 0025](./0025-a-link-that-opens-into-several-files.md)
+- **Status**: accepted; its last consequence — a hoster's link with no service connected — amended by [ADR 0006](./0006-a-file-host-without-a-service.md); its consequence on a direct link that has expired, by [ADR 0022](./0022-a-direct-link-that-expires.md); a Bunkr link is read by Scia's own reader before any service is asked: [ADR 0024](./0024-a-bunkr-album-read-by-scia.md), point 6; what it did not handle of a link that opens into several files, a redirector's included, by [ADR 0025](./0025-a-link-that-opens-into-several-files.md)
 - **Date**: 2026-11-20
 
 ## Context

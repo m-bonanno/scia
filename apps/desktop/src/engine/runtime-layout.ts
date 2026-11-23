@@ -10,6 +10,8 @@ export interface RuntimeLayout {
   readonly downloadDir: string;
   // The notices this computer was already shown (engine/shown-notices.ts).
   readonly noticesPath: string;
+  // The theme the engine said last, for the window of the next start (engine/remembered-theme.ts).
+  readonly themePath: string;
   // The keys of the connected services, each sealed by the system (engine/key-vault.ts).
   readonly keysDir: string;
   // yt-dlp, which reads the page of a video (docs/adr/0009), and what the engine needs to bring it
@@ -79,6 +81,7 @@ export function resolveRuntimeLayout(input: LayoutInput): RuntimeLayout {
     dataDir: join(input.userDataDir, 'engine'),
     logsDir: join(input.userDataDir, 'logs'),
     noticesPath: join(input.userDataDir, 'notices.json'),
+    themePath: join(input.userDataDir, 'theme.json'),
     keysDir: join(input.userDataDir, 'keys'),
     downloadDir: input.scratchProfile ? join(input.userDataDir, 'downloads') : input.downloadsDir,
   };

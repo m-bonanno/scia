@@ -9,6 +9,7 @@ const layout = {
   logsDir: 'logs',
   downloadDir: 'downloads',
   noticesPath: 'notices.json',
+  themePath: 'theme.json',
   keysDir: 'keys',
   ytDlp: undefined,
 };
@@ -63,6 +64,20 @@ describe('buildServerEnv', () => {
       alldebridApi: 'http://127.0.0.1:8080',
     });
     expect(env.SCIA_ALLDEBRID_API).toBe('http://127.0.0.1:8080');
+    expect(env).not.toHaveProperty('SCIA_BUNKR');
+  });
+
+  it('names another address for Bunkr only when the launch gave one', () => {
+    const env = buildServerEnv({
+      layout,
+      apiToken: 'token',
+      port: 0,
+      version: '1.0.0',
+      systemRoot: undefined,
+      tempDir: 'temp',
+      bunkr: 'http://127.0.0.1:8082',
+    });
+    expect(env.SCIA_BUNKR).toBe('http://127.0.0.1:8082');
   });
 
   it('names the reader of pages only where one was shipped, with its release and its build’s name', () => {

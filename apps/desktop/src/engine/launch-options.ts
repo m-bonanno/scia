@@ -11,12 +11,16 @@ export interface LaunchOptions {
   // A host that answers as yt-dlp's releases do, for a run that must not reach GitHub. The engine
   // takes only an address on this computer, and does not start with any other.
   readonly ytDlpReleases: string | undefined;
+  // A host that answers as Bunkr does, for a run that must not reach it. The engine takes only an
+  // address on this computer, and does not start with any other.
+  readonly bunkr: string | undefined;
 }
 
 const USER_DATA_DIR = '--user-data-dir=';
 const PORT = '--port=';
 const ALLDEBRID_API = '--alldebrid-api=';
 const YT_DLP_RELEASES = '--yt-dlp-releases=';
+const BUNKR = '--bunkr=';
 
 function valueOf(argv: readonly string[], prefix: string): string | undefined {
   const value = argv
@@ -35,5 +39,6 @@ export function parseLaunchOptions(argv: readonly string[], cwd: string): Launch
     port: Number.isInteger(port) && port >= 0 && port <= 65_535 ? port : undefined,
     alldebridApi: valueOf(argv, ALLDEBRID_API),
     ytDlpReleases: valueOf(argv, YT_DLP_RELEASES),
+    bunkr: valueOf(argv, BUNKR),
   };
 }

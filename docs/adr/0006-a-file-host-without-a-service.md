@@ -1,6 +1,6 @@
 # ADR 0006 — A file host's link with no service connected asks the service's public list
 
-- **Status**: accepted; while a kept key cannot be read back, the list its account gave in an earlier run decides too: [ADR 0023](./0023-a-key-said-kept-once-it-can-be-read-back.md), point 5; point 1 amended by [ADR 0025](./0025-a-link-that-opens-into-several-files.md)
+- **Status**: accepted; while a kept key cannot be read back, the list its account gave in an earlier run decides too: [ADR 0023](./0023-a-key-said-kept-once-it-can-be-read-back.md), point 5; a Bunkr link is read by Scia's own reader before the list is asked: [ADR 0024](./0024-a-bunkr-album-read-by-scia.md), point 6; point 1 amended by [ADR 0025](./0025-a-link-that-opens-into-several-files.md)
 - **Date**: 2026-11-20
 
 ## Context

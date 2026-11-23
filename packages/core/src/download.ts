@@ -1,3 +1,4 @@
+import { AlbumFailure } from './album.ts';
 import { PageFailure } from './page.ts';
 import { ServiceFailure, UnlockFailure } from './service.ts';
 
@@ -28,6 +29,8 @@ export const DownloadFailure = {
   ...UnlockFailure,
   // The link is a page, and the video in it was not downloaded (page.ts).
   ...PageFailure,
+  // The link is an album of a file host, or one of its files' pages, and gave no file (album.ts).
+  ...AlbumFailure,
 } as const;
 export type DownloadFailure = (typeof DownloadFailure)[keyof typeof DownloadFailure];
 

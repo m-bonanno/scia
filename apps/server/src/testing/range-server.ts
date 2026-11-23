@@ -26,6 +26,9 @@ export interface RangeServerOptions {
   // Answers this many requests for the first byte with a 200 that carries that one byte, as
   // the same link did once: read as it stands, the file is one byte long (#65).
   readonly firstByteAs200?: number;
+  // Answers the first byte as a range, then every other range with the whole file and a 200: a
+  // host that stopped serving ranges after it said it did.
+  readonly ignoresRangesAfterProbe?: boolean;
   // The Content-Type of every answer with a body: a page is `text/html`.
   readonly contentType?: string;
   // The ETag of every answer with a body; `"v1"` if absent.
@@ -141,7 +144,11 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
       headers['content-disposition'] = `attachment; filename="${options.fileName}"`;
     }
     const range = /^bytes=(\d+)-(\d*)$/.exec(request.headers.range ?? '');
-    if (range === null || options.ranges === false) {
+    if (
+      range === null ||
+      options.ranges === false ||
+      (options.ignoresRangesAfterProbe === true && !firstByte)
+    ) {
       if (options.announcesLength !== false)
         headers['content-length'] = String(options.body.length);
       response.writeHead(200, headers);
