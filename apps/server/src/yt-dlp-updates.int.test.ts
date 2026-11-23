@@ -70,6 +70,9 @@ describe('YtDlpUpdates against a host that publishes releases as yt-dlp does', (
   const events = () => logged.map(({ event }) => event);
   const updatesFolder = () => join(folder.path, 'engine', 'yt-dlp');
   const keptPath = (version: string) => join(updatesFolder(), version, 'yt-dlp.exe');
+  // A build's first bytes are written and the rest are held by the host: the fetch is under way.
+  const midway = async () =>
+    ((await stat(`${keptPath(NEWER)}.part`).catch(() => undefined))?.size ?? 0) > 0;
   // The requests for a build, not the redirects they were answered with.
   const builds = () =>
     host.asked.filter(
@@ -177,21 +180,23 @@ describe('YtDlpUpdates against a host that publishes releases as yt-dlp does', (
   });
 
   it('starts again with the build it took, without asking, and asks a day after the last check', async () => {
+    // The time of the checks is the spec's: read from the machine's clock, the wait it held to more
+    // than half a day was less on a loaded run, which took that long between the two starts (#165).
+    let now = Date.parse('2026-11-23T12:00:00.000Z');
     publish(NEWER);
-    const first = await open();
+    const first = await open({ now: () => now });
     first.start(downloads);
     await until(() => first.version() === NEWER);
     await first.close();
     const asked = host.asked.length;
 
-    const second = await open();
+    now += DAY_MS / 4;
+    const second = await open({ now: () => now });
     expect(second.command()).toBe(keptPath(NEWER));
     delays = [];
     second.start(downloads);
-    // Not at once: the last check was moments ago.
-    expect(delays).toHaveLength(1);
-    expect(delays[0]).toBeGreaterThan(DAY_MS / 2);
-    expect(delays[0]).toBeLessThanOrEqual(DAY_MS);
+    // Not at once: the last check was a quarter of a day ago.
+    expect(delays).toEqual([DAY_MS - DAY_MS / 4]);
     await until(() => host.asked.length > asked, 5_000);
   });
 
@@ -430,15 +435,16 @@ describe('YtDlpUpdates against a host that publishes releases as yt-dlp does', (
       }),
     );
     host.latest = NEWER;
-    host.pieceDelayMs = 20;
+    const letGo = host.holdBuilds();
     const updates = await open();
     updates.start(downloads);
-    await until(() => existsSync(`${keptPath(NEWER)}.part`));
+    await until(midway);
     downloads.set(true);
-    await until(() => !existsSync(`${keptPath(NEWER)}.part`));
+    await until(() => events().includes('yt_dlp_fetch_yielded'));
+    expect(existsSync(`${keptPath(NEWER)}.part`)).toBe(false);
     expect(updates.command()).toBe(shipped);
 
-    host.pieceDelayMs = 0;
+    letGo();
     downloads.set(false);
     await until(() => updates.version() === NEWER);
     expect(builds()).toHaveLength(2);
@@ -453,11 +459,12 @@ describe('YtDlpUpdates against a host that publishes releases as yt-dlp does', (
       }),
     );
     host.latest = NEWER;
-    host.pieceDelayMs = 20;
+    const letGo = host.holdBuilds();
     const updates = await open();
     updates.start(downloads);
-    await until(() => existsSync(`${keptPath(NEWER)}.part`));
+    await until(midway);
     await updates.close();
+    letGo();
     expect(existsSync(`${keptPath(NEWER)}.part`)).toBe(false);
     expect(updates.command()).toBe(shipped);
     // A stop is not a failure: nothing is said of it, and nothing is tried again.

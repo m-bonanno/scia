@@ -3,7 +3,7 @@
 // its process id — since the adapter hands it no environment of the spec's. Like yt-dlp's builds,
 // it unpacks itself into its TEMP first, and leaves that there when it is stopped.
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const [given, ...args] = process.argv.slice(2);
@@ -11,7 +11,13 @@ if (process.env.TEMP) {
   mkdirSync(join(process.env.TEMP, '_MEI1'), { recursive: true });
   writeFileSync(join(process.env.TEMP, '_MEI1', 'python.dll'), 'unpacked');
 }
-writeFileSync(given, JSON.stringify({ args, env: process.env, pid: process.pid }));
+// Written beside and renamed into place: a spec that sees the file reads it whole, also when the
+// process is ended a moment after it began to write (#165).
+const writeWhole = (path, text) => {
+  writeFileSync(`${path}.tmp`, text);
+  renameSync(`${path}.tmp`, path);
+};
+writeWhole(given, JSON.stringify({ args, env: process.env, pid: process.pid }));
 const url = args.at(-1) ?? '';
 const fail = (message) => {
   process.stderr.write(`ERROR: ${message}\n`);
@@ -305,14 +311,16 @@ else if (
     ? `const { spawn } = require('node:child_process');
        const held = spawn(process.execPath, ['-e', ${JSON.stringify(holder)}], { stdio: ['ignore', 'inherit', 'inherit'], detached: ${String(apart)} });
        held.unref();
-       require('node:fs').writeFileSync(process.argv[1], String(held.pid));`
+       const fs = require('node:fs');
+       fs.writeFileSync(process.argv[1] + '.tmp', String(held.pid));
+       fs.renameSync(process.argv[1] + '.tmp', process.argv[1]);`
     : holder;
   const holderPidFile = `${given}.holder`;
   const second = spawn(process.execPath, ['-e', code, holderPidFile], {
     stdio: ['ignore', 'inherit', 'inherit'],
     detached: apart,
   });
-  if (!url.includes('/orphaned-holder')) writeFileSync(holderPidFile, String(second.pid));
+  if (!url.includes('/orphaned-holder')) writeWhole(holderPidFile, String(second.pid));
   // `/first-gone`: the first process ends by itself and leaves the second reading.
   if (url.includes('/first-gone')) second.unref();
   else hang();
