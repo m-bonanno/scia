@@ -419,6 +419,8 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
             onChange={(event) => {
               setApiKey(event.target.value);
             }}
+            // What draws the field at rest: its boundary is held to no contrast (#66).
+            placeholder="Paste your API key"
             autoFocus
             autoComplete="off"
             // What is being checked is what the field says: it is not changed meanwhile.
@@ -427,7 +429,7 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
             aria-invalid={refusal !== null}
             aria-describedby={refusal === null ? hintId : `${alertId} ${hintId}`}
             className={cn(
-              'h-9 w-full rounded-lg border border-border bg-transparent px-3 text-sm',
+              'h-9 w-full rounded-lg border border-border bg-transparent px-3 text-sm placeholder:text-muted-foreground',
               FOCUS_RING,
             )}
           />
