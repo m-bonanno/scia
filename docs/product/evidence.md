@@ -70,7 +70,9 @@ A notification when a download ends (#45); "Open" and "Show in folder" are alrea
 
 ### The window really in use
 
-A window that was shown while another was in use can believe it is in front, and Scia is then silent until the person clicks into it and away, or minimises it, or closes it into the tray — a start during which they went back to their work. Under script it did at some starts and not at others, and what decides it is not known; not seen by hand (#62).
+Before #62 was built: a window that was shown while another was in use could believe it was in front, and Scia was then silent until the person clicks into it and away, or minimises it, or closes it into the tray — a start during which they went back to their work. Under script it did at some starts and not at others, and what decides it is not known; not seen by hand (#62).
+
+**Built** (#62, [ADR 0020](../adr/0020-the-window-in-use-asked-of-windows.md)): on Windows main asks the system which window is in use (`GetForegroundWindow`, through koffi) when a notification is about to be decided; a system that does not answer counts as another window in use. **Seen**: unit specs of the decisions (the system believed over the window; no answer counted as another window in use); an integration spec of the real call (a handle, in microseconds); and the E2E suite in CI, where Windows answers inside the built app (`asked: 'answered'` on the clipboard's decisions). The E2E suite does not reach the case itself, a shown window while another is in use. **Not seen**: a start by hand, back to another window with no click into Scia, then a download that ends (#13).
 
 ### A second failure notified
 

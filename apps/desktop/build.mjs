@@ -1,4 +1,5 @@
-// Only `electron` stays external: the packaged asar carries no node_modules.
+// `electron` and `koffi` stay external: koffi loads its native build from beside its own files
+// (ADR 0020), the one module the packaged app carries.
 import { access, cp } from 'node:fs/promises';
 import { build } from 'esbuild';
 
@@ -7,7 +8,7 @@ const common = {
   platform: 'node',
   format: 'cjs',
   target: 'node24',
-  external: ['electron'],
+  external: ['electron', 'koffi'],
   sourcemap: true,
   logLevel: 'info',
 };

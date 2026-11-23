@@ -1,3 +1,4 @@
+import { loadForeground } from './foreground-window.ts';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -88,6 +89,12 @@ async function boot(): Promise<void> {
   // presses OK: after a close nobody sees it and the app stays alive. The log is enough.
   log.errorHandler.startCatching({ showDialog: false });
   log.info('boot', { version: app.getVersion(), packaged: app.isPackaged, pid: process.pid });
+  // Asked only when a notification is decided (ADR 0020); loaded now, in milliseconds.
+  void loadForeground().then((load) => {
+    if (load === undefined) return;
+    if (load.loaded) log.info('foreground_ready');
+    else log.warn('foreground_unavailable', { error: load.error });
+  });
 
   // Windows shows a notification only for an app that says who it is.
   if (process.platform === 'win32') app.setAppUserModelId(APP_ID);
@@ -193,7 +200,7 @@ async function boot(): Promise<void> {
   });
 
   function notifyEnded(downloads: readonly Ended[]): void {
-    const inFront = window.isInFront();
+    const { inFront, asked } = window.isInFront();
     // Idle in the tray: the window was put away and nothing is running or waiting any more.
     const lastOfHiddenScia = window.isPutAway() && unfinished(activityOf(latest)) === 0;
     const completed = downloads.filter((download) => download.ending === Ending.Completed).length;
@@ -201,6 +208,7 @@ async function boot(): Promise<void> {
       completed,
       failed: downloads.length - completed,
       inFront,
+      asked,
       lastOfHiddenScia,
     });
     // A person looking at the list sees its rows change.
@@ -256,8 +264,8 @@ async function boot(): Promise<void> {
     added: number,
     noticeOf: (count: number) => { title: string; body: string },
   ): void {
-    const inFront = window.isInFront();
-    log.info(event, { added, inFront });
+    const { inFront, asked } = window.isInFront();
+    log.info(event, { added, inFront, asked });
     if (added === 0 || isQuitting() || inFront || !Notification.isSupported()) return;
     const text = noticeOf(added);
     const shown = new Notification(text);
