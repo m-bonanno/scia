@@ -1,15 +1,20 @@
-// Draws every icon of the app from its one source: `npm run icons -w @scia/desktop`, then commit
-// the source, the icons and the lock together. The icons are committed rather than drawn by the
-// build because Chromium draws them, and a build that starts Electron needs a display on Linux.
+// Draws every icon of the app from the mark (`@scia/contracts/mark`): `npm run icons -w
+// @scia/desktop` writes the mark on its tile to the source, draws the icons from it, and the
+// source, the icons and the lock are committed together. The icons are committed rather than drawn
+// by the build because Chromium draws them, and a build that starts Electron needs a display on
+// Linux.
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+import { MARK } from '@scia/contracts/mark';
 import { encodeIco } from './ico.ts';
+import { iconSvg } from './icon-svg.ts';
 import {
   DESKTOP_DIR,
+  ICON_COLOURS,
   ICON_LOCK,
   ICON_OUTPUTS,
   ICON_SOURCE,
@@ -59,6 +64,7 @@ function onlyOne(images: readonly Raster[]): Raster {
 }
 
 const source = join(DESKTOP_DIR, ICON_SOURCE);
+writeFileSync(source, iconSvg(MARK, ICON_COLOURS));
 const rasters = rasterise(source, sizesToDraw(ICON_OUTPUTS));
 const outputs: Record<string, string> = {};
 

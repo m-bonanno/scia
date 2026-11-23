@@ -9,6 +9,7 @@
     "./endpoint": "./src/endpoint.ts",
     "./links": "./src/links.ts",
     "./locale": "./src/locale.ts",
+    "./mark": "./src/mark.ts",
     "./theme": "./src/theme.ts"
   },
   "scripts": {

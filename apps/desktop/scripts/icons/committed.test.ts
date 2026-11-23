@@ -1,10 +1,19 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { MARK } from '@scia/contracts/mark';
 import { WINDOW_COLOURS } from '@scia/contracts/theme';
 import { describe, expect, it } from 'vitest';
 import { readIcoDirectory } from './ico.ts';
-import { DESKTOP_DIR, ICON_LOCK, ICON_OUTPUTS, ICON_SOURCE, type IconLock } from './outputs.ts';
+import { iconSvg } from './icon-svg.ts';
+import {
+  DESKTOP_DIR,
+  ICON_COLOURS,
+  ICON_LOCK,
+  ICON_OUTPUTS,
+  ICON_SOURCE,
+  type IconLock,
+} from './outputs.ts';
 
 // The icons are committed, drawn by `npm run icons -w @scia/desktop`: these specs fail when the
 // source or an icon changed without the other.
@@ -57,6 +66,12 @@ describe('the committed icons', () => {
         (output) => output.sizes,
       ),
     ).toEqual([16, 24, 32, 48, 64, 128, 256, 512].map((size) => [size]));
+  });
+
+  // The page's logo draws the same data (#88): a stroke of the mark changed fails here until the
+  // icons are drawn again.
+  it('were drawn from the mark the page’s logo draws, on its tile', () => {
+    expect(read(ICON_SOURCE).toString('utf8')).toBe(iconSvg(MARK, ICON_COLOURS));
   });
 
   // The owner's choice (#81): the mark in the default theme's dark variant, the colours the
