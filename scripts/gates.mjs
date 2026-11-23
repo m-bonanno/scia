@@ -20,7 +20,7 @@ export async function runGates(run) {
   return { ok: true, failed: undefined };
 }
 
-function npmRun(gate) {
+export function npmRun(gate, spawnChild = spawn) {
   const command = [
     'npm',
     'run',
@@ -32,7 +32,7 @@ function npmRun(gate) {
     // A shell: npm is a script on Windows, which spawn does not run by itself. One string, which
     // Node takes from a shell without the warning an argument list gets (DEP0190); every word is
     // one of GATES, written above.
-    const child = spawn(command.join(' '), {
+    const child = spawnChild(command.join(' '), {
       stdio: 'inherit',
       shell: true,
       env: { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' },

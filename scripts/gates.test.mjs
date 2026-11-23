@@ -1,5 +1,6 @@
-import { describe, expect, it } from 'vitest';
-import { GATES, runGates } from './gates.mjs';
+import { EventEmitter } from 'node:events';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { GATES, npmRun, runGates } from './gates.mjs';
 
 describe('runGates', () => {
   it('runs the gates of review-flow.md in their order', async () => {
@@ -29,5 +30,30 @@ describe('runGates', () => {
     expect(GATES.filter((gate) => gate.args.length > 0).map((gate) => gate.script)).toEqual([
       'test',
     ]);
+  });
+});
+
+describe('npmRun', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
+
+  it('starts the gate without colour, whatever the shell asked for', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    // The opposite of what the gates set: a shell that exports them would hide a gate that does not.
+    vi.stubEnv('NO_COLOR', '');
+    vi.stubEnv('FORCE_COLOR', '1');
+    let environment;
+    const spawn = (_command, options) => {
+      environment = options.env;
+      const child = new EventEmitter();
+      queueMicrotask(() => child.emit('close', 0));
+      return child;
+    };
+
+    await npmRun({ script: 'lint', args: [] }, spawn);
+
+    expect(environment).toMatchObject({ NO_COLOR: '1', FORCE_COLOR: '0' });
   });
 });
