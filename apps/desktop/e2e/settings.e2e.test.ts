@@ -6,6 +6,7 @@ import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import type { ElectronApplication } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { allCompleted, paste, rowOf, until, useRun } from './scia.ts';
+import { captureTo, viewportOf } from './under-notices.ts';
 
 const KIB = 1024;
 // A key the simulated service was given: made up, as every key of a spec.
@@ -190,6 +191,67 @@ describe('the real app, with what Settings says', () => {
       'https://ko-fi.com/notsosnake',
       'https://ko-fi.com/notsosnake',
     ]);
+  });
+
+  // The two captures of the whole dialog, taken from the real app by CI (#271), as #143 took those
+  // of a notice over Settings: 1040 by 900, AllDebrid connected, the clipboard's links on, the
+  // betas off, dark and light.
+  it('takes the captures of Settings', async () => {
+    const profile = await run.profile();
+    const service = run.keep(
+      await startAllDebridServer({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+      }),
+    );
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const { page } = scia;
+    // The runner's own clipboard is not read: main is answered an empty one.
+    await scia.app.evaluate(({ clipboard }) => {
+      clipboard.readText = () => Promise.resolve('');
+    });
+    await viewportOf(page, 1040, 900);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    await settings.getByRole('button', { name: 'Use an API key' }).click();
+    await settings.getByLabel('AllDebrid API key').fill(KEY);
+    await settings.getByRole('button', { name: 'Connect', exact: true }).click();
+    await settings.getByText(/^Connected as ada/).waitFor();
+    const watch = settings.getByRole('switch', { name: 'Take links from the clipboard' });
+    await watch.click();
+    await until(() => watch.isChecked());
+    const betas = settings.getByRole('switch', { name: 'Beta versions' });
+    expect(await betas.isChecked()).toBe(false);
+
+    for (const { variant, name } of [
+      { variant: 'dark', name: 'settings.png' },
+      { variant: 'light', name: 'settings-light.png' },
+    ] as const) {
+      await scia.app.evaluate(({ nativeTheme }, source) => {
+        nativeTheme.themeSource = source;
+      }, variant);
+      // Nothing under the pointer, no focus drawn, and every transition over before the capture.
+      await page.mouse.move(1, 1);
+      await page.evaluate(() => {
+        (document.activeElement as HTMLElement | null)?.blur();
+      });
+      await until(() =>
+        page.evaluate(
+          (wanted) =>
+            matchMedia(`(prefers-color-scheme: ${wanted})`).matches &&
+            document.getAnimations().length === 0,
+          variant,
+        ),
+      );
+      // The whole dialog shows: it does not scroll, and its last line is in the window.
+      const { scrolls, bottom } = await settings.evaluate((dialog) => ({
+        scrolls: dialog.scrollHeight > dialog.clientHeight,
+        bottom: dialog.getBoundingClientRect().bottom,
+      }));
+      expect(scrolls, `${name}: Settings scrolls at 900 px`).toBe(false);
+      expect(bottom).toBeLessThanOrEqual(900);
+      await settings.getByRole('button', { name: 'Support Scia' }).waitFor();
+      await page.screenshot({ path: await captureTo(name) });
+    }
   });
 });
 
