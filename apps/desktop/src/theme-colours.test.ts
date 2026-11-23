@@ -75,6 +75,7 @@ const PAIRS: readonly (readonly [string, string, number])[] = [
   // A text button under the pointer (TEXT_BUTTON in apps/renderer/src/components/button-styles.ts).
   ['foreground', 'border', TEXT],
   ['muted-foreground', 'background', TEXT],
+  // Also a field's placeholder, which alone draws the key's field on the dialog at rest (#66).
   ['muted-foreground', 'surface', TEXT],
   ['muted-foreground', 'surface-hover', TEXT],
   ['muted-foreground', 'tonal', TEXT],
