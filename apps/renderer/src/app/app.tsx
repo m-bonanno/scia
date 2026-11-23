@@ -1,6 +1,14 @@
 import { ApiErrorCode, type Settings } from '@scia/contracts';
 import { DownloadStatus, isUnderWay } from '@scia/core';
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { TEXT_BUTTON } from '@/components/button-styles.ts';
 import { AccountMagnets } from '@/features/account/account-magnets.tsx';
 import { type Added, AddBar } from '@/features/downloads/add-bar.tsx';
@@ -38,6 +46,9 @@ export function App(): ReactNode {
   const live = useLive();
   const [filter, setFilter] = useState<Filter>(Filter.All);
   const { notices, tell, dismiss } = useNotices();
+  const [noticesHeight, setNoticesHeight] = useState(0);
+  // Whether a press of the pointer is in this task: the focus it gives is not scrolled.
+  const pressing = useRef(false);
   const field = useRef<HTMLInputElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsLayer, setSettingsLayer] = useState<SettingsLayer | null>(null);
@@ -280,8 +291,32 @@ export function App(): ReactNode {
     }
   }, [bundleIds]);
 
+  // How tall the notices are, for the room every area that scrolls beneath them keeps under its
+  // end (`room-under-notices` in styles.css). Settings, inside this element, keeps its own.
+  const noticesRoom = { '--notices-height': `${String(noticesHeight)}px` } as CSSProperties;
+
   return (
-    <div className="flex h-screen flex-col">
+    <div
+      className="flex h-screen flex-col"
+      style={noticesRoom}
+      // Chromium keeps what Tab moves to clear of that room, but not a focus the page moves itself
+      // onto a control already in the scrollport: `nearest` does, for both (#143). Not the focus a
+      // press of the pointer gives, at the press: moved before it is let go, the control would no
+      // longer be under the pointer, and the click would be lost (round 2 of #244). Marked at
+      // `mousedown`, which comes in the same task as that focus for a mouse, a pen and a finger's
+      // tap alike — a tap's `pointerdown` comes before it, a task or more ahead (round 3).
+      onMouseDownCapture={() => {
+        pressing.current = true;
+        setTimeout(() => {
+          pressing.current = false;
+        });
+      }}
+      onFocus={(event) => {
+        if (noticesHeight > 0 && !pressing.current) {
+          event.target.scrollIntoView({ block: 'nearest' });
+        }
+      }}
+    >
       <TitleBar
         bytesPerSecond={bytesPerSecond}
         speedLimitBytesPerSecond={speedLimit}
@@ -338,7 +373,7 @@ export function App(): ReactNode {
               )}
             </div>
           </div>
-          <div className="min-h-0 flex-1 overflow-y-auto">
+          <div className="room-under-notices min-h-0 flex-1 overflow-y-auto">
             <div className="mx-auto w-full max-w-3xl px-6 pb-8">
               {live.connection !== Connection.Connecting && (
                 <DownloadList
@@ -368,6 +403,7 @@ export function App(): ReactNode {
         }}
         onError={report}
         onSettings={keepSettings}
+        noticesHeight={noticesHeight}
       />
       {/* Over Settings while it is open: a modal dialog leaves the rest of the page out of reach.
           A focus whose notices are all gone goes to the field, or to the top of the dialog. */}
@@ -375,6 +411,7 @@ export function App(): ReactNode {
         notices={notices}
         lasting={live.connection === Connection.Offline ? ENGINE_UNREACHABLE : null}
         onDismiss={dismiss}
+        onHeight={setNoticesHeight}
         home={() => (settingsOpen ? (settingsLayer?.top() ?? null) : field.current)}
         layer={settingsOpen ? (settingsLayer?.element ?? null) : null}
       />

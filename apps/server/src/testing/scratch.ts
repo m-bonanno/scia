@@ -33,6 +33,13 @@ export async function refusingFiles(folder: string): Promise<() => Promise<void>
   return () => chmod(folder, 0o700);
 }
 
+// What Windows' fsutil says of a file's sparse flag, in the system's words: a spec tells one
+// file's answer from another's, never reads it for English.
+export function sparseFlagOf(path: string): string {
+  const fsutil = join(process.env.SystemRoot ?? 'C:\\Windows', 'System32', 'fsutil.exe');
+  return execFileSync(fsutil, ['sparse', 'queryflag', path], { encoding: 'utf8' });
+}
+
 // Waits for something a download does in its own time, without a fixed sleep.
 // The condition may have to ask something to know. On `performance.now()`: the system's clock
 // steps (.claude/gotchas.md, Engine).
