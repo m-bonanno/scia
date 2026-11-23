@@ -182,7 +182,8 @@ describe('the real app, with what Settings says', () => {
     await integrations.getByRole('button', { name: 'Disconnect' }).waitFor();
     const clipboard = settings.getByRole('switch', { name: 'Take links from the clipboard' });
     await clipboard.click();
-    await until(async () => (await clipboard.getAttribute('aria-checked')) === 'true');
+    // What the engine kept: the switch is checked once its answer is drawn.
+    await until(() => clipboard.isChecked());
     await settings.getByRole('button', { name: 'Close' }).click();
     await settings.waitFor({ state: 'hidden' });
     await viewportOf(page, 1040, 900);
