@@ -16,7 +16,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 
 - [ ] The window really in use before Scia stays silent (#62): built ([ADR 0020](../adr/0020-the-window-in-use-asked-of-windows.md)), to be seen by hand (#13).
 - [x] The `--inspect` fuse off in the shipped app, and the installer's smoke test driving it by the page's debugging port (#115).
-- [ ] A video and its sound offered apart, joined into one mp4 (#99), piece 3 of the video of a page (#89).
+- [ ] A video and its sound offered apart, joined into one mp4 (#99), piece 3 of the video of a page (#89): built ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)), to be seen on a site by the owner on the beta after the merge.
 - [ ] A link that expires during a long download, unlocked again keeping the bytes (#180).
 - [ ] A link that unlocks into several files, shown as a list to tick (#181).
 - [ ] #7's README and ADR point, once #180 and #181 land.
@@ -99,7 +99,7 @@ None open: all were settled on 21 November 2026 ([decisions.md](./decisions.md#2
 | [Downloads behind a login, per site](./evidence.md#downloads-behind-a-login)                        | —         | no      | —           | —                                | no        |
 | [Video of a page: one file, yt-dlp shipped](./evidence.md#the-video-of-one-page)                    | #89, #97  | yes     | Script      | any site but archive.org         | yes       |
 | [Video of a page: an HLS stream](./evidence.md#the-video-of-one-page)                               | #98, #162 | yes     | Specs       | any stream in the app, on a site | yes       |
-| [Video of a page: picture and sound joined](./evidence.md#the-video-of-one-page)                    | #99       | no      | —           | —                                | yes       |
+| [Video of a page: picture and sound joined](./evidence.md#the-video-of-one-page)                    | #99       | yes     | Specs       | a site's pair                    | yes       |
 | [Video of a page: yt-dlp kept up to date](./evidence.md#the-video-of-one-page)                      | #100      | yes     | E2E, Script | a real release of yt-dlp         | yes       |
 | [A live stream recorded until stopped](./evidence.md#the-video-of-one-page)                         | #121      | refused | —           | —                                | no        |
 | [A stream that changes partway](./evidence.md#the-video-of-one-page)                                | #123      | refused | —           | —                                | no        |

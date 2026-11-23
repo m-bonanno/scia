@@ -44,6 +44,8 @@ const formatAt = (url: string, overrides: Partial<PageFormat> = {}): PageFormat 
   height: 1080,
   hasDrm: false,
   headers: { 'User-Agent': 'SiteAgent/1', Referer: 'https://site.example/watch' },
+  bitrate: null,
+  languagePreference: null,
   ...overrides,
 });
 
@@ -403,6 +405,36 @@ describe('DownloadManager and a link that is a page', () => {
 
     expect(loaded?.downloads[0]?.timeline).toBeNull();
     expect(loaded?.downloads[0]?.video?.source?.kind).toBe('file');
+    // Before pairs: no sound.
+    expect(loaded?.downloads[0]?.video?.source?.sound).toBeNull();
+  });
+
+  it('reads a stored pair whole or not at all: a picture whose sound is missing is no video kept', async () => {
+    const stateFile = join(folder.path, 'data', 'state.json');
+    const downloads = await open();
+    downloads.add({ urls: ['http://127.0.0.1:9/pair.html'] });
+    await downloads.pause(downloads.snapshot().downloads[0]!.id);
+    await downloads.close();
+    manager = undefined;
+    const state = JSON.parse(await readFile(stateFile, 'utf8')) as {
+      downloads: Record<string, unknown>[];
+    };
+    const record = state.downloads[0]!;
+    const picture = { url: 'https://cdn.example/picture.mp4', headers: {}, kind: 'pair' };
+    record.fromPage = true;
+    record.video = { media: { ext: 'mp4', height: 1080 }, source: picture };
+    await writeFile(stateFile, JSON.stringify(state));
+    expect((await new JsonStateStore(stateFile).load())?.downloads[0]?.video).toBeNull();
+    expect((await new JsonStateStore(stateFile).load())?.downloads[0]?.fromPage).toBe(true);
+
+    record.video = {
+      media: { ext: 'mp4', height: 1080 },
+      source: { ...picture, sound: { url: 'https://cdn.example/sound.m4a', headers: {} } },
+    };
+    await writeFile(stateFile, JSON.stringify(state));
+    expect(
+      (await new JsonStateStore(stateFile).load())?.downloads[0]?.video?.source?.sound,
+    ).toEqual({ url: 'https://cdn.example/sound.m4a', headers: {} });
   });
 
   describe('a video offered as an HLS stream', () => {

@@ -33,6 +33,7 @@ import {
   sanitizeFileName,
   type Segment,
   SpeedMeter,
+  isNameTaken,
   uniqueFileName,
   UnlockFailure,
 } from '@scia/core';
@@ -42,7 +43,8 @@ import type { LinkResolver } from './link-resolver.ts';
 import { describeFailure, type Logger } from './logger.ts';
 import type { MagnetFile, MagnetService } from './magnet-service.ts';
 import { MagnetWatch, nameOfMagnet } from './magnet-watch.ts';
-import { chooseMedia, type MediaKind, PageError } from './media-choice.ts';
+import { chooseMedia, type MediaKind, type MediaSource, PageError } from './media-choice.ts';
+import { PairTask, pictureOf, soundOf } from './pair-task.ts';
 import { offeredAs } from './offered-links.ts';
 import { type MarkDownloaded, markerFor } from './origin-mark.ts';
 import type { PageReader } from './page-reader.ts';
@@ -58,6 +60,14 @@ import type { DownloadRecord, MagnetRecord, StateStore } from './state-store.ts'
 import { Throttle } from './throttle.ts';
 
 export const PART_SUFFIX = '.scia';
+// What a download keeps beside its name while it runs: its part file, a stream's pieces, and a
+// pair's picture and sound.
+const WORKING_SUFFIXES = [
+  PART_SUFFIX,
+  piecesOf(PART_SUFFIX),
+  pictureOf(PART_SUFFIX),
+  soundOf(PART_SUFFIX),
+] as const;
 
 const DEFAULT_SETTINGS = {
   maxConcurrentDownloads: 3,
@@ -124,10 +134,13 @@ type StopIntent = (typeof StopIntent)[keyof typeof StopIntent];
 interface Running {
   readonly controller: AbortController;
   readonly meter: SpeedMeter;
-  task: DownloadTask | HlsTask | undefined;
+  task: DownloadTask | HlsTask | PairTask | undefined;
   intent: StopIntent | undefined;
   settled: Promise<void>;
 }
+
+// What was chosen of a page's video, as the record keeps it.
+type VideoSource = NonNullable<NonNullable<DownloadRecord['video']>['source']>;
 
 // Where a download's bytes are, and how they are asked for.
 interface Located {
@@ -136,6 +149,9 @@ interface Located {
   // What the host said of the file; nothing for a stream, whose playlist the task reads.
   readonly remote: RemoteFile | null;
   readonly kind: MediaKind;
+  // Of a pair (docs/adr/0021): where its sound is, and what its host said of it. The rest is the
+  // picture's.
+  readonly sound?: MediaSource & { readonly remote: RemoteFile };
 }
 
 // The page a link was on is said to the host of that link, never to the host a service sent
@@ -161,7 +177,7 @@ interface Progress {
 
 // A stream's task says nothing until it has read its playlist: the record says what was kept,
 // so that the row does not drop to nothing on a resume.
-function progressOf(task: DownloadTask | HlsTask | undefined): Progress | undefined {
+function progressOf(task: DownloadTask | HlsTask | PairTask | undefined): Progress | undefined {
   if (task === undefined) return undefined;
   if (task instanceof HlsTask) {
     const progress = task.progress();
@@ -497,8 +513,9 @@ export class DownloadManager {
     if (record.named) {
       if (record.status !== DownloadStatus.Completed) {
         await rm(partPathOf(record), { force: true });
-        // A stream's pieces, kept beside its part file.
+        // A stream's pieces, and a pair's picture and sound, kept beside its part file.
         await rm(piecesOf(partPathOf(record)), { recursive: true, force: true });
+        await this.#removePair(record);
       } else if (deleteFile) {
         await rm(join(record.directory, record.fileName), { force: true });
       }
@@ -837,7 +854,7 @@ export class DownloadManager {
     }
   }
 
-  #keepProgress(record: DownloadRecord, task: DownloadTask | HlsTask): void {
+  #keepProgress(record: DownloadRecord, task: DownloadTask | HlsTask | PairTask): void {
     const progress = progressOf(task);
     if (progress === undefined) return;
     record.segments = progress.segments;
@@ -870,10 +887,11 @@ export class DownloadManager {
   async #run(record: DownloadRecord, running: Running): Promise<void> {
     const { signal } = running.controller;
     try {
-      const { url, headers, remote, kind } = await this.#locate(record, signal);
-      // A stream of its own — named, with pieces kept — that a new reading made a file: its pieces
-      // are of nothing now. Never another download's: a name not yet final is no one's.
-      if (kind === 'file' && record.named && record.timeline !== null) {
+      const located = await this.#locate(record, signal);
+      const { url, headers, remote, kind } = located;
+      // A stream of its own — named, with pieces kept — that a new reading made a file or a pair:
+      // its pieces are of nothing now. Never another download's: a name not yet final is no one's.
+      if (kind !== 'hls' && record.named && record.timeline !== null) {
         await rm(piecesOf(partPathOf(record)), { recursive: true, force: true }).catch(
           (error: unknown) => {
             throw new DiskError('The pieces of the stream could not be removed.', { cause: error });
@@ -881,11 +899,18 @@ export class DownloadManager {
         );
         record.timeline = null;
       }
+      // So are the picture and the sound of a pair that a new reading made something else: a
+      // page's video only, the one kind of download that is ever a pair.
+      if (kind !== 'pair' && record.named && record.fromPage) await this.#removePair(record);
       await mkdir(record.directory, { recursive: true }).catch((error: unknown) => {
         throw new DiskError('The folder could not be made.', { cause: error });
       });
       if (kind === 'hls' || remote === null) {
         await this.#runStream(record, running, url, headers, signal);
+        return;
+      }
+      if (located.sound !== undefined) {
+        await this.#runPair(record, running, { url, headers, remote }, located.sound, signal);
         return;
       }
       this.#adopt(record, remote);
@@ -966,6 +991,77 @@ export class DownloadManager {
     await this.#finish(record);
   }
 
+  // A page's picture and its sound offered apart (docs/adr/0021): both fetched, on one line of
+  // segments — the picture's bytes, then the sound's — into files beside the part file, then
+  // joined into the part file as one mp4 by its task.
+  async #runPair(
+    record: DownloadRecord,
+    running: Running,
+    picture: MediaSource & { readonly remote: RemoteFile },
+    sound: MediaSource & { readonly remote: RemoteFile },
+    signal: AbortSignal,
+  ): Promise<void> {
+    const ranged = (remote: RemoteFile) => remote.acceptsRanges && remote.totalBytes !== null;
+    // Both on one line, as one file of both sizes would be: what the row shows, and what a pause
+    // keeps.
+    this.#adopt(record, {
+      totalBytes:
+        picture.remote.totalBytes === null || sound.remote.totalBytes === null
+          ? null
+          : picture.remote.totalBytes + sound.remote.totalBytes,
+      acceptsRanges: ranged(picture.remote) && ranged(sound.remote),
+      fileName: undefined,
+      validator:
+        picture.remote.validator === null && sound.remote.validator === null
+          ? null
+          : `${picture.remote.validator ?? ''} ${sound.remote.validator ?? ''}`,
+      isPage: false,
+    });
+    const fileOf = (part: MediaSource & { readonly remote: RemoteFile }) => ({
+      url: part.url,
+      headers: part.headers,
+      totalBytes: part.remote.totalBytes,
+      resumable: record.resumable,
+    });
+    const task = new PairTask({
+      source: this.#deps.source,
+      picture: fileOf(picture),
+      sound: fileOf(sound),
+      partPath: partPathOf(record),
+      connections: this.#settings.connectionsPerDownload,
+      segments: record.segments,
+      onBytes: (count) => {
+        running.meter.record(count, this.#now());
+      },
+      allowance: (expectedBytes) => this.#throttle.allowance(expectedBytes),
+      ...(this.#deps.retryDelayMs === undefined ? {} : { retryDelayMs: this.#deps.retryDelayMs }),
+    });
+    running.task = task;
+    this.#changed();
+    await task.run(signal);
+    this.#keepProgress(record, task);
+    // The mp4's own size: its movie is made anew, beside the bytes of both.
+    record.totalBytes = await stat(partPathOf(record)).then(
+      (made) => made.size,
+      (error: unknown) => {
+        throw new DiskError('The made file could not be read.', { cause: error });
+      },
+    );
+    record.downloadedBytes = record.totalBytes;
+    record.segments = [];
+    await this.#finish(record);
+  }
+
+  // The picture and the sound of a pair, kept beside its part file.
+  async #removePair(record: DownloadRecord): Promise<void> {
+    try {
+      await rm(pictureOf(partPathOf(record)), { force: true });
+      await rm(soundOf(partPathOf(record)), { force: true });
+    } catch (error) {
+      throw new DiskError('The picture and the sound could not be removed.', { cause: error });
+    }
+  }
+
   #settle(record: DownloadRecord, running: Running, error: unknown): void {
     if (running.intent === StopIntent.Remove) return;
     if (running.intent === StopIntent.Pause) {
@@ -1016,6 +1112,19 @@ export class DownloadManager {
       return { url: chosen.url, headers: chosen.headers, remote: null, kind: 'hls' };
     }
     const remote = await this.#deps.source.probe(chosen.url, chosen.headers, signal);
+    if (chosen.kind === 'pair' && chosen.sound !== null) {
+      const { sound } = chosen;
+      return {
+        url: chosen.url,
+        headers: chosen.headers,
+        remote,
+        kind: 'pair',
+        sound: {
+          ...sound,
+          remote: await this.#deps.source.probe(sound.url, sound.headers, signal),
+        },
+      };
+    }
     return { url: chosen.url, headers: chosen.headers, remote, kind: 'file' };
   }
 
@@ -1023,18 +1132,21 @@ export class DownloadManager {
   // page is not of a site it knows or plays no video. A video it finds and Scia cannot fetch is a
   // PageError. Read again for a download whose name is final, it keeps the container that name
   // carries: its part file holds that container's bytes.
-  async #readPage(
-    record: DownloadRecord,
-    signal: AbortSignal,
-  ): Promise<
-    { readonly url: string; readonly headers: RequestHeaders; readonly kind: MediaKind } | undefined
-  > {
+  async #readPage(record: DownloadRecord, signal: AbortSignal): Promise<VideoSource | undefined> {
     const reader = this.#deps.pageReader;
     if (reader === undefined) return undefined;
     const found = await reader.read(record.url, signal);
     if (found === undefined) return undefined;
     const chosen = chooseMedia(found.formats, record.named ? containerOf(record) : undefined);
-    const source = { url: chosen.url, headers: { ...chosen.headers }, kind: chosen.kind };
+    const source: VideoSource = {
+      url: chosen.url,
+      headers: { ...chosen.headers },
+      kind: chosen.kind,
+      sound:
+        chosen.sound === undefined
+          ? null
+          : { url: chosen.sound.url, headers: { ...chosen.sound.headers } },
+    };
     record.video = { media: chosen.info, source };
     record.fromPage = true;
     // What the site calls the video is a title, not a path: a slash in it is a character.
@@ -1111,13 +1223,11 @@ export class DownloadManager {
         .filter((other) => other !== record && other.named && other.directory === record.directory)
         .map((other) => other.fileName.toLowerCase()),
     );
-    return uniqueFileName(
-      wanted,
-      (candidate) =>
-        reserved.has(candidate.toLowerCase()) ||
-        existsSync(join(record.directory, candidate)) ||
-        existsSync(join(record.directory, `${candidate}${PART_SUFFIX}`)),
-    );
+    const used = {
+      inList: reserved,
+      onDisk: (name: string) => existsSync(join(record.directory, name)),
+    };
+    return uniqueFileName(wanted, (candidate) => isNameTaken(candidate, used, WORKING_SUFFIXES));
   }
 
   async #finish(record: DownloadRecord): Promise<void> {

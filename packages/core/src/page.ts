@@ -8,7 +8,8 @@ export const PageFailure = {
   // person has not handed over, or not in this country. Scia does not get around any of them.
   VideoUnavailable: 'PAGE_UNAVAILABLE',
   // The video, in the form Scia would fetch, is one it does not download yet: DASH, picture and
-  // sound as two files (#99), or a stream that changes partway (#123).
+  // sound apart in forms Scia does not join (docs/adr/0021), or a stream that changes partway
+  // (#123).
   FormatUnsupported: 'PAGE_FORMAT_UNSUPPORTED',
   // The page lists several items — a playlist, a channel, an album — which Scia does not expand
   // yet (#8).
@@ -54,6 +55,7 @@ export const AUDIO_CONTAINERS = [
   'wma',
   'weba',
 ] as const;
+export type AudioContainer = (typeof AUDIO_CONTAINERS)[number];
 
 // What was taken from a page: the kind of file, and how many lines of picture it has when the
 // site says. The row names it ("MP4 1080p").
