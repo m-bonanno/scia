@@ -697,6 +697,8 @@ describe('a Bunkr album', () => {
       { id: '5', slug: 'html', original: 'html.bin', link: page },
       // The link the API gives is refused at its first byte.
       { id: '8', slug: 'nolink', original: 'nolink.bin', link: await host(notes, { status: 404 }) },
+      // A busy file server is not a link that stopped working: the row says what a busy server is.
+      { id: '9', slug: 'busy', original: 'busy.bin', link: await host(notes, { status: 503 }) },
       // The API knows no file of this id: gallery-dl's sign of an album deleted.
       { id: '6', slug: 'unknown', original: 'unknown.bin', link: await host(notes) },
     ];
@@ -726,11 +728,16 @@ describe('a Bunkr album', () => {
         'maint.bin': PageFailure.SiteBusy,
         'html.bin': AlbumFailure.LinkFailed,
         'nolink.bin': AlbumFailure.LinkFailed,
+        'busy.bin': DownloadFailure.HttpStatus,
         'unknown.bin': AlbumFailure.Gone,
       });
       const statusOf = (name: string) =>
         downloads.snapshot().downloads.find(({ fileName }) => fileName === name)?.failureStatus;
-      expect([statusOf('html.bin'), statusOf('nolink.bin')]).toEqual([null, 404]);
+      expect([statusOf('html.bin'), statusOf('nolink.bin'), statusOf('busy.bin')]).toEqual([
+        null,
+        404,
+        503,
+      ]);
       // Nothing written: not the maintenance video, not the page, not a part file.
       expect(existsSync(inDownloads())).toBe(false);
     } finally {
