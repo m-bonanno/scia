@@ -255,11 +255,19 @@ export function App(): ReactNode {
   }, [hasReady]);
 
   // How tall the notices are, for the room every area that scrolls beneath them keeps under its
-  // end (`room-under-notices` in styles.css) — Settings' dialog too, inside this element.
+  // end (`room-under-notices` in styles.css). Settings, inside this element, keeps its own.
   const noticesRoom = { '--notices-height': `${String(noticesHeight)}px` } as CSSProperties;
 
   return (
-    <div className="flex h-screen flex-col" style={noticesRoom}>
+    <div
+      className="flex h-screen flex-col"
+      style={noticesRoom}
+      // Chromium keeps what Tab moves to clear of that room, but not a focus the page moves itself
+      // onto a control already in the scrollport: `nearest` does, for both (#143).
+      onFocus={(event) => {
+        if (noticesHeight > 0) event.target.scrollIntoView({ block: 'nearest' });
+      }}
+    >
       <TitleBar
         bytesPerSecond={bytesPerSecond}
         speedLimitBytesPerSecond={speedLimit}
@@ -344,6 +352,7 @@ export function App(): ReactNode {
         }}
         onError={report}
         onSettings={keepSettings}
+        noticesHeight={noticesHeight}
       />
       {/* Over Settings while it is open: a modal dialog leaves the rest of the page out of reach.
           A focus whose notices are all gone goes to the field, or to the top of the dialog. */}

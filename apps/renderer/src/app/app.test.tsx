@@ -305,6 +305,85 @@ describe('App', () => {
     expect(field).toHaveValue('https://example.com/a.zip');
   });
 
+  // WCAG 2.2, 2.4.11 (#143): Chromium scrolls a control Tab moves to clear of the scroll padding
+  // under the notices, but not one the page focuses itself while it is already in the scrollport.
+  describe('scrolls what takes the focus clear of the notices', () => {
+    // The stack measured as a browser would, 80 high; jsdom has neither layout nor scrolling.
+    class Measured implements ResizeObserver {
+      readonly #told: ResizeObserverCallback;
+      constructor(told: ResizeObserverCallback) {
+        this.#told = told;
+      }
+      observe(target: Element) {
+        const entry = { target, borderBoxSize: [{ blockSize: 80, inlineSize: 0 }] };
+        this.#told([entry as unknown as ResizeObserverEntry], this);
+      }
+      unobserve() {
+        // Nothing is watched after it was measured.
+      }
+      disconnect() {
+        // Nothing is watched after it was measured.
+      }
+    }
+    const scrolled = vi.fn<(this: Element, options?: ScrollIntoViewOptions) => void>();
+    beforeEach(() => {
+      vi.stubGlobal('ResizeObserver', Measured);
+      scrolled.mockReset();
+      Element.prototype.scrollIntoView = scrolled;
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      Reflect.deleteProperty(Element.prototype, 'scrollIntoView');
+    });
+
+    async function aNotice() {
+      vi.spyOn(api, 'addDownloads').mockRejectedValue(
+        new ApiError(401, ApiErrorCode.Unauthorized, 'who are you'),
+      );
+      await userEvent.type(
+        screen.getByRole('textbox', { name: 'Links to download' }),
+        'https://example.com/a.zip',
+      );
+      await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+      await screen.findByRole('list', { name: 'Notices' });
+      scrolled.mockClear();
+    }
+
+    it('when the page moves the focus itself', async () => {
+      render(<App />);
+      await aNotice();
+      const settings = screen.getByRole('button', { name: 'Settings' });
+
+      act(() => {
+        settings.focus();
+      });
+
+      expect(scrolled).toHaveBeenCalledWith({ block: 'nearest' });
+      expect(scrolled.mock.contexts).toContain(settings);
+    });
+
+    it('when Tab moves it', async () => {
+      render(<App />);
+      await aNotice();
+
+      await userEvent.tab();
+
+      expect(scrolled).toHaveBeenCalledWith({ block: 'nearest' });
+      expect(scrolled.mock.contexts).toContain(document.activeElement);
+    });
+
+    it('and leaves it alone while no notice is shown', async () => {
+      render(<App />);
+      await screen.findByRole('button', { name: 'Settings' });
+
+      act(() => {
+        screen.getByRole('button', { name: 'Settings' }).focus();
+      });
+
+      expect(scrolled).not.toHaveBeenCalled();
+    });
+  });
+
   it('says in a notice what the engine refused of links pasted on the page, not in the field', async () => {
     vi.spyOn(api, 'addDownloads').mockRejectedValue(
       new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'),

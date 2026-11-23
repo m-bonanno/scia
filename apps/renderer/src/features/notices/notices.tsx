@@ -20,7 +20,8 @@ interface NoticesProps {
   readonly lasting: string | null;
   readonly onDismiss: (id: number) => void;
   // Told how tall the stack is, whenever that changes, and 0 once it is gone: the page leaves as
-  // much room under what scrolls beneath it (#143).
+  // much room under what scrolls beneath it (#143). A function that keeps its identity (a state's
+  // setter): a new one at every render would measure, report 0 and measure again without end.
   readonly onHeight: (px: number) => void;
   // Where the focus goes when the notice it was on leaves, and no other notice is there.
   readonly home: () => HTMLElement | null;

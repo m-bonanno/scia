@@ -7,6 +7,16 @@ import { API_PREFIX, ApiErrorCode } from '@scia/contracts';
 import { describe, expect, it } from 'vitest';
 import { NOTICE_MS } from '../../renderer/src/features/notices/notice-limits.ts';
 import { allCompleted, paste, rowOf, until, useRun } from './scia.ts';
+import {
+  bottomOf,
+  captureTo,
+  placeUnderNotices,
+  roomAround,
+  scrollsAround,
+  scrollToEnd,
+  topOfNotices,
+  viewportOf,
+} from './under-notices.ts';
 
 const NOT_OPENED = 'Scia could not open the file. It may have been moved or deleted.';
 
@@ -20,23 +30,14 @@ async function isOnTop(notice: Locator): Promise<boolean> {
   });
 }
 
-// Where the notices begin: what is drawn below it lies under them.
-async function topOfNotices(page: Page): Promise<number> {
-  return page
-    .getByRole('list', { name: 'Notices' })
-    .getByRole('listitem')
-    .first()
-    .evaluate((item) => item.getBoundingClientRect().top);
-}
-
-async function bottomOf(thing: Locator): Promise<number> {
-  return thing.evaluate((element) => element.getBoundingClientRect().bottom);
-}
-
-// The room an area that scrolls beneath the notices keeps under its end, once the page knows how
-// tall they are.
-async function roomUnder(area: Locator): Promise<number> {
-  return area.evaluate((element) => Number.parseFloat(getComputedStyle(element).paddingBottom));
+// Settings open, with its rows and its services drawn: before them it is short.
+async function openSettings(page: Page): Promise<Locator> {
+  await page.getByRole('button', { name: 'Settings' }).click();
+  const settings = page.getByRole('dialog', { name: 'Settings' });
+  await settings.getByText('Simultaneous downloads').waitFor();
+  await settings.getByRole('region', { name: 'Integrations' }).getByText('AllDebrid').waitFor();
+  await settings.getByRole('switch', { name: 'Beta versions' }).waitFor();
+  return settings;
 }
 
 describe('the real app says what went wrong in a notice', () => {
@@ -201,33 +202,145 @@ describe('the real app says what went wrong in a notice', () => {
   });
 
   // WCAG 2.2, 2.4.11: a control that takes the focus is not hidden under the notices (#143).
-  it('leaves room under the end of Settings, at the window’s own height, as tall as the notices', async () => {
+  it('leaves room under the end of Settings where it scrolls, and keeps a focus clear of the notices', async () => {
     const profile = await run.profile();
     const scia = await run.launch(profile);
     const { page } = scia;
     await scia.app.evaluate(({ dialog }) => {
       dialog.showOpenDialog = () => Promise.reject(new Error('the system said no'));
     });
-    await page.getByRole('button', { name: 'Settings' }).click();
-    const settings = page.getByRole('dialog', { name: 'Settings' });
+    // A window where Settings scrolls: at 720 px it fits on CI's runner (round 1 of #244).
+    await scia.app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.setContentSize(800, 560);
+    });
+    await until(() => page.evaluate(() => window.innerHeight === 560));
+    const settings = await openSettings(page);
+    const sizes = await settings.evaluate((dialog) => ({
+      innerHeight: window.innerHeight,
+      scrollHeight: dialog.scrollHeight,
+      clientHeight: dialog.clientHeight,
+    }));
+    expect(
+      sizes.scrollHeight,
+      `Settings does not scroll: ${JSON.stringify(sizes)}`,
+    ).toBeGreaterThan(sizes.clientHeight);
     const last = settings.getByRole('switch', { name: 'Beta versions' });
-    await last.waitFor();
-    // At 720 px Settings scrolls: its last setting starts out of sight.
-    expect(await settings.evaluate((dialog) => dialog.scrollHeight > dialog.clientHeight)).toBe(
-      true,
-    );
 
     await settings.getByRole('button', { name: 'Change folder' }).click();
     await settings.getByRole('list', { name: 'Notices' }).getByRole('listitem').waitFor();
-    await until(async () => (await roomUnder(settings)) > 0);
-    await last.focus();
+    await until(async () => (await roomAround(last)) > 0);
 
+    // A focus the page moves itself, onto a control already in the scrollport, under the notices.
+    expect(await placeUnderNotices(last)).toBeGreaterThan(await topOfNotices(page));
+    await last.focus();
     expect(await bottomOf(last)).toBeLessThanOrEqual(await topOfNotices(page));
-    await settings.evaluate((dialog) => {
-      dialog.scrollTop = dialog.scrollHeight;
+    // The focus Tab moves there, from the control before it.
+    await placeUnderNotices(last);
+    await settings.getByRole('button', { name: 'Use an API key' }).focus();
+    await page.keyboard.press('Tab');
+    expect(await last.evaluate((element) => element === document.activeElement)).toBe(true);
+    expect(await bottomOf(last)).toBeLessThanOrEqual(await topOfNotices(page));
+    // Scrolled to its end, the last of it is above them.
+    await scrollToEnd(last);
+    expect(await bottomOf(settings.getByText(/^Scia \d/))).toBeLessThanOrEqual(
+      await topOfNotices(page),
+    );
+  });
+
+  // The product designer, round 1 of #244: room bought where the notices lie over nothing moved
+  // the dialog under the pointer that had just pressed in it.
+  it('moves no Settings the notices do not reach, in a tall window', async () => {
+    const profile = await run.profile();
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    await scia.app.evaluate(({ dialog }) => {
+      dialog.showOpenDialog = () => Promise.reject(new Error('the system said no'));
     });
-    const version = settings.getByText(/^Scia \d/);
-    expect(await bottomOf(version)).toBeLessThanOrEqual(await topOfNotices(page));
+    await viewportOf(page, 1040, 1000);
+    const settings = await openSettings(page);
+    const before = await settings.evaluate((dialog) => ({
+      top: dialog.getBoundingClientRect().top,
+      bottom: dialog.getBoundingClientRect().bottom,
+      scrolls: dialog.scrollHeight > dialog.clientHeight,
+    }));
+    expect(before.scrolls, `Settings scrolls at 1000 px: ${JSON.stringify(before)}`).toBe(false);
+
+    await settings.getByRole('button', { name: 'Change folder' }).click();
+    await settings.getByRole('list', { name: 'Notices' }).getByRole('listitem').waitFor();
+    // Once the page knows how tall they are, and has drawn what it does with it.
+    await until(() =>
+      page
+        .evaluate(
+          () =>
+            document.querySelector('[aria-label="Notices"]')?.getBoundingClientRect().height ?? 0,
+        )
+        .then((height) => height > 0),
+    );
+    await page.evaluate(
+      () =>
+        new Promise<void>((done) => {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              done();
+            });
+          });
+        }),
+    );
+
+    expect(before.bottom).toBeLessThanOrEqual(await topOfNotices(page));
+    const after = await settings.evaluate((dialog) => ({
+      top: dialog.getBoundingClientRect().top,
+      bottom: dialog.getBoundingClientRect().bottom,
+      scrolls: dialog.scrollHeight > dialog.clientHeight,
+    }));
+    expect(after).toEqual(before);
+  });
+
+  // The captures #143 asks for, taken from the real app by CI (the owner, on #143): a change the
+  // engine failed to keep, Settings scrolled to its end — at 800 px, dark and light, and at 720.
+  it('takes the captures of a notice over Settings', async () => {
+    const profile = await run.profile();
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    await page.route(`**${API_PREFIX}/settings`, async (route) => {
+      if (route.request().method() !== 'PATCH') return route.fallback();
+      return route.fulfill({
+        status: 500,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: { code: ApiErrorCode.InternalError, message: 'refused' } }),
+      });
+    });
+    const shots = [
+      { height: 800, variant: 'dark', name: 'a-notice-over-settings.png' },
+      { height: 800, variant: 'light', name: 'a-notice-over-settings-light.png' },
+      { height: 720, variant: 'dark', name: 'a-notice-over-settings-720.png' },
+    ] as const;
+    for (const { height, variant, name } of shots) {
+      await scia.app.evaluate(({ nativeTheme }, source) => {
+        nativeTheme.themeSource = source;
+      }, variant);
+      await viewportOf(page, 1040, height);
+      const settings = await openSettings(page);
+      await settings.getByRole('button', { name: 'Increase' }).first().click();
+      const notice = settings.getByRole('list', { name: 'Notices' }).getByRole('listitem');
+      await notice.waitFor();
+      await until(() =>
+        page.evaluate(
+          (wanted) =>
+            matchMedia(`(prefers-color-scheme: ${wanted})`).matches &&
+            document.getAnimations().length === 0,
+          variant,
+        ),
+      );
+      await page.mouse.move(1, 1);
+      await scrollToEnd(settings.getByText(/^Scia \d/));
+      expect(await bottomOf(settings.getByText(/^Scia \d/))).toBeLessThanOrEqual(
+        await topOfNotices(page),
+      );
+      await page.screenshot({ path: await captureTo(name) });
+      await settings.getByRole('button', { name: 'Close' }).click();
+      await settings.waitFor({ state: 'hidden' });
+    }
   });
 
   it('leaves room under the last row of the list, as tall as the notices', async () => {
@@ -242,8 +355,7 @@ describe('the real app says what went wrong in a notice', () => {
     const rows = page.getByRole('main').getByRole('listitem');
     await until(async () => (await rows.count()) === 12);
     const lastRow = rows.last();
-    const list = page.getByRole('main').locator('.overflow-y-auto');
-    expect(await list.evaluate((area) => area.scrollHeight > area.clientHeight)).toBe(true);
+    expect(await scrollsAround(lastRow)).toBe(true);
     await page.route(`**${API_PREFIX}/downloads`, async (route) => {
       if (route.request().method() !== 'POST') return route.fallback();
       return route.fulfill({
@@ -255,14 +367,15 @@ describe('the real app says what went wrong in a notice', () => {
 
     await paste(page, 'https://example.com/a.zip');
     await page.getByRole('list', { name: 'Notices' }).getByRole('listitem').waitFor();
-    await until(async () => (await roomUnder(list)) > 0);
+    await until(async () => (await roomAround(lastRow)) > 0);
     const lastButton = lastRow.getByRole('button').last();
-    await lastButton.focus();
 
+    // A focus the page moves itself, onto a control already in the scrollport, under the notices.
+    expect(await placeUnderNotices(lastButton)).toBeGreaterThan(await topOfNotices(page));
+    await lastButton.focus();
     expect(await bottomOf(lastButton)).toBeLessThanOrEqual(await topOfNotices(page));
-    await list.evaluate((area) => {
-      area.scrollTop = area.scrollHeight;
-    });
+    // Scrolled to its end, the last row is above them.
+    await scrollToEnd(lastRow);
     expect(await bottomOf(lastRow)).toBeLessThanOrEqual(await topOfNotices(page));
   });
 });
