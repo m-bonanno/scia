@@ -53,9 +53,11 @@ ADRs: [0009](../adr/0009-the-video-of-a-page.md), [0010](../adr/0010-a-stream-ma
 
 ### Bunkr's albums (Scia's own)
 
-What it adds: every file of a public album, into a folder named after the album. Its domains are kept as data in one list.
+What it adds: every file of a public album, into a folder named after the album, each file a download of its own — resumable, under the speed limit. A file's page pasted by itself is downloaded the same way. Its domains are kept as data in one list. No second program is shipped, and no service is asked about a Bunkr link.
 
-**State:** in progress (#228).
+ADR: [0024](../adr/0024-a-bunkr-album-read-by-scia.md). Issue: #228.
+
+**State:** held by specs against a local host that answers as Bunkr does; not seen against the real Bunkr. What it reads of Bunkr's pages and its API was learned from gallery-dl's public source, not from the site; the app has not run it ([evidence.md](./evidence.md#a-bunkr-album)).
 
 ## What Scia asks of GitHub
 

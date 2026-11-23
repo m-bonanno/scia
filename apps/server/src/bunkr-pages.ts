@@ -72,7 +72,7 @@ const ENTITIES = new Map([
   ['gt', '>'],
   ['quot', '"'],
   ['apos', "'"],
-  ['nbsp', ' '],
+  ['nbsp', '\u00a0'],
 ]);
 
 function codePoint(value: number): string | undefined {
