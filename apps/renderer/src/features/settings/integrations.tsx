@@ -396,7 +396,7 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
             aria-invalid={refusal !== null}
             aria-describedby={refusal === null ? hintId : `${alertId} ${hintId}`}
             className={cn(
-              'h-9 w-full rounded-lg border border-border bg-transparent px-3 text-sm placeholder:text-muted-foreground',
+              'h-9 w-full rounded-lg border border-border bg-transparent px-3 text-sm',
               FOCUS_RING,
             )}
           />
