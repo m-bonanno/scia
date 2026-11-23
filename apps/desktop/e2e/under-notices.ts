@@ -83,6 +83,18 @@ export async function viewportOf(page: Page, width: number, height: number): Pro
   );
 }
 
+// A finger's tap at a point, as a touch screen gives it, over the DevTools protocol: the page
+// sees pointerdown and pointerup, then the tap's mousedown, focus, mouseup and click.
+export async function tap(page: Page, x: number, y: number): Promise<void> {
+  const protocol = await page.context().newCDPSession(page);
+  await protocol.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+  await protocol.send('Input.dispatchTouchEvent', {
+    type: 'touchStart',
+    touchPoints: [{ x, y }],
+  });
+  await protocol.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+}
+
 // Where the captures of a run go: the E2E job uploads the folder it names (gates.yml).
 export async function captureTo(name: string): Promise<string> {
   const folder = process.env.SCIA_CAPTURES ?? join(tmpdir(), 'scia-captures');

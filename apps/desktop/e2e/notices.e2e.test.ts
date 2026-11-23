@@ -14,6 +14,7 @@ import {
   roomAround,
   scrollsAround,
   scrollToEnd,
+  tap,
   topOfNotices,
   viewportOf,
 } from './under-notices.ts';
@@ -401,48 +402,54 @@ describe('the real app says what went wrong in a notice', () => {
   });
 
   // The tech lead, round 2 of #244: a focus scrolled clear of the notices at the pointer's press
-  // moved the button before it was let go, and the click was lost.
-  it('takes a press of the pointer on a control beside the notices, in the room under them', async () => {
-    const profile = await run.profile();
-    const host = run.keep(await startRangeServer({ body: randomBytes(64 * 1024) }));
-    const scia = await run.launch(profile);
-    const { page } = scia;
-    // Wide enough for a row's buttons to lie beside the notices, which are centred and narrower.
-    await scia.app.evaluate(({ BrowserWindow }) => {
-      BrowserWindow.getAllWindows()[0]?.setContentSize(1000, 700);
-    });
-    await until(() =>
-      page.evaluate(() => window.innerWidth === 1000 && window.innerHeight === 700),
-    );
-    const links = Array.from({ length: 12 }, (_, n) => `${host.url}?copy=${String(n)}`);
-    await paste(page, links.join(' '));
-    await until(() => allCompleted(page));
-    const rows = page.getByRole('main').getByRole('listitem');
-    await until(async () => (await rows.count()) === 12);
-    const lastRow = rows.last();
-    await page.route(`**${API_PREFIX}/downloads`, async (route) => {
-      if (route.request().method() !== 'POST') return route.fallback();
-      return route.fulfill({
-        status: 500,
-        contentType: 'application/json',
-        body: JSON.stringify({ error: { code: ApiErrorCode.InternalError, message: 'refused' } }),
+  // moved the button before it was let go, and the click was lost. And a finger's tap, whose
+  // focus comes after its pointer events (the frontend, round 3).
+  it.each(['click', 'tap'] as const)(
+    'takes a %s on a control beside the notices, in the room under them',
+    async (press) => {
+      const profile = await run.profile();
+      const host = run.keep(await startRangeServer({ body: randomBytes(64 * 1024) }));
+      const scia = await run.launch(profile);
+      const { page } = scia;
+      // Wide enough for a row's buttons to lie beside the notices, which are centred and narrower.
+      await scia.app.evaluate(({ BrowserWindow }) => {
+        BrowserWindow.getAllWindows()[0]?.setContentSize(1000, 700);
       });
-    });
-    await paste(page, 'https://example.com/a.zip');
-    const notice = page.getByRole('list', { name: 'Notices' }).getByRole('listitem');
-    await notice.waitFor();
-    await until(async () => (await roomAround(lastRow)) > 0);
-    const remove = lastRow.getByRole('button', { name: 'Remove from list' });
-    expect(await placeUnderNotices(remove)).toBeGreaterThan(await topOfNotices(page));
-    const button = await remove.boundingBox();
-    const beside = await notice.first().boundingBox();
-    expect(button !== null && beside !== null && button.x > beside.x + beside.width).toBe(true);
+      await until(() =>
+        page.evaluate(() => window.innerWidth === 1000 && window.innerHeight === 700),
+      );
+      const links = Array.from({ length: 12 }, (_, n) => `${host.url}?copy=${String(n)}`);
+      await paste(page, links.join(' '));
+      await until(() => allCompleted(page));
+      const rows = page.getByRole('main').getByRole('listitem');
+      await until(async () => (await rows.count()) === 12);
+      const lastRow = rows.last();
+      await page.route(`**${API_PREFIX}/downloads`, async (route) => {
+        if (route.request().method() !== 'POST') return route.fallback();
+        return route.fulfill({
+          status: 500,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: { code: ApiErrorCode.InternalError, message: 'refused' } }),
+        });
+      });
+      await paste(page, 'https://example.com/a.zip');
+      const notice = page.getByRole('list', { name: 'Notices' }).getByRole('listitem');
+      await notice.waitFor();
+      await until(async () => (await roomAround(lastRow)) > 0);
+      const remove = lastRow.getByRole('button', { name: 'Remove from list' });
+      expect(await placeUnderNotices(remove)).toBeGreaterThan(await topOfNotices(page));
+      const button = await remove.boundingBox();
+      const beside = await notice.first().boundingBox();
+      expect(button !== null && beside !== null && button.x > beside.x + beside.width).toBe(true);
+      const x = (button?.x ?? 0) + (button?.width ?? 0) / 2;
+      const y = (button?.y ?? 0) + 10;
 
-    await page.mouse.click((button?.x ?? 0) + (button?.width ?? 0) / 2, (button?.y ?? 0) + 10);
+      if (press === 'click') await page.mouse.click(x, y);
+      else await tap(page, x, y);
 
-    await until(async () => (await rows.count()) === 11);
-  });
-
+      await until(async () => (await rows.count()) === 11);
+    },
+  );
   it('leaves room under the last row of the list, as tall as the notices', async () => {
     const profile = await run.profile();
     const host = run.keep(await startRangeServer({ body: randomBytes(64 * 1024) }));
