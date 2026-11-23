@@ -1,4 +1,5 @@
 import { ApiErrorCode, IntegrationCodeFailure, type IntegrationId } from '@scia/contracts';
+import { SUPPORT_PAGE } from '@scia/contracts/bridge';
 import {
   BundleFailure,
   MagnetFailure,
@@ -24,6 +25,10 @@ export const ENGINE_UNREACHABLE = 'Scia’s engine is not responding. Trying aga
 // Main says only that it failed. The engine being silent is the rare cause; a file that is no
 // longer where it was downloaded is the common one.
 export const FILE_NOT_OPENED = 'Scia could not open the file. It may have been moved or deleted.';
+
+// Main says only that it failed: no browser took the page. The place is how a person types it.
+const supportPage = new URL(SUPPORT_PAGE);
+export const SUPPORT_PAGE_NOT_OPENED = `Scia could not open the page. Go to ${supportPage.host}${supportPage.pathname}.`;
 
 // Said only when main answers that the engine refused the folder the person chose: one it
 // cannot make, or cannot write to. Any other failure of that ask is not about a folder.
