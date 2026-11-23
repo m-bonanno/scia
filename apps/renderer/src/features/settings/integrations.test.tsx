@@ -13,6 +13,7 @@ const notConnected: Integration = {
   connected: false,
   account: null,
   failure: null,
+  keyNotRead: false,
 };
 const connected: Integration = {
   id: 'alldebrid',
@@ -20,6 +21,7 @@ const connected: Integration = {
   // The specs run in UTC (vitest.config.ts): the day is the one written here.
   account: { name: 'ada', premium: true, premiumUntil: '2027-06-30T12:00:00.000Z' },
   failure: null,
+  keyNotRead: false,
 };
 
 const ignore = () => undefined;
@@ -386,6 +388,41 @@ describe('IntegrationsSection', () => {
     expect(disconnect).toHaveBeenCalledExactlyOnceWith('alldebrid');
     expect(await service.findByText('Not connected')).toBeInTheDocument();
     expect(service.getByRole('button', { name: 'Connect with a code' })).toHaveFocus();
+  });
+
+  describe('a key kept that could not be read back (#69)', () => {
+    const NOT_READ = 'Scia could not read back the key it kept for AllDebrid. Connect it again.';
+
+    it('says so, beside the ways to connect again', async () => {
+      listing([{ ...notConnected, keyNotRead: true }]);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      expect(service.getByRole('status')).toHaveTextContent(/^Not connected$/);
+      expect(service.getByText(NOT_READ)).toBeInTheDocument();
+      expect(service.getByRole('button', { name: 'Connect with a code' })).toBeInTheDocument();
+      expect(service.getByRole('button', { name: 'Use an API key' })).toBeInTheDocument();
+    });
+
+    it('says nothing of it for a service that was never connected', async () => {
+      listing([notConnected]);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      expect(service.queryByText(NOT_READ)).not.toBeInTheDocument();
+    });
+
+    it('no longer says so once a key is connected again', async () => {
+      listing([{ ...notConnected, keyNotRead: true }]);
+      vi.spyOn(api, 'connectIntegration').mockResolvedValue(connected);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await typeAKey();
+
+      await userEvent.keyboard('{Enter}');
+
+      expect(await service.findByRole('status')).toHaveTextContent(/^Connected as ada/);
+      expect(service.queryByText(NOT_READ)).not.toBeInTheDocument();
+    });
   });
 
   it('stays connected, and says so by the service, when it could not be disconnected', async () => {

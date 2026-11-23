@@ -97,7 +97,9 @@ describe('the engine API, for the services Scia connects to', () => {
 
     expect(listed.status).toBe(200);
     expect(await listed.json()).toEqual({
-      data: [{ id: 'alldebrid', connected: false, account: null, failure: null }],
+      data: [
+        { id: 'alldebrid', connected: false, account: null, failure: null, keyNotRead: false },
+      ],
     });
   });
 
@@ -116,6 +118,7 @@ describe('the engine API, for the services Scia connects to', () => {
           premiumUntil: new Date(PREMIUM_UNTIL * 1000).toISOString(),
         },
         failure: null,
+        keyNotRead: false,
       },
     });
     expect(body).not.toContain(KEY);
@@ -211,7 +214,9 @@ describe('the engine API, for the services Scia connects to', () => {
     expect((await remove(APP_TOKEN)).status).toBe(204);
     expect(await vault.read(IntegrationId.AllDebrid)).toBeUndefined();
     expect(await (await call('/integrations', { token: APP_TOKEN })).json()).toEqual({
-      data: [{ id: 'alldebrid', connected: false, account: null, failure: null }],
+      data: [
+        { id: 'alldebrid', connected: false, account: null, failure: null, keyNotRead: false },
+      ],
     });
   });
 

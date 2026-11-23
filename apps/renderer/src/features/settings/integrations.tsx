@@ -299,7 +299,7 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
       .disconnectIntegration(id)
       .then(() => {
         handFocusTo('connect-code');
-        onChange({ id, connected: false, account: null, failure: null });
+        onChange({ id, connected: false, account: null, failure: null, keyNotRead: false });
       })
       .catch((error: unknown) => {
         setRefusal(errorMessage(error));
@@ -331,6 +331,11 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
           {integration.connected && integration.failure !== null && (
             <p className="text-sm text-destructive">
               {serviceTroubleMessage(integration.failure, id)}
+            </p>
+          )}
+          {integration.keyNotRead && (
+            <p className="text-sm text-destructive">
+              Scia could not read back the key it kept for {name}. Connect it again.
             </p>
           )}
         </div>

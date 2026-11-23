@@ -12,6 +12,7 @@ const connected = {
   connected: true,
   account: { name: 'ada', premium: true, premiumUntil: '2027-06-30T12:00:00.000Z' },
   failure: null,
+  keyNotRead: false,
 };
 
 describe('integrationSchema', () => {
@@ -39,6 +40,15 @@ describe('integrationSchema', () => {
     expect(integrationSchema.safeParse({ ...connected, failure: 'KEY_REFUSED' }).success).toBe(
       true,
     );
+  });
+
+  it('says whether a key kept for the service could not be read back, and always says it', () => {
+    const notRead = { ...connected, connected: false, account: null, keyNotRead: true };
+    const { keyNotRead: _left, ...unsaid } = connected;
+
+    expect(integrationSchema.safeParse(notRead).success).toBe(true);
+    expect(integrationSchema.safeParse(unsaid).success).toBe(false);
+    expect(integrationSchema.safeParse({ ...connected, keyNotRead: 'yes' }).success).toBe(false);
   });
 });
 
