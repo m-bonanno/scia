@@ -74,6 +74,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 
 - #99: picture and sound offered apart are joined only as an mp4 picture in H.264 or AV1 and an AAC sound. The most lines win, and H.264 at equal lines; HEVC never, since Windows plays it only with a paid extension. A webm picture with Opus sound is an issue of its own (#239) ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)).
 - #228: `v1.0.0` waits for a Bunkr album downloaded into a folder of its own. Its reader is Scia's own — a small reader of Bunkr's album and file pages, its domains kept as data in one list — and no second program is shipped: when Bunkr changes its pages, Scia is updated ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md)). Until #214, the album's files are separate downloads in its folder, as a magnet's.
+- #228: undoing the XOR Bunkr puts on the link its API answers is within "Respect the hosts": Bunkr's own download page does the same in every visitor's browser, with no account, payment, region or check behind it, so it is no access control ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md), point 4).
 
 ## Undated in the roadmap
 
