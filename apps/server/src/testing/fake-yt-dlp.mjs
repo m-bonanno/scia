@@ -19,6 +19,32 @@ const fail = (message) => {
 };
 const hang = () => setTimeout(() => undefined, 60_000);
 
+// Asked for the title alone (`--print %(title)j`, #285), it prints what the shipped build prints,
+// seen in a run of it on an info file: the title as JSON, every character past ASCII escaped, on
+// a line of its own — one for each video of a list — and a title of its own making when the site
+// gives none. What is no JSON object is written as it stands.
+if (args.includes('--print')) {
+  const write = process.stdout.write.bind(process.stdout);
+  const asAscii = (title) =>
+    JSON.stringify(title).replace(
+      /[^\x20-\x7e]/g,
+      (char) => `${String.fromCharCode(92)}u${char.charCodeAt(0).toString(16).padStart(4, '0')}`,
+    );
+  process.stdout.write = (text) => {
+    let info;
+    try {
+      info = JSON.parse(text);
+    } catch {
+      return write(text);
+    }
+    const titles =
+      info._type === 'playlist'
+        ? (info.entries ?? []).map((entry) => entry.title)
+        : [info.title ?? 'example video #v1'];
+    return write(titles.map((title) => `${asAscii(title)}\n`).join(''));
+  };
+}
+
 const format = (overrides) => ({
   format_id: 'f',
   url: 'https://cdn.example/f.mp4',
@@ -201,7 +227,37 @@ else if (url.includes('/one-url')) {
 } else if (url.includes('/no-format-at-all')) {
   process.stdout.write(JSON.stringify({ _type: 'video', title: 'Empty', formats: [] }));
 } else if (url.includes('/playlist'))
-  process.stdout.write(JSON.stringify({ _type: 'playlist', title: 'Many', entries: [] }));
+  process.stdout.write(
+    JSON.stringify({
+      _type: 'playlist',
+      title: 'Many',
+      entries: [{ title: 'One' }, { title: 'Two' }],
+    }),
+  );
+else if (url.includes('/long-title')) {
+  // A title as a site may write it: markup, lines, a control character, far too long.
+  process.stdout.write(
+    JSON.stringify({ ...video, title: `<b>Long</b>\r\n\u0007${'trip '.repeat(2000)}` }),
+  );
+} else if (url.includes('/far-title')) {
+  // A title of letters past ASCII and an emoji: É, the two of Tokyo, a clapper board.
+  process.stdout.write(
+    JSON.stringify({
+      ...video,
+      title: String.fromCodePoint(0xc9, 0x20, 0x6771, 0x4eac, 0x20, 0x1f3ac),
+    }),
+  );
+} else if (url.includes('/no-title')) {
+  const { title: _none, ...untitled } = video;
+  process.stdout.write(JSON.stringify(untitled));
+} else if (url.includes('/title-flood')) {
+  // One line that never ends.
+  process.stdout.write('"'.concat('x'.repeat(100_000)));
+  hang();
+} else if (url.includes('/says-nothing')) process.exit(0);
+// A title that is no text: yt-dlp prints it as JSON all the same.
+else if (url.includes('/number-title'))
+  process.stdout.write(JSON.stringify({ ...video, title: 1080 }));
 else if (url.includes('/unknown')) fail(`No suitable extractor found for URL ${url}`);
 else if (url.includes('/unsupported')) fail(`Unsupported URL: ${url}`);
 // The words of the shipped build on an archive.org book and collection.

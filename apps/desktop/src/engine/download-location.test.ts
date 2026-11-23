@@ -7,6 +7,7 @@ const download = {
   id: 'a1b2',
   url: 'https://example.com/film.mkv',
   fileName: 'film.mkv',
+  title: null,
   directory: join('home', 'Downloads'),
   kind: 'video',
   status: 'completed',

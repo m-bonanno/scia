@@ -47,8 +47,11 @@ export interface RowActions {
 }
 
 // A ready link's name is a guess from its address until it starts: a site's page is "watch", a
-// file host's an "….html". One that names no kind of file is shown by its address.
+// file host's an "….html". A video's page is named by the title its site gives, read while it is
+// ready, until the file is named (#285); one that names no kind of file otherwise by its address.
+// The title is text: React writes it as such, never as markup.
 function shownName(download: Download): string {
+  if (download.title !== null) return download.title;
   if (download.status !== DownloadStatus.Ready || download.kind !== FileKind.Other) {
     return download.fileName;
   }

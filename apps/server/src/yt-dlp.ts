@@ -1,19 +1,18 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { AUDIO_CONTAINERS, type AudioContainer, PageFailure } from '@scia/core';
+import { AUDIO_CONTAINERS, type AudioContainer, PageFailure, titleOfVideo } from '@scia/core';
 import { mediaSchema } from '@scia/contracts';
 import { z } from 'zod';
 import { PageError, type PageFormat } from './media-choice.ts';
 import type { PageMedia, PageReader } from './page-reader.ts';
 
-// What yt-dlp is always told (docs/adr/0009). It reads one page and prints what it found, as one
-// JSON object; it downloads nothing — the engine does. It never guesses a site it has no reader
-// of its own for (the generic one is left out), never works around a geographic restriction,
-// never reads a cookie — from a file or from a browser's store — and never reads a configuration
-// or writes a cache of its own on this computer (CLAUDE.md, "Respect the hosts").
+// What yt-dlp is always told (docs/adr/0009). It reads one page and prints what it found; it
+// downloads nothing — the engine does. It never guesses a site it has no reader of its own for
+// (the generic one is left out), never works around a geographic restriction, never reads a
+// cookie — from a file or from a browser's store — and never reads a configuration or writes a
+// cache of its own on this computer (CLAUDE.md, "Respect the hosts").
 const ALWAYS = [
-  '--dump-single-json',
   '--no-playlist',
   '--ignore-config',
   '--no-cache-dir',
@@ -29,8 +28,20 @@ const ALWAYS = [
   '--no-plugin-dirs',
 ] as const;
 
+// A read prints the page's whole description, as one JSON object.
+const READ = ['--dump-single-json'] as const;
+// A ready row's title (#285) is printed alone: as JSON — every character past ASCII escaped, so
+// that no code page of the system changes it — on a line of its own, one for each video of a list.
+// The videos of a list are not read one by one for it: a page that turns out to be a list stays
+// one request.
+const TITLE = ['--print', '%(title)j', '--flat-playlist'] as const;
+
 // A page's description can be long — a format per quality and per host — but not this long.
 const MOST_OUTPUT_BYTES = 32 * 1024 * 1024;
+// A title is a line: what runs on past this is no title.
+const MOST_TITLE_BYTES = 64 * 1024;
+// A title is wanted while the person looks at the row, not after a whole read's wait.
+const TITLE_LIMIT_MS = 30_000;
 // What is kept of the error stream: its end, where yt-dlp says why it stopped.
 const MOST_ERROR_BYTES = 64 * 1024;
 
@@ -168,6 +179,8 @@ export interface YtDlpOptions {
   readonly prefix?: readonly string[];
   // A page that has said nothing by then is given up.
   readonly timeoutMs: number;
+  // A title that has not come by then is given up: TITLE_LIMIT_MS unless told.
+  readonly titleTimeoutMs?: number;
   // Where each run gets a folder of its own for its temporary files, removed when it ends: the
   // builds of yt-dlp unpack themselves there — 30 MB — and leave it behind when they are stopped.
   readonly tempDir: string;
@@ -184,6 +197,13 @@ function environmentOf(temp: string): Record<string, string> {
     TMP: temp,
     TMPDIR: temp,
   };
+}
+
+// What one run asks of yt-dlp, and how long and how much it may answer.
+interface Ask {
+  readonly told: readonly string[];
+  readonly timeoutMs: number;
+  readonly mostOutputBytes: number;
 }
 
 interface Run {
@@ -237,7 +257,11 @@ export class YtDlp implements PageReader {
   }
 
   async read(url: string, signal: AbortSignal): Promise<PageMedia | undefined> {
-    const run = await this.#inFolderOfItsOwn(url, signal);
+    const run = await this.#inFolderOfItsOwn(url, signal, {
+      told: READ,
+      timeoutMs: this.#options.timeoutMs,
+      mostOutputBytes: this.#options.mostOutputBytes ?? MOST_OUTPUT_BYTES,
+    });
     if (run.code !== 0) {
       const refusal = refusalOf(run.stderr);
       if (refusal === undefined) return undefined;
@@ -274,30 +298,62 @@ export class YtDlp implements PageReader {
     return { title: info.title, formats };
   }
 
-  async #inFolderOfItsOwn(url: string, signal: AbortSignal): Promise<Run> {
+  // The same request as a read, under the same rules, for one line: the title, made one line of
+  // text a row can show (#285).
+  async readTitle(url: string, signal: AbortSignal): Promise<string | undefined> {
+    const run = await this.#inFolderOfItsOwn(url, signal, {
+      told: TITLE,
+      timeoutMs: this.#options.titleTimeoutMs ?? TITLE_LIMIT_MS,
+      mostOutputBytes: MOST_TITLE_BYTES,
+    });
+    if (run.code !== 0) {
+      const refusal = refusalOf(run.stderr);
+      if (refusal === undefined) return undefined;
+      throw refusal;
+    }
+    const lines = run.stdout.split(/\r?\n/).filter((line) => line !== '');
+    const [line] = lines;
+    if (line === undefined) return undefined;
+    // A line for each video: the page is a list, and its title no one video's.
+    if (lines.length > 1) throw new PageError(PageFailure.Playlist, 'The page is not one video.');
+    let title: unknown;
+    try {
+      title = JSON.parse(line);
+    } catch (error) {
+      throw new PageError(PageFailure.Unreadable, 'The reader printed no title.', {
+        cause: error,
+      });
+    }
+    if (typeof title !== 'string') {
+      throw new PageError(PageFailure.Unreadable, 'The reader printed no title.');
+    }
+    return titleOfVideo(title);
+  }
+
+  async #inFolderOfItsOwn(url: string, signal: AbortSignal, ask: Ask): Promise<Run> {
     signal.throwIfAborted();
     await mkdir(this.#options.tempDir, { recursive: true });
     const temp = await mkdtemp(join(this.#options.tempDir, 'scia-yt-dlp-'));
     try {
-      return await this.#run(url, temp, signal);
+      return await this.#run(url, temp, signal, ask);
     } finally {
       // After the process has closed, whatever ended it: Windows may hold its files a moment.
       await rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
     }
   }
 
-  #run(url: string, temp: string, signal: AbortSignal): Promise<Run> {
+  #run(url: string, temp: string, signal: AbortSignal, ask: Ask): Promise<Run> {
     return new Promise((resolve, reject) => {
       // Stopped while its folder was being made: an abort that has happened is never heard again.
       if (signal.aborted) {
         reject(signal.reason as Error);
         return;
       }
-      const { prefix = [], timeoutMs } = this.#options;
+      const { prefix = [] } = this.#options;
+      const { told, timeoutMs, mostOutputBytes } = ask;
       const command =
         typeof this.#options.command === 'string' ? this.#options.command : this.#options.command();
-      const mostOutputBytes = this.#options.mostOutputBytes ?? MOST_OUTPUT_BYTES;
-      const child = spawn(command, [...prefix, ...ALWAYS, '--', url], {
+      const child = spawn(command, [...prefix, ...told, ...ALWAYS, '--', url], {
         env: environmentOf(temp),
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,

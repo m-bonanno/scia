@@ -2,7 +2,8 @@ import type * as ChildProcesses from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
 import { readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
-import { PageFailure } from '@scia/core';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { PageFailure, TITLE_MOST_CHARS } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PageError } from './media-choice.ts';
 import { scratchFolder, until } from './testing/scratch.ts';
@@ -318,6 +319,152 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     await expect(reading).rejects.toThrow('paused');
     expect(Date.now() - startedAt).toBeLessThan(5000);
     expect(isRunning(given().pid)).toBe(false);
+  });
+
+  describe('the title of a page alone, for a ready row (#285)', () => {
+    it('asks yt-dlp for the title alone, with everything it is always told and nothing of the engine’s', async () => {
+      vi.stubEnv('SCIA_API_TOKEN', 'the-engine-token-0000');
+      try {
+        expect(await reader().readTitle('https://site.example/video/1', never)).toBe('A video');
+      } finally {
+        vi.unstubAllEnvs();
+      }
+
+      const { args, env } = given();
+      const valueOf = (option: string) => args[args.indexOf(option) + 1];
+      expect(args).toEqual(
+        expect.arrayContaining([
+          '--no-playlist',
+          '--flat-playlist',
+          '--ignore-config',
+          '--no-cache-dir',
+          '--no-cookies',
+          '--no-cookies-from-browser',
+          '--no-plugin-dirs',
+        ]),
+      );
+      // Printed, not dumped: the title on a line, and none of the page's formats.
+      expect(valueOf('--print')).toBe('%(title)j');
+      expect(args).not.toContain('--dump-single-json');
+      expect(valueOf('--use-extractors')).toBe('default,-generic');
+      expect(valueOf('--xff')).toBe('never');
+      expect(
+        args.some((arg) => arg.startsWith('--cookies') && arg !== '--no-cookies-from-browser'),
+      ).toBe(false);
+      expect(args.slice(-2)).toEqual(['--', 'https://site.example/video/1']);
+      expect(JSON.stringify(env)).not.toContain('the-engine-token-0000');
+      expect(env.TEMP?.startsWith(join(tempDir, 'scia-yt-dlp-'))).toBe(true);
+      expect(await readdir(tempDir)).toEqual([]);
+    });
+
+    it('reads a title past ASCII as yt-dlp escapes it', async () => {
+      expect(await reader().readTitle('https://site.example/far-title', never)).toBe(
+        String.fromCodePoint(0xc9, 0x20, 0x6771, 0x4eac, 0x20, 0x1f3ac),
+      );
+    });
+
+    it('makes a title one line of text, cut to the most a row shows', async () => {
+      const title = await reader().readTitle('https://site.example/long-title', never);
+
+      expect(title).toHaveLength(TITLE_MOST_CHARS);
+      expect(title?.startsWith('<b>Long</b> trip trip')).toBe(true);
+      // No line break, no control character: one line of text.
+      expect(title).not.toMatch(/[\r\n]/);
+      expect(title).not.toContain(String.fromCharCode(7));
+    });
+
+    it('takes the title yt-dlp makes for a video its site names not', async () => {
+      expect(await reader().readTitle('https://site.example/no-title', never)).toBe(
+        'example video #v1',
+      );
+    });
+
+    it('answers no title for a page of a site it does not know, a page that says nothing, or a list', async () => {
+      expect(await reader().readTitle('https://other.example/unknown', never)).toBeUndefined();
+      expect(await reader().readTitle('https://site.example/says-nothing', never)).toBeUndefined();
+      expect(await failureOf(reader().readTitle('https://site.example/playlist', never))).toBe(
+        PageFailure.Playlist,
+      );
+    });
+
+    it('says why a site would not give the title', async () => {
+      expect(await failureOf(reader().readTitle('https://site.example/private', never))).toBe(
+        PageFailure.VideoUnavailable,
+      );
+      expect(await failureOf(reader().readTitle('https://site.example/garbage', never))).toBe(
+        PageFailure.Unreadable,
+      );
+      expect(await failureOf(reader().readTitle('https://site.example/number-title', never))).toBe(
+        PageFailure.Unreadable,
+      );
+    });
+
+    it('gives a title thirty seconds when it is told no other time', async () => {
+      // Only the adapter's own timers are the spec's: the process, its pipes and the waits of the
+      // spec run as they do.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      try {
+        let outcome: unknown = 'reading';
+        const reading = reader({ timeoutMs: 1000 })
+          .readTitle('https://site.example/slow', never)
+          .then(
+            () => 'answered',
+            (error: unknown) => (error instanceof PageError ? error.failure : error),
+          )
+          .then((settled) => {
+            outcome = settled;
+          });
+        await until(() => existsSync(givenFile));
+
+        vi.advanceTimersByTime(29_999);
+        await until(() => isRunning(given().pid));
+        expect(outcome).toBe('reading');
+
+        vi.advanceTimersByTime(1);
+        // The grace of a reader's output once it is ended, and no more: two seconds of the
+        // adapter's time at most, far inside a longer limit.
+        for (let step = 0; step < 40 && outcome === 'reading'; step += 1) {
+          vi.advanceTimersByTime(50);
+          await sleep(100);
+        }
+        expect(outcome).toBe(PageFailure.SiteBusy);
+        await reading;
+      } finally {
+        vi.useRealTimers();
+      }
+    }, 20_000);
+
+    it('gives up, and ends, a reader that says nothing in its own time, not the time of a whole read', async () => {
+      const startedAt = Date.now();
+      expect(
+        await failureOf(
+          reader({ timeoutMs: 60_000, titleTimeoutMs: 300 }).readTitle(
+            'https://site.example/slow',
+            never,
+          ),
+        ),
+      ).toBe(PageFailure.SiteBusy);
+      expect(Date.now() - startedAt).toBeLessThan(5000);
+      expect(isRunning(given().pid)).toBe(false);
+    });
+
+    it('gives up, and ends, a reader whose title runs on past what a title can be', async () => {
+      expect(await failureOf(reader().readTitle('https://site.example/title-flood', never))).toBe(
+        PageFailure.Unreadable,
+      );
+      expect(isRunning(given().pid)).toBe(false);
+    });
+
+    it('stops reading the title when it is told to, and ends the reader', async () => {
+      const stopped = new AbortController();
+      const reading = reader().readTitle('https://site.example/slow', stopped.signal);
+      await until(() => existsSync(givenFile));
+      stopped.abort(new Error('started'));
+
+      await expect(reading).rejects.toThrow('started');
+      expect(isRunning(given().pid)).toBe(false);
+      expect(await readdir(tempDir)).toEqual([]);
+    });
   });
 
   describe('a reader whose second process holds its output, as yt-dlp’s Windows build runs (#170)', () => {

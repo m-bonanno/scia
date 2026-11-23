@@ -28,6 +28,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [x] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes): 32 s with nothing written for a 32 GiB file on an NVMe SSD, over 45 s for 4 GiB on a USB hard disk.
 - [ ] A large download that starts at once: its part file made sparse, its room looked at instead of reserved, the engine given more disk threads (#182; `v1.0.0` waits for it, the owner, 23 November 2026): built, held by specs and by CI's E2E suite in the built app ([ADR 0026](../adr/0026-a-part-file-made-sparse.md)), measured with the engine's own task; a large file in the app, and on a USB hard disk, to be seen (#265).
 - [x] The installer refuses an older version (#172, #177).
+- [ ] A video's page taken from the clipboard named by its title, read by yt-dlp the moment it is taken (#285; `v1.0.0` waits for it, the owner, 23 November 2026): built ([ADR 0012](../adr/0012-links-taken-from-the-clipboard.md), amended), held by specs against a stand-in for yt-dlp and, for the row, by CI's E2E suite in the built app; a real site's title to be seen in the owner's sitting below.
 - [ ] Every file of a Bunkr album downloaded into a folder of its own, by a reader of Scia's own (#228): built ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md)) and held by specs, and by CI's E2E suite on the built app, against a local host that answers as Bunkr does; to be seen against the real Bunkr (#266).
 
 ### The owner's hands
@@ -43,14 +44,14 @@ One sitting, from one checklist, on a beta built as a release candidate:
 - [ ] The mark on a real `.exe` and a document (#33).
 - [ ] A hand in the folder dialog (#40) and on the speed menu (#43).
 - [ ] The update's note seen in a packaged build, and its two captures retaken (#156).
-- [ ] A real site's video, one file and an HLS stream (#89).
+- [ ] A real site's video, one file and an HLS stream (#89), and the title of a video's page copied, on its "Ready" row (#285).
 - [ ] A real public Bunkr album, and a Bunkr file pasted by itself (#266).
 
 Checked after the tag, so not part of the gate: a beta updated to the stable (#82).
 
 ### The owner's decisions
 
-None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisions.md#23-november-2026)), #228 joining the gate on 23 November.
+None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisions.md#23-november-2026)), #228 and #285 joining the gate on 23 November.
 
 ## M0 — Foundations
 

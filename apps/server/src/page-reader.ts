@@ -15,4 +15,8 @@ export interface PageReader {
   // then fetched as it stands. Rejects with a PageError that says why not, or with the reason of
   // `signal`.
   read(url: string, signal: AbortSignal): Promise<PageMedia | undefined>;
+  // What the page's site calls its video, alone, for a row that has not started (#285): one line
+  // of text, cut to what a row shows (`titleOfVideo`); undefined when the site is not one the
+  // reader knows or gives none. Rejects as `read` does.
+  readTitle(url: string, signal: AbortSignal): Promise<string | undefined>;
 }

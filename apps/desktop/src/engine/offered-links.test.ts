@@ -7,6 +7,7 @@ const aDownload = (id: string) => ({
   id,
   url: `https://example.com/${id}.zip`,
   fileName: `${id}.zip`,
+  title: null,
   directory: 'D:\\Downloads',
   kind: 'archive',
   status: 'ready',

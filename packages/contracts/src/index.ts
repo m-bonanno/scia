@@ -64,6 +64,10 @@ export const downloadSchema = z.object({
   id: z.string(),
   url: z.string(),
   fileName: z.string(),
+  // What the site of a video's page calls the video, read while the row was ready (#285): what
+  // the row shows until the file is named. One line of text, never markup; null when it was not
+  // read, or once the file's name says it.
+  title: z.string().nullable(),
   directory: z.string(),
   kind: z.enum(FileKind),
   status: z.enum(DownloadStatus),
