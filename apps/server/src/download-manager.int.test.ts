@@ -351,6 +351,7 @@ describe('DownloadManager', () => {
     const downloads = await open({
       services: {
         connected: () => connected,
+        codeConnectFailed: () => null,
         onChange: (listener) => {
           listeners.add(listener);
           return () => listeners.delete(listener);
@@ -379,8 +380,27 @@ describe('DownloadManager', () => {
     expect(listeners.size).toBe(0);
   });
 
-  it('says no service is connected when it is given none to ask', async () => {
-    expect((await open()).snapshot().connectedServices).toEqual([]);
+  it('says no service is connected, and no code failed, when it is given none to ask', async () => {
+    const { connectedServices, codeConnectFailed } = (await open()).snapshot();
+    expect(connectedServices).toEqual([]);
+    expect(codeConnectFailed).toBeNull();
+  });
+
+  it('says the last confirmed code that connected nothing, as the services say it', async () => {
+    const failed = {
+      service: IntegrationId.AllDebrid,
+      failure: 'KEY_REFUSED',
+      at: '2026-11-23T20:00:00.000Z',
+    } as const;
+    const downloads = await open({
+      services: {
+        connected: () => [],
+        codeConnectFailed: () => failed,
+        onChange: () => () => undefined,
+      },
+    });
+
+    expect(downloads.snapshot().codeConnectFailed).toEqual(failed);
   });
 
   it('leaves nothing on the signal of whoever waits, however many changes it is told of', async () => {

@@ -1,6 +1,6 @@
 # ADR 0013 — The key of a service can also arrive by a code the person confirms on its site
 
-- **Status**: accepted
+- **Status**: accepted; point 3 amended below, "Amendment — a code confirmed after Settings closed" (#146)
 - **Date**: 2026-11-21
 
 ## Context
@@ -54,22 +54,27 @@ AllDebrid's tools page also offers an OpenAPI specification (https://docs.alldeb
 
 ## Amendment — a code confirmed after Settings closed (2026-11-23, #146, #286)
 
-The owner decided (21 November 2026, #146): with Settings closed before the code is confirmed, Scia keeps waiting for the code's ten minutes and connects when it is confirmed, saying so with a notification. `v1.0.0` waits for it.
+The owner decided, on #146:
+
+- (21 November 2026) With Settings closed before the code is confirmed, Scia keeps waiting for the code's ten minutes and connects when it is confirmed, saying so with a notification. `v1.0.0` waits for it.
+- (23 November 2026, on the review of #288) "AllDebrid is connected" is notified every time AllDebrid connects while Scia's window is not the one in use — a code confirmed in the browser with Settings open too, not only a code left waiting when Settings closed.
+- (23 November 2026, on the review of #288) A code confirmed while Settings is closed whose key then fails — refused, blocked, not kept — is said by a notification of its own, "AllDebrid could not be connected" with the reason, under the same rule as the notification of a connection.
 
 Point 3 is amended: **Settings closing no longer ends the wait for a code that is shown.** A new code, a pasted key, Cancel and "Use an API key" still end it, as before.
 
-How, the team's within the owner's decision:
+How, the team's within the owner's decisions:
 
 - **A code shown and waiting when Settings closes is left to the engine**, which asks the service about it at its pace, for as long as it works, as it does with Settings open. The page stops reading it. Its timer still does not keep the engine running.
-- **A code still being asked for when Settings closes is forgotten**, as before: nobody has seen it, so nobody can confirm it. The page tells the engine at once, and again by name once the code arrives.
-- **Settings opened again shows the code it left**, while the engine says it still waits: the code, its page, and how long it has left — a minute at least — and the page reads it again every two seconds. The page asks the engine only about a code it left waiting itself; a code the engine no longer has, or that failed meanwhile, is not shown, and "Connect with a code" asks for a new one.
-- **The engine's events say which services are connected** (`connectedServices` in `Snapshot`, from `Integrations.connected()`; `Integrations.onChange` wakes the stream). Main and the page hear a service connected the moment it is, with nobody in Settings.
-- **Main says it with a notification of the system** (`engine/connected-services.ts`), under the rules of a download that ends: only while the window is put away, minimised or not the window in use, which Windows is asked ([ADR 0020](./0020-the-window-in-use-asked-of-windows.md)). "AllDebrid is connected", and that links of file hosts and magnets now download through the account. A click opens the window. What was connected when main first heard the engine is not said. A person looking at the window sees the account's button appear in the title bar: the page asks again whether AllDebrid is connected when the events say the services changed — a third moment beside the two of [ADR 0016](./0016-the-magnets-of-the-account.md), point 6.
+- **A code still being asked for when Settings closes is forgotten**, as before: nobody has seen it, so nobody can confirm it. The page tells the engine at once, and again by name once the code arrives. So is a code shown that had already failed.
+- **Settings opened again draws at once what it drew last**: the last list of services, kept also while the engine does not answer, and the code a row left waiting, while its time has not run out by the clock — the code, its page, and how long it has left, a minute at least. Nothing appears late and nothing moves. The row asks the engine at once what became of that code, then every two seconds: connected, it says whose account it is; failed, it says why and offers "Get a new code" — "This code is no longer valid" for one the engine no longer has. The page remembers only a code it left waiting itself.
+- **The engine's events say which services are connected** (`connectedServices` in `Snapshot`, from `Integrations.connected()`; `Integrations.onChange` wakes the stream), **and the last confirmed code whose key connected nothing** (`codeConnectFailed`: the service, why — the service's refusal of the key or `KEY_NOT_KEPT` — and when). A code that expired unconfirmed, or whose wait was ended, is not one.
+- **Main says both with a notification of the system** (`engine/connected-services.ts`), under the rules of a download that ends: only while the window is put away, minimised or not the window in use, which Windows is asked ([ADR 0020](./0020-the-window-in-use-asked-of-windows.md)). "AllDebrid is connected", and that links of file hosts and magnets now go through the account; "AllDebrid could not be connected", and why, with its remedy. A click opens the window. What main first heard of the engine is not said: a key read back at a start, a failure from before. A failure is told from the next by its moment, so the same refusal twice is said twice.
+- **Main cannot tell whether Settings is open**: the page says nothing to main unasked (`apps/desktop/CLAUDE.md`). A confirmed code that fails with Settings open, while another window is in use, is said by the system as well as by Settings — the same rule as a connection, which the owner chose for every connection.
+- **A person looking at the window** sees the account's button appear in the title bar: the page asks again whether AllDebrid is connected when the events say the services changed — a third moment beside the two of [ADR 0016](./0016-the-magnets-of-the-account.md), point 6.
 
 Consequences, beside those above:
 
 - A code left waiting is asked about every five seconds with Settings closed, for ten minutes at most, as it was with Settings open. Nothing else is asked.
-- A code that fails while Settings is closed — the key it gives refused, or not kept by the system — is said by no notification, and Settings opened again shows no code: the person asks for a new one. A code that expires unconfirmed is said nowhere, as the person left it.
-- A notification is decided when main hears the engine say the service connected, also with Settings open: a person who confirmed the code in the browser, with Scia's window not in use, is told by the system as well as by Settings.
-- An engine started again has no code: one left waiting is gone, and Settings shows none.
+- A code that expires unconfirmed is said by no notification: the person left it. Settings opened again within its time says it is no longer valid; after it, shows none.
+- An engine started again has no code: Settings opened again says the code it left is no longer valid.
 - A page that reloads forgets which code it left: Settings shows none, and the engine still waits for it and connects it when it is confirmed.

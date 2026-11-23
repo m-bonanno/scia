@@ -2,6 +2,8 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
+  type CodeConnectFailed,
+  CodeConnectFailure,
   type Integration,
   type IntegrationAccount,
   type IntegrationCode,
@@ -129,6 +131,13 @@ function codeFailureOf(error: unknown): IntegrationCodeFailure {
   return ServiceFailure.Unavailable;
 }
 
+// Why the key a confirmed code gave connected nothing.
+function connectFailureOf(error: unknown): CodeConnectFailure {
+  if (error instanceof KeyNotKeptError) return CodeConnectFailure.KeyNotKept;
+  if (error instanceof ServiceError && isServiceFailure(error.failure)) return error.failure;
+  return CodeConnectFailure.Unavailable;
+}
+
 function isDomainList(value: unknown): value is { readonly domains: string[] } {
   const domains = (value as { domains?: unknown } | null)?.domains;
   return Array.isArray(domains) && domains.every((domain) => typeof domain === 'string');
@@ -164,6 +173,8 @@ export class Integrations implements LinkResolver, MagnetService {
   // Told whenever a service is connected or let go, whoever did it: a code confirmed while
   // Settings is closed is heard by main and the page in the engine's events (#146).
   readonly #listeners = new Set<() => void>();
+  // The last confirmed code whose key connected nothing: said by a notification (the owner, #146).
+  #codeConnectFailed: CodeConnectFailed | null = null;
 
   // A key was kept and could not be read back at this start (docs/adr/0023): said in Settings
   // until a key is connected again or the service disconnected.
@@ -211,6 +222,10 @@ export class Integrations implements LinkResolver, MagnetService {
   // The services Scia holds a key for. One there is: a second has a key of its own.
   connected(): IntegrationId[] {
     return this.#key === undefined ? [] : [IntegrationId.AllDebrid];
+  }
+
+  codeConnectFailed(): CodeConnectFailed | null {
+    return this.#codeConnectFailed;
   }
 
   onChange(listener: () => void): () => void {
@@ -291,6 +306,8 @@ export class Integrations implements LinkResolver, MagnetService {
 
   async #waitFor(id: IntegrationId, pending: PendingCode): Promise<void> {
     const { signal } = pending.stop;
+    // The service gave a key for the code: the person confirmed it.
+    let confirmed = false;
     try {
       for (;;) {
         const left = pending.endsAt - this.#now();
@@ -312,6 +329,7 @@ export class Integrations implements LinkResolver, MagnetService {
             throw error;
           });
         if (key === undefined) continue;
+        confirmed = true;
         // In turn with the other changes: a wait ended while one of them ran connects nothing.
         await this.#oneAtATime(() => {
           signal.throwIfAborted();
@@ -324,6 +342,14 @@ export class Integrations implements LinkResolver, MagnetService {
       if (signal.aborted) return;
       pending.status = IntegrationCodeStatus.Failed;
       pending.failure = codeFailureOf(error);
+      if (confirmed) {
+        this.#codeConnectFailed = {
+          service: id,
+          failure: connectFailureOf(error),
+          at: new Date().toISOString(),
+        };
+        this.#tell();
+      }
       this.#deps.logger.warn('service_code_failed', {
         service: id,
         failure: pending.failure,

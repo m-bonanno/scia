@@ -1045,33 +1045,170 @@ describe('IntegrationsSection', () => {
       expect(read).toHaveBeenCalledTimes(readings);
     });
 
-    it('shows again, at the next visit, a code it left waiting, and goes on reading it', async () => {
+    // A code shown when Settings closed: the next visits draw it at once, with the last list.
+    async function leaveACode(code: IntegrationCode = given) {
       const user = setUp();
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(code);
+      const read = vi.spyOn(api, 'integrationCode').mockResolvedValue(code);
+      const view = render(<IntegrationsSection open onError={ignore} />);
+      await user.click((await theService()).getByRole('button', { name: 'Connect with a code' }));
+      await screen.findByText(code.code, { selector: 'p' });
+      view.rerender(<IntegrationsSection open={false} onError={ignore} />);
+      const open = () => {
+        view.rerender(<IntegrationsSection open onError={ignore} />);
+      };
+      const close = () => {
+        view.rerender(<IntegrationsSection open={false} onError={ignore} />);
+      };
+      return { user, read, open, close };
+    }
+    // The services' list asked at a visit, held open by the spec.
+    function listHeld() {
+      let answer: (list: Integration[]) => void = () => undefined;
+      let refuse: (error: unknown) => void = () => undefined;
+      vi.spyOn(api, 'integrations').mockImplementation(
+        () =>
+          new Promise((resolve, reject) => {
+            answer = resolve;
+            refuse = reject;
+          }),
+      );
+      return {
+        answer: async (list: Integration[]) => {
+          await act(async () => {
+            answer(list);
+            await Promise.resolve();
+          });
+        },
+        refuse: async (error: unknown) => {
+          await act(async () => {
+            refuse(error);
+            await Promise.resolve();
+          });
+        },
+      };
+    }
+
+    it('shows again, at once at the next visit, a code it left waiting, and goes on reading it', async () => {
       withMain();
       listing([notConnected]);
-      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
-      const read = vi.spyOn(api, 'integrationCode').mockResolvedValue(given);
-      const { rerender } = render(<IntegrationsSection open onError={ignore} />);
-      const service = await theService();
-      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
-      await service.findByText('ABCD', { selector: 'p' });
-      rerender(<IntegrationsSection open={false} onError={ignore} />);
+      const fourMinutes = { ...given, expiresAt: new Date(Date.now() + 240_000).toISOString() };
+      const { read, open } = await leaveACode(fourMinutes);
+      const held = listHeld();
+      const readings = read.mock.calls.length;
 
-      read.mockResolvedValue({ ...given, expiresAt: new Date(Date.now() + 240_000).toISOString() });
-      rerender(<IntegrationsSection open onError={ignore} />);
+      open();
 
-      const again = await theService();
-      expect(await again.findByText('ABCD', { selector: 'p' })).toBeInTheDocument();
-      // What is left of it, not what it was given with.
+      // Drawn before the engine answers the list: nothing appears late, nothing moves.
+      const again = within(screen.getByRole('listitem'));
+      expect(again.getByText('ABCD', { selector: 'p' })).toBeInTheDocument();
       expect(again.getByText(/The code works for 4\smin\.$/)).toBeInTheDocument();
       expect(again.getByRole('button', { name: 'Open AllDebrid' })).toBeInTheDocument();
       expect(again.queryByRole('button', { name: 'Connect with a code' })).not.toBeInTheDocument();
-      const readings = read.mock.calls.length;
-      read.mockResolvedValue({ ...given, status: 'connected' });
+      // Asked at once what became of it, not a pace later.
+      await vi.waitFor(() => {
+        expect(read.mock.calls.length).toBeGreaterThan(readings);
+      });
+      await held.answer([notConnected]);
+      read.mockResolvedValue({ ...fourMinutes, status: 'connected' });
       listing([connected]);
       await nextReading();
-      expect(read.mock.calls.length).toBeGreaterThan(readings);
       expect(await again.findByText(/^Connected as ada/)).toBeInTheDocument();
+    });
+
+    it('keeps the last list at a visit whose list the engine does not answer, with the code it left', async () => {
+      listing([notConnected]);
+      const { open, close } = await leaveACode();
+      const held = listHeld();
+
+      open();
+      await held.refuse(new TypeError('Failed to fetch'));
+
+      expect(screen.getByRole('heading', { name: 'Integrations' })).toBeInTheDocument();
+      expect(
+        within(screen.getByRole('listitem')).getByText('ABCD', { selector: 'p' }),
+      ).toBeInTheDocument();
+      // Closed and opened again: still there, also when it closes before any answer.
+      close();
+      listHeld();
+      open();
+      close();
+      open();
+      expect(
+        within(screen.getByRole('listitem')).getByText('ABCD', { selector: 'p' }),
+      ).toBeInTheDocument();
+    });
+
+    it('says at once, at the next visit, that a code it left is no longer valid once the engine no longer knows it', async () => {
+      listing([notConnected]);
+      const { read, open } = await leaveACode();
+      read.mockRejectedValue(new ApiError(404, ApiErrorCode.NotFound, 'No code was given.'));
+
+      open();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'This code is no longer valid. Get a new one.',
+      );
+      expect(screen.getByRole('button', { name: 'Get a new code' })).toBeInTheDocument();
+    });
+
+    it('says why, at the next visit, a code it left connected nothing', async () => {
+      listing([notConnected]);
+      const { read, open } = await leaveACode();
+      read.mockResolvedValue({ ...given, status: 'failed', failure: 'KEY_REFUSED' });
+
+      open();
+
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'AllDebrid did not accept the key it gave for this code. Get a new code.',
+      );
+    });
+
+    it('shows no code at the next visit whose time ran out while Settings was closed', async () => {
+      listing([notConnected]);
+      const { read, open } = await leaveACode({
+        ...given,
+        expiresAt: new Date(Date.now() + 30_000).toISOString(),
+      });
+      const readings = read.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(31_000);
+
+      open();
+
+      expect(
+        await within(await screen.findByRole('listitem')).findByRole('button', {
+          name: 'Connect with a code',
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText('ABCD', { selector: 'p' })).not.toBeInTheDocument();
+      expect(read).toHaveBeenCalledTimes(readings);
+    });
+
+    it("keeps a visit's list over the late answer of the visit before", async () => {
+      const read = vi.spyOn(api, 'integrations');
+      let late: (list: Integration[]) => void = () => undefined;
+      read.mockResolvedValueOnce([notConnected]);
+      const view = render(<IntegrationsSection open onError={ignore} />);
+      await theService();
+      view.rerender(<IntegrationsSection open={false} onError={ignore} />);
+      read.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            late = resolve;
+          }),
+      );
+      view.rerender(<IntegrationsSection open onError={ignore} />);
+      view.rerender(<IntegrationsSection open={false} onError={ignore} />);
+      read.mockResolvedValueOnce([connected]);
+      view.rerender(<IntegrationsSection open onError={ignore} />);
+      expect(await screen.findByText(/^Connected as ada/)).toBeInTheDocument();
+
+      await act(async () => {
+        late([notConnected]);
+        await Promise.resolve();
+      });
+
+      expect(screen.getByText(/^Connected as ada/)).toBeInTheDocument();
     });
 
     it('forgets at Cancel a code shown again, and asks about it at no later visit', async () => {
@@ -1098,36 +1235,6 @@ describe('IntegrationsSection', () => {
         await (await theService()).findByRole('button', { name: 'Connect with a code' }),
       ).toBeInTheDocument();
       expect(read).toHaveBeenCalledTimes(readings);
-    });
-
-    it('shows no code at the next visit when the one it left no longer waits, nor when it connected', async () => {
-      const user = setUp();
-      listing([notConnected]);
-      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
-      const read = vi.spyOn(api, 'integrationCode').mockResolvedValue(given);
-      const { rerender } = render(<IntegrationsSection open onError={ignore} />);
-      const service = await theService();
-      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
-      await service.findByText('ABCD', { selector: 'p' });
-      rerender(<IntegrationsSection open={false} onError={ignore} />);
-
-      read.mockResolvedValue({ ...given, status: 'failed', failure: 'CODE_EXPIRED' });
-      rerender(<IntegrationsSection open onError={ignore} />);
-      const again = await theService();
-      expect(await again.findByRole('button', { name: 'Connect with a code' })).toBeInTheDocument();
-      expect(again.queryByText('ABCD', { selector: 'p' })).not.toBeInTheDocument();
-      expect(again.queryByRole('alert')).not.toBeInTheDocument();
-
-      // Connected while Settings was closed: the code is not asked about.
-      await user.click(again.getByRole('button', { name: 'Connect with a code' }));
-      await again.findByText('ABCD', { selector: 'p' });
-      rerender(<IntegrationsSection open={false} onError={ignore} />);
-      listing([connected]);
-      const readings = read.mock.calls.length;
-      rerender(<IntegrationsSection open onError={ignore} />);
-      expect(await screen.findByText(/^Connected as ada/)).toBeInTheDocument();
-      expect(read).toHaveBeenCalledTimes(readings);
-      expect(screen.queryByText('ABCD', { selector: 'p' })).not.toBeInTheDocument();
     });
 
     it('asks the engine about no code at a visit when none was left waiting', async () => {

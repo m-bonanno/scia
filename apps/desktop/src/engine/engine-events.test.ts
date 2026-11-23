@@ -29,7 +29,7 @@ function aDownload(id: string, status: string) {
 }
 
 const snapshot = (...downloads: unknown[]) =>
-  `event: snapshot\ndata: ${JSON.stringify({ downloads, magnets: [], bundles: [], watchClipboard: false, connectedServices: [] })}\n\n`;
+  `event: snapshot\ndata: ${JSON.stringify({ downloads, magnets: [], bundles: [], watchClipboard: false, connectedServices: [], codeConnectFailed: null })}\n\n`;
 
 // An answer of the engine whose body the spec writes piece by piece, and ends when it likes.
 function aStream() {
@@ -200,7 +200,7 @@ describe('followDownloads', () => {
 
     stream.say(snapshot(aDownload('a', 'ready')));
     stream.say(
-      `event: snapshot\ndata: ${JSON.stringify({ downloads: [], magnets: [], bundles: [], watchClipboard: true, connectedServices: [] })}\n\n`,
+      `event: snapshot\ndata: ${JSON.stringify({ downloads: [], magnets: [], bundles: [], watchClipboard: true, connectedServices: [], codeConnectFailed: null })}\n\n`,
     );
     await vi.waitFor(() => {
       expect(follow.watching).toEqual([false, true]);
@@ -216,7 +216,7 @@ describe('followDownloads', () => {
 
     stream.say(snapshot(aDownload('a', 'ready')));
     stream.say(
-      `event: snapshot\ndata: ${JSON.stringify({ downloads: [], magnets: [], bundles: [], watchClipboard: false, connectedServices: ['alldebrid'] })}\n\n`,
+      `event: snapshot\ndata: ${JSON.stringify({ downloads: [], magnets: [], bundles: [], watchClipboard: false, connectedServices: ['alldebrid'], codeConnectFailed: null })}\n\n`,
     );
     await vi.waitFor(() => {
       expect(follow.connected).toEqual([[], ['alldebrid']]);

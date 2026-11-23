@@ -393,10 +393,34 @@ describe('the real app, with what Settings says', () => {
 
     await page.getByRole('button', { name: 'AllDebrid magnets' }).waitFor();
     await until(async () => (await profile.log()).includes('service_connected_heard'));
+    // Read once Settings has said it too: the log has had every moment to say a notification.
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByText(/^Connected as ada/).waitFor();
     const log = await profile.log();
     // Windows itself said which window was in use, inside the built app (ADR 0020).
     expect(log).toMatch(/service_connected_heard {[^}]*inFront: true[^}]*asked: 'answered'/);
     expect(log).not.toContain('connected_notice_asked');
+  });
+
+  // The owner, #146 (23 November 2026): a confirmed code whose key then fails is said too.
+  it('says by the system that a code confirmed once Settings closed connected nothing, and why', async () => {
+    const profile = await run.profile();
+    // The service knows no account for the key it gives: it refuses it.
+    const service = run.keep(await startAllDebridServer({ accounts: {} }));
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const code = await codeLeftWaiting(scia);
+    await scia.app.evaluate(({ BrowserWindow }) => {
+      BrowserWindow.getAllWindows()[0]?.minimize();
+    });
+
+    service.confirmCode(code, KEY);
+
+    await until(async () => (await profile.log()).includes('code_failed_notice_asked'));
+    const log = await profile.log();
+    expect(log).toMatch(/code_failure_heard {[^}]*failure: 'KEY_REFUSED'[^}]*inFront: false/);
+    expect(log).toMatch(/code_failed_notice_asked {[^}]*'AllDebrid could not be connected'/);
+    expect(log).not.toContain('connected_notice_asked');
+    expect(log).not.toContain(KEY);
   });
 
   it('offers a way to support Scia, whose page main opens at its fixed address (#271)', async () => {

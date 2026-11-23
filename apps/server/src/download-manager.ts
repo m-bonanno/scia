@@ -5,6 +5,7 @@ import { isAbsolute, join, resolve } from 'node:path';
 import {
   type AccountMagnet,
   type Bundle,
+  type CodeConnectFailed,
   type Download,
   IntegrationId,
   type Magnet,
@@ -165,6 +166,8 @@ export interface ManagerDeps {
 // The services Scia holds a key for, and a word whenever that changes: `Integrations` says it.
 export interface ConnectedServices {
   readonly connected: () => readonly IntegrationId[];
+  // The last confirmed code whose key connected nothing (#146).
+  readonly codeConnectFailed: () => CodeConnectFailed | null;
   readonly onChange: (listener: () => void) => () => void;
 }
 
@@ -421,6 +424,7 @@ export class DownloadManager {
       bundles: this.#bundles.map((record) => this.#bundleView(record)),
       watchClipboard: this.#settings.watchClipboard,
       connectedServices: [...(this.#deps.services?.connected() ?? [])],
+      codeConnectFailed: this.#deps.services?.codeConnectFailed() ?? null,
     };
   }
 

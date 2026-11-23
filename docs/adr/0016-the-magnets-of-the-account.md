@@ -1,6 +1,6 @@
 # ADR 0016 — The magnets of the account are read while their panel is open
 
-- **Status**: accepted
+- **Status**: accepted; point 6 amended below, "Amendment — learned also when the engine's events say the services changed" (#146)
 - **Date**: 2026-11-21
 
 ## Context
@@ -53,6 +53,8 @@ The issue asked that ADR 0014 gain these reads. An ADR is never rewritten, and t
 - A magnet taken from the account a second time, after its files arrived, downloads them again under free names, as a pasted one does (#150).
 - Untried against the real AllDebrid: the order and the dates it lists magnets with, and an account with many magnets. These are the owner's to try. A hidden window was tried in the real app started by Electron itself (playwright-core keeps a page `visible`): minimised or hidden, the page was `hidden` and asked nothing for twelve seconds, and asked once within two seconds of being shown.
 
-## Amendment — learned also when the engine's events say the services changed (2026-11-23, #146, #286)
+## Amendment — learned also when the engine's events say the services changed (#146, #286)
 
-Point 6 is amended: the page also learns whether AllDebrid is connected **when the engine's events say the connected services changed** (`connectedServices`), beside when the engine is reached and whenever Settings closes. A code confirmed once Settings closed connects AllDebrid with nobody in Settings ([ADR 0013](./0013-a-key-that-arrives-by-a-code.md), amendment of #146), and the panel's button appears then.
+The team's, within the owner's decision on #146 (a code confirmed after Settings closed connects AllDebrid; [ADR 0013](./0013-a-key-that-arrives-by-a-code.md), amendment). Point 6's moments were the team's how, and so is this one.
+
+Point 6 is amended: the page also learns whether AllDebrid is connected **when the engine's events say the connected services changed** (`connectedServices`), beside when the engine is reached and whenever Settings closes. A code confirmed once Settings closed connects AllDebrid with nobody in Settings, and the panel's button appears then.

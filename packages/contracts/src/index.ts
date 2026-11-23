@@ -7,7 +7,7 @@ import {
   VIDEO_CONTAINERS,
 } from '@scia/core';
 import { z } from 'zod';
-import { IntegrationCodeFailure, IntegrationId } from './integrations.ts';
+import { codeConnectFailedSchema, IntegrationCodeFailure, IntegrationId } from './integrations.ts';
 import { bundleSchema } from './bundles.ts';
 import { httpUrl, magnetUri } from './links.ts';
 import { magnetSchema } from './magnets.ts';
@@ -127,6 +127,8 @@ export const snapshotSchema = z.object({
   // The services Scia holds a key for: main and the page hear one connected while Settings is
   // closed — a code confirmed after it closed (#146) — the moment it is.
   connectedServices: z.array(z.enum(IntegrationId)),
+  // The last confirmed code whose key connected nothing, while the engine runs (#146).
+  codeConnectFailed: codeConnectFailedSchema.nullable(),
 });
 export type Snapshot = z.infer<typeof snapshotSchema>;
 

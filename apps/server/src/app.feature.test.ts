@@ -163,7 +163,7 @@ describe('the engine API', () => {
 
     expect(
       heard.startsWith(
-        'event: snapshot\ndata: {"downloads":[],"magnets":[],"bundles":[],"watchClipboard":false,"connectedServices":[]}\n\n',
+        'event: snapshot\ndata: {"downloads":[],"magnets":[],"bundles":[],"watchClipboard":false,"connectedServices":[],"codeConnectFailed":null}\n\n',
       ),
     ).toBe(true);
     expect(heard.match(/event: snapshot/g)).toHaveLength(1);
