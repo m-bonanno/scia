@@ -94,6 +94,29 @@ export function fileNameFromContentDisposition(header: string): string | undefin
   return name === '' ? undefined : sanitizeFileName(name);
 }
 
+// The names a folder already holds: those of the downloads on their way there (lower case, as
+// Windows compares them), and the files on its disk.
+export interface UsedNames {
+  readonly inList: ReadonlySet<string>;
+  readonly onDisk: (name: string) => boolean;
+}
+
+// Whether a download may not take `name` in a folder. A download keeps files beside its name
+// while it runs (`working`: its part file, a stream's pieces, a pair's picture and sound), and no
+// other file may stand under those names: a name is taken when it is used, when one of its working
+// names is, and when it is itself a working name of a download in the list. A file that is done
+// has nothing beside it.
+export function isNameTaken(name: string, used: UsedNames, working: readonly string[]): boolean {
+  const lower = name.toLowerCase();
+  if (used.inList.has(lower) || used.onDisk(name)) return true;
+  return working.some((suffix) => {
+    const beside = `${name}${suffix}`;
+    if (used.inList.has(beside.toLowerCase()) || used.onDisk(beside)) return true;
+    const ending = suffix.toLowerCase();
+    return lower.endsWith(ending) && used.inList.has(lower.slice(0, lower.length - ending.length));
+  });
+}
+
 // "film.mkv", then "film (1).mkv", "film (2).mkv"…
 export function uniqueFileName(name: string, isTaken: (candidate: string) => boolean): string {
   if (!isTaken(name)) return name;

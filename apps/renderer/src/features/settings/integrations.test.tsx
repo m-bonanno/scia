@@ -13,6 +13,7 @@ const notConnected: Integration = {
   connected: false,
   account: null,
   failure: null,
+  keyNotRead: false,
 };
 const connected: Integration = {
   id: 'alldebrid',
@@ -20,6 +21,7 @@ const connected: Integration = {
   // The specs run in UTC (vitest.config.ts): the day is the one written here.
   account: { name: 'ada', premium: true, premiumUntil: '2027-06-30T12:00:00.000Z' },
   failure: null,
+  keyNotRead: false,
 };
 
 const ignore = () => undefined;
@@ -388,6 +390,170 @@ describe('IntegrationsSection', () => {
     expect(service.getByRole('button', { name: 'Connect with a code' })).toHaveFocus();
   });
 
+  describe('a key kept that could not be read back (#69)', () => {
+    const NOT_READ = 'Scia could not read back the key it kept for AllDebrid. Connect it again.';
+
+    it('says so, beside the ways to connect again', async () => {
+      listing([{ ...notConnected, keyNotRead: true }]);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      expect(service.getByRole('status')).toHaveTextContent(/^Not connected$/);
+      expect(service.getByText(NOT_READ)).toBeInTheDocument();
+      expect(service.getByRole('button', { name: 'Connect with a code' })).toBeInTheDocument();
+      expect(service.getByRole('button', { name: 'Use an API key' })).toBeInTheDocument();
+    });
+
+    it('says so across the row, under its name and its buttons, not beside them', async () => {
+      listing([{ ...notConnected, keyNotRead: true }]);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      const sentence = service.getByText(NOT_READ);
+      const lastButton = service.getByRole('button', { name: 'Connect with a code' });
+      // After the row's head in the page's order: drawn under it, not in the name's column.
+      expect(
+        lastButton.compareDocumentPosition(sentence) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(lastButton.parentElement?.parentElement?.contains(sentence)).toBe(false);
+    });
+
+    it('offers to disconnect, which forgets the key and the sentence, at the second press', async () => {
+      listing([{ ...notConnected, keyNotRead: true }]);
+      const disconnect = vi.spyOn(api, 'disconnectIntegration').mockResolvedValue();
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+      expect(disconnect).not.toHaveBeenCalled();
+      await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+
+      expect(disconnect).toHaveBeenCalledExactlyOnceWith('alldebrid');
+      await vi.waitFor(() => {
+        expect(service.queryByText(NOT_READ)).not.toBeInTheDocument();
+      });
+      expect(service.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument();
+      expect(service.getByRole('status')).toHaveTextContent(/^Not connected$/);
+      expect(service.getByRole('button', { name: 'Connect with a code' })).toHaveFocus();
+    });
+
+    it('offers no Disconnect while the key form is open, and keeps saying the key was not read', async () => {
+      listing([{ ...notConnected, keyNotRead: true }]);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await typeAKey();
+
+      // Its failure would be the field's alert, and its success would leave the focus on nothing.
+      expect(service.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument();
+      expect(service.getByText(NOT_READ)).toBeInTheDocument();
+      expect(service.getByLabelText('AllDebrid API key')).not.toHaveAttribute(
+        'aria-invalid',
+        'true',
+      );
+    });
+
+    describe('while its Disconnect is on its way, nothing opens a way to connect', () => {
+      // A refusal that comes back later is said by the row, never by a form opened meanwhile.
+      async function disconnectHeld() {
+        listing([{ ...notConnected, keyNotRead: true }]);
+        let refuse: (error: unknown) => void = () => undefined;
+        vi.spyOn(api, 'disconnectIntegration').mockReturnValue(
+          new Promise<void>((_resolve, reject) => {
+            refuse = reject;
+          }),
+        );
+        render(<IntegrationsSection open onError={ignore} />);
+        const service = await theService();
+        await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+        await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+        return {
+          service,
+          refuse: async () => {
+            await act(async () => {
+              refuse(new ApiError(500, ApiErrorCode.InternalError, 'no'));
+              await Promise.resolve();
+            });
+          },
+        };
+      }
+
+      it('opens no key form, says so, and says the refusal by the row', async () => {
+        const { service, refuse } = await disconnectHeld();
+        const useKey = service.getByRole('button', { name: 'Use an API key' });
+
+        expect(useKey).toHaveAttribute('aria-disabled', 'true');
+        await userEvent.click(useKey);
+        await refuse();
+
+        expect(service.queryByLabelText('AllDebrid API key')).not.toBeInTheDocument();
+        expect(await service.findByRole('alert')).toHaveTextContent(
+          'Scia could not complete the operation. Try again.',
+        );
+        expect(service.getByRole('button', { name: 'Use an API key' })).not.toHaveAttribute(
+          'aria-disabled',
+          'true',
+        );
+      });
+
+      it('asks for no code, and says so', async () => {
+        const start = vi.spyOn(api, 'startIntegrationCode');
+        const { service, refuse } = await disconnectHeld();
+        const withCode = service.getByRole('button', { name: 'Connect with a code' });
+
+        expect(withCode).toHaveAttribute('aria-disabled', 'true');
+        await userEvent.click(withCode);
+        await refuse();
+
+        expect(start).not.toHaveBeenCalled();
+        expect(service.queryByText('ABCD', { selector: 'p' })).not.toBeInTheDocument();
+      });
+    });
+
+    it('offers no Disconnect while a code is being asked for', async () => {
+      listing([{ ...notConnected, keyNotRead: true }]);
+      vi.spyOn(api, 'startIntegrationCode').mockReturnValue(new Promise(() => undefined));
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await userEvent.click(service.getByRole('button', { name: 'Connect with a code' }));
+
+      expect(service.getByRole('button', { name: 'Getting a code…' })).toBeInTheDocument();
+      expect(service.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument();
+    });
+
+    it('says nothing of it after a connected service is disconnected', async () => {
+      listing([connected]);
+      vi.spyOn(api, 'disconnectIntegration').mockResolvedValue();
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+      await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+
+      expect(await service.findByText('Not connected')).toBeInTheDocument();
+      expect(service.queryByText(NOT_READ)).not.toBeInTheDocument();
+    });
+
+    it('says nothing of it for a service that was never connected', async () => {
+      listing([notConnected]);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      expect(service.queryByText(NOT_READ)).not.toBeInTheDocument();
+    });
+
+    it('no longer says so once a key is connected again', async () => {
+      listing([{ ...notConnected, keyNotRead: true }]);
+      vi.spyOn(api, 'connectIntegration').mockResolvedValue(connected);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await typeAKey();
+
+      await userEvent.keyboard('{Enter}');
+
+      expect(await service.findByRole('status')).toHaveTextContent(/^Connected as ada/);
+      expect(service.queryByText(NOT_READ)).not.toBeInTheDocument();
+    });
+  });
+
   it('stays connected, and says so by the service, when it could not be disconnected', async () => {
     listing([connected]);
     vi.spyOn(api, 'disconnectIntegration').mockRejectedValue(
@@ -524,6 +690,27 @@ describe('IntegrationsSection', () => {
       const key = service.getByRole('button', { name: 'Use an API key' });
       expect(code).toBeInTheDocument();
       expect(key).toBeInTheDocument();
+    });
+
+    it('offers no Disconnect while a code is shown for a key that was not read (#69)', async () => {
+      const user = setUp();
+      withMain();
+      listing([{ ...notConnected, keyNotRead: true }]);
+      vi.spyOn(api, 'startIntegrationCode').mockResolvedValue(given);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await user.click(service.getByRole('button', { name: 'Connect with a code' }));
+      await service.findByText('ABCD', { selector: 'p' });
+
+      // Its failure would replace what the code says, and its success would leave the code waiting
+      // and the focus on nothing.
+      expect(service.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument();
+      expect(
+        service.getByText(
+          'Scia could not read back the key it kept for AllDebrid. Connect it again.',
+        ),
+      ).toBeInTheDocument();
     });
 
     it('shows the code, where to enter it and how long it works, and opens the page through main', async () => {

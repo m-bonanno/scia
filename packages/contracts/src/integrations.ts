@@ -27,8 +27,16 @@ export const integrationSchema = z.object({
   account: integrationAccountSchema.nullable(),
   // Why it did not say, the last time it was asked.
   failure: z.enum(ServiceFailure).nullable(),
+  // A key was kept for the service and could not be read back at this start: the service is not
+  // connected, and the person connects it again (docs/adr/0023).
+  keyNotRead: z.boolean(),
 });
 export type Integration = z.infer<typeof integrationSchema>;
+
+// How long main waits, once it wrote a key, for what opens it to be on disk before it says the key
+// is kept (docs/adr/0023). The engine waits that long for main's answer to a write, beside its
+// bound for any answer.
+export const KEY_SEAL_LIMIT_MS = 20_000;
 
 // A key as a service gives it: visible characters and no space — it travels in a header.
 // What surrounds it when it is pasted is not part of it.

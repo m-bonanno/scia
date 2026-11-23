@@ -28,6 +28,7 @@ And on the review of #122 ([their answers](https://github.com/m-bonanno/scia/iss
    - Its container is `mp4`, the one Scia makes.
    - Between an mp4 file and a stream, the most lines of picture win. At equal lines the file wins, because it is fetched as it stands.
    - DASH (`http_dash_segments`) is not taken, and neither are picture and sound offered apart (#99).
+     - _Amended by #99, 23 November 2026:_ picture and sound offered apart are taken, as two files joined into one mp4 ([ADR 0021](./0021-picture-and-sound-joined-into-one-mp4.md)). At equal lines a pair comes before a stream. DASH is still not taken.
 2. **The engine reads the playlist** (`parsePlaylist` in `@scia/core`, RFC 8216): the pieces, how long each lasts, their number, their key, their init segment and their byte ranges.
    - The address yt-dlp gives is the playlist of one quality. A playlist of qualities instead is `PAGE_UNREADABLE`.
    - A playlist with no end (`#EXT-X-ENDLIST`) is live: `PAGE_LIVE` until #121.

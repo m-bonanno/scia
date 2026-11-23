@@ -70,6 +70,10 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 - `v1.0.0` waits for the two specs in quarantine to be fixed and back in the gates (#43, #162).
 - #190: `SECURITY.md` with private vulnerability reporting turned on; Dependabot alerts on; a code of conduct; 3 to 5 issues labelled `good first issue`, written for a stranger. The repository settings are changed on the owner's word, given there.
 
+## 23 November 2026
+
+- #99: picture and sound offered apart are joined only as an mp4 picture in H.264 or AV1 and an AAC sound. The most lines win, and H.264 at equal lines; HEVC never, since Windows plays it only with a paid extension. A webm picture with Opus sound is an issue of its own (#239) ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)).
+
 ## Undated in the roadmap
 
 The roadmap gave these without a date; the issue holds it.

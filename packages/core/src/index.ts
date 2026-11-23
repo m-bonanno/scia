@@ -9,3 +9,4 @@ export * from './service.ts';
 export * from './speed.ts';
 export * from './hls.ts';
 export * from './magnet.ts';
+export * from './mp4.ts';
