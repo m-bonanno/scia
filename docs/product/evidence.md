@@ -142,6 +142,10 @@ E2E suite on the real app: `playwright-core`'s Electron driver under Vitest, on 
 
 The first eight were each seen failing with the line they hold taken away, on the app's side where the line is the app's (ten lines, in #104); two of the notices' specs, one with the hand-off and one with the layer over Settings taken away (#132). Not reached: the packaged app (the installer's smoke test, [above](#the-installer-in-ci)), a Scia killed mid-download (#108), what the system draws (notifications, the tray), a hand on the keys and the mouse, Linux.
 
+### A save of `state.json` while another process holds it
+
+#151, #229. On Windows a rename onto a file another process holds open fails with `EPERM`. The store now tries the rename again for two seconds, then gives the save up and logs it as before. **Seen**: a spec that holds `state.json` open for 300 ms while a save renames onto it fails on `develop`'s store with `EPERM` and passes with the retry; a second spec holds the file throughout and sees the save given up and the next one land. Both run on Windows only, where a rename onto an open file is refused; CI's Windows job runs them. **Not seen**: the real app with `state.json` held by another program.
+
 ### Zero-filling on NTFS
 
 To measure: the wait caused by zero-filling on NTFS for very large files (#182; ADR 0001, "to be measured before M1 closes"). Not measured.
