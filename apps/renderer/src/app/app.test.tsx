@@ -1157,7 +1157,9 @@ describe('App, its version and an update', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Update to 1.0.0-beta.18' }));
 
-    expect(screen.getByRole('dialog')).toHaveTextContent('Scia is downloading.');
+    expect(screen.getByRole('dialog')).toHaveAccessibleName(
+      '1.0.0-beta.18 installs when you quit Scia. Pause your downloads to restart now.',
+    );
     expect(shell.restartToUpdate).not.toHaveBeenCalled();
   });
 
