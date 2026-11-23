@@ -267,6 +267,9 @@ async function boot(): Promise<void> {
   // person is not looking at the list.
   const clipboardWatch = new ClipboardWatch({
     read: () => clipboard.readText(),
+    // Electron 44 lists the standard formats from Windows' `IsClipboardFormatAvailable`, which
+    // answers without opening the clipboard.
+    holdsText: () => clipboard.has('text/plain'),
     offer: (links) => offerToEngine(links, engine(), OFFER_ANSWER_LIMIT_MS),
     added: (added) => {
       notifyOffered('clipboard_links_added', added, offeredNotice);
