@@ -258,7 +258,7 @@ export class Bunkr {
         return await this.#once(url, init, signal, read);
       } catch (error) {
         const waitMs =
-          error instanceof RemoteError && error.retryable && attempt < ATTEMPTS && !signal.aborted
+          error instanceof RemoteError && error.retryable && attempt < ATTEMPTS
             ? this.#waitBefore(attempt, error)
             : undefined;
         if (waitMs === undefined) throw error;

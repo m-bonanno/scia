@@ -675,6 +675,8 @@ describe('a Bunkr album', () => {
     const [album] = downloads.add({ urls: [`${on.url}/a/AbCd12`] });
 
     expect(await failureOf(downloads, album!.id)).toBe(PageFailure.SiteBusy);
+    // Asked again three times, each given the same time.
+    expect(on.asked.filter(({ path }) => path === '/a/AbCd12')).toHaveLength(4);
   });
 
   it("says why a file of the album gave no file, and saves nothing in that file's place", async () => {
@@ -693,6 +695,8 @@ describe('a Bunkr album', () => {
       { id: '3', slug: 'noid', original: 'noid.bin', link: await host(notes) },
       { id: '4', slug: 'maint', original: 'maint.bin', link: `${server.url}/cdn/maint` },
       { id: '5', slug: 'html', original: 'html.bin', link: page },
+      // The link the API gives is refused at its first byte.
+      { id: '8', slug: 'nolink', original: 'nolink.bin', link: await host(notes, { status: 404 }) },
       // The API knows no file of this id: gallery-dl's sign of an album deleted.
       { id: '6', slug: 'unknown', original: 'unknown.bin', link: await host(notes) },
     ];
@@ -721,8 +725,12 @@ describe('a Bunkr album', () => {
         'noid.bin': AlbumFailure.Unrecognised,
         'maint.bin': PageFailure.SiteBusy,
         'html.bin': AlbumFailure.LinkFailed,
+        'nolink.bin': AlbumFailure.LinkFailed,
         'unknown.bin': AlbumFailure.Gone,
       });
+      const statusOf = (name: string) =>
+        downloads.snapshot().downloads.find(({ fileName }) => fileName === name)?.failureStatus;
+      expect([statusOf('html.bin'), statusOf('nolink.bin')]).toEqual([null, 404]);
       // Nothing written: not the maintenance video, not the page, not a part file.
       expect(existsSync(inDownloads())).toBe(false);
     } finally {

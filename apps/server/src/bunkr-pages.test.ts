@@ -121,6 +121,8 @@ describe('readAlbumPage', () => {
       ['a list never closed', good.replace('\n];', '')],
       ['a file opened inside another', two.replace(/\n},\n/, '\n')],
       ['a file closed twice', good.replace('\n}', '\n}\n}')],
+      ['a line that is no field', good.replace(' type: "application/octet-stream",', ' type')],
+      ['a field whose name is no word', good.replace(' type:', ' the type:')],
       // Every file on one line: Scia would take the first file's fields for all of them.
       ['a list on one line', good.replace(/\n/g, ' ')],
       ['a file with no slug', good.replace(/\s*slug: .*\n/, '\n')],
