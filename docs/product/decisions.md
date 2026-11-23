@@ -93,6 +93,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 - #146, on the review of #288 ([ADR 0013](../adr/0013-a-key-that-arrives-by-a-code.md), amendment):
   - **"AllDebrid is connected"** is notified every time AllDebrid connects while Scia's window is not the one in use: a code confirmed in the browser with Settings open too, not only a code left waiting when Settings closed.
   - **A code confirmed while Settings is closed whose key then fails** — refused, blocked, not kept — is said by a notification of its own, "AllDebrid could not be connected" with the reason, under the same rule as the notification of a connection.
+- #151, on the review of #297: the specs are enough. The two Windows integration specs of the store, run by CI's Windows job, hold a save while `state.json` is held open, and the gate line of `v1.0.0` is ticked on them. The real app with `state.json` held by another program stays under "Not seen" in evidence.md, and is not part of the owner's sitting.
 
 ## Undated in the roadmap
 
