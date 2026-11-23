@@ -10,7 +10,7 @@ import type { Logger } from './logger.ts';
 import { PageError, type PageFormat } from './media-choice.ts';
 import type { PageMedia, PageReader } from './page-reader.ts';
 import type { RemoteSource } from './remote-source.ts';
-import { JsonStateStore } from './state-store.ts';
+import { JsonStateStore, type PersistedState, type StateStore } from './state-store.ts';
 import { type RangeServer, startRangeServer } from './testing/range-server.ts';
 import { scratchFolder, until } from './testing/scratch.ts';
 import { silentSource } from './testing/silent-source.ts';
@@ -135,7 +135,19 @@ describe('the title of a video’s page added ready (#285)', () => {
 
   it('reads the title of a video’s page copied, and shows it on the ready row, kept with it', async () => {
     const { reader, titles, reads } = aReader();
-    const downloads = await open({ pageReader: reader });
+    // What the engine keeps is seen through the store it is given (.claude/gotchas.md, Specs).
+    const json = new JsonStateStore(statePath());
+    const saved: PersistedState[] = [];
+    const store: StateStore = {
+      load: () => json.load(),
+      save: async (state) => {
+        saved.push(structuredClone(state));
+        await json.save(state);
+      },
+    };
+    const downloads = await open({ pageReader: reader, store });
+    // The magnets' first turn says it changed the list, and saves: once, at the start.
+    await until(() => saved.length > 0);
 
     const [file, page] = await downloads.offer(['https://files.example/archive.zip', pageOf('a1')]);
     // The page alone, for its title alone: a file is not a page, and nothing starts.
@@ -143,12 +155,11 @@ describe('the title of a video’s page added ready (#285)', () => {
     expect(reads).toEqual([]);
     expect(titleOf(downloads, page!.id)).toBeNull();
 
-    // The title is a change of the list: the page and main hear it at once.
-    const before = await downloads.nextChange(-1);
-    const changed = downloads.nextChange(before);
+    // A change of the list, saved at once: the page and main hear it, and a restart keeps it.
     titles[0]?.answer('A <b>trip</b>');
-    expect(await changed).toBeGreaterThan(before);
-    expect(titleOf(downloads, page!.id)).not.toBeNull();
+    await until(() =>
+      saved.some((state) => state.downloads.some((row) => row.title === 'A <b>trip</b>')),
+    );
     expect(downloads.find(page!.id)).toMatchObject({
       title: 'A <b>trip</b>',
       status: DownloadStatus.Ready,
