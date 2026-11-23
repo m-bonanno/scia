@@ -72,6 +72,10 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 
 ## 23 November 2026
 
+- #181, after AllDebrid's documentation showed that one link unlocks into one file, and that several files come only through its redirector ([ADR 0025](../adr/0025-a-link-that-opens-into-several-files.md)):
+  - **Which links**: a file host's folder and the links of the protectors and shorteners AllDebrid's redirector opens. The owner chose this knowing that a protector puts a captcha in front of its links, which AllDebrid gets past on its own servers: under "Respect the hosts" that is the service's doing, as a hoster's wait is (#7).
+  - **How they are known**: by path shapes Scia keeps as data, in one list (`1fichier.com/dir/…`, `mega.nz/folder/…`); a protector's or a shortener's domain whole. AllDebrid is not asked first about every link.
+  - **Where the list shows**: on a row of its own that waits for the person's choice, every file ticked, as a magnet's row does. The chosen files go into a folder named after the link. A link of one file skips the list, as a magnet of one file does (#150).
 - #99: picture and sound offered apart are joined only as an mp4 picture in H.264 or AV1 and an AAC sound. The most lines win, and H.264 at equal lines; HEVC never, since Windows plays it only with a paid extension. A webm picture with Opus sound is an issue of its own (#239) ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)).
 
 ## Undated in the roadmap

@@ -1,6 +1,6 @@
 # ADR 0005 — A debrid service plugs in as a link resolver, at the start of a download
 
-- **Status**: accepted; its last consequence — a hoster's link with no service connected — amended by [ADR 0006](./0006-a-file-host-without-a-service.md); its consequence on a direct link that has expired, by [ADR 0022](./0022-a-direct-link-that-expires.md)
+- **Status**: accepted; its last consequence — a hoster's link with no service connected — amended by [ADR 0006](./0006-a-file-host-without-a-service.md); its consequence on a direct link that has expired, by [ADR 0022](./0022-a-direct-link-that-expires.md); what it did not handle of a link that opens into several files, a redirector's included, by [ADR 0025](./0025-a-link-that-opens-into-several-files.md)
 - **Date**: 2026-11-20
 
 ## Context
@@ -39,6 +39,6 @@ A hoster's link is not the address of a file: fetched as it stands it gives the 
 - A state written by a later version, naming a service this one does not know, is read with no service (`via` null): its link is then fetched as it stands, against point 7. It is the price of a state that always loads (`apps/server/CLAUDE.md`).
 - A link that was downloaded on one connection because its host answered the first byte wrongly starts again from its first byte after a pause.
 - A direct link that has expired when a paused download is resumed fails with what its host answers; "Retry" asks the service for another, and the bytes are kept only if the new link is the same file (same size, same validator). Asking again by itself, without losing the bytes, is the next item of the roadmap.
-- Not handled: a link that unlocks into several files, a link that needs a password, a host that offers several qualities of a stream, a redirector, magnets. Each fails in words, or is a later item of the roadmap.
+- Not handled: a link that unlocks into several files, a link that needs a password, a host that offers several qualities of a stream, a redirector, magnets. Each fails in words, or is a later item of the roadmap. Amended on 23 November 2026 by [ADR 0025](./0025-a-link-that-opens-into-several-files.md): a file host's folder and a redirector's link are opened into their files, beside `unlock`, and wait in the list for the person to choose.
 - A second service would make `Integrations` choose among several; the port already names the service in `unlock`.
 - A hoster's link added while no service is connected is still fetched as it stands (#49).
