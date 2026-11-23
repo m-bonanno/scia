@@ -9,10 +9,16 @@ import {
   IntegrationCodeStatus,
   IntegrationId,
 } from '@scia/contracts';
-import { type MagnetFailure, isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
+import {
+  type BundleFailure,
+  type MagnetFailure,
+  isServiceFailure,
+  ServiceFailure,
+  UnlockFailure,
+} from '@scia/core';
 import type { AllDebrid } from './alldebrid.ts';
 import type { KeyVault } from './key-vault.ts';
-import type { LinkResolver, UnlockedLink } from './link-resolver.ts';
+import type { LinkResolver, OpenedLink, UnlockedLink } from './link-resolver.ts';
 import type { MagnetFile, MagnetService, MagnetState, SentMagnet } from './magnet-service.ts';
 import { describeFailure, type Logger } from './logger.ts';
 import { CodeExpiredError, ServiceError } from './service-error.ts';
@@ -436,6 +442,19 @@ export class Integrations implements LinkResolver, MagnetService {
       throw new ServiceError(service, UnlockFailure.NotConnected, 'The service is not connected.');
     }
     return this.#deps.alldebrid.unlock(key, url, signal);
+  }
+
+  async open(
+    service: IntegrationId,
+    url: string,
+    signal: AbortSignal,
+  ): Promise<OpenedLink | typeof BundleFailure.Empty | typeof BundleFailure.TooMany> {
+    const key = this.#key;
+    // Nothing was ever this service's: it is the service to connect, not one that left.
+    if (key === undefined) {
+      throw new ServiceError(service, UnlockFailure.NeedsService, 'No service is connected.');
+    }
+    return this.#deps.alldebrid.openLink(key, url, signal);
   }
 
   // One reading at a time, for every download that waits for it. A list that cannot be read

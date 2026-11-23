@@ -1,6 +1,13 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
-import { DownloadFailure, DownloadStatus, MagnetFailure, MagnetStatus } from '@scia/core';
+import {
+  BundleFailure,
+  BundleStatus,
+  DownloadFailure,
+  DownloadStatus,
+  MagnetFailure,
+  MagnetStatus,
+} from '@scia/core';
 import {
   IntegrationId,
   mediaSchema,
@@ -93,6 +100,27 @@ export const magnetRecordSchema = z.object({
 });
 export type MagnetRecord = z.infer<typeof magnetRecordSchema>;
 
+// A link that opens into several files (#181; docs/adr/0025), until the person starts the files
+// they chose: then those are downloads, and it leaves the list.
+export const bundleRecordSchema = z.object({
+  id: z.string(),
+  // The link that was added: asked of the service again while it is being opened.
+  url: z.string(),
+  // The folder its files go into, named after the link.
+  name: z.string(),
+  status: z.enum(BundleStatus),
+  failure: z.enum(BundleFailure).nullable(),
+  // What the service listed, in its order: its link to each file — unlocked as a hoster's is, and
+  // in no answer of the API and no log — what the file is called, and its size.
+  files: z.array(z.object({ link: z.string(), name: z.string(), size: z.number() })),
+  // The files the service could say nothing of.
+  unavailable: z.number(),
+  // The folder downloads went to when it was added: its files go there.
+  directory: z.string(),
+  createdAt: z.string(),
+});
+export type BundleRecord = z.infer<typeof bundleRecordSchema>;
+
 // A setting added after a state was written is read with its default, and so is one whose
 // stored value the bounds of today refuse: the file loads with its downloads, it is not set
 // aside as unreadable for one setting.
@@ -129,6 +157,8 @@ export const stateSchema = z.object({
   // A state written before magnets has none; one a later version cannot read loses its magnets,
   // never its downloads.
   magnets: z.array(magnetRecordSchema).catch([]),
+  // Likewise of the links that open into several files (#181).
+  bundles: z.array(bundleRecordSchema).catch([]),
 });
 export type PersistedState = z.infer<typeof stateSchema>;
 

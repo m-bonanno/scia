@@ -1,11 +1,18 @@
 import { integrationAccountSchema } from '@scia/contracts';
-import { MagnetFailure, ServiceFailure, UnlockFailure, PREPARE_LIMIT_SECONDS } from '@scia/core';
+import {
+  BundleFailure,
+  MagnetFailure,
+  ServiceFailure,
+  UnlockFailure,
+  PREPARE_LIMIT_SECONDS,
+} from '@scia/core';
 import { afterEach, describe, expect, it } from 'vitest';
 import { AllDebrid, DELAYED_LIMIT_MS, PUBLIC_ANSWER_LIMIT_MS } from './alldebrid.ts';
 import { CodeExpiredError, ServiceError } from './service-error.ts';
 import {
   type AllDebridServer,
   type AllDebridServerOptions,
+  REDIRECT_LINKS,
   startAllDebridServer,
 } from './testing/alldebrid-server.ts';
 import { until } from './testing/scratch.ts';
@@ -832,6 +839,155 @@ describe('AllDebrid', () => {
         expect((await client.magnetFiles(KEY, [id])).get(id)).toBe(MagnetFailure.Unreadable);
         await service?.close();
       }
+    });
+  });
+
+  describe('a link that opens into several files', () => {
+    const FOLDER = 'https://1fichier.com/dir/AbCdEf';
+    const ONE = `${REDIRECT_LINKS}mnsaj-0-abc`;
+    const TWO = `${REDIRECT_LINKS}mnsaj-1-abc`;
+    const THREE = `${REDIRECT_LINKS}mnsaj-2-abc`;
+    const known = {
+      [ONE]: { direct: 'http://127.0.0.1:9/one', filename: 'Day 1.mkv', size: 1000 },
+      [TWO]: { direct: 'http://127.0.0.1:9/two', filename: 'Day 2.mkv', size: 2000 },
+    };
+
+    it('opens it through the redirector, and names each file and its size through the infos of its links, in one request', async () => {
+      const server = await serviceWith({ redirects: { [FOLDER]: [ONE, TWO] }, links: known });
+
+      expect(await clientOf(server).openLink(KEY, FOLDER)).toEqual({
+        files: [
+          { link: ONE, name: 'Day 1.mkv', size: 1000 },
+          { link: TWO, name: 'Day 2.mkv', size: 2000 },
+        ],
+        unavailable: 0,
+      });
+      expect(
+        server.requests.map(({ url, form, lists, authorization }) => ({
+          url,
+          form,
+          lists,
+          authorization,
+        })),
+      ).toEqual([
+        {
+          url: '/v4/link/redirector',
+          form: { link: FOLDER },
+          lists: { link: [FOLDER] },
+          authorization: `Bearer ${KEY}`,
+        },
+        {
+          url: '/v4/link/infos',
+          form: { 'link[]': TWO },
+          lists: { 'link[]': [ONE, TWO] },
+          authorization: `Bearer ${KEY}`,
+        },
+      ]);
+    });
+
+    it('counts the files the service cannot say anything of, and lists the others', async () => {
+      const server = await serviceWith({
+        redirects: { [FOLDER]: [ONE, 'javascript:alert(1)', TWO, THREE, ONE] },
+        links: { ...known, [THREE]: { error: 'LINK_DOWN' } },
+      });
+
+      expect(await clientOf(server).openLink(KEY, FOLDER)).toEqual({
+        files: [
+          { link: ONE, name: 'Day 1.mkv', size: 1000 },
+          { link: TWO, name: 'Day 2.mkv', size: 2000 },
+        ],
+        unavailable: 2,
+      });
+    });
+
+    it('says it found nothing when the service opens it into no link, or none it can get', async () => {
+      const server = await serviceWith({
+        redirects: { [FOLDER]: [], 'https://bit.ly/abc': [THREE] },
+        links: { [THREE]: { error: 'LINK_DOWN' } },
+      });
+      const client = clientOf(server);
+
+      expect(await client.openLink(KEY, FOLDER)).toBe(BundleFailure.Empty);
+      expect(await client.openLink(KEY, 'https://bit.ly/abc')).toBe(BundleFailure.Empty);
+    });
+
+    it('asks for the infos of many links a hundred at a time', async () => {
+      const many = Array.from({ length: 250 }, (_, index) => `${REDIRECT_LINKS}x-${String(index)}`);
+      const server = await serviceWith({
+        redirects: { [FOLDER]: many },
+        links: Object.fromEntries(many.map((link) => [link, { direct: 'http://127.0.0.1:9/x' }])),
+      });
+
+      const opened = await clientOf(server).openLink(KEY, FOLDER);
+
+      expect(typeof opened === 'string' ? opened : opened.files).toHaveLength(250);
+      expect(
+        server.requests
+          .filter((request) => request.url === '/v4/link/infos')
+          .map((request) => request.lists['link[]']?.length),
+      ).toEqual([100, 100, 50]);
+    });
+
+    it('lists no more files than a person ticks through, and asks nothing about them', async () => {
+      const many = Array.from(
+        { length: 1001 },
+        (_, index) => `${REDIRECT_LINKS}x-${String(index)}`,
+      );
+      const server = await serviceWith({ redirects: { [FOLDER]: many } });
+
+      expect(await clientOf(server).openLink(KEY, FOLDER)).toBe(BundleFailure.TooMany);
+      expect(server.requests.map((request) => request.url)).toEqual(['/v4/link/redirector']);
+    });
+
+    it.each([
+      ['REDIRECTOR_NOT_SUPPORTED', UnlockFailure.LinkRefused],
+      ['REDIRECTOR_ERROR', UnlockFailure.LinkRefused],
+      ['MUST_BE_PREMIUM', UnlockFailure.NotPremium],
+      ['NO_SERVER', ServiceFailure.NetworkRefused],
+    ] as const)('reads the refusal %s of the redirector as %s', async (code, failure) => {
+      const server = await serviceWith({ redirects: { [FOLDER]: { error: code } } });
+
+      expect(await failureOf(clientOf(server).openLink(KEY, FOLDER))).toBe(failure);
+      expect(server.requests).toHaveLength(1);
+    });
+
+    it('says the key is refused when it is', async () => {
+      const server = await serviceWith({ redirects: { [FOLDER]: [ONE] }, links: known });
+
+      expect(await failureOf(clientOf(server).openLink('unknown-key-0000000000000', FOLDER))).toBe(
+        ServiceFailure.KeyRefused,
+      );
+    });
+
+    it('asks again a service that cannot be asked at first, for the link and for its files', async () => {
+      const server = await serviceWith({ redirects: { [FOLDER]: [ONE, TWO] }, links: known });
+      server.misbehave({ status: 503, times: 1, route: 'POST /v4/link/redirector' });
+      const client = clientOf(server);
+
+      expect(await client.openLink(KEY, FOLDER)).toMatchObject({ unavailable: 0 });
+      server.misbehave({ nonsense: true, times: 2, route: 'POST /v4/link/infos' });
+      expect(await client.openLink(KEY, FOLDER)).toMatchObject({ unavailable: 0 });
+    });
+
+    it('says the service cannot be asked when its answer about the files is not one', async () => {
+      const server = await serviceWith({ redirects: { [FOLDER]: [ONE, TWO] }, links: known });
+      server.misbehave({ nonsense: true, route: 'POST /v4/link/infos' });
+
+      expect(await failureOf(clientOf(server).openLink(KEY, FOLDER))).toBe(
+        ServiceFailure.Unavailable,
+      );
+    });
+
+    it('stops when whoever asked stops', async () => {
+      const server = await serviceWith({ redirects: { [FOLDER]: [ONE] }, links: known });
+      server.misbehave({ silent: true });
+      const stop = new AbortController();
+
+      const opening = clientOf(server).openLink(KEY, FOLDER, stop.signal);
+      await until(() => server.requests.length === 1);
+      stop.abort(new Error('removed'));
+
+      await expect(opening).rejects.toThrow('removed');
     });
   });
 

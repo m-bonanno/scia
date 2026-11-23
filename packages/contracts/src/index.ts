@@ -8,11 +8,13 @@ import {
 } from '@scia/core';
 import { z } from 'zod';
 import { IntegrationCodeFailure, IntegrationId } from './integrations.ts';
+import { bundleSchema } from './bundles.ts';
 import { httpUrl, magnetUri } from './links.ts';
 import { magnetSchema } from './magnets.ts';
 import { Theme } from './theme.ts';
 
 export { API_PREFIX, DEFAULT_API_PORT } from './endpoint.ts';
+export * from './bundles.ts';
 export * from './integrations.ts';
 export * from './magnets.ts';
 
@@ -91,6 +93,8 @@ export type Download = z.infer<typeof downloadSchema>;
 
 export const MAX_URLS_PER_REQUEST = 200;
 
+// A link that opens into several files is not added as a download: it is a bundle of the snapshot
+// (#181), and the answer lists the downloads alone.
 export const addDownloadsSchema = z.object({
   urls: z.array(httpUrl).min(1).max(MAX_URLS_PER_REQUEST),
   // The page the links were on: some hosts serve a file only to who comes from their page.
@@ -115,6 +119,8 @@ export const snapshotSchema = z.object({
   downloads: z.array(downloadSchema),
   // The magnets the service is fetching, or could not (#137).
   magnets: z.array(magnetSchema),
+  // The links that open into several files, until the person starts the ones they chose (#181).
+  bundles: z.array(bundleSchema),
   // Whether main reads the clipboard: main follows the engine's events, and hears the switch
   // there the moment it changes, whoever changed it.
   watchClipboard: z.boolean(),

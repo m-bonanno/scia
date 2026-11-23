@@ -4,6 +4,7 @@ import { mkdir, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import {
   type AccountMagnet,
+  type Bundle,
   type Download,
   IntegrationId,
   type Magnet,
@@ -13,6 +14,8 @@ import {
 } from '@scia/contracts';
 import { DEFAULT_THEME } from '@scia/contracts/theme';
 import {
+  BundleFailure,
+  BundleStatus,
   canPause,
   canResume,
   canStart,
@@ -24,6 +27,7 @@ import {
   fileNameFromHost,
   fileNameFromUrl,
   hashOfMagnet,
+  isServiceFailure,
   magnetFolders,
   MagnetStage,
   MagnetStatus,
@@ -37,9 +41,10 @@ import {
   uniqueFileName,
   UnlockFailure,
 } from '@scia/core';
+import { BundleKind, bundleKindOf, bundleName } from './bundle-links.ts';
 import { DownloadTask } from './download-task.ts';
 import { HlsTask, piecesOf, type Timeline } from './hls-task.ts';
-import type { LinkResolver } from './link-resolver.ts';
+import type { LinkFile, LinkResolver } from './link-resolver.ts';
 import { describeFailure, type Logger } from './logger.ts';
 import type { MagnetFile, MagnetService } from './magnet-service.ts';
 import { MagnetWatch, nameOfMagnet } from './magnet-watch.ts';
@@ -56,7 +61,7 @@ import {
   type RequestHeaders,
 } from './remote-source.ts';
 import { ServiceError } from './service-error.ts';
-import type { DownloadRecord, MagnetRecord, StateStore } from './state-store.ts';
+import type { BundleRecord, DownloadRecord, MagnetRecord, StateStore } from './state-store.ts';
 import { Throttle } from './throttle.ts';
 
 export const PART_SUFFIX = '.scia';
@@ -242,6 +247,22 @@ function isAnotherFile(record: DownloadRecord, remote: RemoteFile): boolean {
   );
 }
 
+// Why the service did not open a link into its files: what it says of the key, the network or
+// the account as it says it of any link; a refusal of the link itself, of whatever kind, is that
+// it does not open this one; anything else, that it could not be asked.
+function bundleFailureOf(error: unknown): BundleFailure {
+  if (!(error instanceof ServiceError)) return BundleFailure.Unavailable;
+  if (isServiceFailure(error.failure)) return error.failure;
+  if (error.failure === UnlockFailure.NotPremium) return BundleFailure.NotPremium;
+  if (
+    error.failure === UnlockFailure.NeedsService ||
+    error.failure === UnlockFailure.NotConnected
+  ) {
+    return BundleFailure.NeedsService;
+  }
+  return BundleFailure.Refused;
+}
+
 function partPathOf(record: DownloadRecord): string {
   return join(record.directory, `${record.fileName}${PART_SUFFIX}`);
 }
@@ -254,6 +275,12 @@ export class DownloadManager {
   // The magnets the service is fetching, or could not: theirs is the list's top (#137).
   #magnets: MagnetRecord[];
   readonly #magnetWatch: MagnetWatch;
+  // The links that open into several files, until the person starts the ones they chose (#181).
+  #bundles: BundleRecord[];
+  // Those the service is being asked about, each with what stops the question.
+  readonly #opening = new Map<string, AbortController>();
+  // They are opened one after the other: a paste of many is not as many questions at once.
+  #openings: Promise<void> = Promise.resolve();
   #settings: Settings;
   readonly #running = new Map<string, Running>();
   #version = 0;
@@ -272,11 +299,13 @@ export class DownloadManager {
     records: DownloadRecord[],
     settings: Settings,
     magnets: MagnetRecord[] = [],
+    bundles: BundleRecord[] = [],
   ) {
     this.#deps = deps;
     this.#markDownloaded = deps.markDownloaded ?? markerFor(process.platform);
     this.#records = records;
     this.#magnets = magnets;
+    this.#bundles = bundles;
     this.#magnetWatch = new MagnetWatch({
       service: deps.magnets,
       logger: deps.logger,
@@ -308,10 +337,20 @@ export class DownloadManager {
       ...DEFAULT_SETTINGS,
       downloadDirectory: deps.defaultDirectory,
     };
-    const manager = new DownloadManager(deps, records, settings, state?.magnets ?? []);
+    const manager = new DownloadManager(
+      deps,
+      records,
+      settings,
+      state?.magnets ?? [],
+      state?.bundles ?? [],
+    );
     manager.#schedule();
     // A magnet waited for when the engine stopped is waited for again, never sent again.
     manager.#magnetWatch.wake();
+    // A link that was being opened is asked about again; one whose files wait for a choice waits.
+    for (const bundle of manager.#bundles) {
+      if (bundle.status === BundleStatus.Opening) manager.#openBundle(bundle);
+    }
     return manager;
   }
 
@@ -319,6 +358,7 @@ export class DownloadManager {
     return {
       downloads: this.#records.map((record) => this.#view(record)),
       magnets: this.#magnets.map((record) => this.#magnetView(record)),
+      bundles: this.#bundles.map((record) => this.#bundleView(record)),
       watchClipboard: this.#settings.watchClipboard,
     };
   }
@@ -369,13 +409,60 @@ export class DownloadManager {
     readonly urls: readonly string[];
     readonly referrer?: string | undefined;
   }): Download[] {
-    const added = input.urls.map((url) =>
-      this.#newRecord(url, input.referrer ?? null, DownloadStatus.Queued),
-    );
+    // A link that opens into several files is not a download: its files are, once chosen (#181).
+    const bundled = input.urls.filter((url) => this.#opensIntoSeveral(url));
+    const added = input.urls
+      .filter((url) => !bundled.includes(url))
+      .map((url) => this.#newRecord(url, input.referrer ?? null, DownloadStatus.Queued));
     this.#records.push(...added);
+    for (const url of bundled) this.#addBundle(url);
+    if (bundled.length > 0) this.#deps.logger.info('bundles_added', { links: bundled.length });
     this.#changed();
     this.#schedule();
     return added.map((record) => this.#view(record));
+  }
+
+  // The files the person chose, by their place in the list, become downloads in the link's folder;
+  // the link leaves the list (docs/adr/0025).
+  startBundle(id: string, chosen: readonly number[]): Download[] {
+    const record = this.#bundleRecord(id);
+    if (record.status !== BundleStatus.Choosing) {
+      throw new ManagerError(ManagerRefusal.Conflict, 'Its files are not waiting for a choice.');
+    }
+    const files = chosen.flatMap((index): LinkFile[] => {
+      const file = Number.isInteger(index) ? record.files.at(index) : undefined;
+      return index < 0 || file === undefined ? [] : [file];
+    });
+    if (
+      files.length === 0 ||
+      files.length !== chosen.length ||
+      new Set(chosen).size !== chosen.length
+    ) {
+      throw new ManagerError(ManagerRefusal.Invalid, 'Choose one or more of the files it lists.');
+    }
+    this.#deps.logger.info('bundle_started', { files: files.length, of: record.files.length });
+    return this.#bundleDone(record, files, true);
+  }
+
+  // Scia stops asking about it, or forgets the files it listed.
+  removeBundle(id: string): void {
+    const record = this.#bundleRecord(id);
+    this.#opening.get(id)?.abort();
+    this.#bundles = this.#bundles.filter((other) => other !== record);
+    this.#changed();
+  }
+
+  // A link the service did not open is asked about again.
+  retryBundle(id: string): Bundle {
+    const record = this.#bundleRecord(id);
+    if (record.status !== BundleStatus.Failed) {
+      throw new ManagerError(ManagerRefusal.Conflict, 'Only a link that failed is tried again.');
+    }
+    record.status = BundleStatus.Opening;
+    record.failure = null;
+    this.#changed();
+    this.#openBundle(record);
+    return this.#bundleView(record);
   }
 
   // The links main read on the clipboard (#128): those that are files or videos Scia knows are
@@ -714,8 +801,133 @@ export class DownloadManager {
     this.#schedule();
   }
 
+  // A link the service opens into several files (docs/adr/0025): a file host's folder, which needs
+  // a service as any of its host's links does; a protector's or a shortener's link, while a service
+  // is connected — with none, it is fetched as it stands, as it always was. A manager with no
+  // resolver fetches every link as it stands.
+  #opensIntoSeveral(url: string): boolean {
+    const { resolver } = this.#deps;
+    const kind = bundleKindOf(url);
+    if (resolver === undefined || kind === undefined) return false;
+    return kind === BundleKind.Folder || resolver.hasService();
+  }
+
+  #addBundle(url: string): void {
+    const record: BundleRecord = {
+      id: (this.#deps.newId ?? randomUUID)(),
+      url,
+      name: bundleName(url),
+      status: BundleStatus.Opening,
+      failure: null,
+      files: [],
+      unavailable: 0,
+      directory: this.#settings.downloadDirectory,
+      createdAt: new Date(this.#now()).toISOString(),
+    };
+    this.#bundles.push(record);
+    this.#openBundle(record);
+  }
+
+  // Asked after those before it: one question to the service at a time.
+  #openBundle(record: BundleRecord): void {
+    const stop = new AbortController();
+    this.#opening.set(record.id, stop);
+    this.#openings = this.#openings.then(() => this.#open(record, stop.signal));
+  }
+
+  async #open(record: BundleRecord, signal: AbortSignal): Promise<void> {
+    const { resolver } = this.#deps;
+    const mine = () => !signal.aborted && this.#bundles.includes(record);
+    try {
+      if (!mine() || resolver === undefined) return;
+      const opened = await resolver.open(IntegrationId.AllDebrid, record.url, signal);
+      if (!mine()) return;
+      if (typeof opened === 'string') {
+        this.#bundleFailed(record, opened);
+        return;
+      }
+      this.#deps.logger.info('bundle_opened', {
+        id: record.id,
+        files: opened.files.length,
+        unavailable: opened.unavailable,
+      });
+      const [only] = opened.files;
+      // A link of one file is that file: nothing to choose (#150 for a magnet).
+      if (only !== undefined && opened.files.length === 1 && opened.unavailable === 0) {
+        this.#bundleDone(record, [only], false);
+        return;
+      }
+      record.files = [...opened.files];
+      record.unavailable = opened.unavailable;
+      record.status = BundleStatus.Choosing;
+      this.#changed();
+    } catch (error) {
+      if (!mine()) return;
+      this.#bundleFailed(record, bundleFailureOf(error));
+    } finally {
+      if (this.#opening.get(record.id)?.signal === signal) this.#opening.delete(record.id);
+    }
+  }
+
+  #bundleFailed(record: BundleRecord, failure: BundleFailure): void {
+    record.status = BundleStatus.Failed;
+    record.failure = failure;
+    this.#deps.logger.warn('bundle_failed', { id: record.id, failure });
+    this.#changed();
+  }
+
+  // Its files become downloads through the service, under the names the service gave — in a
+  // folder named after the link, or, for a link of one file, in the download folder itself, as a
+  // magnet of one file is — and the link leaves the list.
+  #bundleDone(record: BundleRecord, files: readonly LinkFile[], inFolder: boolean): Download[] {
+    this.#bundles = this.#bundles.filter((other) => other !== record);
+    // Its folder, or the first free one beside it when a file of its name stands there: a folder
+    // of that name is shared, as the files take free names inside it.
+    const root = inFolder
+      ? join(
+          record.directory,
+          uniqueFileName(record.name, (candidate) =>
+            isFileThere(join(record.directory, candidate)),
+          ),
+        )
+      : record.directory;
+    const added = files.map((file) => {
+      const download = this.#newRecord(file.link, null, DownloadStatus.Queued);
+      download.via = IntegrationId.AllDebrid;
+      download.directory = root;
+      download.fileName = fileNameFromHost(file.name) ?? FALLBACK_FILE_NAME;
+      download.nameKept = true;
+      return download;
+    });
+    this.#records.push(...added);
+    this.#changed();
+    this.#schedule();
+    return added.map((download) => this.#view(download));
+  }
+
+  #bundleRecord(id: string): BundleRecord {
+    const record = this.#bundles.find((candidate) => candidate.id === id);
+    if (record === undefined) throw new ManagerError(ManagerRefusal.NotFound, 'No such link.');
+    return record;
+  }
+
+  #bundleView(record: BundleRecord): Bundle {
+    return {
+      id: record.id,
+      name: record.name,
+      status: record.status,
+      failure: record.failure,
+      files: record.files.map(({ name, size }) => ({ name, size })),
+      unavailable: record.unavailable,
+      createdAt: record.createdAt,
+    };
+  }
+
   // Stops every transfer and writes the state. What was running goes on at the next start.
   async close(): Promise<void> {
+    // A link being opened stays so: it is asked about again at the next start.
+    for (const stop of this.#opening.values()) stop.abort();
+    await this.#openings;
     await this.#magnetWatch.close();
     this.#closed = true;
     clearInterval(this.#checkpoint);
@@ -762,6 +974,8 @@ export class DownloadManager {
   // connected says so, or — none connected — AllDebrid's public list does (docs/adr/0006). What
   // the service cannot say within its limit is left out.
   async #isOffered(url: string): Promise<boolean> {
+    // One that opens into several files would be asked of the service for a copy: left out.
+    if (bundleKindOf(url) !== undefined) return false;
     if (offeredAs(url) !== undefined) return true;
     const { resolver } = this.#deps;
     if (resolver === undefined) return false;
@@ -831,6 +1045,7 @@ export class DownloadManager {
         settings: this.#settings,
         downloads: this.#records,
         magnets: this.#magnets,
+        bundles: this.#bundles,
       });
     } catch (error) {
       this.#deps.logger.error('state_not_saved', { error: describeFailure(error) });

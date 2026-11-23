@@ -239,6 +239,8 @@ describe('DownloadManager and a link that is a page', () => {
       resolver: {
         serviceFor: async () => 'alldebrid',
         unlock: async () => ({ url: site.url, fileName: 'from-the-service.html' }),
+        hasService: () => true,
+        open: () => Promise.reject(new Error('Nothing opens here.')),
       },
     });
 

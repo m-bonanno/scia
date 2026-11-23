@@ -7,6 +7,7 @@ import { type Added, AddBar } from '@/features/downloads/add-bar.tsx';
 import { type Pasted, pastedIn } from '@/features/downloads/pasted.ts';
 import { DownloadList } from '@/features/downloads/download-list.tsx';
 import type { RowActions } from '@/features/downloads/download-row.tsx';
+import type { BundleActions } from '@/features/downloads/bundle-row.tsx';
 import type { MagnetActions } from '@/features/downloads/magnet-row.tsx';
 import { FilterTabs, type FilterTabsHandle } from '@/features/downloads/filter-tabs.tsx';
 import { countByFilter, Filter, matchesFilter } from '@/features/downloads/filters.ts';
@@ -18,6 +19,7 @@ import { api, ApiError } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { Connection, useLive } from '@/lib/live.ts';
 import {
+  bundleActionMessage,
   ENGINE_UNREACHABLE,
   errorMessage,
   FILE_NOT_OPENED,
@@ -210,6 +212,27 @@ export function App(): ReactNode {
     };
   }, [report, tell]);
 
+  const bundleActions = useMemo(
+    (): BundleActions => ({
+      start: (id, files) => {
+        api.startBundle(id, files).catch((error: unknown) => {
+          tell(bundleActionMessage(error, 'start'));
+        });
+      },
+      retry: (id) => {
+        api.retryBundle(id).catch((error: unknown) => {
+          tell(bundleActionMessage(error, 'retry'));
+        });
+      },
+      remove: (id) => {
+        api.removeBundle(id).catch((error: unknown) => {
+          tell(bundleActionMessage(error, 'remove'));
+        });
+      },
+    }),
+    [tell],
+  );
+
   const magnetActions = useMemo(
     (): MagnetActions => ({
       retry: (id) => {
@@ -244,6 +267,18 @@ export function App(): ReactNode {
       filterTabs.current?.focus();
     }
   }, [hasReady]);
+  // So does a link whose files were started: its row leaves under "Download" (#181).
+  const bundleIds = live.bundles.map((bundle) => bundle.id).join(' ');
+  const bundlesBefore = useRef(bundleIds);
+  useEffect(() => {
+    const now = new Set(bundleIds.split(' '));
+    const left = bundlesBefore.current.split(' ').some((id) => id !== '' && !now.has(id));
+    bundlesBefore.current = bundleIds;
+    if (!left) return;
+    if (document.activeElement === null || document.activeElement === document.body) {
+      filterTabs.current?.focus();
+    }
+  }, [bundleIds]);
 
   return (
     <div className="flex h-screen flex-col">
@@ -287,7 +322,7 @@ export function App(): ReactNode {
               <FilterTabs
                 ref={filterTabs}
                 filter={filter}
-                counts={countByFilter(live.downloads, live.magnets.length)}
+                counts={countByFilter(live.downloads, live.magnets.length + live.bundles.length)}
                 onChange={setFilter}
               />
               {hasReady && (
@@ -309,9 +344,11 @@ export function App(): ReactNode {
                 <DownloadList
                   downloads={visible}
                   magnets={live.magnets}
+                  bundles={live.bundles}
                   filter={filter}
                   actions={actions}
                   magnetActions={magnetActions}
+                  bundleActions={bundleActions}
                 />
               )}
             </div>

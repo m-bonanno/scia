@@ -1,5 +1,11 @@
 import { ApiErrorCode, IntegrationCodeFailure, type IntegrationId } from '@scia/contracts';
-import { MagnetFailure, PREPARE_LIMIT_SECONDS, ServiceFailure, UnlockFailure } from '@scia/core';
+import {
+  BundleFailure,
+  MagnetFailure,
+  PREPARE_LIMIT_SECONDS,
+  ServiceFailure,
+  UnlockFailure,
+} from '@scia/core';
 import { ZodError } from 'zod';
 import { ApiError } from './api.ts';
 import { formatDuration } from './format.ts';
@@ -265,6 +271,52 @@ const LINK_NOT_UNLOCKED: Readonly<
   [UnlockFailure.NotConnected]: (service) =>
     `${service} is no longer connected. Connect it in Settings, then try again.`,
 };
+
+// Why a link that opens into several files gave none to choose from (#181): what the service said
+// of the key, the network or the account as a link's row says it; the rest in words of its own.
+const BUNDLE_FAILED: Readonly<Record<BundleFailure, (service: string) => string>> = {
+  // The redirector does not open this site, or could not open this link: true of both.
+  [BundleFailure.Refused]: (service) => `${service} could not open this link.`,
+  [BundleFailure.Empty]: (service) => `${service} found no file it can get behind this link.`,
+  [BundleFailure.TooMany]: () => 'This link holds more files than Scia lists to choose from.',
+  [BundleFailure.KeyRefused]: (service) => LINK_NOT_UNLOCKED[ServiceFailure.KeyRefused](service),
+  [BundleFailure.KeyBlocked]: (service) => LINK_NOT_UNLOCKED[ServiceFailure.KeyBlocked](service),
+  [BundleFailure.AccountBanned]: (service) =>
+    LINK_NOT_UNLOCKED[ServiceFailure.AccountBanned](service),
+  [BundleFailure.NetworkRefused]: (service) =>
+    LINK_NOT_UNLOCKED[ServiceFailure.NetworkRefused](service),
+  [BundleFailure.Unavailable]: (service) => LINK_NOT_UNLOCKED[ServiceFailure.Unavailable](service),
+  [BundleFailure.NotPremium]: (service) =>
+    `${service} opens links like this for premium accounts only.`,
+  // A file host's folder with no service connected, or a link whose service left while it was
+  // opened: true of both.
+  [BundleFailure.NeedsService]: () =>
+    `This link opens into several files through ${SERVICE_NAME.alldebrid}. Connect ${SERVICE_NAME.alldebrid} in Settings, then try again.`,
+};
+
+export function bundleFailureMessage(failure: BundleFailure): string {
+  return BUNDLE_FAILED[failure](SERVICE_NAME.alldebrid);
+}
+
+// Said when a press on the row of such a link was refused: it moved on meanwhile.
+const BUNDLE_MOVED: Readonly<
+  Record<'start' | 'retry' | 'remove', Readonly<Record<string, string>>>
+> = {
+  start: { [ApiErrorCode.NotFound]: 'This link is no longer in the list.' },
+  // Only Retry meets a conflict a person can read: the link is no longer failed.
+  retry: {
+    [ApiErrorCode.NotFound]: 'This link is no longer in the list.',
+    [ApiErrorCode.Conflict]: 'This link is already being opened again.',
+  },
+  remove: { [ApiErrorCode.NotFound]: 'This link is no longer in the list.' },
+};
+
+export function bundleActionMessage(error: unknown, action: 'start' | 'retry' | 'remove'): string {
+  return (
+    (error instanceof ApiError ? said(BUNDLE_MOVED[action], error.code) : undefined) ??
+    errorMessage(error)
+  );
+}
 
 // Said on the row of a download that went through a service, when the link the service gave
 // stopped working — expired, refused, cut. Trying again asks the service for a new one

@@ -39,6 +39,8 @@ const resolver: LinkResolver = {
     return Promise.resolve(undefined);
   },
   unlock: () => Promise.reject(new Error('Nothing is unlocked by an offer.')),
+  hasService: () => true,
+  open: () => Promise.reject(new Error('Nothing is opened by an offer.')),
 };
 
 describe('links offered from the clipboard', () => {
