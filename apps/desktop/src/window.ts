@@ -90,13 +90,18 @@ export class MainWindow {
       this.#shownOnce = true;
     });
     // Closing is a question, not an order. A quit ends the process without closing the window
-    // (main.ts), so nothing here has to tell the two apart.
+    // (main.ts), so nothing here has to tell the two apart — but at the end of the session, when
+    // Electron's own quit closes it: a close cancelled then cancels that quit, and Electron ends
+    // the process at once, the engine with it (main.ts, `onSessionEnd`).
+    let sessionEnded = false;
     this.#window.on('close', (event) => {
+      if (sessionEnded) return;
       event.preventDefault();
       options.onCloseRequested();
     });
     // Never prevented: Scia does not ask Windows to wait (#13).
     this.#window.on('session-end', (event) => {
+      sessionEnded = true;
       options.onSessionEnd(event.reasons);
     });
     // Shown now, in the theme's background, rather than once a page has loaded: the engine's

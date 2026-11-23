@@ -219,16 +219,20 @@ describe('the installer, installed and started', () => {
     // The installer waited for it: it ended before the installer did.
     expect(ended).toBe(true);
     await scia!.close();
-    const log = await profile!.log();
-    expect(log).toMatch(/session_ended {[^}]*'close-app'/);
-    expect(log).toMatch(/\[engine\][^\n]*\bstopped\b/);
-    expect(log).not.toContain('update_installing');
+    // What the engine wrote as it stopped, read first: a download it was stopping is `queued`,
+    // one it was killed in the middle of stays `downloading` at its last checkpoint.
     const state = JSON.parse(
       await readFile(join(profile!.path, 'engine', 'state.json'), 'utf8'),
-    ) as { downloads: { fileName: string; status: string }[] };
-    expect(state.downloads.find((download) => download.fileName === 'during-install.bin')).toEqual(
-      expect.objectContaining({ status: DownloadStatus.Queued }),
-    );
+    ) as { downloads: { fileName: string; status: string; segments: { downloaded: number }[] }[] };
+    const during = state.downloads.find((download) => download.fileName === 'during-install.bin');
+    expect(during?.status).toBe(DownloadStatus.Queued);
+    expect(during?.segments.some((segment) => segment.downloaded > 0)).toBe(true);
+    const log = await profile!.log();
+    expect(log).toMatch(/session_ended {[^}]*'close-app'/);
+    // Quit's own last line: Scia ended itself, after the engine, not Electron at once.
+    expect(log).toMatch(/\squit\s*$/m);
+    expect(log).toMatch(/\[engine\][^\n]*\bstopped\b/);
+    expect(log).not.toContain('update_installing');
 
     scia = await launchInstalled(profile!, EXE);
 

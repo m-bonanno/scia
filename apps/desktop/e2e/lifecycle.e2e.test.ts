@@ -114,6 +114,7 @@ describe('the real app, from start to quit', () => {
   // comes, and the process may be ended as soon as the message is answered.
   it.each([
     { what: 'a shutdown, with Scia in the tray', how: EndSession.Shutdown, hidden: true },
+    { what: 'a sign-out, with Scia in the tray', how: EndSession.Logoff, hidden: true },
     { what: 'an installer that needs its files', how: EndSession.CloseApp, hidden: false },
   ])(
     'writes its state and ends at $what during a download, which goes on at the next start',
@@ -140,16 +141,19 @@ describe('the real app, from start to quit', () => {
       endSessionOf(pid, how);
 
       await scia.exited;
-      const log = await profile.log();
-      expect(log).toMatch(/\bsession_ended\b/);
-      expect(log).toMatch(/\[engine\][^\n]*\bstopped\b/);
-      expect(log).not.toContain('update_installing');
-      // What the engine wrote as it stopped: the download waits to go on, with bytes on disk.
+      // What the engine wrote as it stopped, read first: a download it was stopping is `queued`,
+      // one it was killed in the middle of stays `downloading` at its last checkpoint.
       const state = JSON.parse(
         await readFile(join(profile.path, 'engine', 'state.json'), 'utf8'),
       ) as { downloads: { status: string; segments: Segment[] }[] };
       expect(state.downloads[0]?.status).toBe(DownloadStatus.Queued);
       expect(state.downloads[0]?.segments.some((segment) => segment.downloaded > 0)).toBe(true);
+      const log = await profile.log();
+      expect(log).toMatch(/\bsession_ended\b/);
+      // Quit's own last line: Scia ended itself, after the engine, not Electron at once.
+      expect(log).toMatch(/\squit\s*$/m);
+      expect(log).toMatch(/\[engine\][^\n]*\bstopped\b/);
+      expect(log).not.toContain('update_installing');
 
       const again = await run.launch(profile);
 

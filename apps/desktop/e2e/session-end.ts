@@ -2,9 +2,10 @@ import { load, out, pointer } from 'koffi';
 
 const WM_QUERYENDSESSION = 0x0011;
 const WM_ENDSESSION = 0x0016;
-// What lParam says of the end: nothing for a shutdown or a restart, ENDSESSION_CLOSEAPP for an
-// installer that needs the program's files (the Restart Manager's, and Scia's own installer's).
-export const EndSession = { Shutdown: 0, CloseApp: 0x0001 } as const;
+// What lParam says of the end: nothing for a shutdown or a restart, ENDSESSION_LOGOFF for a
+// sign-out, ENDSESSION_CLOSEAPP for an installer that needs the program's files (the Restart
+// Manager's, and Scia's own installer's).
+export const EndSession = { Shutdown: 0, Logoff: 0x8000_0000, CloseApp: 0x0001 } as const;
 export type EndSession = (typeof EndSession)[keyof typeof EndSession];
 // SendMessageTimeout's SMTO_ABORTIFHUNG, and a bound: a window that does not answer fails the spec.
 const ABORT_IF_HUNG = 0x0002;

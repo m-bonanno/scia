@@ -113,6 +113,46 @@ describe('Quit', () => {
     expect(calls).toEqual(['settle', 'stop', 'installs false', 'exit']);
   });
 
+  // Electron lets its own quit stand only from here on: begun inside the window's `session-end`,
+  // it is what keeps Electron from ending the process the moment the handler returns.
+  it('says that the session ended once told, and not before', () => {
+    const { quit } = quitting();
+    quit.asked(true);
+    expect(quit.sessionHasEnded()).toBe(false);
+
+    quit.sessionEnded(['shutdown']);
+
+    expect(quit.sessionHasEnded()).toBe(true);
+  });
+
+  it('ends at the end of a session whose update cannot be decided', async () => {
+    const { quit, calls, engineStops } = quitting({
+      installs: async () => {
+        throw new Error('no answer');
+      },
+    });
+
+    quit.sessionEnded(['logoff']);
+    await engineStops();
+
+    expect(calls).toEqual(['settle', 'stop', 'installs false', 'exit']);
+  });
+
+  it('says nothing of an update when the session ends during a quit that installs none', async () => {
+    const { quit, lines, engineStops } = quitting();
+    quit.asked(true);
+
+    quit.sessionEnded(['shutdown']);
+    await settle();
+    await engineStops();
+
+    expect(lines).toContainEqual({
+      event: 'session_ended',
+      data: { reasons: ['shutdown'], quitting: true },
+    });
+    expect(lines.map((line) => line.event)).not.toContain('update_not_installed');
+  });
+
   it('installs nothing and starts nothing when the session ends during a quit', async () => {
     let decide: (install: boolean) => void = () => undefined;
     const { quit, calls, lines, engineStops } = quitting({

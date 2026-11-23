@@ -37,6 +37,14 @@ export class Quit {
     return this.#begun;
   }
 
+  // From here on Electron's own quit is let stand (main.ts): begun inside the window's
+  // `session-end`, it is what keeps Electron from ending the process — the engine with it — the
+  // moment the handler returns (`TerminateCurrentProcessImmediately` unless `is_quitting()`,
+  // shell/browser/native_window_views_win.cc).
+  sessionHasEnded(): boolean {
+    return this.#sessionEnded;
+  }
+
   asked(byPerson: boolean): void {
     if (this.#begun) return;
     this.#begun = true;
@@ -47,8 +55,9 @@ export class Quit {
       .then(async (install) => {
         await this.#stop();
         // A session that ended meanwhile is owed nothing: an installer started now, or a Scia
-        // started again, would meet the system closing it — or the installer that asked.
-        if (this.#ended()) {
+        // started again, would meet the system closing it — or the installer that asked. Read
+        // anew after the wait.
+        if (this.sessionHasEnded()) {
           if (install) this.#steps.log.info('update_not_installed', { reason: 'session_end' });
           return;
         }
@@ -76,11 +85,6 @@ export class Quit {
     void stopped.finally(() => {
       this.#end();
     });
-  }
-
-  // Read anew after every wait: the session may have ended meanwhile.
-  #ended(): boolean {
-    return this.#sessionEnded;
   }
 
   #stop(): Promise<void> {

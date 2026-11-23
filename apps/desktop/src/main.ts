@@ -155,8 +155,13 @@ async function boot(): Promise<void> {
     onCloseRequested: () => {
       void closeRequested();
     },
+    // Electron ends the process the moment this returns, the engine with it, unless its own quit
+    // has begun (`TerminateCurrentProcessImmediately` unless `is_quitting()`,
+    // shell/browser/native_window_views_win.cc, v44): begun here, before returning, and let stand.
+    // Windows is not asked to wait.
     onSessionEnd: (reasons) => {
       quit.sessionEnded(reasons);
+      app.quit();
     },
   });
   log.info('window_starting', { theme: startingTheme, visible: window.isVisible() });
@@ -434,18 +439,19 @@ async function boot(): Promise<void> {
     log,
   });
   // Electron's own quit — closing every window — is refused every time, or the close handler,
-  // which prevents a close, would cancel the quit and be asked again.
+  // which prevents a close, would cancel the quit and be asked again. But at the end of the
+  // session: Electron ends the process the moment the window's `session-end` returns unless its
+  // own quit has begun, so the session's end begins it and lets it stand (`onSessionEnd`).
   app.on('before-quit', (event) => {
+    if (quit.sessionHasEnded()) return;
     event.preventDefault();
     quit.asked(quitAskedByPerson);
   });
-  // PROBE (#262, round 1; removed in the next commit): which of Electron's own quit events come
-  // at the end of a session.
-  app.on('will-quit', () => {
-    log.info('probe_will_quit');
-  });
-  app.on('quit', () => {
-    log.info('probe_quit');
+  // Reached only by the session's end, once the window has closed: held until Quit has seen the
+  // engine stop and ends the process itself, with `app.exit`.
+  app.on('will-quit', (event) => {
+    event.preventDefault();
+    log.info('electron_quit_held');
   });
 
   // Starting Scia again is how a person whose desktop draws no tray gets the window back — also
