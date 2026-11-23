@@ -197,7 +197,7 @@ A fallback port, and the extension finding the app by itself, when 47821 is take
 
 M3 does not wait for M2: a hoster link pasted into Scia needs nothing from it. Only the link sent by the extension leans on an extension that has not been tried in a browser yet.
 
-Integrations arrive one at a time. Each is visible in three places: an **Integrations** section in Settings that lists the services and shows which are connected; the Integrations table in the README; the release notes of the version that brings it (`feat(integrations): …`).
+Integrations arrive one at a time. Each is visible in three places: an **Integrations** section in Settings that lists the services and shows which are connected; the Integrations table in the README; the release notes of the version that brings it (`feat(integrations): …`). Every integration, with its ADRs, issues and state, is also recorded in [integrations.md](./integrations.md).
 
 AllDebrid (#7), connected once in Settings (API key kept by the operating system). From then on a hoster link pasted into Scia, or sent by the extension, is recognised, unlocked and downloaded automatically, with nothing else to do — as a direct link would be. It has to be built and proven against a simulated service; the verification with a real account is the owner's, who pastes their own key into Settings. It is built in small PRs, each with its issue. Of #7's nine points, six are ticked by merged PRs (the audit of #7, 21 November 2026); #181 is left to build; #180 is built and held by specs, not yet seen in the app ([a link that expires](#a-link-that-expires)); the README and ADR point stays open until both land.
 
