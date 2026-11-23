@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
-import { mkdir, readFile } from 'node:fs/promises';
-import { join } from 'node:path';
+import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, parse } from 'node:path';
 import { startAllDebridServer } from '@scia/server/testing/alldebrid-server.ts';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import type { ElectronApplication, Locator } from 'playwright-core';
@@ -119,6 +120,39 @@ describe('the real app, with what Settings says', () => {
     expect(Math.abs((await placeOf(change, 'middle')) - (top + bottom) / 2)).toBeLessThanOrEqual(1);
   });
 
+  // The common case: a path that fits is not cut, and starts under its label. Written right to
+  // left, its box would lay it against "Change…" but for `text-left` (round 1 of #278).
+  it("starts a folder's path that fits at the left edge of its label, uncut", async () => {
+    const profile = await run.profile();
+    // At the drive's root, where the path is short whatever the runner's profile is called.
+    const chosen = await mkdtemp(join(parse(tmpdir()).root, 'scia-e2e-'));
+    run.keep({ close: () => rm(chosen, { recursive: true, force: true }) });
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    await scia.app.evaluate(({ dialog }, folder) => {
+      dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [folder] });
+    }, chosen);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await page.getByRole('button', { name: 'Change…' }).click();
+    const path = page.getByText(chosen, { exact: true });
+    await path.waitFor();
+
+    const seen = await path.evaluate((element) => {
+      const box = element.closest('output');
+      if (box === null) throw new Error('No path in its box.');
+      return {
+        cut: box.scrollWidth > box.clientWidth,
+        path: element.getBoundingClientRect().left,
+      };
+    });
+    const label = await page
+      .getByText('Download folder', { exact: true })
+      .evaluate((element) => element.getBoundingClientRect().left);
+    // The premise: the path fits its box.
+    expect(seen.cut, JSON.stringify({ ...seen, label })).toBe(false);
+    expect(Math.abs(seen.path - label), JSON.stringify({ ...seen, label })).toBeLessThanOrEqual(1);
+  });
+
   // The captures of docs/design/ that show Settings, taken from the built app by CI (the owner's
   // decision on #143), retaken for #40's "Change…": AllDebrid not connected, a key it refused, a
   // code to confirm in both variants, and the whole dialog, AllDebrid connected, in both.
@@ -131,9 +165,11 @@ describe('the real app, with what Settings says', () => {
     );
     const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
     const { page } = scia;
-    // The clipboard is answered in main, as in clipboard.e2e: nothing of the runner's is read.
+    // The clipboard is answered in main, empty, as clipboard.e2e answers it: nothing of the
+    // runner's is read, its formats included (#277).
     await scia.app.evaluate(({ clipboard }) => {
       clipboard.readText = () => Promise.resolve('');
+      clipboard.has = () => Promise.resolve(false);
     });
     const settings = page.getByRole('dialog', { name: 'Settings' });
     const integrations = settings.getByRole('region', { name: 'Integrations' });

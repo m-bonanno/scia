@@ -88,6 +88,7 @@ export function SettingsDialog({
   const [folderRefused, setFolderRefused] = useState(false);
   const folderLabelId = useId();
   const folderPathId = useId();
+  const folderRefusalId = useId();
   const shell = bridge();
   // The betas are offered where Scia updates itself: in the app, on a system with an installer.
   const updatesItself =
@@ -215,27 +216,34 @@ export function SettingsDialog({
                     Download folder
                   </p>
                   {/* Written right to left, the box cuts a long path at its start, so that the
-                      name just chosen shows (#40); the path inside keeps its own order. */}
+                      name just chosen shows (#40); the path inside keeps its own order, and so
+                      does its tooltip, which takes the direction of what carries the title. */}
                   <output
                     id={folderPathId}
                     dir="rtl"
                     className="block truncate text-left text-sm text-muted-foreground"
-                    title={settings.downloadDirectory}
                   >
-                    <bdi dir="ltr">{settings.downloadDirectory}</bdi>
+                    <bdi dir="ltr" title={settings.downloadDirectory}>
+                      {settings.downloadDirectory}
+                    </bdi>
                   </output>
                   {folderRefused && (
-                    <p role="alert" className="text-sm text-destructive">
+                    <p id={folderRefusalId} role="alert" className="text-sm text-destructive">
                       {FOLDER_REFUSED}
                     </p>
                   )}
                 </div>
-                {/* Its one word is told what it changes by the setting beside it. The margin sets
-                    it in the middle of the label and the path, where the refusal does not move it. */}
+                {/* Its one word is told what it changes by the setting beside it, and by the
+                    refusal while there is one. The margin sets it in the middle of the label and
+                    the path, where the refusal does not move it. */}
                 {shell !== undefined && (
                   <button
                     type="button"
-                    aria-describedby={`${folderLabelId} ${folderPathId}`}
+                    aria-describedby={
+                      folderRefused
+                        ? `${folderLabelId} ${folderPathId} ${folderRefusalId}`
+                        : `${folderLabelId} ${folderPathId}`
+                    }
                     className={cn(TEXT_BUTTON, 'mt-1')}
                     onClick={changeFolder}
                   >
