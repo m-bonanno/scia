@@ -1,3 +1,4 @@
+import { ENGINE_THREADPOOL_SIZE, SETTINGS_LIMITS } from '@scia/contracts';
 import { describe, expect, it } from 'vitest';
 import { buildServerEnv } from './server-env.ts';
 
@@ -32,7 +33,24 @@ describe('buildServerEnv', () => {
       SCIA_STATIC_DIR: 'renderer',
       SCIA_VERSION: '1.0.0',
       SCIA_TEMP_DIR: 'temp',
+      UV_THREADPOOL_SIZE: String(ENGINE_THREADPOOL_SIZE),
     });
+  });
+
+  it('gives the engine a thread for every write it can have at once, and some to spare (#182)', () => {
+    const env = buildServerEnv({
+      layout,
+      apiToken: 'token',
+      port: 0,
+      version: '1.0.0',
+      systemRoot: undefined,
+      tempDir: 'temp',
+    });
+    const writesAtOnce =
+      SETTINGS_LIMITS.maxConcurrentDownloads.max * SETTINGS_LIMITS.connectionsPerDownload.max;
+    expect(Number(env.UV_THREADPOOL_SIZE)).toBeGreaterThan(writesAtOnce);
+    // libuv takes no more.
+    expect(Number(env.UV_THREADPOOL_SIZE)).toBeLessThanOrEqual(1024);
   });
 
   it('names another address for AllDebrid only when the launch gave one', () => {
