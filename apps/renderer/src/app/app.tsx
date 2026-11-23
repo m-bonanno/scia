@@ -53,7 +53,8 @@ export function App(): ReactNode {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsLayer, setSettingsLayer] = useState<SettingsLayer | null>(null);
   const [speedLimit, setSpeedLimit] = useState<number | null>(null);
-  // Whether AllDebrid is connected, from the last ask: it offers the panel of its magnets.
+  // Whether AllDebrid is connected, from the last ask: it offers the panel of its magnets, and the
+  // field names magnets.
   const [connected, setConnected] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
   // Each close of Settings, where a key may have been mended: the panel asks again at once.
@@ -368,7 +369,11 @@ export function App(): ReactNode {
       <div className="relative flex min-h-0 flex-1">
         <main className="flex min-h-0 min-w-0 flex-1 flex-col">
           <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 px-6 pt-4 pb-4">
-            <AddBar onAdd={(pasted) => add(pasted, true)} inputRef={field} />
+            <AddBar
+              onAdd={(pasted) => add(pasted, true)}
+              inputRef={field}
+              takesMagnets={connected}
+            />
             <div className="flex flex-wrap items-center justify-between gap-2">
               <FilterTabs
                 ref={filterTabs}
