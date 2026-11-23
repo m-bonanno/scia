@@ -35,9 +35,9 @@ function defaultRetryDelayMs(attempt: number): number {
 export interface BunkrOptions {
   // Scia's own, as its downloads send it: never a browser's.
   readonly userAgent: string;
-  // Replaced only by a run's local host: a spec's, or one a launch option names (`SCIA_BUNKR`).
-  readonly domains?: readonly string[];
-  readonly api?: string;
+  // A host that answers as Bunkr does, on this computer (`SCIA_BUNKR`, a spec's): Bunkr's links
+  // are those of its name, and its API is at the same path as Bunkr's. Bunkr's own otherwise.
+  readonly site?: string;
   readonly timeoutMs?: number;
   readonly retryDelayMs?: (attempt: number) => number;
 }
@@ -123,8 +123,9 @@ export class Bunkr {
 
   constructor(options: BunkrOptions) {
     this.#userAgent = options.userAgent;
-    this.#domains = options.domains ?? BUNKR_DOMAINS;
-    this.#api = options.api ?? API;
+    const site = options.site === undefined ? undefined : new URL(options.site);
+    this.#domains = site === undefined ? BUNKR_DOMAINS : [site.hostname];
+    this.#api = site === undefined ? API : new URL(new URL(API).pathname, site).href;
     this.#timeoutMs = options.timeoutMs ?? READ_LIMIT_MS;
     this.#retryDelayMs = options.retryDelayMs ?? defaultRetryDelayMs;
   }

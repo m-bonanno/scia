@@ -107,7 +107,7 @@ export async function main(
   const source = new HttpSource(userAgent);
   const manager = await DownloadManager.open({
     source,
-    bunkr: new Bunkr({ userAgent }),
+    bunkr: new Bunkr({ userAgent, ...(config.bunkr === undefined ? {} : { site: config.bunkr }) }),
     store: new JsonStateStore(join(config.dataDir, 'state.json')),
     defaultDirectory: config.downloadDir,
     logger,

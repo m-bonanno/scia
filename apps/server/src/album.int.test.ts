@@ -110,8 +110,7 @@ describe('a Bunkr album', () => {
       retryDelayMs: () => 1,
       bunkr: new Bunkr({
         userAgent: 'Scia/spec',
-        domains: ['127.0.0.1'],
-        api: on.api,
+        site: on.url,
         retryDelayMs: () => 1,
         ...(timeoutMs === undefined ? {} : { timeoutMs }),
       }),

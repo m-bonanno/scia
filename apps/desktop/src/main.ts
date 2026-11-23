@@ -112,6 +112,7 @@ async function boot(): Promise<void> {
     tempDir: app.getPath('temp'),
     alldebridApi: launch.alldebridApi,
     ytDlpReleases: launch.ytDlpReleases,
+    bunkr: launch.bunkr,
   });
   // The keys of the services the engine is connected to: the engine asks, main keeps them
   // sealed by the system (engine/key-vault.ts).
