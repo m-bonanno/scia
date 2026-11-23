@@ -189,7 +189,7 @@ describe('the installer, installed and started', () => {
     const written = await readFile(join(profile!.downloads, 'sample.bin'));
     expect(Buffer.compare(written, body)).toBe(0);
     // The decision on its end was Windows' own, asked through koffi in the installed app (ADR 0020).
-    await until(async () => /downloads_ended .*asked: 'answered'/.test(await profile!.log()));
+    await until(async () => /downloads_ended {[^}]*asked: 'answered'/.test(await profile!.log()));
   });
 
   it('quits when its window is closed with nothing to download', async () => {

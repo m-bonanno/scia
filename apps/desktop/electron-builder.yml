@@ -13,7 +13,8 @@ directories:
   output: release
   buildResources: build
 
-# main and preload are self-contained bundles: no node_modules in the asar.
+# main and preload are self-contained bundles; the one module in the asar is koffi, with its native
+# build unpacked (ADR 0020).
 files:
   - dist/**/*
   - '!dist/**/*.map'
