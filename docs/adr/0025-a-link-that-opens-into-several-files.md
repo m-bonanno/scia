@@ -39,7 +39,7 @@ The owner decided on 23 November 2026, as three questions on #181, which links, 
 6. **It is opened at once, one link at a time** (the team's). The redirector is asked for its links, then the infos of those links, a hundred to a request.
    - A link given twice is one file.
    - A file the service says nothing of — an `error` in its infos, an entry that is no link or not an http address — is counted (`unavailable`), not listed.
-   - Each entry of the infos is matched to its link, whatever the order, its scheme aside, as the documentation's example writes back `https` for `http`; an entry that names no link asked is taken by its place, the order asked.
+   - Each entry of the infos — a file or a refusal alike — is matched to its link, whatever the order, its scheme aside, as the documentation's example writes back `https` for `http`; an entry that names no link asked is taken by its place, the order asked.
    - Nothing listed is `BUNDLE_EMPTY`.
    - The redirector's two refusals, and any other refusal of a link, are `BUNDLE_REFUSED`.
    - The refusals of a key, a network or an account are said as for any link. A service that cannot be asked is asked again a few times, then the row fails `SERVICE_UNAVAILABLE`; anything else that goes wrong with the question is `SERVICE_UNAVAILABLE` too.
@@ -58,7 +58,7 @@ The owner decided on 23 November 2026, as three questions on #181, which links, 
 
 10. **The step is beside `LinkResolver.unlock`** (the team's, ADR 0005): the port gains `open(service, url)` and `hasService()`, and `Integrations` is their adapter over `AllDebrid.openLink`.
 
-11. **A file host's folder copied to the clipboard is offered "Ready"**, as any copied link, while "Take links from the clipboard" is on and a service is connected, and is opened into its files only when the person presses Start or "Start all" (the owner's, 23 November 2026). Nothing is asked of the service for a copy, as ADR 0012 asks; with no service connected a copied folder is left out, as a copied magnet is (ADR 0017). A protector's or a shortener's link copied is offered as any copied link is (the team's): only when its path names a file; started, it goes through the redirector as a pasted one does.
+11. **A file host's folder copied to the clipboard is offered "Ready"**, as any copied link, while "Take links from the clipboard" is on and a service is connected, and is opened into its files only when the person presses Start or "Start all" (the owner's, 23 November 2026), into the download folder it was copied for, as any download keeps the folder it was added with. A folder already in the list, on a row of its own, is not offered again (ADR 0012). Nothing is asked of the service for a copy, as ADR 0012 asks; with no service connected a copied folder is left out, as a copied magnet is (ADR 0017). A protector's or a shortener's link copied is offered as any copied link is (the team's): only when its path names a file; started, it goes through the redirector as a pasted one does.
 
 ## Alternatives considered
 

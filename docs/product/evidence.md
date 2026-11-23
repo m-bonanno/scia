@@ -288,7 +288,7 @@ A link that unlocks into several files shows the list before downloading (#181):
 
 **Written and covered by specs, against the simulated AllDebrid and real local hosts**:
 
-- AllDebrid's client against the simulated service: the redirector and the infos of its links, a hundred to a request; files it says nothing of counted, an entry that is no link among them; each entry of the infos matched to its link in whatever order, `https` for `http`, else by its place; nothing said as such; the first 1,000 of 1,003 listed and 3 left out, never asked about; 1,000 listed whole; its refusals; a service that cannot be asked at first; a stop.
+- AllDebrid's client against the simulated service: the redirector and the infos of its links, a hundred to a request; files it says nothing of counted, an entry that is no link among them; each entry of the infos, a refusal too, matched to its link in whatever order, `https` for `http`, else by its place; nothing said as such; the first 1,000 of 1,003 listed and 3 left out, never asked about; 1,000 listed whole; its refusals; a service that cannot be asked at first; a stop.
 - The manager, from the paste to the bytes:
   - a pasted 1fichier folder opened, its three files listed, nothing asked of a host before the choice, and the two left ticked downloaded byte for byte into a folder named after the link;
   - a link of one file downloaded straight into the download folder;
@@ -301,9 +301,9 @@ A link that unlocks into several files shows the list before downloading (#181):
   - a shortener's link fetched as it stands with no service connected;
   - each refusal;
   - a restart that keeps the files to choose from without asking, and asks again about one being opened;
-  - Remove while the service is asked, its question one that never answers; an answer that lands after Remove kept for nothing; a link removed while it waited its turn never asked about; a failure the service never said is `SERVICE_UNAVAILABLE`;
+  - Remove while the service is asked, its question one that never answers; an answer that lands after Remove kept for nothing; a link removed while it waited its turn never asked about; a refusal that lands after Remove adds nothing; a failure the service never said is `SERVICE_UNAVAILABLE`; a shortener's link whose key is refused, whose account is not premium or whose service cannot be asked fails on its row and fetches nothing;
   - a choice refused, `[0, 99]` among them, with nothing started;
-  - a copied folder offered ready while a service is connected and opened into its files at Start and at "Start all"; a copied shortener's link whose path names no file left out; a copied folder left out with no service;
+  - a copied folder offered ready while a service is connected and opened into its files at Start and at "Start all", into the folder it was copied for, and not offered again while it is on a row of its own; a copied shortener's link whose path names no file left out; a copied folder left out with no service;
   - the pasted link in no log and no answer, before and after the start, the service's links in no log and in no answer before the start; each started file a download known by the service's link.
 - The routes, for the app's token alone: the extension's add answering no download for such a link.
 - The row: every file ticked, "All files", "Download N files", the files left out counted, one press however repeated (Remove's held Enter among them), the choice held while it is on its way and given back at a refusal, Retry and Remove.
