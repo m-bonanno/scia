@@ -174,6 +174,19 @@ describe('selected text', () => {
   });
 });
 
+// A token the page names by a class (`bg-paused`) is one Tailwind knows: a class it does not know
+// it drops without a word, and the page draws nothing there (#260).
+describe('the names of the tokens', () => {
+  const named = /@theme inline\s*\{([^}]*)\}/.exec(pageRules)?.[1] ?? '';
+
+  it.each(Object.keys(tokensOf(DEFAULT_THEME, ColourScheme.Dark)))(
+    'name --%s for Tailwind',
+    (token) => {
+      expect(named).toContain(`--color-${token}: var(--${token});`);
+    },
+  );
+});
+
 // The scrollbar is the page's own, in its tokens: the system's has arrow buttons and no theme.
 describe('the scrollbar', () => {
   const groundOf = (selector: string) => {
