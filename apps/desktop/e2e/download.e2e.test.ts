@@ -39,6 +39,63 @@ describe('the real app downloads', () => {
     expect(ranges.length).toBeGreaterThan(1);
   });
 
+  it('takes every completed download off the list at the second press of "Clear completed", keeping the files (#215)', async () => {
+    const profile = await run.profile();
+    const first = randomBytes(1024 * 1024);
+    const second = randomBytes(1024 * 1024);
+    const one = run.keep(await startRangeServer({ body: first, fileName: 'one.bin' }));
+    const two = run.keep(await startRangeServer({ body: second, fileName: 'two.bin' }));
+    // Slow enough to be paused while it runs.
+    const slow = run.keep(
+      await startRangeServer({
+        body: randomBytes(8 * 1024 * 1024),
+        fileName: 'slow.bin',
+        chunkBytes: 16 * 1024,
+        chunkDelayMs: 40,
+      }),
+    );
+    const { page } = await run.launch(profile);
+    await paste(page, one.url, two.url, slow.url);
+    await until(async () =>
+      (await downloadsOf(page)).some(
+        (download) => download.fileName === 'slow.bin' && download.downloadedBytes > 0,
+      ),
+    );
+    await rowOf(page, 'slow.bin').getByRole('button', { name: 'Pause' }).click();
+    await until(async () => {
+      const statuses = (await downloadsOf(page)).map((download) => download.status).sort();
+      return (
+        JSON.stringify(statuses) ===
+        JSON.stringify(
+          [DownloadStatus.Completed, DownloadStatus.Completed, DownloadStatus.Paused].sort(),
+        )
+      );
+    });
+
+    const clear = page.getByRole('button', { name: 'Clear completed' });
+    await clear.focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Clear 2 completed' }).waitFor();
+    expect((await downloadsOf(page)).length).toBe(3);
+    await page.keyboard.press('Enter');
+
+    await page.getByRole('button', { name: /^Clear/ }).waitFor({ state: 'detached' });
+    const left = await downloadsOf(page);
+    expect(left.map((download) => [download.fileName, download.status])).toEqual([
+      ['slow.bin', DownloadStatus.Paused],
+    ]);
+    await rowOf(page, 'one.bin').waitFor({ state: 'detached' });
+    expect(await rowOf(page, 'slow.bin').count()).toBe(1);
+    expect(Buffer.compare(await readFile(join(profile.downloads, 'one.bin')), first)).toBe(0);
+    expect(Buffer.compare(await readFile(join(profile.downloads, 'two.bin')), second)).toBe(0);
+    // The focus it held goes to the filter in use, beside it.
+    expect(
+      await page
+        .getByRole('button', { name: /^All/ })
+        .evaluate((tab) => tab === document.activeElement),
+    ).toBe(true);
+  });
+
   it.runIf(process.platform === 'win32')(
     "makes the part file of a download sparse with the system's own fsutil, so that a large file starts at once (#182)",
     async () => {

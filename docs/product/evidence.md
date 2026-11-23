@@ -213,6 +213,14 @@ The first writes' 61 ms include `fsutil` and the look at the room. `fsutil spars
 
 **Not seen**: a hand pressing the button in a packaged build, and the default browser showing Ko-fi (among "The owner's hands"); the failure line with no browser to take the page; the repository's "Sponsor" button, which GitHub shows once `FUNDING.yml` is on the default branch.
 
+### Clearing completed downloads
+
+#215. With 169 completed downloads, the owner had one × per row to take them off the list (22 November 2026). "Clear completed" is beside the filters while any download is completed, whatever the filter, after "Start all" when both are there. It asks once more in place — "Clear 169 completed", also for one (the team's: the issue left one press or two to the product designer, and rows a press takes away together are not brought back) — and its second press takes every completed download off the list in one request, `POST /downloads/clear-completed` (the app's token only, `204`), one change and one save of `state.json` however many rows go. The files stay on the disk, as a row's own × leaves a finished file; nothing running, waiting, paused, failed or ready changes. Leaving under the focus, it hands the focus to the filter in use.
+
+**Written, covered by specs** — in the engine, beside a failed and a paused download, two finished ones leave in one change and one save, their files byte for byte where they were and the paused one's part file kept; with none finished, nothing changes and nothing is saved; the route answers the app's token alone (401 with none, 403 for the extension's), `204` with no body. In the page: the button only while a download is completed, under every filter; the count in its question; a double click that asks and does not answer itself; a refusal said as a notice; the focus handed to the filter in use when the button leaves under it, and not moved when it did not hold it — a press that does not take the focus, and the last completed row removed by its own ×. **Written for CI's E2E suite on the built app** (`download.e2e.test.ts`): two finished files and a paused one, the button reached by the keyboard, its question, then the two rows gone, the paused one left, both files byte for byte on the disk, and the focus on "All".
+
+**Not seen**: a hand on it in the app; a list of 169 rows cleared at once (the specs and the suite clear two); "Clear failed", which the issue leaves for later (not built); a group of #214 whose files are all completed leaving as one (#214 is not built).
+
 ## M2 — The whole extension
 
 ### Tried in browsers

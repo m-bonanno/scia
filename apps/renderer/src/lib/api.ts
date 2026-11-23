@@ -94,6 +94,9 @@ export const api = {
     request(`/downloads/${encodeURIComponent(id)}/start`, downloadSchema, { method: 'POST' }),
   startReady: (): Promise<Download[]> =>
     request('/downloads/start-ready', z.array(downloadSchema), { method: 'POST' }),
+  // Every completed download off the list, the files kept (#215).
+  clearCompleted: (): Promise<void> =>
+    request('/downloads/clear-completed', null, { method: 'POST' }),
   pause: (id: string): Promise<Download> =>
     request(`/downloads/${encodeURIComponent(id)}/pause`, downloadSchema, { method: 'POST' }),
   resume: (id: string): Promise<Download> =>

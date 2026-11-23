@@ -735,6 +735,15 @@ export class DownloadManager {
     this.#schedule();
   }
 
+  // Every finished download leaves the list at once, its file kept, in one change and one save
+  // (#215): a remove of each would save the list once per row.
+  clearCompleted(): void {
+    const kept = this.#records.filter((record) => record.status !== DownloadStatus.Completed);
+    if (kept.length === this.#records.length) return;
+    this.#records.splice(0, this.#records.length, ...kept);
+    this.#changed();
+  }
+
   settings(): Settings {
     return this.#settings;
   }

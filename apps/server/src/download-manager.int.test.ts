@@ -807,6 +807,79 @@ describe('DownloadManager', () => {
     expect(await readdir(join(folder.path, 'downloads'))).toEqual([keptName]);
   });
 
+  it('takes every finished download off the list in one change, keeps their files, and touches nothing else (#215)', async () => {
+    const finished = await host();
+    const slow = await host({ chunkDelayMs: 5, fileName: 'slow.bin' });
+    const gone = await host({ status: 404 });
+    const store = new JsonStateStore(join(folder.path, 'data', 'state.json'));
+    const saved: string[][] = [];
+    const downloads = await open({
+      store: {
+        load: () => store.load(),
+        save: (state) => {
+          saved.push(state.downloads.map((download) => download.id));
+          return store.save(state);
+        },
+      },
+    });
+    const [first, second] = downloads.add({ urls: [finished.url, finished.url] });
+    const [failed] = downloads.add({ urls: [gone.url] });
+    const [paused] = downloads.add({ urls: [slow.url] });
+    await until(() => downloads.find(paused!.id).downloadedBytes > 0);
+    await downloads.pause(paused!.id);
+    await until(
+      () =>
+        statusOf(downloads, first!.id) === DownloadStatus.Completed &&
+        statusOf(downloads, second!.id) === DownloadStatus.Completed &&
+        statusOf(downloads, failed!.id) === DownloadStatus.Failed,
+    );
+    const names = [first, second].map((added) => downloads.find(added!.id).fileName).sort();
+    const version = await downloads.nextChange(-1);
+    const savesBefore = saved.length;
+
+    downloads.clearCompleted();
+
+    expect(downloads.snapshot().downloads.map((download) => download.id)).toEqual([
+      failed!.id,
+      paused!.id,
+    ]);
+    expect(downloads.find(paused!.id).status).toBe(DownloadStatus.Paused);
+    expect(downloads.find(failed!.id).status).toBe(DownloadStatus.Failed);
+    expect(await downloads.nextChange(-1)).toBe(version + 1);
+    expect(saved.slice(savesBefore)).toEqual([[failed!.id, paused!.id]]);
+    const left = await readdir(join(folder.path, 'downloads'));
+    expect(left.filter((name) => names.includes(name)).sort()).toEqual(names);
+    for (const name of names) {
+      expect(Buffer.compare(await readFile(inDownloads(name)), body)).toBe(0);
+    }
+    expect(left).toContain('slow.bin.scia');
+  });
+
+  it('changes nothing, and saves nothing, when no download is finished', async () => {
+    const { url } = await host({ status: 404 });
+    const store = new JsonStateStore(join(folder.path, 'data', 'state.json'));
+    let saves = 0;
+    const downloads = await open({
+      store: {
+        load: () => store.load(),
+        save: (state) => {
+          saves += 1;
+          return store.save(state);
+        },
+      },
+    });
+    const [failed] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, failed!.id) === DownloadStatus.Failed);
+    const version = await downloads.nextChange(-1);
+    const savesBefore = saves;
+
+    downloads.clearCompleted();
+
+    expect(downloads.snapshot().downloads.map((download) => download.id)).toEqual([failed!.id]);
+    expect(await downloads.nextChange(-1)).toBe(version);
+    expect(saves).toBe(savesBefore);
+  });
+
   it('says why a download failed, and resumes it when asked', async () => {
     const { url } = await host({ status: 404 });
     const downloads = await open();

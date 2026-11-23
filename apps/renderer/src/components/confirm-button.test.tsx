@@ -182,4 +182,30 @@ describe('ConfirmButton', () => {
     await userEvent.dblClick(screen.getByRole('button', { name: 'Open' }));
     expect(onConfirm).toHaveBeenCalledTimes(2);
   });
+
+  it('as a word beside other text buttons, is named by its word and asks in place (#215)', async () => {
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmButton
+        shape="word"
+        label="Clear completed"
+        confirmLabel="Clear 3 completed"
+        onConfirm={onConfirm}
+      >
+        Clear completed
+      </ConfirmButton>,
+    );
+    const button = screen.getByRole('button', { name: 'Clear completed' });
+    // Its word says it: no tooltip repeats it.
+    expect(button).not.toHaveAttribute('title');
+    expect(button).not.toHaveAttribute('aria-label');
+
+    await userEvent.click(button);
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(button).toHaveAccessibleName('Clear 3 completed');
+    await userEvent.click(button);
+
+    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(button).toHaveAccessibleName('Clear completed');
+  });
 });

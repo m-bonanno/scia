@@ -17,6 +17,7 @@ A download manager for Windows: paste a link, and Scia fetches it over several c
 - ⚡ **Several connections at once** for any http or https link.
 - ⏯️ **Pause and resume**, also after Scia was closed and opened again.
 - 🚦 **A queue**: simultaneous downloads, connections per download, a speed limit.
+- 🧹 **Clear completed**: every finished download off the list at once; the files stay.
 - 🖥️ **The system tray**: close the window, and the downloads go on.
 - 🔔 **Notifications** when a download completes or fails.
 - 🎨 **Nine colour themes**, each light and dark, following the system.

@@ -1,6 +1,6 @@
 import { type ReactNode, type Ref, useEffect, useImperativeHandle, useRef, useState } from 'react';
 import { cn } from '@/lib/cn.ts';
-import { FOCUS_RING, ICON_BUTTON } from './button-styles.ts';
+import { FOCUS_RING, ICON_BUTTON, TEXT_BUTTON } from './button-styles.ts';
 import { useOnePress } from './one-press.ts';
 
 const CONFIRM_FOR_MS = 3000;
@@ -21,6 +21,8 @@ interface ConfirmButtonProps {
   readonly confirmLabel: string | undefined;
   // The second press throws something away: it says so in the colour of what cannot be undone.
   readonly destructive?: boolean;
+  // An icon by default; a word beside other text buttons, named by that word, its children.
+  readonly shape?: 'icon' | 'word';
   readonly onConfirm: () => void;
   readonly children: ReactNode;
   readonly ref?: Ref<ConfirmButtonHandle>;
@@ -41,6 +43,7 @@ export function ConfirmButton({
   label,
   confirmLabel,
   destructive = false,
+  shape = 'icon',
   onConfirm,
   children,
   ref,
@@ -80,8 +83,8 @@ export function ConfirmButton({
     <button
       type="button"
       ref={element}
-      aria-label={asking ? undefined : label}
-      title={asking ? undefined : label}
+      aria-label={asking || shape === 'word' ? undefined : label}
+      title={asking || shape === 'word' ? undefined : label}
       className={
         asking
           ? cn(
@@ -91,7 +94,9 @@ export function ConfirmButton({
                 : 'bg-tonal text-foreground',
               FOCUS_RING,
             )
-          : ICON_BUTTON
+          : shape === 'word'
+            ? TEXT_BUTTON
+            : ICON_BUTTON
       }
       onKeyDown={press.onKeyDown}
       onClick={(event) => {
