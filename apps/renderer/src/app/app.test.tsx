@@ -729,6 +729,40 @@ describe('App', () => {
       expect(links).toHaveBeenCalledExactlyOnceWith(['https://example.com/a.zip']);
     });
 
+    // A magnet goes nowhere without a service: the field names magnets only while one is connected,
+    // as the page last learned it (#150).
+    it("names magnets in the field's placeholder only while a service is connected", async () => {
+      const integrations = vi.spyOn(api, 'integrations').mockResolvedValue([alldebrid(true)]);
+      render(<App />);
+      const field = screen.getByRole('textbox', { name: 'Links to download' });
+      await vi.waitFor(() => {
+        expect(field).toHaveAttribute('placeholder', 'Paste links or magnets');
+      });
+
+      integrations.mockResolvedValue([alldebrid(false)]);
+      await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      await userEvent.click(
+        within(await screen.findByRole('dialog', { name: 'Settings' })).getByRole('button', {
+          name: 'Close',
+        }),
+      );
+      await vi.waitFor(() => {
+        expect(field).toHaveAttribute('placeholder', 'Paste one or more links');
+      });
+    });
+
+    it('says only links in the placeholder while no service is connected', async () => {
+      render(<App />);
+      await vi.waitFor(() => {
+        expect(api.integrations).toHaveBeenCalled();
+      });
+
+      expect(screen.getByRole('textbox', { name: 'Links to download' })).toHaveAttribute(
+        'placeholder',
+        'Paste one or more links',
+      );
+    });
+
     it('counts on its button what the field sends: files, or links with a magnet among them', async () => {
       render(<App />);
       const field = screen.getByRole('textbox', { name: 'Links to download' });
