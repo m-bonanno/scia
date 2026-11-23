@@ -69,7 +69,9 @@ describe('the real app, with what Settings says', () => {
   // in the middle of the label and the path beside it.
   it("cuts a long folder's path at its start, so that the name just chosen shows beside Change…", async () => {
     const profile = await run.profile();
-    const name = 'Films chosen last';
+    // Ending in a neutral character, which a right-to-left box would move to its left end were the
+    // path not kept in its own order (the frontend engineer, round 1 of #278).
+    const name = 'Films chosen last_';
     const chosen = join(
       profile.path,
       'a-folder-whose-name-is-long-enough-to-be-cut',
