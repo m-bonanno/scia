@@ -62,18 +62,24 @@ describe('a paused bar', () => {
       const drawn = await rowOf(page, 'paused.bin').evaluate((row) => {
         const stretches = [...row.querySelectorAll<HTMLElement>('[role="progressbar"] > div')];
         const stretch = stretches.find((element) => element.getBoundingClientRect().width > 0);
+        // The token as the page resolves it: the built stylesheet writes it in its shortest form
+        // (`gray` for #808080), so it is read through an element that wears it.
+        const probe = document.createElement('div');
+        probe.style.backgroundColor = 'var(--paused)';
+        document.body.append(probe);
+        const token = getComputedStyle(probe).backgroundColor;
+        probe.remove();
         return {
           fill: stretch === undefined ? null : getComputedStyle(stretch).backgroundColor,
-          token: getComputedStyle(document.documentElement).getPropertyValue('--paused').trim(),
+          token,
         };
       });
 
-      // Only these forms are read: a colour in another one (`oklab(…)`, a transparent `rgba`)
+      // Only this form is compared: a colour in another one (`oklab(…)`, a transparent `rgba`)
       // would be compared as something it is not (.claude/gotchas.md, #246).
-      expect(drawn.token).toMatch(/^#[0-9a-f]{6}$/i);
+      expect(drawn.token).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
       expect(drawn.fill).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
-      const [red, green, blue] = [1, 3, 5].map((at) => parseInt(drawn.token.slice(at, at + 2), 16));
-      expect(drawn.fill).toBe(`rgb(${String(red)}, ${String(green)}, ${String(blue)})`);
+      expect(drawn.fill).toBe(drawn.token);
     },
   );
 
@@ -86,13 +92,7 @@ describe('a paused bar', () => {
     const report = run.keep(
       await startRangeServer({ body: randomBytes(6 * MIB), fileName: 'Annual report 2026.pdf' }),
     );
-    const photos = run.keep(
-      await startRangeServer({
-        body: Buffer.alloc(0),
-        fileName: 'Holiday photos.zip',
-        status: 404,
-      }),
-    );
+    const photos = run.keep(await startRangeServer({ body: Buffer.alloc(0), status: 404 }));
     const concert = await slowHost(run, 'Live concert.flac', { ranges: false });
     const setup = await slowHost(run, 'old-setup.exe');
     const scia = await run.launch(profile);
@@ -109,7 +109,8 @@ describe('a paused bar', () => {
     await rowOf(page, 'Annual report 2026.pdf')
       .getByRole('button', { name: 'Show in folder' })
       .waitFor({ timeout: 30_000 });
-    await paste(page, photos.url);
+    // A refusal carries no name of the file: the row takes it from the address.
+    await paste(page, photos.url.replace(/[^/]+$/, 'Holiday%20photos.zip'));
     await rowOf(page, 'Holiday photos.zip')
       .getByText('The file is no longer at this address.')
       .waitFor({ timeout: 30_000 });
