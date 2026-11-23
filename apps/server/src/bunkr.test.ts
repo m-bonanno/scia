@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { apiOf, Bunkr } from './bunkr.ts';
+import { apiOf, Bunkr, defaultRetryDelayMs } from './bunkr.ts';
+
+describe("the reader's waits", () => {
+  // ADR 0024 point 4: a busy Bunkr is asked again after 1, 2 and 4 s, never at once.
+  it('waits a second before the first retry, and twice as long before each after it', () => {
+    expect([1, 2, 3].map(defaultRetryDelayMs)).toEqual([1000, 2000, 4000]);
+  });
+});
 
 // Where a run's reader asks, read back with nothing sent: a mutant of these lines would point the
 // integration specs at Bunkr itself (.claude/gotchas.md, Specs).

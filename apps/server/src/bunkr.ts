@@ -28,7 +28,7 @@ const REDIRECTS = new Set([301, 302, 303, 307, 308]);
 const ATTEMPTS = 4;
 const RETRY_AFTER_LIMIT_MS = 60_000;
 
-function defaultRetryDelayMs(attempt: number): number {
+export function defaultRetryDelayMs(attempt: number): number {
   return Math.min(8000, 1000 * 2 ** (attempt - 1));
 }
 
@@ -144,7 +144,8 @@ export class Bunkr {
   }
 
   // Its files, each by its page on the host the album was read at. Rejects with a RemoteError that
-  // says why not — also at a stop, which `#settle` reads as the stop it is, from its intent.
+  // says why not; at a stop, with that or with the abort of a retry's wait — `#settle` reads a
+  // stop from its intent, whichever it is.
   async readAlbum(url: string, signal: AbortSignal): Promise<Album> {
     const link = bunkrLinkOf(url, this.#domains);
     if (link?.kind !== 'album') throw unreadable('Not an album of Bunkr.');

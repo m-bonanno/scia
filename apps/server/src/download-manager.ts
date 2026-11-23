@@ -253,16 +253,15 @@ function isAnotherFile(record: DownloadRecord, remote: RemoteFile): boolean {
 
 // A refusal from the address a site gave a file at this run (docs/adr/0024): the row says that
 // address stopped working, not the link the person pasted, and that a retry asks for a new one.
-// Only a refusal that cannot heal, a 4xx: a busy server (5xx, 429, 408, 425, a 204) is no dead
-// link, and keeps the sentence of a busy server, as does a host that ignored a range (a 200).
+// Only a refusal that cannot heal, a 4xx: a busy server (5xx, 429, 408, 425, a 204 — what
+// `HttpSource` marks retryable) is no dead link, and keeps the sentence of a busy server, as does
+// a host that ignored a range (a 200).
 function ofTheSitesLink(error: unknown): unknown {
   if (
     !(error instanceof RemoteError) ||
-    error.failure !== DownloadFailure.HttpStatus ||
     error.retryable ||
     error.status === null ||
-    error.status < 400 ||
-    error.status >= 500
+    error.status < 400
   ) {
     return error;
   }

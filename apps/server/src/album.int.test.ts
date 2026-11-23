@@ -668,6 +668,67 @@ describe('a Bunkr album', () => {
     expect((again?.atMs ?? 0) - (refused?.atMs ?? 0)).toBeGreaterThanOrEqual(950);
   });
 
+  it('says of a file server that stopped serving ranges what it says of any, not that the link stopped working', async () => {
+    const files: SimulatedFile[] = [
+      {
+        id: '1',
+        slug: 'norange',
+        original: 'norange.bin',
+        link: await host(notes, { ignoresRangesAfterProbe: true }),
+      },
+    ];
+    const on = await bunkr({ albums: { x: { files } } });
+    const downloads = await open(on);
+
+    const [file] = downloads.add({ urls: [`${on.url}/f/norange`] });
+
+    expect(await failureOf(downloads, file!.id)).toBe(DownloadFailure.HttpStatus);
+    expect(downloads.find(file!.id).failureStatus).toBe(200);
+  });
+
+  // A site that asks for a wait of 30 s: the reader is waiting once it has asked for Scia's own
+  // delay, the step just before the wait.
+  async function waitingOn429(): Promise<{ on: BunkrServer; downloads: DownloadManager }> {
+    const on = await bunkr({ troubles: { '/a/AbCd12': [{ status: 429, retryAfter: '30' }] } });
+    let waiting = false;
+    const downloads = await open(on, {
+      bunkr: new Bunkr({
+        userAgent: 'Scia/spec',
+        site: on.url,
+        retryDelayMs: () => {
+          waiting = true;
+          return 1;
+        },
+      }),
+    });
+    downloads.add({ urls: [`${on.url}/a/AbCd12`] });
+    await until(() => waiting);
+    return { on, downloads };
+  }
+
+  it("pauses an album while the reader waits out a site's Retry-After, at once and asking nothing more", async () => {
+    const { on, downloads } = await waitingOn429();
+    const [album] = downloads.snapshot().downloads;
+
+    const startedAt = performance.now();
+    await downloads.pause(album!.id);
+
+    expect(performance.now() - startedAt).toBeLessThan(1000);
+    expect(downloads.find(album!.id).status).toBe(DownloadStatus.Paused);
+    expect(on.asked.filter(({ path }) => path === '/a/AbCd12')).toHaveLength(1);
+  });
+
+  it("closes the engine while the reader waits out a site's Retry-After, at once and asking nothing more", async () => {
+    const { on, downloads } = await waitingOn429();
+
+    const startedAt = performance.now();
+    await downloads.close();
+    manager = undefined;
+
+    expect(performance.now() - startedAt).toBeLessThan(1000);
+    expect(on.asked.filter(({ path }) => path === '/a/AbCd12')).toHaveLength(1);
+  });
+
   it('says that a site that does not answer in time is busy', async () => {
     const on = await bunkr({ delayMs: 400 });
     const downloads = await open(on, { timeoutMs: 100 });
