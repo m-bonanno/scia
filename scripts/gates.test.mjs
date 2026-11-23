@@ -34,10 +34,16 @@ describe('runGates', () => {
 });
 
 describe('npmRun', () => {
-  afterEach(() => vi.restoreAllMocks());
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+  });
 
-  it('starts the gate without colour', async () => {
+  it('starts the gate without colour, whatever the shell asked for', async () => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
+    // The opposite of what the gates set: a shell that exports them would hide a gate that does not.
+    vi.stubEnv('NO_COLOR', '');
+    vi.stubEnv('FORCE_COLOR', '1');
     let environment;
     const spawn = (_command, options) => {
       environment = options.env;
