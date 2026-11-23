@@ -137,6 +137,13 @@ export const SETTINGS_LIMITS = {
   speedLimitBytesPerSecond: { min: 64 * 1024 },
 } as const;
 
+// The threads the engine's Node gives the disk (`UV_THREADPOOL_SIZE`, read once, when the
+// process starts): one for each write its downloads can have at once — each connection waits
+// for its own — and four to spare, so that a save of `state.json` or a file of the page never
+// waits behind a slow write (#182). Node gives four, and takes no more than 1024.
+export const ENGINE_THREADPOOL_SIZE =
+  SETTINGS_LIMITS.maxConcurrentDownloads.max * SETTINGS_LIMITS.connectionsPerDownload.max + 4;
+
 export const settingsSchema = z.object({
   maxConcurrentDownloads: z
     .number()

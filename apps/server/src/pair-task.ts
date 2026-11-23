@@ -3,6 +3,7 @@ import { downloadedBytes, type Segment } from '@scia/core';
 import { DownloadTask, type TaskOptions } from './download-task.ts';
 import { joinIntoMp4 } from './mp4-join.ts';
 import { DiskError, type RemoteSource, type RequestHeaders } from './remote-source.ts';
+import type { MarkSparse } from './sparse-file.ts';
 import type { Allowance } from './throttle.ts';
 
 // Where a pair's two files wait beside the part file until they are joined.
@@ -28,6 +29,8 @@ export interface PairTaskOptions {
   readonly onBytes: (count: number) => void;
   readonly allowance?: (expectedBytes: number | null) => Allowance;
   readonly retryDelayMs?: (attempt: number) => number;
+  // Asked of each of the two files when it is made (sparse-file.ts).
+  readonly markSparse?: MarkSparse;
 }
 
 const shifted = (segments: readonly Segment[], by: number): Segment[] =>
@@ -72,6 +75,7 @@ export class PairTask {
       onBytes: options.onBytes,
       ...(options.allowance === undefined ? {} : { allowance: options.allowance }),
       ...(options.retryDelayMs === undefined ? {} : { retryDelayMs: options.retryDelayMs }),
+      ...(options.markSparse === undefined ? {} : { markSparse: options.markSparse }),
     });
     const ranged = split !== null && options.sound.totalBytes !== null;
     this.#picture = new DownloadTask(
