@@ -38,6 +38,8 @@ const MESSAGES: Readonly<Record<string, string>> = {
   MAGNET_TOO_LARGE: 'Magnet files are too large (max 1TB)',
   MAGNET_MUST_BE_PREMIUM: 'You must be premium to use this feature',
   PIN_INVALID: 'This endpoint check parameter is invalid',
+  REDIRECTOR_NOT_SUPPORTED: 'Redirector not supported',
+  REDIRECTOR_ERROR: 'Could not extract links',
 };
 
 const ROUTES: readonly string[] = [
@@ -46,12 +48,18 @@ const ROUTES: readonly string[] = [
   'GET /v4.1/user/hosts',
   'POST /v4/link/unlock',
   'POST /v4/link/delayed',
+  'POST /v4/link/redirector',
+  'POST /v4/link/infos',
   'GET /v4.1/pin/get',
   'POST /v4/pin/check',
   'POST /v4/magnet/upload',
   'POST /v4.1/magnet/status',
   'POST /v4/magnet/files',
 ];
+
+// What the links the redirector gives begin with, as its documentation shows them: they work with
+// the unlock and the infos of a link alone, whatever host they lead to.
+export const REDIRECT_LINKS = 'https://redirect.alldebrid.com/';
 
 // Where the service has a person confirm a code, as its documentation gives it.
 const CODE_PAGE = 'https://alldebrid.com/pin/';
@@ -73,6 +81,8 @@ export interface UnlockableLink {
   // The direct link it gives: a local test host's.
   readonly direct: string;
   readonly filename?: string;
+  // The size the infos of the link give; 0 if absent.
+  readonly size?: number;
   // The link is not ready at once: the service gives a "delayed" id, and says "still
   // processing" this many times before it gives the link — or says it could not, if `fails`.
   readonly delayedPolls?: number;
@@ -139,6 +149,17 @@ export interface AllDebridServerOptions {
   // What it also lists to anyone besides its file hosts: sites of videos, shorteners of links.
   readonly streams?: readonly string[];
   readonly redirectors?: readonly string[];
+  // What its redirector opens a link into (#181): the links it gives — links of the service's own,
+  // unlocked as any of `links`, or whatever else an answer may hold — or one of its refusals, by
+  // its code. A link that is not here is one it does not open.
+  readonly redirects?: Readonly<Record<string, readonly unknown[] | { readonly error: string }>>;
+  // How the infos of links are answered: in the order asked unless `reversed`, each naming the
+  // link it is of as the service writes it — an `http` link as `https`, as the documentation's
+  // example does — unless `linkAs` writes it otherwise.
+  readonly infosAnswer?: {
+    readonly reversed?: boolean;
+    readonly linkAs?: (asked: string) => string;
+  };
   // The links it knows, by address. A link of one of its hosts that is not here is "down".
   readonly links?: Readonly<Record<string, SimulatedLink>>;
   // The HTTP status that goes with a refused key. The documentation says both that some errors
@@ -255,7 +276,12 @@ function isPremium(account: SimulatedAccount): boolean {
   return account.premium ?? (account.premiumUntil ?? 0) > 0;
 }
 
+function asTheServiceWrites(link: string): string {
+  return link.replace(/^http:/, 'https:');
+}
+
 function hostOf(link: string, options: AllDebridServerOptions): string | undefined {
+  if (asTheServiceWrites(link).startsWith(REDIRECT_LINKS)) return 'redirect';
   if (!URL.canParse(link)) return undefined;
   const { hostname } = new URL(link);
   return Object.entries(options.hosts ?? {}).find(([, domains]) =>
@@ -389,6 +415,44 @@ export async function startAllDebridServer(
     } else {
       succeed(response, { status: 2, time_left: 0, link: waiting.link.direct });
     }
+  }
+
+  function redirect(response: ServerResponse, link: string | undefined): void {
+    if (link === undefined || link === '') {
+      refuse(response, 200, 'LINK_IS_MISSING');
+      return;
+    }
+    const opened = options.redirects?.[link];
+    if (opened === undefined) refuse(response, 200, 'REDIRECTOR_NOT_SUPPORTED');
+    else if ('error' in opened) refuse(response, 200, opened.error);
+    else succeed(response, { links: opened });
+  }
+
+  // Each link answered on its own: what its host calls the file and its size, or why not.
+  function infos(response: ServerResponse, links: readonly string[]): void {
+    if (links.length === 0) {
+      refuse(response, 200, 'LINK_IS_MISSING');
+      return;
+    }
+    const { reversed = false, linkAs = asTheServiceWrites } = options.infosAnswer ?? {};
+    const answered = links.map((asked) => {
+      const host = hostOf(asked, options);
+      const known = options.links?.[asked];
+      const link = linkAs(asked);
+      if (host === undefined || known === undefined || 'error' in known) {
+        const refused = known !== undefined && 'error' in known ? known.error : 'LINK_DOWN';
+        const code = host === undefined ? 'LINK_HOST_NOT_SUPPORTED' : refused;
+        return { link, error: { code, message: MESSAGES[code] ?? '' } };
+      }
+      return {
+        link,
+        filename: known.filename ?? 'file.bin',
+        size: known.size ?? 0,
+        host,
+        hostDomain: options.hosts?.[host]?.[0] ?? host,
+      };
+    });
+    succeed(response, { infos: reversed ? answered.toReversed() : answered });
   }
 
   function giveCode(response: ServerResponse): void {
@@ -597,6 +661,10 @@ export async function startAllDebridServer(
         magnetFiles(response, lists['id[]'] ?? []);
       } else if (route === 'POST /v4/link/unlock') {
         unlock(response, account, form.link);
+      } else if (route === 'POST /v4/link/redirector') {
+        redirect(response, form.link);
+      } else if (route === 'POST /v4/link/infos') {
+        infos(response, lists['link[]'] ?? []);
       } else {
         delayed(response, form.id);
       }

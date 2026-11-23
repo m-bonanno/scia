@@ -1,4 +1,5 @@
 export * from './album.ts';
+export * from './bundle.ts';
 export * from './download.ts';
 export * from './file-kind.ts';
 export * from './file-name.ts';

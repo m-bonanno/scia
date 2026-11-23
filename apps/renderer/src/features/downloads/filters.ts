@@ -17,12 +17,13 @@ export function matchesFilter(filter: Filter, status: DownloadStatus): boolean {
   return filter === Filter.Completed ? completed : !completed;
 }
 
-// A magnet is in the list and not finished, whatever the service does with it (#137).
-export function countByFilter(downloads: readonly Download[], magnets = 0): Record<Filter, number> {
+// What waits on the service or on a choice — a magnet (#137), a link that opens into several files
+// (#181) — is in the list and not finished, whatever the service does with it.
+export function countByFilter(downloads: readonly Download[], waiting = 0): Record<Filter, number> {
   const completed = downloads.filter((d) => d.status === DownloadStatus.Completed).length;
   return {
-    all: downloads.length + magnets,
-    active: downloads.length - completed + magnets,
+    all: downloads.length + waiting,
+    active: downloads.length - completed + waiting,
     completed,
   };
 }

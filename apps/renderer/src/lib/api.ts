@@ -3,6 +3,8 @@ import {
   accountMagnetSchema,
   API_PREFIX,
   ApiErrorCode,
+  type Bundle,
+  bundleSchema,
   type Download,
   downloadSchema,
   errorEnvelopeSchema,
@@ -78,6 +80,16 @@ export const api = {
     request(`/magnets/${encodeURIComponent(id)}/retry`, magnetSchema, { method: 'POST' }),
   removeMagnet: (id: string): Promise<void> =>
     request(`/magnets/${encodeURIComponent(id)}`, null, { method: 'DELETE' }),
+  // A link that opens into several files (#181): the files chosen, by their place in its list.
+  startBundle: (id: string, files: readonly number[]): Promise<Download[]> =>
+    request(`/bundles/${encodeURIComponent(id)}/start`, z.array(downloadSchema), {
+      method: 'POST',
+      body: JSON.stringify({ files }),
+    }),
+  retryBundle: (id: string): Promise<Bundle> =>
+    request(`/bundles/${encodeURIComponent(id)}/retry`, bundleSchema, { method: 'POST' }),
+  removeBundle: (id: string): Promise<void> =>
+    request(`/bundles/${encodeURIComponent(id)}`, null, { method: 'DELETE' }),
   start: (id: string): Promise<Download> =>
     request(`/downloads/${encodeURIComponent(id)}/start`, downloadSchema, { method: 'POST' }),
   startReady: (): Promise<Download[]> =>

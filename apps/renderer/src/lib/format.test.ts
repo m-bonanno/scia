@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { formatBytes, formatDuration, formatPercent, formatSpeed } from './format.ts';
+import { formatBytes, formatCount, formatDuration, formatPercent, formatSpeed } from './format.ts';
+
+describe('formatCount', () => {
+  it('counts in whole numbers, its thousands grouped', () => {
+    expect(formatCount(1)).toBe('1');
+    expect(formatCount(1000)).toBe('1,000');
+  });
+});
 
 const MIB = 1024 * 1024;
 

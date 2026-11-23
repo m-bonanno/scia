@@ -15,6 +15,7 @@ import {
   type Pairing,
   settingsPatchSchema,
   SNAPSHOT_EVENT,
+  startBundleSchema,
 } from '@scia/contracts';
 import type { Theme } from '@scia/contracts/theme';
 import { isServiceFailure, ServiceFailure, UnlockFailure } from '@scia/core';
@@ -200,6 +201,25 @@ export function createApp(deps: AppDeps): Hono {
 
   app.delete(`${API_PREFIX}/magnets/:id`, (c) => {
     manager.removeMagnet(c.req.param('id'));
+    return c.body(null, 204);
+  });
+
+  // A link that opens into several files (#181; docs/adr/0025): the files the person chose, by
+  // their place in its list, become downloads.
+  app.post(`${API_PREFIX}/bundles/:id/start`, async (c) => {
+    const parsed = startBundleSchema.safeParse(await c.req.json().catch(() => null));
+    if (!parsed.success) {
+      return fail(400, ApiErrorCode.InvalidRequest, 'Choose one or more of its files.');
+    }
+    return c.json({ data: manager.startBundle(c.req.param('id'), parsed.data.files) }, 201);
+  });
+
+  app.post(`${API_PREFIX}/bundles/:id/retry`, (c) =>
+    c.json({ data: manager.retryBundle(c.req.param('id')) }),
+  );
+
+  app.delete(`${API_PREFIX}/bundles/:id`, (c) => {
+    manager.removeBundle(c.req.param('id'));
     return c.body(null, 204);
   });
 
