@@ -14,7 +14,13 @@ import {
   type RangeServerOptions,
   startRangeServer,
 } from './testing/range-server.ts';
-import { refusingFiles, scratchFolder, silentLogger, until } from './testing/scratch.ts';
+import {
+  refusingFiles,
+  scratchFolder,
+  silentLogger,
+  sparseFlagOf,
+  until,
+} from './testing/scratch.ts';
 
 const MIB = 1024 * 1024;
 const body = randomBytes(4 * MIB + 7);
@@ -147,6 +153,62 @@ describe('DownloadManager', () => {
 
       expect(await readFile(`${inDownloads('setup.exe')}:Zone.Identifier`, 'utf8')).toBe(
         '[ZoneTransfer]\r\nZoneId=3\r\n',
+      );
+    },
+  );
+
+  it('asks for the part file of a download to be made sparse (#182)', async () => {
+    const { url } = await host({ fileName: 'Film.mkv' });
+    const marked: string[] = [];
+    const downloads = await open({
+      markSparse: async (path) => {
+        marked.push(path);
+      },
+    });
+
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(marked).toEqual([inDownloads(`Film.mkv${PART_SUFFIX}`)]);
+  });
+
+  it('downloads all the same a file whose part file cannot be made sparse, and says so in the log', async () => {
+    const { url } = await host({ fileName: 'Film.mkv' });
+    const warned: { event: string; details: object | undefined }[] = [];
+    const downloads = await open({
+      logger: {
+        ...silentLogger,
+        warn: (event, details) => {
+          warned.push({ event, details });
+        },
+      },
+      markSparse: async () => {
+        throw new Error('fsutil did not answer.');
+      },
+    });
+
+    const [added] = downloads.add({ urls: [url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
+    expect(warned.map((warning) => warning.event)).toEqual(['part_file_not_sparse']);
+    expect(warned[0]?.details).toMatchObject({ id: added!.id });
+    expect(JSON.stringify(warned)).not.toContain('Film.mkv');
+  });
+
+  it.runIf(process.platform === 'win32')(
+    'on Windows, makes the part file sparse with the system’s own fsutil',
+    async () => {
+      const { url } = await host({ fileName: 'Film.mkv' });
+      await writeFile(join(folder.path, 'dense.bin'), body);
+      const downloads = await open();
+
+      const [added] = downloads.add({ urls: [url] });
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+      // The flag goes with the part file to its name.
+      expect(sparseFlagOf(inDownloads('Film.mkv'))).not.toBe(
+        sparseFlagOf(join(folder.path, 'dense.bin')),
       );
     },
   );

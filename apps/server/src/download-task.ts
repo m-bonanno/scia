@@ -1,4 +1,5 @@
-import { type FileHandle, open } from 'node:fs/promises';
+import { type FileHandle, open, statfs } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
   compactSegments,
@@ -11,6 +12,7 @@ import {
   splitLargest,
 } from '@scia/core';
 import { DiskError, RemoteError, type RemoteSource, type RequestHeaders } from './remote-source.ts';
+import type { MarkSparse } from './sparse-file.ts';
 import type { Allowance } from './throttle.ts';
 
 // A connection that finished its range takes over half of another only when at least this much
@@ -45,6 +47,16 @@ export interface TaskOptions {
   // when the host says.
   readonly allowance?: (expectedBytes: number | null) => Allowance;
   readonly retryDelayMs?: (attempt: number) => number;
+  // Asked of a ranged part file the task makes, while it is empty (sparse-file.ts). Unset, the
+  // file stays as the system makes it.
+  readonly markSparse?: MarkSparse;
+  // The room left on the disk of a folder; the system's, unless a spec says otherwise.
+  readonly freeBytes?: (folder: string) => Promise<number>;
+}
+
+async function roomOf(folder: string): Promise<number> {
+  const disk = await statfs(folder);
+  return disk.bavail * disk.bsize;
 }
 
 export interface TaskProgress {
@@ -140,23 +152,47 @@ export class DownloadTask {
   }
 
   async #openPart(): Promise<FileHandle> {
-    return onDisk(async () => {
-      const file = await this.#openOrMake();
-      try {
-        // A ranged part file is the file's length. Made new, the whole size at once: a full disk
-        // says so now, not at the last megabyte. Kept, whatever an earlier attempt left: when the
-        // host's file got smaller and the download started over, the old file's tail would stay
-        // past the new end (#106). The segments hold only bytes inside it.
-        if (this.#ranged) await file.truncate(this.#options.totalBytes ?? 0);
-      } catch (error) {
-        await file.close();
+    const kept = await onDisk(() => this.#openKept());
+    if (this.#ranged) {
+      // Before the file is made: a download refused for its room leaves nothing on the disk.
+      await this.#roomForTheRest().catch(async (error: unknown) => {
+        await kept?.close();
         throw error;
+      });
+    }
+    const file = kept ?? (await onDisk(() => open(this.#options.partPath, 'w+')));
+    try {
+      // A ranged part file is the file's length: the whole size at once when it is made, kept
+      // at whatever an earlier attempt left — when the host's file got smaller and the download
+      // started over, the old file's tail would stay past the new end (#106). The segments hold
+      // only bytes inside it. It is made sparse before its size is set — a new one while it is
+      // empty — so that a write far into it does not wait for the zeros before it
+      // (docs/adr/0024). A kept one is asked again, which changes nothing of one already sparse.
+      if (this.#ranged) {
+        const markSparse = this.#options.markSparse;
+        if (markSparse !== undefined) await onDisk(() => markSparse(this.#options.partPath));
+        await onDisk(() => file.truncate(this.#options.totalBytes ?? 0));
       }
-      return file;
-    });
+    } catch (error) {
+      await file.close();
+      throw error;
+    }
+    return file;
   }
 
-  async #openOrMake(): Promise<FileHandle> {
+  // A sparse file takes its room as its bytes arrive, so the room is not reserved: it is looked
+  // at, so that a full disk is still said before a byte is fetched. What another download or
+  // program writes meanwhile is said by the write that finds the disk full, and so is the room of
+  // a disk that does not say it.
+  async #roomForTheRest(): Promise<void> {
+    const room = await (this.#options.freeBytes ?? roomOf)(dirname(this.#options.partPath)).catch(
+      () => null,
+    );
+    const toCome = this.#segments.reduce((sum, segment) => sum + remainingBytes(segment), 0);
+    if (room !== null && room < toCome) throw new DiskError('The disk has no room for the file.');
+  }
+
+  async #openKept(): Promise<FileHandle | undefined> {
     try {
       return await open(this.#options.partPath, 'r+');
     } catch (error) {
@@ -164,7 +200,7 @@ export class DownloadTask {
     }
     // The part file is gone, and with it what the segments remember.
     this.#segments = this.#segments.map((segment) => ({ ...segment, downloaded: 0 }));
-    return open(this.#options.partPath, 'w+');
+    return undefined;
   }
 
   async #runConnections(file: FileHandle, signal: AbortSignal): Promise<void> {
