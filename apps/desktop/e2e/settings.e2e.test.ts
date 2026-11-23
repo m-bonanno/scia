@@ -3,9 +3,10 @@ import { mkdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { startAllDebridServer } from '@scia/server/testing/alldebrid-server.ts';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
-import type { ElectronApplication } from 'playwright-core';
+import type { ElectronApplication, Locator } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { allCompleted, paste, rowOf, until, useRun } from './scia.ts';
+import { captureTo, scrollToEnd, viewportOf } from './under-notices.ts';
 
 const KIB = 1024;
 // A key the simulated service was given: made up, as every key of a spec.
@@ -52,7 +53,7 @@ describe('the real app, with what Settings says', () => {
       dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [folder] });
     }, chosen);
     await page.getByRole('button', { name: 'Settings' }).click();
-    await page.getByRole('button', { name: 'Change folder' }).click();
+    await page.getByRole('button', { name: 'Change…' }).click();
     await page.getByText(chosen, { exact: true }).waitFor();
     await page.getByRole('button', { name: 'Close' }).click();
 
@@ -61,6 +62,134 @@ describe('the real app, with what Settings says', () => {
     await rowOf(page, 'sample.bin').getByRole('button', { name: 'Show in folder' }).waitFor();
     const written = await readFile(join(chosen, 'sample.bin'));
     expect(Buffer.compare(written, body)).toBe(0);
+  });
+
+  // #40: a long path was cut at its end, which hid the name just chosen; and "Change…" is in words,
+  // in the middle of the label and the path beside it.
+  it("cuts a long folder's path at its start, so that the name just chosen shows beside Change…", async () => {
+    const profile = await run.profile();
+    const name = 'Films chosen last';
+    const chosen = join(
+      profile.path,
+      'a-folder-whose-name-is-long-enough-to-be-cut',
+      'and-another-one-as-long-as-the-first-of-them',
+      name,
+    );
+    await mkdir(chosen, { recursive: true });
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    await scia.app.evaluate(({ dialog }, folder) => {
+      dialog.showOpenDialog = () => Promise.resolve({ canceled: false, filePaths: [folder] });
+    }, chosen);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const change = page.getByRole('button', { name: 'Change…' });
+    await change.click();
+    const path = page.getByText(chosen, { exact: true });
+    await path.waitFor();
+
+    const seen = await path.evaluate((element, end) => {
+      const box = element.closest('output');
+      const text = element.firstChild;
+      if (box === null || text === null) throw new Error('No path in its box.');
+      const length = text.textContent?.length ?? 0;
+      const rectOf = (from: number, to: number) => {
+        const range = document.createRange();
+        range.setStart(text, from);
+        range.setEnd(text, to);
+        return range.getBoundingClientRect();
+      };
+      const shown = box.getBoundingClientRect();
+      const last = rectOf(length - end.length, length);
+      return {
+        cut: box.scrollWidth > box.clientWidth,
+        box: { left: shown.left, right: shown.right },
+        first: rectOf(0, 1).left,
+        name: { left: last.left, right: last.right },
+      };
+    }, name);
+    // The premise: the path is longer than its box.
+    expect(seen.cut, JSON.stringify(seen)).toBe(true);
+    expect(seen.first, JSON.stringify(seen)).toBeLessThan(seen.box.left);
+    expect(seen.name.left, JSON.stringify(seen)).toBeGreaterThanOrEqual(seen.box.left);
+    expect(seen.name.right, JSON.stringify(seen)).toBeLessThanOrEqual(seen.box.right + 0.5);
+    // A button of words, in the middle of the label and the path.
+    expect(await change.textContent()).toBe('Change…');
+    const top = await placeOf(page.getByText('Download folder', { exact: true }), 'top');
+    const bottom = await placeOf(page.locator('output', { has: path }), 'bottom');
+    expect(Math.abs((await placeOf(change, 'middle')) - (top + bottom) / 2)).toBeLessThanOrEqual(1);
+  });
+
+  // The captures of docs/design/ that show Settings, taken from the built app by CI (the owner's
+  // decision on #143), retaken for #40's "Change…": AllDebrid not connected, a key it refused, a
+  // code to confirm in both variants, and the whole dialog, AllDebrid connected, in both.
+  it('takes the captures of Settings', async () => {
+    const profile = await run.profile();
+    const service = run.keep(
+      await startAllDebridServer({
+        accounts: { [KEY]: { username: 'ada', premiumUntil: PREMIUM_UNTIL } },
+      }),
+    );
+    const scia = await run.launch(profile, { args: [`--alldebrid-api=${service.api}`] });
+    const { page } = scia;
+    // The clipboard is answered in main, as in clipboard.e2e: nothing of the runner's is read.
+    await scia.app.evaluate(({ clipboard }) => {
+      clipboard.readText = () => Promise.resolve('');
+    });
+    const settings = page.getByRole('dialog', { name: 'Settings' });
+    const integrations = settings.getByRole('region', { name: 'Integrations' });
+    const capture = async (name: string, variant: 'dark' | 'light') => {
+      await scia.app.evaluate(({ nativeTheme }, source) => {
+        nativeTheme.themeSource = source;
+      }, variant);
+      // Nothing under the pointer, and every transition over before the capture.
+      await page.mouse.move(1, 1);
+      await until(() =>
+        page.evaluate(
+          (wanted) =>
+            matchMedia(`(prefers-color-scheme: ${wanted})`).matches &&
+            document.getAnimations().length === 0,
+          variant,
+        ),
+      );
+      await page.screenshot({ path: await captureTo(name) });
+    };
+
+    await viewportOf(page, 1040, 720);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await integrations.getByRole('button', { name: 'Connect with a code' }).waitFor();
+    await settings.getByRole('switch', { name: 'Beta versions' }).waitFor();
+    await capture('two-ways-to-connect.png', 'dark');
+
+    await integrations.getByRole('button', { name: 'Use an API key' }).click();
+    await settings.getByLabel('AllDebrid API key').fill('e2e-a-key-the-service-does-not-know');
+    await settings.getByRole('button', { name: 'Connect', exact: true }).click();
+    await settings.getByText(/^AllDebrid does not know this key/).waitFor();
+    await scrollToEnd(settings.getByText(/^Scia \d/));
+    await capture('connect-a-service.png', 'dark');
+    await settings.getByRole('button', { name: 'Cancel' }).click();
+
+    // Pressed with the keyboard, as the focus it hands to "Open AllDebrid" is drawn.
+    await integrations.getByRole('button', { name: 'Connect with a code' }).press('Enter');
+    const open = integrations.getByRole('button', { name: 'Open AllDebrid' });
+    await until(() => open.evaluate((element) => element === document.activeElement));
+    await capture('connect-with-a-code.png', 'dark');
+    await capture('connect-with-a-code-light.png', 'light');
+    await integrations.getByRole('button', { name: 'Cancel' }).click();
+
+    await integrations.getByRole('button', { name: 'Use an API key' }).click();
+    await settings.getByLabel('AllDebrid API key').fill(KEY);
+    await settings.getByRole('button', { name: 'Connect', exact: true }).click();
+    await integrations.getByRole('button', { name: 'Disconnect' }).waitFor();
+    const clipboard = settings.getByRole('switch', { name: 'Take links from the clipboard' });
+    await clipboard.click();
+    await until(async () => (await clipboard.getAttribute('aria-checked')) === 'true');
+    await settings.getByRole('button', { name: 'Close' }).click();
+    await settings.waitFor({ state: 'hidden' });
+    await viewportOf(page, 1040, 900);
+    await page.getByRole('button', { name: 'Settings' }).click();
+    await integrations.getByText(/^Connected as ada/).waitFor();
+    await capture('settings.png', 'dark');
+    await capture('settings-light.png', 'light');
   });
 
   it("unlocks a file host's link through a connected AllDebrid, and downloads it", async () => {
@@ -180,6 +309,15 @@ function contrast(one: string, other: string): number {
   };
   const [lighter = 0, darker = 0] = [luminance(one), luminance(other)].sort((a, b) => b - a);
   return (lighter + 0.05) / (darker + 0.05);
+}
+
+// Where a thing begins, ends or has its middle on the page, counted from its top.
+async function placeOf(thing: Locator, where: 'top' | 'middle' | 'bottom'): Promise<number> {
+  return thing.evaluate((element, at) => {
+    const { top, bottom } = element.getBoundingClientRect();
+    if (at === 'top') return top;
+    return at === 'bottom' ? bottom : (top + bottom) / 2;
+  }, where);
 }
 
 async function openedBy(scia: { readonly app: ElectronApplication }): Promise<string[]> {
