@@ -11,8 +11,13 @@ export const BridgeChannel = {
   UpdateChanged: 'updates.changed',
   RestartToUpdate: 'updates.restart',
   OpenCodePage: 'integrations.openCodePage',
+  OpenSupportPage: 'support.openPage',
 } as const;
 export type BridgeChannel = (typeof BridgeChannel)[keyof typeof BridgeChannel];
+
+// Where a person can support Scia (#271). The page asks main to open it and names nothing: main
+// opens this address alone, in the person's browser.
+export const SUPPORT_PAGE = 'https://ko-fi.com/notsosnake';
 
 // What main answers to `chooseDownloadFolder`: what became of the folder. Anything that is not
 // about the folder — an engine that fails or is silent — is a rejection, not one of these.

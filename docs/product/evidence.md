@@ -203,6 +203,14 @@ The first writes' 61 ms include `fsutil` and the look at the room. `fsutil spars
 
 **Not seen** (#265 carries the first three): a large file in the app, by a person; the USB hard disk with the fix; a download refused for room in the app; `UV_THREADPOOL_SIZE` reaching the engine's `utilityProcess`; a network slower than the disk, where the zeros are written while the connections would otherwise wait on the host; a disk with Defender's real-time protection off; a full disk met by a download whose room was there when its part file was made; a finished file left sparse, and what other programs make of it; Linux.
 
+### A way to support Scia
+
+#271. The repository names GitHub Sponsors and Ko-fi (`.github/FUNDING.yml`, the README's "Support"). Settings has a quiet "Support Scia" beside the version, which asks main, naming nothing, to open the Ko-fi page in the person's browser. Main opens the one fixed address, `SUPPORT_PAGE` of `@scia/contracts/bridge`, whatever comes with the ask, and Scia itself sends nothing. `v1.0.0` waits for it (the owner, 23 November 2026).
+
+**Seen**: in CI's E2E suite on the built app (`settings.e2e.test.ts`), with `shell.openExternal` answered in main, a press of "Support Scia" and an ask from the page naming another address both opened `https://ko-fi.com/notsosnake` (passing in every CI run on a head of #272 but `7abd006`'s). With main's wiring taken away, that case alone failed (`7abd006`, run 45210853573). Settings with the button, in both variants, in the captures CI took for #272 (`docs/design/settings*.png`, `a-notice-over-settings*.png`, `two-ways-to-connect.png`, `connect-a-service.png`), read before they were committed. Specs hold one page for a double click and a held Enter, the button reached by Tab, and the failure said by the button only for the last ask.
+
+**Not seen**: a hand pressing the button in a packaged build, and the default browser showing Ko-fi (among "The owner's hands"); the failure line with no browser to take the page; the repository's "Sponsor" button, which GitHub shows once `FUNDING.yml` is on the default branch.
+
 ## M2 — The whole extension
 
 ### Tried in browsers
