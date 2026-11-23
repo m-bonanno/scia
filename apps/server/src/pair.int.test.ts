@@ -159,6 +159,39 @@ describe('DownloadManager and a picture and a sound offered apart (docs/adr/0021
     ).toBe(true);
   });
 
+  it('asks for the picture and the sound to be made sparse, and joins them all the same when they cannot be (#182)', async () => {
+    const { site, picture, sound } = await pairOf('picture.mp4', 'sound.m4a');
+    const marked: string[] = [];
+    const warned: { event: string; details: object | undefined }[] = [];
+    const downloads = await open({
+      pageReader: reader(() => ({
+        title: 'A video',
+        formats: [pictureAt(picture.url), soundAt(sound.url)],
+      })),
+      logger: {
+        ...silentLogger,
+        warn: (event, details) => {
+          warned.push({ event, details });
+        },
+      },
+      markSparse: async (path) => {
+        marked.push(path);
+        throw new Error('fsutil did not answer.');
+      },
+    });
+
+    const [added] = downloads.add({ urls: [site.url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(await readdir(downloadsFolder())).toEqual(['A video.mp4']);
+    expect(marked.map((path) => path.slice(path.lastIndexOf('.')))).toEqual(['.picture', '.sound']);
+    expect(warned.map((warning) => warning.event)).toEqual([
+      'part_file_not_sparse',
+      'part_file_not_sparse',
+    ]);
+    for (const warning of warned) expect(warning.details).toMatchObject({ id: added!.id });
+  });
+
   it('joins a fragmented picture and sound, as a DASH site gives them, every fragment of both', async () => {
     const { site, picture, sound, pictureBytes, soundBytes } = await pairOf(
       'picture-fragmented.mp4',

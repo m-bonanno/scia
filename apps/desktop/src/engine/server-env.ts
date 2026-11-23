@@ -1,3 +1,4 @@
+import { ENGINE_THREADPOOL_SIZE } from '@scia/contracts';
 import type { RuntimeLayout } from './runtime-layout.ts';
 
 export interface ServerEnvInput {
@@ -18,6 +19,7 @@ export interface ServerEnvInput {
 
 // Built from scratch, never from `process.env`: inherited variables silently override
 // configuration. `SystemRoot` is the one OS variable kept — Windows networking needs it.
+// `UV_THREADPOOL_SIZE` is Scia's own value, not inherited: Node reads it once, as it starts.
 export function buildServerEnv(input: ServerEnvInput): Record<string, string> {
   return {
     SCIA_API_TOKEN: input.apiToken,
@@ -27,6 +29,7 @@ export function buildServerEnv(input: ServerEnvInput): Record<string, string> {
     SCIA_STATIC_DIR: input.layout.rendererDir,
     SCIA_VERSION: input.version,
     SCIA_TEMP_DIR: input.tempDir,
+    UV_THREADPOOL_SIZE: String(ENGINE_THREADPOOL_SIZE),
     ...(input.alldebridApi === undefined ? {} : { SCIA_ALLDEBRID_API: input.alldebridApi }),
     ...(input.ytDlpReleases === undefined ? {} : { SCIA_YT_DLP_RELEASES: input.ytDlpReleases }),
     ...(input.layout.ytDlp === undefined
