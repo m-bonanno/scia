@@ -185,7 +185,14 @@ describe('the real app, with a magnet', () => {
       });
     });
 
-    await paste(page, 'https://example.com/a.zip');
+    // The field's own button: the panel's "Download <name>" buttons share its first word.
+    await page
+      .getByRole('textbox', { name: 'Links to download' })
+      .fill('https://example.com/a.zip');
+    await page
+      .getByRole('main')
+      .getByRole('button', { name: /^Download/ })
+      .click();
     await page.getByRole('list', { name: 'Notices' }).getByRole('listitem').waitFor();
     await until(async () => (await roomAround(lastRow)) > 0);
     const download = lastRow.getByRole('button', { name: /^Download / });

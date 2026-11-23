@@ -236,7 +236,10 @@ describe('the real app says what went wrong in a notice', () => {
     expect(await bottomOf(last)).toBeLessThanOrEqual(await topOfNotices(page));
     // The focus Tab moves there, from the control before it.
     await placeUnderNotices(last);
-    await settings.getByRole('button', { name: 'Use an API key' }).focus();
+    await last.evaluate((element) => {
+      const order = [...document.querySelectorAll<HTMLElement>('dialog button, dialog input')];
+      order[order.indexOf(element as HTMLElement) - 1]?.focus();
+    });
     await page.keyboard.press('Tab');
     expect(await last.evaluate((element) => element === document.activeElement)).toBe(true);
     expect(await bottomOf(last)).toBeLessThanOrEqual(await topOfNotices(page));
@@ -324,6 +327,10 @@ describe('the real app says what went wrong in a notice', () => {
       await settings.getByRole('button', { name: 'Increase' }).first().click();
       const notice = settings.getByRole('list', { name: 'Notices' }).getByRole('listitem');
       await notice.waitFor();
+      // Nothing under the pointer, scrolled to the end, and every transition over (a hover's
+      // colour going back included) before the capture.
+      await page.mouse.move(1, 1);
+      await scrollToEnd(settings.getByText(/^Scia \d/));
       await until(() =>
         page.evaluate(
           (wanted) =>
@@ -332,8 +339,6 @@ describe('the real app says what went wrong in a notice', () => {
           variant,
         ),
       );
-      await page.mouse.move(1, 1);
-      await scrollToEnd(settings.getByText(/^Scia \d/));
       expect(await bottomOf(settings.getByText(/^Scia \d/))).toBeLessThanOrEqual(
         await topOfNotices(page),
       );
