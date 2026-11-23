@@ -293,7 +293,7 @@ describe('HlsTask against a real HTTP host', () => {
     expect((failure as RemoteError).status).toBe(404);
   });
 
-  it('stops every connection when a piece fails for good, and fetches nothing after [flaky #162]', async () => {
+  it('stops every connection when a piece fails for good, and fetches nothing after', async () => {
     const copy = join(folder.path, 'site');
     await cp(join(FIXTURES, 'ts'), copy, { recursive: true });
     const names = [
@@ -315,6 +315,10 @@ describe('HlsTask against a real HTTP host', () => {
     await expect(
       task(`${server.url}/index.m3u8`).run(new AbortController().signal),
     ).rejects.toThrow();
+    // A request a connection sent before the stop can reach the host just after the task ended:
+    // it is in flight, not a connection that went on (#162). What follows is counted once those
+    // have landed, and nothing may be asked after.
+    await new Promise((resolve) => setTimeout(resolve, 200));
     const askedThen = server.asked.length;
     // The other connection stopped at the piece it had: not every piece was asked for.
     expect(server.asked.filter((path) => path.endsWith('.mpegts')).length).toBeLessThan(

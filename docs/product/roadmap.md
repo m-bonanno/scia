@@ -24,7 +24,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [ ] A save of `state.json` not lost while another process has the file open (#151).
 - [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#13), the folder's button (#40), a paused bar's tone (#58), the key's placeholder (#66), the clipboard's first read (#134), room under notices (#143), the popover's note (#159), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
 - [ ] The page's logo and the app's icon drawing the mark in the same proportions (#88).
-- [ ] The spec in quarantine fixed and back in the gates (#162). The speed limit's is back (#43).
+- [x] The specs in quarantine fixed and back in the gates: the speed limit's (#43, #232) and HLS's (#162).
 - [ ] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes).
 - [x] The installer refuses an older version (#172, #177).
 
@@ -91,22 +91,22 @@ None open: all were settled on 21 November 2026 ([decisions.md](./decisions.md#2
 
 ## M2 — The whole extension
 
-| Item                                                                                                | Issue     | Built   | Proven by                | Not seen                         | In v1.0.0 |
-| --------------------------------------------------------------------------------------------------- | --------- | ------- | ------------------------ | -------------------------------- | --------- |
-| [Tried in Chrome and Brave, then Edge; Firefox](./evidence.md#tried-in-browsers)                    | #23       | no      | —                        | —                                | no        |
-| [Published in the stores; the pairing code back in Settings](./evidence.md#published-in-the-stores) | #152      | no      | —                        | —                                | no        |
-| [The extension's icon, from the mark](./evidence.md#the-icon-of-the-app)                            | —         | no      | —                        | —                                | no        |
-| [Downloads behind a login, per site](./evidence.md#downloads-behind-a-login)                        | —         | no      | —                        | —                                | no        |
-| [Video of a page: one file, yt-dlp shipped](./evidence.md#the-video-of-one-page)                    | #89, #97  | yes     | Script                   | any site but archive.org         | yes       |
-| [Video of a page: an HLS stream](./evidence.md#the-video-of-one-page)                               | #98, #162 | yes     | Specs; one in quarantine | any stream in the app, on a site | yes       |
-| [Video of a page: picture and sound joined](./evidence.md#the-video-of-one-page)                    | #99       | no      | —                        | —                                | yes       |
-| [Video of a page: yt-dlp kept up to date](./evidence.md#the-video-of-one-page)                      | #100      | yes     | E2E, Script              | a real release of yt-dlp         | yes       |
-| [A live stream recorded until stopped](./evidence.md#the-video-of-one-page)                         | #121      | refused | —                        | —                                | no        |
-| [A stream that changes partway](./evidence.md#the-video-of-one-page)                                | #123      | refused | —                        | —                                | no        |
-| [Adaptive streams (HLS, DASH): detection, quality, assembly](./evidence.md#adaptive-streams)        | —         | no      | —                        | —                                | no        |
-| [Pages, playlists and channels](./evidence.md#pages-playlists-and-channels)                         | #8        | no      | —                        | —                                | no        |
-| [A fallback port, found by the extension](./evidence.md#a-fallback-port)                            | —         | no      | —                        | —                                | no        |
-| [A reader of sites of Scia's own](./evidence.md#the-video-of-one-page)                              | #102      | no      | —                        | —                                | no        |
+| Item                                                                                                | Issue     | Built   | Proven by   | Not seen                         | In v1.0.0 |
+| --------------------------------------------------------------------------------------------------- | --------- | ------- | ----------- | -------------------------------- | --------- |
+| [Tried in Chrome and Brave, then Edge; Firefox](./evidence.md#tried-in-browsers)                    | #23       | no      | —           | —                                | no        |
+| [Published in the stores; the pairing code back in Settings](./evidence.md#published-in-the-stores) | #152      | no      | —           | —                                | no        |
+| [The extension's icon, from the mark](./evidence.md#the-icon-of-the-app)                            | —         | no      | —           | —                                | no        |
+| [Downloads behind a login, per site](./evidence.md#downloads-behind-a-login)                        | —         | no      | —           | —                                | no        |
+| [Video of a page: one file, yt-dlp shipped](./evidence.md#the-video-of-one-page)                    | #89, #97  | yes     | Script      | any site but archive.org         | yes       |
+| [Video of a page: an HLS stream](./evidence.md#the-video-of-one-page)                               | #98, #162 | yes     | Specs       | any stream in the app, on a site | yes       |
+| [Video of a page: picture and sound joined](./evidence.md#the-video-of-one-page)                    | #99       | no      | —           | —                                | yes       |
+| [Video of a page: yt-dlp kept up to date](./evidence.md#the-video-of-one-page)                      | #100      | yes     | E2E, Script | a real release of yt-dlp         | yes       |
+| [A live stream recorded until stopped](./evidence.md#the-video-of-one-page)                         | #121      | refused | —           | —                                | no        |
+| [A stream that changes partway](./evidence.md#the-video-of-one-page)                                | #123      | refused | —           | —                                | no        |
+| [Adaptive streams (HLS, DASH): detection, quality, assembly](./evidence.md#adaptive-streams)        | —         | no      | —           | —                                | no        |
+| [Pages, playlists and channels](./evidence.md#pages-playlists-and-channels)                         | #8        | no      | —           | —                                | no        |
+| [A fallback port, found by the extension](./evidence.md#a-fallback-port)                            | —         | no      | —           | —                                | no        |
+| [A reader of sites of Scia's own](./evidence.md#the-video-of-one-page)                              | #102      | no      | —           | —                                | no        |
 
 ## M3 — Integrations: debrid services
 
@@ -155,9 +155,7 @@ After `v1.0.0` too, not ordered: live streams (#121), streams that change partwa
 
 ## Specs in quarantine
 
-Held by no gate until their issue is fixed ([ADR 0019](../adr/0019-specs-in-quarantine.md), #195). `v1.0.0` waits for it to be fixed and back in the gates:
-
-- The HLS spec of a piece that fails for good stopping every connection (#162).
+Held by no gate until their issue is fixed ([ADR 0019](../adr/0019-specs-in-quarantine.md), #195). None today: the two put there by #195 are back in the gates (#43, #162).
 
 ## Not planned
 
