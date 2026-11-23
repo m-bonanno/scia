@@ -1,4 +1,5 @@
 import { join } from 'node:path';
+import { WINDOW_COLOURS } from '@scia/contracts/theme';
 
 export interface IconOutput {
   // Relative to apps/desktop.
@@ -15,8 +16,11 @@ export interface IconLock {
 
 export const DESKTOP_DIR = join(import.meta.dirname, '..', '..');
 
-// The one source of every icon of the app: the approved mark on its tile (#81).
+// The drawing every icon of the app is drawn from: the mark of `@scia/contracts/mark`, which the
+// page's logo draws too (#88), on its tile, written by the script before it draws.
 export const ICON_SOURCE = 'assets/icon.svg';
+// The owner's choice (#81): the default theme's dark variant, the colours the window wears.
+export const ICON_COLOURS = WINDOW_COLOURS['black-tie'].dark;
 export const ICON_LOCK = 'scripts/icons/icons.lock.json';
 
 const LINUX_SIZES = [16, 24, 32, 48, 64, 128, 256, 512];

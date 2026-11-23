@@ -57,6 +57,8 @@ The light variant of a capture is the page told that the system asks for light (
 
 The three captures of a notice over Settings were taken by CI's E2E job (`apps/desktop/e2e/notices.e2e.test.ts`, "takes the captures of a notice over Settings"), and so was `downloads-paused.png` (`apps/desktop/e2e/paused.e2e.test.ts`, "takes the capture of a paused download beside the running ones", its downloads from hosts of the runner that send slowly, and a failure answered with 404), from the built app on a scratch profile of the runner, the page given its size over the protocol; they were read before they were committed. The folder they show is the runner's, deleted after the run, and the version beside the name is that of a build that is not a release, `0.0.0`.
 
+From #88 the logo in the title bar and in the empty list draws the mark as the app's icon does; the captures above taken before it show its earlier drawing, and but for those CI's E2E suite takes (`downloads-paused.png`, `a-notice-over-settings*.png`) are retaken in #156.
+
 From #133 the title bar names the version beside "Scia" (or offers an update there); the captures above taken before it show the title bar without it, and are retaken in #156.
 
 `update-while-downloading.png` and its light twin show the note's words before #159 and #257 ("Scia is downloading. … installs when you quit Scia."); it now says "<version> installs when you quit Scia. Pause your downloads to restart now." The E2E suite cannot offer an update, so both are retaken, with the note's first look in a packaged build, in the owner's sitting on the release candidate of `v1.0.0` (the owner, 23 November 2026), carried by #156.
@@ -67,7 +69,7 @@ Not captured yet: Settings with a folder refused, the key's form in a light vari
 
 ## The app's icon
 
-The mark on a tile, in the default theme's dark variant (`#e3e3e3` on `#111111`; the owner, #81). Its one source is [`apps/desktop/assets/icon.svg`](../../apps/desktop/assets/icon.svg); every icon of the app is drawn from it by `npm run icons -w @scia/desktop` and committed (`apps/desktop/CLAUDE.md`).
+The mark on a tile, in the default theme's dark variant (`#e3e3e3` on `#111111`; the owner, #81). The mark is one drawing, `MARK` in `@scia/contracts/mark`, which the page's logo draws too (#88); `npm run icons -w @scia/desktop` writes it on its tile to [`apps/desktop/assets/icon.svg`](../../apps/desktop/assets/icon.svg), draws every icon of the app from that, and they are committed (`apps/desktop/CLAUDE.md`).
 
 | Capture                                                                  | Shows                                                                                                                                                                                                                                                   |
 | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
