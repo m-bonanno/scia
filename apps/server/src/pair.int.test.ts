@@ -302,25 +302,30 @@ describe('DownloadManager and a picture and a sound offered apart (docs/adr/0021
     expect(await readdir(downloadsFolder())).toEqual(['Changed.mp4']);
   });
 
-  it("never names a download after a file that stands where a pair's picture or sound will", async () => {
-    // A host once named a file after what a pair's picture is called while it is fetched.
-    await mkdir(downloadsFolder(), { recursive: true });
-    const theirs = Buffer.from('a finished file of someone else');
-    await writeFile(join(downloadsFolder(), 'clip.mp4.scia.picture'), theirs);
-    const { site, picture, sound } = await pairOf('picture.mp4', 'sound.m4a');
-    const downloads = await open({
-      pageReader: reader(() => ({
-        title: 'clip',
-        formats: [pictureAt(picture.url), soundAt(sound.url)],
-      })),
-    });
+  // What a download keeps beside its name while it runs: its part file, a stream's pieces, a pair's
+  // picture and sound.
+  it.each(['.scia', '.scia.pieces', '.scia.picture', '.scia.sound'])(
+    'never names a download after a file that stands where its %s will',
+    async (suffix) => {
+      // A host once named a file after what a download keeps beside its name while it runs.
+      await mkdir(downloadsFolder(), { recursive: true });
+      const theirs = Buffer.from('a finished file of someone else');
+      await writeFile(join(downloadsFolder(), `clip.mp4${suffix}`), theirs);
+      const { site, picture, sound } = await pairOf('picture.mp4', 'sound.m4a');
+      const downloads = await open({
+        pageReader: reader(() => ({
+          title: 'clip',
+          formats: [pictureAt(picture.url), soundAt(sound.url)],
+        })),
+      });
 
-    const [added] = downloads.add({ urls: [site.url] });
-    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+      const [added] = downloads.add({ urls: [site.url] });
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
 
-    expect(downloads.find(added!.id).fileName).toBe('clip (1).mp4');
-    expect(await readFile(join(downloadsFolder(), 'clip.mp4.scia.picture'))).toEqual(theirs);
-  });
+      expect(downloads.find(added!.id).fileName).toBe('clip (1).mp4');
+      expect(await readFile(join(downloadsFolder(), `clip.mp4${suffix}`))).toEqual(theirs);
+    },
+  );
 
   it("never gives a file the name of a pair's picture while the pair is fetched", async () => {
     const site = await host({ body: page, contentType: 'text/html' });

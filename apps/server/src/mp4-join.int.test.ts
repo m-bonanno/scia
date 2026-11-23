@@ -59,6 +59,32 @@ describe('joinIntoMp4', () => {
     ).toBe(PageFailure.FormatUnsupported);
   });
 
+  it('refuses to hold more of a file in memory than its limits: a box, and all of them', async () => {
+    // A plain sound's movie is over 100 bytes.
+    expect(
+      await failureOf(
+        joinIntoMp4(at('picture'), at('sound'), at('joined'), new AbortController().signal, {
+          mostReadBytes: 100,
+          mostReadInAll: 1024 * 1024,
+        }),
+      ),
+    ).toBe(PageFailure.FormatUnsupported);
+
+    // Every box of a fragmented picture within the first, and all of them past the second.
+    await copyFile(join(FIXTURES, 'picture-fragmented.mp4'), at('picture'));
+    await copyFile(join(FIXTURES, 'sound-fragmented.m4a'), at('sound'));
+    const limits = { mostReadBytes: 1024 * 1024, mostReadInAll: 1000 };
+    expect(
+      await failureOf(
+        joinIntoMp4(at('picture'), at('sound'), at('joined'), new AbortController().signal, limits),
+      ),
+    ).toBe(PageFailure.FormatUnsupported);
+    await joinIntoMp4(at('picture'), at('sound'), at('joined'), new AbortController().signal, {
+      ...limits,
+      mostReadInAll: 1024 * 1024,
+    });
+  });
+
   it('refuses a file cut short as unreadable, and two of one kind as a format it does not join', async () => {
     const { size } = await stat(at('sound'));
     await truncate(at('sound'), size - 100);

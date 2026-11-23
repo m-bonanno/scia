@@ -12,11 +12,16 @@ import {
 import { PageError } from './media-choice.ts';
 import { DiskError } from './remote-source.ts';
 
-// A movie or a fragment's header is read whole: tens of kilobytes, a few megabytes for hours of
-// a movie that is not fragmented. Never this.
-const MOST_READ_BYTES = 64 * 1024 * 1024;
-// And all of them together, of one file: hours of fragments weigh tens of megabytes.
-const MOST_READ_IN_ALL = 256 * 1024 * 1024;
+// What is held in memory of a file, a site's file being as hostile as any.
+export interface JoinLimits {
+  // A movie or a fragment's header is read whole: tens of kilobytes, a few megabytes for hours
+  // of a movie that is not fragmented.
+  readonly mostReadBytes: number;
+  // And all of them together: hours of fragments weigh tens of megabytes.
+  readonly mostReadInAll: number;
+}
+
+const LIMITS: JoinLimits = { mostReadBytes: 64 * 1024 * 1024, mostReadInAll: 256 * 1024 * 1024 };
 // What a file of the two may hold in boxes: hours of fragments of a second or two.
 const MOST_BOXES = 1_000_000;
 // What is copied at a time.
@@ -57,7 +62,7 @@ async function writeAll(file: FileHandle, bytes: Uint8Array, position: number): 
 }
 
 // The boxes of a file, read by their headers, with the contents of those the plan reads.
-async function sourceOf(file: FileHandle): Promise<Mp4Source> {
+async function sourceOf(file: FileHandle, limits: JoinLimits): Promise<Mp4Source> {
   const { size } = await file.stat();
   const boxes: TopBox[] = [];
   const contents = new Map<number, Uint8Array>();
@@ -70,7 +75,7 @@ async function sourceOf(file: FileHandle): Promise<Mp4Source> {
     boxes.push(box);
     if (BOXES_READ.has(box.type)) {
       read += box.size;
-      if (box.size > MOST_READ_BYTES || read > MOST_READ_IN_ALL) {
+      if (box.size > limits.mostReadBytes || read > limits.mostReadInAll) {
         throw new Mp4Error(Mp4Refusal.Unsupported, 'The boxes to read are too big.');
       }
       contents.set(start, await readAt(file, start, box.size));
@@ -94,6 +99,7 @@ export async function joinIntoMp4(
   soundPath: string,
   outPath: string,
   signal: AbortSignal,
+  limits: JoinLimits = LIMITS,
 ): Promise<void> {
   const picture = await onDisk(() => open(picturePath, 'r'));
   try {
@@ -101,7 +107,10 @@ export async function joinIntoMp4(
     try {
       let plan;
       try {
-        plan = joinPlan(await onDisk(() => sourceOf(picture)), await onDisk(() => sourceOf(sound)));
+        plan = joinPlan(
+          await onDisk(() => sourceOf(picture, limits)),
+          await onDisk(() => sourceOf(sound, limits)),
+        );
       } catch (error) {
         if (error instanceof Mp4Error) throw pageErrorOf(error);
         throw error;

@@ -1011,9 +1011,10 @@ export class DownloadManager {
           : picture.remote.totalBytes + sound.remote.totalBytes,
       acceptsRanges: ranged(picture.remote) && ranged(sound.remote),
       fileName: undefined,
-      // The picture's size too: where the line splits between the two files, which a swap of
-      // two sizes of the same sum would move.
-      validator: `${String(picture.remote.totalBytes)} ${picture.remote.validator ?? ''} ${sound.remote.validator ?? ''}`,
+      validator:
+        picture.remote.validator === null && sound.remote.validator === null
+          ? null
+          : `${picture.remote.validator ?? ''} ${sound.remote.validator ?? ''}`,
       isPage: false,
     });
     const fileOf = (part: MediaSource & { readonly remote: RemoteFile }) => ({

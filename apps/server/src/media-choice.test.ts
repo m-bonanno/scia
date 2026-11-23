@@ -300,6 +300,12 @@ describe('chooseMedia', () => {
     ).toThrow(expect.objectContaining({ failure: PageFailure.Drm }));
   });
 
+  it('never says a video whose formats are sound alone is protected', () => {
+    expect(() => chooseMedia([sound({ hasDrm: false })])).toThrow(
+      expect.objectContaining({ failure: PageFailure.FormatUnsupported }),
+    );
+  });
+
   it('says a page with no format at all could not be read', () => {
     expect(() => chooseMedia([])).toThrow(
       expect.objectContaining({ failure: PageFailure.Unreadable }),
