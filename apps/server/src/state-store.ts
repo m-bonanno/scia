@@ -94,6 +94,25 @@ const storedSettingsSchema = settingsSchema.extend({
   watchClipboard: settingsSchema.shape.watchClipboard.catch(false),
 });
 
+// On Windows a rename onto a file another process holds open fails, for as long as it holds it:
+// an antivirus scanning it, the indexer, a backup (#151). A save waits for it, a while.
+const BUSY = new Set(['EPERM', 'EACCES', 'EBUSY']);
+const RENAME_TRIES = 40;
+const RENAME_WAIT_MS = 50;
+
+async function renameWhenFree(from: string, to: string): Promise<void> {
+  for (let tries = 1; ; tries += 1) {
+    try {
+      await rename(from, to);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? '';
+      if (!BUSY.has(code) || tries >= RENAME_TRIES) throw error;
+      await new Promise((resolve) => setTimeout(resolve, RENAME_WAIT_MS));
+    }
+  }
+}
+
 export const stateSchema = z.object({
   version: z.literal(1),
   settings: storedSettingsSchema,
@@ -143,7 +162,7 @@ export class JsonStateStore implements StateStore {
       await mkdir(dirname(this.#path), { recursive: true });
       const temporary = `${this.#path}.tmp`;
       await writeFile(temporary, text);
-      await rename(temporary, this.#path);
+      await renameWhenFree(temporary, this.#path);
     };
     this.#saving = this.#saving.then(write, write);
     return this.#saving;
