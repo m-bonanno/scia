@@ -99,6 +99,8 @@ The last line is `Follow-ups: none` when an approving verdict leaves nothing to 
 
 The two merge commits are what lets semantic-release count the next version from the last one ([`release-flow.md`](./release-flow.md)): squashing either breaks the count.
 
+**A squash is given its own body: `gh pr merge <n> --squash … --body "Closes #N"`.** Left to GitHub, the squash's body is the message of every commit of the branch, and semantic-release's notes list each issue that body names: "closes #99" six times in `v1.0.0-beta.30` (#249). The title is the PR's, and the body names the issue once. Nothing else goes there.
+
 **After every merge into `develop` or `main`**, whoever merged reads that a Release run started for the merge commit, and starts one by hand when none has. GitHub once recorded no push for a merge, and nothing was released (#95). The steps are in [`release-flow.md`](./release-flow.md), "A merge nothing released".
 
 ## A pull request from outside
