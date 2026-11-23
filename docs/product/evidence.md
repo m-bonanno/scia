@@ -70,9 +70,9 @@ A notification when a download ends (#45); "Open" and "Show in folder" are alrea
 
 ### The window really in use
 
-A window that was shown while another was in use can believe it is in front, and Scia is then silent until the person clicks into it and away, or minimises it, or closes it into the tray — a start during which they went back to their work. Under script it did at some starts and not at others, and what decides it is not known; not seen by hand (#62).
+Before #62 was built: a window that was shown while another was in use could believe it was in front, and Scia was then silent until the person clicks into it and away, or minimises it, or closes it into the tray — a start during which they went back to their work. Under script it did at some starts and not at others, and what decides it is not known; not seen by hand (#62).
 
-**Built** (#62, [ADR 0020](../adr/0020-the-window-in-use-asked-of-windows.md)): on Windows main asks the system which window is in use (`GetForegroundWindow`, through PowerShell) when a notification is about to be decided; a system that does not answer counts as another window in use. **Seen**: specs of the decision (the system believed over the window), of the question asked of Windows (a handle, and nothing when the system cannot be asked), and the E2E suite in CI. **Not seen**: a start by hand, back to another window with no click into Scia, then a download that ends (#13).
+**Built** (#62, [ADR 0020](../adr/0020-the-window-in-use-asked-of-windows.md)): on Windows main asks the system which window is in use (`GetForegroundWindow`, through PowerShell) when a notification is about to be decided; a system that does not answer counts as another window in use. **Seen**: unit specs of the decisions (the system believed over the window; no answer counted as another window in use; the command and the reading of an answer), and an integration spec of the question asked of the real Windows (nothing before ready, then a handle in under half a second; nothing when the system cannot be asked). No E2E spec reaches it: the suite's one notification it checks is decided for a minimised window. Each decision logs `asked` (`answered`, `unanswered`). **Not seen**: a start by hand, back to another window with no click into Scia, then a download that ends (#13).
 
 ### A second failure notified
 

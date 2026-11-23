@@ -1,3 +1,4 @@
+import { foreground } from './foreground-window.ts';
 import { randomBytes } from 'node:crypto';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
@@ -72,6 +73,9 @@ if (!app.requestSingleInstanceLock()) {
 }
 
 async function boot(): Promise<void> {
+  // Its first start takes seconds on a cold machine: started now, asked only when a notification
+  // is decided (ADR 0020).
+  foreground.warm();
   const layout = resolveRuntimeLayout({
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
@@ -195,7 +199,7 @@ async function boot(): Promise<void> {
   });
 
   async function notifyEnded(downloads: readonly Ended[]): Promise<void> {
-    const inFront = await window.isInFront();
+    const { inFront, asked } = await window.isInFront();
     // Idle in the tray: the window was put away and nothing is running or waiting any more.
     const lastOfHiddenScia = window.isPutAway() && unfinished(activityOf(latest)) === 0;
     const completed = downloads.filter((download) => download.ending === Ending.Completed).length;
@@ -203,6 +207,7 @@ async function boot(): Promise<void> {
       completed,
       failed: downloads.length - completed,
       inFront,
+      asked,
       lastOfHiddenScia,
     });
     // A person looking at the list sees its rows change.
@@ -258,8 +263,8 @@ async function boot(): Promise<void> {
     added: number,
     noticeOf: (count: number) => { title: string; body: string },
   ): Promise<void> {
-    const inFront = await window.isInFront();
-    log.info(event, { added, inFront });
+    const { inFront, asked } = await window.isInFront();
+    log.info(event, { added, inFront, asked });
     if (added === 0 || isQuitting() || inFront || !Notification.isSupported()) return;
     const text = noticeOf(added);
     const shown = new Notification(text);

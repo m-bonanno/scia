@@ -75,7 +75,9 @@ describe('the real app, with links copied to the clipboard', () => {
       ['archive.zip', DownloadStatus.Ready],
       ['setup.exe', DownloadStatus.Ready],
     ]);
-    // Nothing was fetched before a Start, and nothing was notified to a person looking at the list.
+    // Nothing was fetched before a Start, and nothing was notified to a person looking at the list
+    // — read once both copies were decided: main asks Windows first, which takes a moment (#62).
+    await logged(profile, 'clipboard_links_added', 2);
     expect(host.ranges).toEqual([]);
     expect(await profile.log()).not.toContain('offered_notice_asked');
 
