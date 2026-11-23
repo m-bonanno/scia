@@ -510,8 +510,12 @@ describe('the title of a video’s page added ready (#285)', () => {
     const offered = await downloads.offer([pageOf('s1'), pageOf('s2')]);
     expect(inFlight()).toHaveLength(2);
 
-    // Two downloads start, each reading its page: neither waits, and each takes a title's turn.
-    downloads.add({ urls: [`${site.url}?one`, `${site.url}?two`] });
+    // Two downloads start, each reading its page: neither waits, and each takes a title's turn —
+    // the newest title's first, then the other's.
+    downloads.add({ urls: [`${site.url}?one`] });
+    await until(() => reads.length === 1);
+    expect(inFlight().map((ask) => ask.url)).toEqual([pageOf('s1')]);
+    downloads.add({ urls: [`${site.url}?two`] });
     await until(() => reads.length === 2);
     expect(inFlight()).toEqual([]);
     expect(most).toBe(2);
@@ -529,6 +533,55 @@ describe('the title of a video’s page added ready (#285)', () => {
     titles[3]?.answer('Two');
     await until(() => offered.every((download) => titleOf(downloads, download.id) !== null));
     expect(offered.map((download) => titleOf(downloads, download.id))).toEqual(['One', 'Two']);
+  });
+
+  it('lets a stopped title that ends late free no turn of the one read again in its place', async () => {
+    const site = await startRangeServer({
+      body: Buffer.from('<html></html>'),
+      contentType: 'text/html',
+    });
+    servers.push(site);
+    const answers: (() => void)[] = [];
+    // Deaf to the stop, as a yt-dlp that takes its time to end.
+    const { reader, titles, inFlight } = aReader(
+      () =>
+        new Promise((done) => {
+          answers.push(() => {
+            done(undefined);
+          });
+        }),
+    );
+    const downloads = await open({ pageReader: reader, source: new HttpSource('scia-test') });
+    downloads.updateSettings({ maxConcurrentDownloads: 1 });
+    await downloads.offer([pageOf('v1'), pageOf('v2')]);
+    downloads.add({ urls: [site.url] });
+    await until(() => answers.length === 1);
+    expect(titles[0]?.signal.aborted).toBe(true);
+    answers[0]?.();
+    // v1 is read again; the stopped read of it ends only now.
+    await until(() => titles.length === 2);
+    titles[0]?.answer('Late');
+    await new Promise((settle) => setImmediate(settle));
+
+    expect(inFlight().map((ask) => ask.url)).toEqual([pageOf('v1')]);
+    expect(titles).toHaveLength(2);
+    titles[1]?.answer('One');
+    await until(() => titles.length === 3);
+    titles[2]?.answer('Two');
+  });
+
+  it('hands a started row’s turn to the next title at once, before its yt-dlp has ended', async () => {
+    const { reader, titles } = aReader();
+    const downloads = await open({ pageReader: reader });
+    downloads.updateSettings({ maxConcurrentDownloads: 1 });
+    const [first] = await downloads.offer([pageOf('w1'), pageOf('w2')]);
+
+    downloads.start(first!.id);
+
+    expect(titles.map((ask) => ask.url)).toEqual([pageOf('w1'), pageOf('w2')]);
+    // What the engine waits for as it stops: every read, the stopped one too.
+    titles[0]?.answer(undefined);
+    titles[1]?.answer('Two');
   });
 });
 

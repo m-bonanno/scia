@@ -1049,7 +1049,6 @@ export class DownloadManager {
     this.#stopping = true;
     this.#titlesWanted = [];
     for (const stop of this.#titles.values()) stop.abort();
-    this.#titles.clear();
     await this.#magnetWatch.close();
     this.#closed = true;
     clearInterval(this.#checkpoint);
