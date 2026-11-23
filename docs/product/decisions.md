@@ -49,7 +49,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 - #57: yes, after `v1.0.0` — a click on the notification opens the window, clears the filter that hides the row and scrolls to it.
 - #13: with no tray icon drawn, closing the window quits Scia, also with downloads running, and they resume at the next start; a cold start, or a second launch while it loads, shows the window at once in the theme's colours with a line saying Scia is starting; an installer run while downloads run closes Scia with its state saved, and the downloads resume when it starts again; at a shutdown or a sign-out with Scia in the tray, Scia saves its state at once, the downloads resume at the next start, and it does not ask Windows to wait.
 - #40: "Change folder" becomes words, a button like the others of Settings ("Change…").
-- #58: a paused bar gets a dimmer tone of its own, a token darker than the accent in every theme and variant, held by the contrast spec.
+- #58: a paused bar gets a dimmer tone of its own, a token darker than the accent in every theme and variant, held by the contrast spec. Changed on 23 November 2026.
 - #66: a placeholder at the contrast of text carries the key's field ("Paste your API key"), and that is the rule for every field that has nothing else.
 - #102: after Linux, with a design document first (what it does that yt-dlp does not), before any decision to build.
 - #134: what is on the clipboard when the reading starts is never taken — the clipboard's formats are read before it is called empty, or the reading waits longer — and ADR 0012's exception goes.
@@ -74,6 +74,9 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 
 - #99: picture and sound offered apart are joined only as an mp4 picture in H.264 or AV1 and an AAC sound. The most lines win, and H.264 at equal lines; HEVC never, since Windows plays it only with a paid extension. A webm picture with Opus sound is an issue of its own (#239) ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)).
 - #182, on its measure: the part file is made sparse on Windows, as ADR 0001 said it would be if the measure called for it, with the room on the disk looked at when a download starts instead of reserved, so that a full disk is still said early; the engine gets more disk threads, so that its other disk work never waits behind a write. `v1.0.0` waits for this fix ([ADR 0026](../adr/0026-a-part-file-made-sparse.md)).
+- #58, changing the decision of 21 November 2026 after the contrast was computed in every variant: a paused bar gets a tone of its own, darker than the accent and 3:1 or more on its track, in 15 of the 18 variants; Black Tie light, Earth dark and Wood Floor dark keep today's paused bar, lighter than the accent, since "darker" there would be less distinct from a running bar (1.29:1, 1.16:1 and 1.34:1 at best). Wood Floor dark was added from the review of #261. The contrast spec holds the tone on the track and its order against the accent in each variant (#260).
+- #257: the update's note says "<version> installs when you quit Scia. Pause your downloads to restart now.", words that stay true once the downloads end. It lands with #159, and does not hold up `v1.0.0` by itself.
+- #156: the update's note seen for the first time in a packaged build, and `update-while-downloading.png` with its light twin retaken, in the owner's single sitting on the release candidate of `v1.0.0` — among "The owner's hands" of the roadmap. #258 merges without them, closing #159 and #257.
 
 ## Undated in the roadmap
 
