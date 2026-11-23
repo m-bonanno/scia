@@ -372,6 +372,32 @@ describe('App', () => {
       expect(scrolled.mock.contexts).toContain(document.activeElement);
     });
 
+    // Chromium focuses a button at the pointer's press: moved before it is let go, the button is
+    // no longer under the pointer, and the click is lost (the tech lead, round 2 of #244).
+    it('but not the focus a press of the pointer gives', async () => {
+      render(<App />);
+      await aNotice();
+      const settings = screen.getByRole('button', { name: 'Settings' });
+
+      await userEvent.click(settings);
+
+      expect(scrolled.mock.contexts).not.toContain(settings);
+    });
+
+    it('and still when the page moves it after a press of the pointer', async () => {
+      render(<App />);
+      await aNotice();
+      await userEvent.click(screen.getByRole('button', { name: 'Settings' }));
+      scrolled.mockClear();
+      const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+      act(() => {
+        field.focus();
+      });
+
+      expect(scrolled.mock.contexts).toContain(field);
+    });
+
     it('and leaves it alone while no notice is shown', async () => {
       render(<App />);
       await screen.findByRole('button', { name: 'Settings' });

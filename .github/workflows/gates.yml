@@ -163,9 +163,10 @@ jobs:
         env:
           SCIA_CAPTURES: ${{ runner.temp }}/captures
       # The captures of docs/design/ some specs take from the real app (#143), for a PR to commit
-      # once a person has read them (.claude/gotchas.md, "Docs and runbooks").
+      # once a person has read them (.claude/gotchas.md, "Docs and runbooks"). On a PR only: a
+      # burn-in calls this workflow several times in one run, and one name may be uploaded once.
       - name: Captures
-        if: always()
+        if: always() && github.event_name == 'pull_request'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: captures

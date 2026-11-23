@@ -32,7 +32,8 @@ describe('roomOverDialog', () => {
   });
 
   it('is a whole number of pixels, never less than it needs', () => {
-    expect(roomOverDialog({ stack: 80.5, content: 900, window: WINDOW, tallest: TALLEST })).toBe(
+    // 61.4 is owed: rounded, it would be 61, and the last 0.4 px would lie under the notices.
+    expect(roomOverDialog({ stack: 80.4, content: 900, window: WINDOW, tallest: TALLEST })).toBe(
       62,
     );
   });

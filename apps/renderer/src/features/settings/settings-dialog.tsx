@@ -23,6 +23,11 @@ import { SpeedLimit } from './speed-limit.tsx';
 import { roomOverDialog } from './room-over-dialog.ts';
 import { ThemeChoice } from './theme-choice.tsx';
 
+// What the window keeps above and below the dialog at its tallest — Chromium's own gap, 2em and
+// 6 px, made the page's: the room under the notices is measured from it, and a computed
+// `max-height` is no number (`calc(100% - 38px)`, read in Chromium in round 2 of #244).
+const DIALOG_GAP_PX = 38;
+
 interface SettingsDialogProps {
   readonly open: boolean;
   readonly onClose: () => void;
@@ -127,13 +132,12 @@ export function SettingsDialog({
       return undefined;
     }
     const measure = () => {
-      const tallest = Number.parseFloat(getComputedStyle(element).maxHeight);
       setRoom(
         roomOverDialog({
           stack: noticesHeight,
           content: content.offsetHeight,
           window: window.innerHeight,
-          tallest: Number.isFinite(tallest) ? tallest : window.innerHeight,
+          tallest: window.innerHeight - DIALOG_GAP_PX,
         }),
       );
     };
@@ -157,7 +161,12 @@ export function SettingsDialog({
       ref={dialog}
       onClose={onClose}
       aria-labelledby="settings-title"
-      style={{ '--notices-height': `${String(room)}px` } as CSSProperties}
+      style={
+        {
+          '--notices-height': `${String(room)}px`,
+          maxHeight: `calc(100vh - ${String(DIALOG_GAP_PX)}px)`,
+        } as CSSProperties
+      }
       className="room-under-notices m-auto w-[30rem] max-w-[calc(100vw-2rem)] rounded-2xl bg-surface px-0 pt-0 text-foreground backdrop:bg-overlay"
     >
       <div ref={shown}>

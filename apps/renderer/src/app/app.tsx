@@ -45,6 +45,8 @@ export function App(): ReactNode {
   const [filter, setFilter] = useState<Filter>(Filter.All);
   const { notices, tell, dismiss } = useNotices();
   const [noticesHeight, setNoticesHeight] = useState(0);
+  // Whether the pointer is being pressed in this turn: the focus it gives is not scrolled.
+  const pressing = useRef(false);
   const field = useRef<HTMLInputElement>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsLayer, setSettingsLayer] = useState<SettingsLayer | null>(null);
@@ -263,9 +265,19 @@ export function App(): ReactNode {
       className="flex h-screen flex-col"
       style={noticesRoom}
       // Chromium keeps what Tab moves to clear of that room, but not a focus the page moves itself
-      // onto a control already in the scrollport: `nearest` does, for both (#143).
+      // onto a control already in the scrollport: `nearest` does, for both (#143). Not the focus a
+      // press of the pointer gives, at the press: moved before it is let go, the control would no
+      // longer be under the pointer, and the click would be lost (round 2 of #244).
+      onPointerDownCapture={() => {
+        pressing.current = true;
+        setTimeout(() => {
+          pressing.current = false;
+        });
+      }}
       onFocus={(event) => {
-        if (noticesHeight > 0) event.target.scrollIntoView({ block: 'nearest' });
+        if (noticesHeight > 0 && !pressing.current) {
+          event.target.scrollIntoView({ block: 'nearest' });
+        }
       }}
     >
       <TitleBar

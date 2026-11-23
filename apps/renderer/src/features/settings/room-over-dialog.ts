@@ -14,7 +14,7 @@ export interface DialogBounds {
 export function roomOverDialog({ stack, content, window, tallest }: DialogBounds): number {
   const height = Math.min(content, tallest);
   const covered = (window + height) / 2 - (window - stack);
-  if (stack <= 0 || covered <= 0) return 0;
+  if (covered <= 0) return 0;
   // Grown by its room, the dialog is centred again and ends half of it lower: twice what was
   // covered clears it — unless it reaches its tallest first, where it scrolls, and room down to
   // where the notices begin is enough.
