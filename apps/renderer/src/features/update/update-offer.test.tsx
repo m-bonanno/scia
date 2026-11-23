@@ -103,14 +103,14 @@ describe('UpdateOffer', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
   });
 
-  it('offers no restart while something downloads, and says the update installs at the quit', async () => {
+  it('offers no restart while something downloads, says the update installs at the quit, and how to restart now', async () => {
     const { props } = offer({ downloading: true });
 
     await userEvent.click(screen.getByRole('button', { name: 'Update to 1.0.0-beta.18' }));
 
     const note = screen.getByRole('dialog');
     expect(note).toHaveTextContent(
-      'Scia is downloading. 1.0.0-beta.18 installs when you quit Scia.',
+      'Scia is downloading. 1.0.0-beta.18 installs when you quit Scia. Pause your downloads to restart now.',
     );
     expect(screen.queryByRole('button', { name: 'Restart now' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
@@ -143,6 +143,8 @@ describe('UpdateOffer', () => {
     expect(screen.getByRole('dialog')).toHaveTextContent(
       'Scia could not restart now. 1.0.0-beta.18 installs when you quit Scia.',
     );
+    // Pausing is no remedy when the engine is what did not answer.
+    expect(screen.getByRole('dialog')).not.toHaveTextContent('Pause');
     expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus();
   });
 
