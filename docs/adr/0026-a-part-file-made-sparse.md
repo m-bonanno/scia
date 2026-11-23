@@ -1,4 +1,4 @@
-# ADR 0025 — A part file made sparse, its room looked at instead of reserved
+# ADR 0026 — A part file made sparse, its room looked at instead of reserved
 
 - **Status**: accepted
 - **Date**: 2026-11-23

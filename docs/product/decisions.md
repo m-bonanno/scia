@@ -73,7 +73,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 ## 23 November 2026
 
 - #99: picture and sound offered apart are joined only as an mp4 picture in H.264 or AV1 and an AAC sound. The most lines win, and H.264 at equal lines; HEVC never, since Windows plays it only with a paid extension. A webm picture with Opus sound is an issue of its own (#239) ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)).
-- #182, on its measure: the part file is made sparse on Windows, as ADR 0001 said it would be if the measure called for it, with the room on the disk looked at when a download starts instead of reserved, so that a full disk is still said early; the engine gets more disk threads, so that its other disk work never waits behind a write. `v1.0.0` waits for this fix ([ADR 0025](../adr/0025-a-part-file-made-sparse.md)).
+- #182, on its measure: the part file is made sparse on Windows, as ADR 0001 said it would be if the measure called for it, with the room on the disk looked at when a download starts instead of reserved, so that a full disk is still said early; the engine gets more disk threads, so that its other disk work never waits behind a write. `v1.0.0` waits for this fix ([ADR 0026](../adr/0026-a-part-file-made-sparse.md)).
 
 ## Undated in the roadmap
 

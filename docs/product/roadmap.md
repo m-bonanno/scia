@@ -26,7 +26,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [ ] The page's logo and the app's icon drawing the mark in the same proportions (#88).
 - [x] The specs in quarantine fixed and back in the gates: the speed limit's (#43, #232) and HLS's (#162).
 - [x] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes): 32 s with nothing written for a 32 GiB file on an NVMe SSD, over 45 s for 4 GiB on a USB hard disk.
-- [ ] A large download that starts at once: its part file made sparse, its room looked at instead of reserved, the engine given more disk threads (#182; `v1.0.0` waits for it, the owner, 23 November 2026): built and held by specs ([ADR 0025](../adr/0025-a-part-file-made-sparse.md)), measured with the engine's own task; to be seen in the app.
+- [ ] A large download that starts at once: its part file made sparse, its room looked at instead of reserved, the engine given more disk threads (#182; `v1.0.0` waits for it, the owner, 23 November 2026): built and held by specs ([ADR 0026](../adr/0026-a-part-file-made-sparse.md)), measured with the engine's own task; to be seen in the app.
 - [x] The installer refuses an older version (#172, #177).
 
 ### The owner's hands

@@ -9,7 +9,7 @@ A download manager for Windows, with Linux to follow: paste a link, Scia fetches
 ## What it does today
 
 - Downloads any http/https link over several connections in parallel, handing work over when one finishes before the others.
-- Starts writing a large file at once on Windows, where its connections would otherwise wait for the disk to be filled with zeros — half a minute for a 32 GiB file on a fast SSD — and says a disk without room for the file before fetching a byte of it ([ADR 0025](./docs/adr/0025-a-part-file-made-sparse.md); specs, and the engine measured under a script, not yet seen in the app, #182).
+- Starts writing a large file at once on Windows, where its connections would otherwise wait for the disk to be filled with zeros — half a minute for a 32 GiB file on a fast SSD — and says a disk without room for the file before fetching a byte of it ([ADR 0026](./docs/adr/0026-a-part-file-made-sparse.md); specs, and the engine measured under a script, not yet seen in the app, #182).
 - Pauses and resumes from the bytes it already has, even after the app was closed and opened again.
 - Keeps downloading from the system tray when the window is closed with downloads running or waiting; closing it with nothing left quits (Windows, verified by script: the icon, its menu, its tooltip and its click not yet seen or pressed by a person, #13; Linux not yet tried).
 - Wears its own icon, drawn from its mark: the installer, the installed program, its uninstaller and its shortcuts carry it, as read from the system (Windows, #81). How Windows draws it on screen — the taskbar, the tray, the Start menu — has not been seen, and on the owner's machine the taskbar names Scia "Electron" (#85).

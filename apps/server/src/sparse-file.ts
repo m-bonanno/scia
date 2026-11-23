@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 
-// Makes a new, empty part file sparse before its size is set (docs/adr/0024).
+// Makes a new, empty part file sparse before its size is set (docs/adr/0026).
 export type MarkSparse = (path: string) => Promise<void>;
 
 // fsutil answers in tens of milliseconds; one that does not answer in this long is ended, and

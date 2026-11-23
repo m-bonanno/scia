@@ -167,7 +167,7 @@ export class DownloadTask {
       // started over, the old file's tail would stay past the new end (#106). The segments hold
       // only bytes inside it. It is made sparse before its size is set — a new one while it is
       // empty — so that a write far into it does not wait for the zeros before it
-      // (docs/adr/0024). A kept one is asked again, which changes nothing of one already sparse.
+      // (docs/adr/0026). A kept one is asked again, which changes nothing of one already sparse.
       if (this.#ranged) {
         const markSparse = this.#options.markSparse;
         if (markSparse !== undefined) await onDisk(() => markSparse(this.#options.partPath));

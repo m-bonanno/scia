@@ -1374,7 +1374,7 @@ export class DownloadManager {
   }
 
   // A part file that cannot be made sparse is downloaded into as it is, dense: slower to start
-  // on NTFS, whole all the same (docs/adr/0024). The log says so.
+  // on NTFS, whole all the same (docs/adr/0026). The log says so.
   #sparseFor(record: DownloadRecord): MarkSparse {
     return async (path) => {
       try {
