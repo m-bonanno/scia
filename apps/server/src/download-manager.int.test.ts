@@ -347,22 +347,31 @@ describe('DownloadManager', () => {
     expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), body)).toBe(0);
   });
 
-  it('reaches a high limit on one connection: a wait that ends late is made up [flaky #43]', async () => {
+  it('reaches a high limit on one connection: a wait that ends late is made up', async () => {
     const large = randomBytes(32 * MIB);
     const { url } = await host({ body: large, fileName: 'Film.mkv' });
     const downloads = await open();
     // A read every two and a half milliseconds: less than a system's timer may take to fire.
-    downloads.updateSettings({ speedLimitBytesPerSecond: 25 * MIB, connectionsPerDownload: 1 });
+    const limit = 25 * MIB;
+    downloads.updateSettings({ speedLimitBytesPerSecond: limit, connectionsPerDownload: 1 });
 
-    const startedAt = Date.now();
     const [added] = downloads.add({ urls: [url] });
+    const bytes = () => downloads.find(added!.id).downloadedBytes;
+    // The rate is measured in the middle of the download, in bytes the engine took, not from the
+    // add to the file on the disk: the start and the last write to disk are no part of the limit,
+    // and a busy machine stretched them past any bound on the whole (#43).
+    await until(() => bytes() >= 2 * MIB);
+    const fromBytes = bytes();
+    const fromTime = performance.now();
+    // The stretch that is measured: the wait is the case itself.
+    await until(() => performance.now() - fromTime >= 600);
+    const rate = ((bytes() - fromBytes) * 1000) / (performance.now() - fromTime);
     await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
-    const took = Date.now() - startedAt;
 
-    // Thirty-two megabytes at twenty-five a second: 1.28 seconds. Not faster, and not at a
-    // third of the limit, which is what one read a tick comes to.
-    expect(took).toBeGreaterThan(1150);
-    expect(took).toBeLessThan(1900);
+    // One read a tick comes to a third of the limit; made up, the rate is the limit. The bound is
+    // set between the two, against what the code does without the thing held.
+    expect(rate).toBeGreaterThan(0.6 * limit);
+    expect(rate).toBeLessThan(1.1 * limit);
     expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), large)).toBe(0);
   });
 

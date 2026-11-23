@@ -24,7 +24,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [ ] A save of `state.json` not lost while another process has the file open (#151).
 - [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#13), the folder's button (#40), a paused bar's tone (#58), the key's placeholder (#66), the clipboard's first read (#134), room under notices (#143), the popover's note (#159), a code confirmed after Settings closed (#146), a magnet of one file and the field's placeholder (#150).
 - [ ] The page's logo and the app's icon drawing the mark in the same proportions (#88).
-- [ ] The two specs in quarantine fixed and back in the gates (#43, #162).
+- [ ] The spec in quarantine fixed and back in the gates (#162). The speed limit's is back (#43).
 - [ ] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes).
 - [x] The installer refuses an older version (#172, #177).
 
@@ -70,7 +70,7 @@ None open: all were settled on 21 November 2026 ([decisions.md](./decisions.md#2
 | [A file that could not be marked says so](./evidence.md#a-file-that-could-not-be-marked)                                  | #34        | no    | —                                    | —                                                           | no        |
 | [The default folder, in Settings](./evidence.md#the-download-folder)                                                      | #37, #40   | yes   | E2E, Script                          | a hand in the dialog; the packaged app                      | yes       |
 | [The folder of one download](./evidence.md#the-download-folder)                                                           | #39        | no    | —                                    | —                                                           | no        |
-| [Speed limit for all downloads](./evidence.md#the-speed-limit)                                                            | #41, #43   | yes   | E2E, Script; one spec in quarantine  | a hand on the menu; HTTPS in the app                        | yes       |
+| [Speed limit for all downloads](./evidence.md#the-speed-limit)                                                            | #41, #43   | yes   | E2E, Script                          | a hand on the menu; HTTPS in the app                        | yes       |
 | [The speed limit of one download](./evidence.md#the-speed-limit)                                                          | #42        | no    | —                                    | —                                                           | no        |
 | [A notification when a download ends](./evidence.md#the-notification-when-a-download-ends)                                | #45        | yes   | Script (main's log)                  | a notification looked at or clicked                         | yes       |
 | [The window really in use](./evidence.md#the-window-really-in-use)                                                        | #62        | no    | —                                    | —                                                           | yes       |
@@ -155,9 +155,8 @@ After `v1.0.0` too, not ordered: live streams (#121), streams that change partwa
 
 ## Specs in quarantine
 
-Held by no gate until their issue is fixed ([ADR 0019](../adr/0019-specs-in-quarantine.md), #195). `v1.0.0` waits for both to be fixed and back in the gates:
+Held by no gate until their issue is fixed ([ADR 0019](../adr/0019-specs-in-quarantine.md), #195). `v1.0.0` waits for it to be fixed and back in the gates:
 
-- The speed limit's spec of a download at 99 and 100 % of the limit (#43).
 - The HLS spec of a piece that fails for good stopping every connection (#162).
 
 ## Not planned
