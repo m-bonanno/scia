@@ -132,12 +132,13 @@ describe('the themes of the page', () => {
   );
 });
 
-// A paused bar is a tone of its own, darker than a running one (the owner, #58). In the two
+// A paused bar is a tone of its own, darker than a running one (the owner, #58). In the three
 // variants below "darker" cannot be built without the paused bar coming out less distinct from
-// a running one than the lighter tone it keeps (1.29:1 and 1.16:1 at best).
+// a running one than the lighter tone it keeps (1.29:1, 1.16:1 and 1.34:1 at best).
 const PAUSED_LIGHTER_THAN_THE_ACCENT: readonly { theme: Theme; scheme: ColourScheme }[] = [
   { theme: Theme.BlackTie, scheme: ColourScheme.Light },
   { theme: Theme.Earth, scheme: ColourScheme.Dark },
+  { theme: Theme.WoodFloor, scheme: ColourScheme.Dark },
 ];
 
 describe('a paused bar', () => {
@@ -149,6 +150,11 @@ describe('a paused bar', () => {
         (variant) => variant.theme === theme && variant.scheme === scheme,
       );
 
+      // A value in another form would read as no luminance at all, and as "darker".
+      expect([paused, accent]).toEqual([
+        expect.stringMatching(/^#[0-9a-f]{6}$/i),
+        expect.stringMatching(/^#[0-9a-f]{6}$/i),
+      ]);
       expect(luminance(paused) > luminance(accent)).toBe(lighter);
       expect(paused).not.toBe(accent);
     },

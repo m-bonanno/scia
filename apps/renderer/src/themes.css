@@ -10,8 +10,8 @@
    move it toward crimson so that the two stay apart. docs/design/themes.md says which is which.
 
    A paused bar (--paused) is the secondary text's hue, darker than the accent and 3:1 on its
-   track — but in Black Tie light and Earth dark, where it stays the secondary text's own tone,
-   lighter than the accent (the owner, #58).
+   track — but in Black Tie light, Earth dark and Wood Floor dark, where it stays the secondary
+   text's own tone, lighter than the accent (the owner, #58).
 
    A spec holds every pair of text and ground to AA, and --background, --foreground and
    --muted-foreground to WINDOW_COLOURS of @scia/contracts/theme, which main paints the window
@@ -127,7 +127,7 @@
   --foreground: #f7e4d6;
   --muted-foreground: #b9a392;
   --accent: #c9731e;
-  --paused: #857568;
+  --paused: #b9a392;
   --accent-foreground: #180904;
   --destructive: #ff7a9c;
   --destructive-foreground: #2b0712;

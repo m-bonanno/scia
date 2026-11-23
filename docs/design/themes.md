@@ -14,7 +14,7 @@ Two tokens are not held as the others are, and say so here so that the next them
 
 Selected text is not a token: it is `accent-foreground` on `accent`, in every theme, and the same spec holds that.
 
-A paused bar has a tone of its own, `paused` (the owner, #58). In 16 of the 18 variants it is the hue of the secondary text, darkened until it is darker than the accent and still 3:1 or more on its track: about 3.2:1 on the dark tracks, and 1.8:1 under the accent on the light ones. Black Tie light and Earth dark keep the paused bar they had, the secondary text's own tone, lighter than the accent: there, a tone darker than the accent could differ from it by 1.29:1 and 1.16:1 at most, less than the lighter one does (1.62:1 and 1.60:1). The row's "Paused" says the rest. The spec holds the tone at 3:1 on the track, and its order against the accent in each variant, the two exceptions written as a list. A ready or a queued bar stays `muted-foreground`.
+A paused bar has a tone of its own, `paused` (the owner, #58). In 15 of the 18 variants it is the hue of the secondary text, darkened until it is darker than the accent and still 3:1 or more on its track: about 3.2:1 on the dark tracks, and 1.8:1 under the accent on the light ones. Black Tie light, Earth dark and Wood Floor dark keep the paused bar they had, the secondary text's own tone, lighter than the accent: there, a tone darker than the accent could differ from it by 1.29:1, 1.16:1 and 1.34:1 at most, less than the lighter one does (1.62:1, 1.60:1 and 1.46:1). The row's "Paused" says the rest. The spec holds the tone at 3:1 on the track, and its order against the accent in each variant, the three exceptions written as a list. A ready or a queued bar stays `muted-foreground`.
 
 Captures of every theme, from the real app: [`themes/`](./themes/); the default one is the captures of [`README.md`](./README.md).
 
@@ -172,7 +172,7 @@ Lowest contrast — text: 5.64:1 dark, 4.62:1 light; marks: 3.21:1 dark (the pau
 
 [Palette 5258](https://www.color-hex.com/color-palette/5258): `#c9731e` `#733214` `#a54b00` `#bf6d1b` `#70300d`.
 
-No two colours of this palette reach 4.5:1 against each other (the best pair is 2.81:1). The accents are the palette’s own oranges; grounds and text are tones of them. Because the accent is an orange, the failure colour is moved toward crimson, as in Brick.
+No two colours of this palette reach 4.5:1 against each other (the best pair is 2.81:1). The accents are the palette’s own oranges; grounds and text are tones of them. Because the accent is an orange, the failure colour is moved toward crimson, as in Brick. On dark a paused bar keeps the secondary text's tone, lighter than the orange by 1.46:1: no tone darker than it is that distinct at 3:1 on the track (#58).
 
 | Token                    | Dark              | Light                 |
 | ------------------------ | ----------------- | --------------------- |
@@ -183,7 +183,7 @@ No two colours of this palette reach 4.5:1 against each other (the best pair is 
 | `foreground`             | `#f7e4d6`         | `#391605`             |
 | `muted-foreground`       | `#b9a392`         | `#684b3e`             |
 | `accent`                 | **`#c9731e`**     | **`#a54b00`**         |
-| `paused`                 | `#857568`         | `#523a30`             |
+| `paused`                 | `#b9a392`         | `#523a30`             |
 | `accent-foreground`      | `#180904`         | `#ffffff`             |
 | `destructive`            | `#ff7a9c`         | `#a3123f`             |
 | `destructive-foreground` | `#2b0712`         | `#ffffff`             |
@@ -191,7 +191,7 @@ No two colours of this palette reach 4.5:1 against each other (the best pair is 
 | `ring`                   | **`#c9731e`**     | **`#a54b00`**         |
 | `overlay`                | `#000000` at 60 % | **`#70300d`** at 40 % |
 
-Lowest contrast — text: 5.52:1 dark, 5.82:1 light; marks: 3.20:1 dark (the paused bar on its track), 4.38:1 light.
+Lowest contrast — text: 5.52:1 dark, 5.82:1 light; marks: 4.02:1 dark, 4.38:1 light.
 
 ## Ice
 
