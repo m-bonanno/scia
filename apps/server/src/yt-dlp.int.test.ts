@@ -107,6 +107,32 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     });
   });
 
+  it('reads a sound offered apart from its picture, in a container of sound, with its bitrate and the preference of its language', async () => {
+    const media = await reader().read('https://site.example/apart', never);
+    const byUrl = new Map(media?.formats.map((format) => [format.url, format]));
+
+    expect(byUrl.get('https://cdn.example/sound.m4a')).toMatchObject({
+      ext: 'm4a',
+      vcodec: 'none',
+      acodec: 'mp4a.40.2',
+      bitrate: 129.5,
+      languagePreference: 10,
+    });
+    expect(byUrl.get('https://cdn.example/total.m4a')?.bitrate).toBe(48);
+    // What no bitrate or preference is, is none.
+    expect(byUrl.get('https://cdn.example/odd.m4a')).toMatchObject({
+      bitrate: null,
+      languagePreference: null,
+    });
+    // A sound in what is no container of sound is no format.
+    expect(byUrl.has('https://cdn.example/sound.exe')).toBe(false);
+    expect(byUrl.get('https://cdn.example/picture.mp4')).toMatchObject({
+      ext: 'mp4',
+      acodec: 'none',
+      bitrate: null,
+    });
+  });
+
   it('never lets a site be guessed, a restriction be got around, a cookie, a plugin or a setting of this computer be read', async () => {
     await reader().read('https://site.example/video/1', never);
 

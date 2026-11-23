@@ -24,7 +24,8 @@ async function onDisk<T>(operation: () => Promise<T>): Promise<T> {
   try {
     return await operation();
   } catch (error) {
-    if (error instanceof PageError) throw error;
+    // What the files say is not the disk's fault: the plan reads it as a refusal of its own.
+    if (error instanceof PageError || error instanceof Mp4Error) throw error;
     throw new DiskError('The joined file could not be made.', { cause: error });
   }
 }
