@@ -41,5 +41,7 @@ contextBridge.exposeInMainWorld(
     // The page names a service; main asks the engine for its code's page, and opens it.
     openCodePage: (id: string) =>
       ipcRenderer.invoke(BridgeChannel.OpenCodePage, id) as Promise<unknown>,
+    // The page asks and names nothing: main opens Scia's support page.
+    openSupportPage: () => ipcRenderer.invoke(BridgeChannel.OpenSupportPage) as Promise<unknown>,
   }),
 );

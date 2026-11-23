@@ -53,6 +53,7 @@ describe('SettingsDialog', () => {
       onUpdateChanged: vi.fn(() => () => undefined),
       restartToUpdate: vi.fn(async () => 'nothing'),
       openCodePage: vi.fn(async () => undefined),
+      openSupportPage: vi.fn(async () => undefined),
     };
   }
 
@@ -158,6 +159,28 @@ describe('SettingsDialog', () => {
     expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
     // Whoever opened it learns what was read, not only what is changed here.
     expect(onSettings).toHaveBeenCalledExactlyOnceWith(settings);
+  });
+
+  it('offers a way to support Scia, beside its version (#271)', async () => {
+    aShell(async () => 'kept');
+    const openSupportPage = vi.fn(async () => undefined);
+    window.scia = { ...window.scia!, openSupportPage };
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Support Scia' }));
+
+    expect(openSupportPage).toHaveBeenCalledOnce();
+    expect(screen.getByText('Scia 1.0.0')).toBeInTheDocument();
+  });
+
+  it('reaches "Support Scia" by Tab, after the last setting', async () => {
+    aShell(async () => 'kept');
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    (await screen.findByRole('switch', { name: 'Beta versions' })).focus();
+
+    await userEvent.tab();
+
+    expect(screen.getByRole('button', { name: 'Support Scia' })).toHaveFocus();
   });
 
   describe('the links of the clipboard', () => {
@@ -275,11 +298,40 @@ describe('SettingsDialog', () => {
     const onSettings = vi.fn();
     render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
 
     expect(chooseDownloadFolder).toHaveBeenCalledExactlyOnceWith();
     expect(await screen.findByText('/media/films')).toBeInTheDocument();
     expect(onSettings).toHaveBeenLastCalledWith({ ...settings, downloadDirectory: '/media/films' });
+  });
+
+  // The owner, #40: a button in words, like the others of Settings, not an icon whose words are
+  // only a tooltip. Its one word is told what it changes by the setting it sits beside.
+  it('offers to change the folder in words, described by the folder it changes', async () => {
+    aShell(async () => 'kept');
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+
+    const change = await screen.findByRole('button', { name: 'Change…' });
+
+    expect(change).toHaveTextContent(/^Change…$/);
+    expect(change).not.toHaveAttribute('title');
+    expect(change).toHaveAccessibleDescription('Download folder /home/me/Downloads');
+  });
+
+  // #40: a path cut at its end hid the name just chosen. Written right to left, the box cuts its
+  // start; the path inside it keeps its own order. That the name shows is read in the built app
+  // (`apps/desktop/e2e/settings.e2e.test.ts`): jsdom lays nothing out.
+  it('cuts a long path at its start, so that the folder’s own name shows', async () => {
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+
+    const path = await screen.findByText('/home/me/Downloads');
+
+    expect(path).toHaveAttribute('dir', 'ltr');
+    expect(path.closest('output')).toHaveAttribute('dir', 'rtl');
+    // The tooltip takes the direction of what carries the title: the path's own, left to right,
+    // or its neutral ends — `D:\`, a leading `/` — would move to the other end (round 1 of #278).
+    expect(path).toHaveAttribute('title', '/home/me/Downloads');
+    expect(path.closest('output')).not.toHaveAttribute('title');
   });
 
   it('says so, by the folder, when the engine refused the one that was chosen', async () => {
@@ -287,13 +339,39 @@ describe('SettingsDialog', () => {
     const onError = vi.fn();
     render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Scia could not use the folder you chose. Choose one it can write to.',
     );
     expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  // A message that belongs to a control describes it (`apps/renderer/CLAUDE.md`, "Behaviour"): an
+  // alert is said once, and whoever comes back to "Change…" hears the refusal with the folder.
+  it('describes Change… by the refusal while the folder is refused, and no longer once it is chosen again', async () => {
+    const chooseDownloadFolder = vi
+      .fn<() => Promise<unknown>>()
+      .mockResolvedValueOnce('refused')
+      .mockResolvedValueOnce('kept');
+    aShell(chooseDownloadFolder);
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+    const change = await screen.findByRole('button', { name: 'Change…' });
+
+    await userEvent.click(change);
+    await screen.findByRole('alert');
+
+    expect(change).toHaveAccessibleDescription(
+      'Download folder /home/me/Downloads Scia could not use the folder you chose. Choose one it can write to.',
+    );
+
+    await userEvent.click(change);
+    await vi.waitFor(() => {
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+
+    expect(change).toHaveAccessibleDescription('Download folder /home/me/Downloads');
   });
 
   it('does not blame a folder when main failed before or after the dialog: it says what failed, and reads the folder again', async () => {
@@ -309,7 +387,7 @@ describe('SettingsDialog', () => {
     const onError = vi.fn();
     render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
 
     expect(await screen.findByText('/media/films')).toBeInTheDocument();
     expect(onError).toHaveBeenCalledExactlyOnceWith(failure);
@@ -324,7 +402,7 @@ describe('SettingsDialog', () => {
     const onError = vi.fn();
     render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
 
     await vi.waitFor(() => {
       expect(onError).toHaveBeenCalledTimes(2);
@@ -339,7 +417,7 @@ describe('SettingsDialog', () => {
     const onError = vi.fn();
     render(<SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} />);
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
 
     expect(await screen.findByText('/home/me/Downloads')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
@@ -357,15 +435,15 @@ describe('SettingsDialog', () => {
       <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />,
     );
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     rerender(<SettingsDialog open={false} onClose={ignore} onError={ignore} onSettings={ignore} />);
     rerender(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Change folder' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
     expect(await screen.findByRole('alert')).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Change folder' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Change…' }));
     await screen.findByText('/home/me/Downloads');
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
@@ -374,7 +452,7 @@ describe('SettingsDialog', () => {
     render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
 
     expect(await screen.findByText('/home/me/Downloads')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Change folder' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Change…' })).not.toBeInTheDocument();
   });
 
   it('offers the nine themes by name, the default one first, and keeps the one chosen', async () => {
@@ -464,7 +542,7 @@ describe('SettingsDialog', () => {
     render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={onSettings} />);
     const theme = await screen.findByRole('combobox', { name: 'Theme' });
 
-    await userEvent.click(screen.getByRole('button', { name: 'Change folder' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Change…' }));
     await vi.waitFor(() => {
       expect(read).toHaveBeenCalledTimes(2);
     });
