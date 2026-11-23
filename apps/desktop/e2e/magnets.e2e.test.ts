@@ -425,6 +425,10 @@ describe('the real app, with a magnet', () => {
       await watch.click();
       await until(() => watch.isChecked());
       await page.getByRole('button', { name: 'Close' }).click();
+      // Copied once main knows the clipboard held no text when it began reading: a text there
+      // before that is what was there, never taken (ADR 0012).
+      await until(async () => (await profile.log()).includes('clipboard_start_known'));
+      expect(await profile.log()).toContain('clipboard_start_known { text: false }');
       await copy(scia, setup.url.replace('sample.bin', 'setup.exe'));
       await rowOf(page, 'setup.exe').getByRole('button', { name: 'Start' }).waitFor();
       await paste(page, `magnet:?xt=urn:btih:${holiday ?? ''}&dn=Holiday%20films`);
