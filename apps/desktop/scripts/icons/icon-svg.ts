@@ -18,7 +18,7 @@ export function iconSvg(mark: Mark, { background, foreground }: TileColours): st
   return [
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}">\n`,
     `  <rect width="${size}" height="${size}" rx="${String(TILE_RADIUS)}" fill="${background}" />\n`,
-    `  <g fill="none" stroke="${foreground}" stroke-width="${String(mark.strokeWidth)}" stroke-linecap="round" stroke-linejoin="round">\n`,
+    `  <g fill="${mark.fill}" stroke="${foreground}" stroke-width="${String(mark.strokeWidth)}" stroke-linecap="${mark.lineCap}" stroke-linejoin="${mark.lineJoin}">\n`,
     ...strokes,
     '  </g>\n',
     '</svg>\n',

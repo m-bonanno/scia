@@ -13,11 +13,11 @@ export function Logo({ size = 18 }: { readonly size?: number }): ReactNode {
       width={size}
       height={size}
       viewBox={VIEW_BOX}
-      fill="none"
+      fill={MARK.fill}
       stroke="currentColor"
       strokeWidth={MARK.strokeWidth}
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      strokeLinecap={MARK.lineCap}
+      strokeLinejoin={MARK.lineJoin}
       aria-hidden="true"
       className="text-accent"
     >

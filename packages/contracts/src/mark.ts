@@ -6,15 +6,23 @@ export interface MarkStroke {
   readonly opacity?: number;
 }
 
+// Strokes, never a fill: a round cap adds half the width to each end, so the cap and the join are
+// the mark's proportions as much as its paths are.
 export interface Mark {
   readonly size: number;
+  readonly fill: 'none';
   readonly strokeWidth: number;
+  readonly lineCap: 'round' | 'butt' | 'square';
+  readonly lineJoin: 'round' | 'miter' | 'bevel';
   readonly strokes: readonly MarkStroke[];
 }
 
 export const MARK: Mark = {
   size: 32,
+  fill: 'none',
   strokeWidth: 3,
+  lineCap: 'round',
+  lineJoin: 'round',
   strokes: [
     { d: 'M16 6v18' },
     { d: 'M9 17.5 16 24.5l7-7' },

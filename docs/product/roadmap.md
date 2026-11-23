@@ -101,7 +101,7 @@ None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisio
 | --------------------------------------------------------------------------------------------------- | --------- | ------- | ----------- | -------------------------------- | --------- |
 | [Tried in Chrome and Brave, then Edge; Firefox](./evidence.md#tried-in-browsers)                    | #23       | no      | —           | —                                | no        |
 | [Published in the stores; the pairing code back in Settings](./evidence.md#published-in-the-stores) | #152      | no      | —           | —                                | no        |
-| [The extension's icon, from the mark](./evidence.md#the-icon-of-the-app)                            | —         | no      | —           | —                                | no        |
+| [The extension's icon, from the mark](./evidence.md#the-icon-of-the-app)                            | #293      | no      | —           | —                                | no        |
 | [Downloads behind a login, per site](./evidence.md#downloads-behind-a-login)                        | —         | no      | —           | —                                | no        |
 | [Video of a page: one file, yt-dlp shipped](./evidence.md#the-video-of-one-page)                    | #89, #97  | yes     | Script      | any site but archive.org         | yes       |
 | [Video of a page: an HLS stream](./evidence.md#the-video-of-one-page)                               | #98, #162 | yes     | Specs       | any stream in the app, on a site | yes       |

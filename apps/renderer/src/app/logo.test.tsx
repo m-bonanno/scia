@@ -16,6 +16,9 @@ describe('Logo', () => {
     const svg = drawn();
 
     expect(svg.getAttribute('stroke-width')).toBe(String(MARK.strokeWidth));
+    expect(svg.getAttribute('stroke-linecap')).toBe(MARK.lineCap);
+    expect(svg.getAttribute('stroke-linejoin')).toBe(MARK.lineJoin);
+    expect(svg.getAttribute('fill')).toBe(MARK.fill);
     expect(
       [...svg.querySelectorAll('path')].map((path) => ({
         d: path.getAttribute('d'),
@@ -29,23 +32,25 @@ describe('Logo', () => {
     );
   });
 
-  // The mark stands where it stands on the tile, the tile's margin left out.
+  // The mark stands where it stands on the tile, with 3 units of the tile's margin left out: about
+  // as large on the page as the logo before #88.
   it('frames it in a square centred on the mark’s own', () => {
-    const [x = NaN, y = NaN, width = NaN, height = NaN] = (drawn().getAttribute('viewBox') ?? '')
-      .split(' ')
-      .map(Number);
+    const viewBox = drawn().getAttribute('viewBox') ?? '';
+    const [x = NaN, y = NaN, width = NaN, height = NaN] = viewBox.split(' ').map(Number);
 
+    expect(viewBox).toBe('3 3 26 26');
     expect(width).toBe(height);
-    expect(width).toBeLessThan(MARK.size);
     expect(x + width / 2).toBe(MARK.size / 2);
     expect(y + height / 2).toBe(MARK.size / 2);
   });
 
-  it('is as large as it is asked to be, and hidden from assistive technology', () => {
+  it('is as large as it is asked to be, in the accent, and hidden from assistive technology', () => {
     const svg = drawn(26);
 
     expect(svg.getAttribute('width')).toBe('26');
     expect(svg.getAttribute('height')).toBe('26');
+    expect(svg.getAttribute('stroke')).toBe('currentColor');
+    expect(svg).toHaveClass('text-accent');
     expect(svg.getAttribute('aria-hidden')).toBe('true');
   });
 });
