@@ -156,7 +156,7 @@ export class DownloadTask {
     // Only a part file about to be made, before it is: a download refused for its room leaves
     // nothing on the disk. A kept one had its room looked at when it was made — or taken, made
     // dense — and what it has not written yet is no room it still needs.
-    if (this.#ranged && kept === undefined) await this.#roomForTheRest();
+    if (this.#ranged && kept === undefined) await this.#roomForTheFile();
     const file = kept ?? (await onDisk(() => open(this.#options.partPath, 'w+')));
     try {
       // A ranged part file is the file's length: the whole size at once when it is made, kept
@@ -181,12 +181,12 @@ export class DownloadTask {
   // at, so that a full disk is still said before a byte is fetched. What another download or
   // program writes afterwards is said by the write that finds the disk full, and so is the room of
   // a disk that does not say it.
-  async #roomForTheRest(): Promise<void> {
+  async #roomForTheFile(): Promise<void> {
     const room = await (this.#options.freeBytes ?? roomOf)(dirname(this.#options.partPath)).catch(
       () => null,
     );
-    const toCome = this.#segments.reduce((sum, segment) => sum + remainingBytes(segment), 0);
-    if (room !== null && room < toCome) throw new DiskError('The disk has no room for the file.');
+    const size = this.#options.totalBytes ?? 0;
+    if (room !== null && room < size) throw new DiskError('The disk has no room for the file.');
   }
 
   async #openKept(): Promise<FileHandle | undefined> {
