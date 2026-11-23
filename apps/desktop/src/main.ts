@@ -37,6 +37,7 @@ import { resolveRuntimeLayout } from './engine/runtime-layout.ts';
 import { buildServerEnv } from './engine/server-env.ts';
 import { ServerSupervisor } from './engine/server-supervisor.ts';
 import { ShownNotices } from './engine/shown-notices.ts';
+import { supportPageOpener } from './engine/support-page.ts';
 import { HIDDEN_TO_TRAY_NOTICE, trayTooltip } from './engine/tray-presentation.ts';
 import { Updates, updatesApply } from './engine/updates.ts';
 import { themeOfEngine } from './engine/window-theme.ts';
@@ -507,6 +508,10 @@ async function boot(): Promise<void> {
   window.answer(BridgeChannel.OpenCodePage, async (id) => {
     await shell.openExternal(await codePageAddress(id, engine(), ENGINE_ANSWER_LIMIT_MS));
   });
+  window.answer(
+    BridgeChannel.OpenSupportPage,
+    supportPageOpener((url) => shell.openExternal(url)),
+  );
 
   try {
     port = await supervisor.start();

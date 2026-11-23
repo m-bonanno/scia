@@ -90,6 +90,7 @@ describe('App', () => {
       onUpdateChanged: vi.fn(() => () => undefined),
       restartToUpdate: vi.fn(async () => 'nothing'),
       openCodePage: vi.fn(async () => undefined),
+      openSupportPage: vi.fn(async () => undefined),
     };
     render(<App />);
 
@@ -209,6 +210,7 @@ describe('App', () => {
       onUpdateChanged: vi.fn(() => () => undefined),
       restartToUpdate: vi.fn(async () => 'nothing'),
       openCodePage: vi.fn(async () => undefined),
+      openSupportPage: vi.fn(async () => undefined),
     };
     const add = vi.spyOn(api, 'addDownloads').mockResolvedValue([]);
     render(<App />);
@@ -1317,6 +1319,7 @@ describe('App, its version and an update', () => {
       }),
       restartToUpdate: vi.fn(async (): Promise<unknown> => 'restarting'),
       openCodePage: vi.fn(async () => undefined),
+      openSupportPage: vi.fn(async () => undefined),
       ...overrides,
     };
     window.scia = shell;

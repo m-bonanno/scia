@@ -15,6 +15,7 @@ function aShell() {
     onUpdateChanged: vi.fn(() => () => undefined),
     restartToUpdate: vi.fn(async () => 'nothing'),
     openCodePage: vi.fn(async () => undefined),
+    openSupportPage: vi.fn(async () => undefined),
   };
   return themeChanged;
 }
