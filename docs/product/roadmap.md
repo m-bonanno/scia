@@ -27,7 +27,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [x] The specs in quarantine fixed and back in the gates: the speed limit's (#43, #232) and HLS's (#162).
 - [ ] The wait of zero-filling on NTFS, measured (#182; ADR 0001: before M1 closes).
 - [x] The installer refuses an older version (#172, #177).
-- [ ] Every file of a Bunkr album downloaded into a folder of its own, by a reader of Scia's own (#228): built ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md)) and held by specs against a local host that answers as Bunkr does; to be seen against the real Bunkr.
+- [ ] Every file of a Bunkr album downloaded into a folder of its own, by a reader of Scia's own (#228): built ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md)) and held by specs, and by CI's E2E suite on the built app, against a local host that answers as Bunkr does; to be seen against the real Bunkr (#266).
 
 ### The owner's hands
 
@@ -42,6 +42,7 @@ One sitting, from one checklist, on a beta built as a release candidate:
 - [ ] The mark on a real `.exe` and a document (#33).
 - [ ] A hand in the folder dialog (#40) and on the speed menu (#43).
 - [ ] A real site's video, one file and an HLS stream (#89).
+- [ ] A real public Bunkr album, and a Bunkr file pasted by itself (#266).
 
 Checked after the tag, so not part of the gate: a beta updated to the stable (#82).
 
@@ -108,7 +109,7 @@ None open: all were settled on 21 November 2026 ([decisions.md](./decisions.md#2
 | [Pages, playlists and channels](./evidence.md#pages-playlists-and-channels)                         | #8        | no      | —           | —                                | no        |
 | [A fallback port, found by the extension](./evidence.md#a-fallback-port)                            | —         | no      | —           | —                                | no        |
 | [A reader of sites of Scia's own](./evidence.md#the-video-of-one-page)                              | #102      | no      | —           | —                                | no        |
-| [A Bunkr album into a folder of its own](./evidence.md#a-bunkr-album)                               | #228      | yes     | Specs       | the real Bunkr; the app          | yes       |
+| [A Bunkr album into a folder of its own](./evidence.md#a-bunkr-album)                               | #228      | yes     | Specs, E2E  | the real Bunkr (#266)            | yes       |
 
 ## M3 — Integrations: debrid services
 
