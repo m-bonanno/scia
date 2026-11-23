@@ -400,8 +400,34 @@ describe('the real app, with a magnet', () => {
         await panel.getByText('gave no files for it').waitFor();
       };
 
-      await viewportOf(page, 1040, 520);
+      // The window itself sized, not the page's viewport: the title bar is laid out by the window's
+      // own width (its buttons' room), and a viewport narrower than the window left the page wider
+      // than itself, scrolled sideways under the panel's focus (CI's E2E on 826b48e).
+      const windowOf = async (width: number, height: number) => {
+        await scia.app.evaluate(
+          ({ BrowserWindow }, [w, h]) => {
+            BrowserWindow.getAllWindows()[0]?.setContentSize(w, h);
+          },
+          [width, height] as const,
+        );
+        await until(() =>
+          page.evaluate(([w, h]) => window.innerWidth === w && window.innerHeight === h, [
+            width,
+            height,
+          ] as const),
+        );
+      };
+      // Nothing scrolls sideways: the page is as wide as the window.
+      const widths = () =>
+        page.evaluate(() => ({
+          page: document.documentElement.scrollWidth,
+          window: window.innerWidth,
+          scrolled: document.scrollingElement?.scrollLeft ?? 0,
+        }));
+
+      await windowOf(1040, 520);
       await shown();
+      expect(await widths()).toEqual({ page: 1040, window: 1040, scrolled: 0 });
       await capture(scia, 'dark', 'the-account-magnets.png');
       await capture(scia, 'light', 'the-account-magnets-light.png');
       await page.keyboard.press('Escape');
@@ -438,8 +464,9 @@ describe('the real app, with a magnet', () => {
         .filter({ hasText: 'Holiday films' })
         .getByText(/1\.0\sMB\/s/)
         .waitFor();
-      await viewportOf(page, 640, 720);
+      await windowOf(640, 720);
       await shown();
+      expect(await widths()).toEqual({ page: 640, window: 640, scrolled: 0 });
       await capture(scia, 'dark', 'the-account-magnets-narrow.png', true);
       await capture(scia, 'light', 'the-account-magnets-narrow-light.png', true);
     });
