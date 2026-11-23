@@ -12,6 +12,8 @@ export type Added =
 interface AddBarProps {
   readonly onAdd: (pasted: Pasted) => Promise<Added>;
   readonly inputRef?: Ref<HTMLInputElement>;
+  // Whether a service is connected, which a magnet needs: the placeholder names magnets only then.
+  readonly takesMagnets: boolean;
 }
 
 // How many it sends, when more than one: files, or — with a magnet among them — links.
@@ -21,7 +23,7 @@ function buttonLabel({ links, magnets }: Pasted): string {
   return `Download ${String(count)} ${magnets.length === 0 ? 'files' : 'links'}`;
 }
 
-export function AddBar({ onAdd, inputRef }: AddBarProps): ReactNode {
+export function AddBar({ onAdd, inputRef, takesMagnets }: AddBarProps): ReactNode {
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
@@ -76,7 +78,7 @@ export function AddBar({ onAdd, inputRef }: AddBarProps): ReactNode {
           aria-label="Links to download"
           aria-invalid={refusal === null ? undefined : true}
           aria-describedby={refusal === null ? undefined : refusalId}
-          placeholder="Paste one or more links"
+          placeholder={takesMagnets ? 'Paste links or magnets' : 'Paste one or more links'}
           autoFocus
           spellCheck={false}
           autoComplete="off"
