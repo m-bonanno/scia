@@ -177,7 +177,9 @@ export class KeyVault {
   }
 
   async #sealKept(): Promise<boolean> {
-    this.#sealOnDisk ||= await this.#deps.cipher.sealKept();
+    if (this.#sealOnDisk) return true;
+    // Only a look that found it writes: an older look answering "not yet" says nothing of now.
+    if (await this.#deps.cipher.sealKept()) this.#sealOnDisk = true;
     return this.#sealOnDisk;
   }
 }

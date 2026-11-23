@@ -333,11 +333,6 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
               {serviceTroubleMessage(integration.failure, id)}
             </p>
           )}
-          {integration.keyNotRead && (
-            <p className="text-sm text-destructive">
-              Scia could not read back the key it kept for {name}. Connect it again.
-            </p>
-          )}
         </div>
         {integration.connected ? (
           <ConfirmButton
@@ -379,6 +374,25 @@ function IntegrationRow({ integration, onChange }: IntegrationRowProps): ReactNo
           )
         )}
       </div>
+      {/* Across the row, under its head: beside the buttons it was a column three words wide.
+          Disconnect is the way out for a person who will not connect again (ADR 0023). */}
+      {integration.keyNotRead && (
+        <div className="flex items-center justify-between gap-4">
+          <p className="text-sm text-destructive">
+            Scia could not read back the key it kept for {name}. Connect it again.
+          </p>
+          <ConfirmButton
+            ref={takeFocus('disconnect')}
+            label="Disconnect"
+            // The key Scia cannot read is removed from this computer: it asks once more.
+            confirmLabel="Disconnect"
+            destructive
+            onConfirm={disconnect}
+          >
+            <Unplug size={16} aria-hidden="true" />
+          </ConfirmButton>
+        </div>
+      )}
       {entering && !integration.connected && (
         <form onSubmit={connect} className="flex flex-col gap-2">
           <label htmlFor={fieldId} className="text-sm font-medium">

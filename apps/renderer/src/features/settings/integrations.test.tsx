@@ -404,6 +404,52 @@ describe('IntegrationsSection', () => {
       expect(service.getByRole('button', { name: 'Use an API key' })).toBeInTheDocument();
     });
 
+    it('says so across the row, under its name and its buttons, not beside them', async () => {
+      listing([{ ...notConnected, keyNotRead: true }]);
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      const sentence = service.getByText(NOT_READ);
+      const lastButton = service.getByRole('button', { name: 'Connect with a code' });
+      // After the row's head in the page's order: drawn under it, not in the name's column.
+      expect(
+        lastButton.compareDocumentPosition(sentence) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(lastButton.parentElement?.parentElement?.contains(sentence)).toBe(false);
+    });
+
+    it('offers to disconnect, which forgets the key and the sentence, at the second press', async () => {
+      listing([{ ...notConnected, keyNotRead: true }]);
+      const disconnect = vi.spyOn(api, 'disconnectIntegration').mockResolvedValue();
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+      expect(disconnect).not.toHaveBeenCalled();
+      await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+
+      expect(disconnect).toHaveBeenCalledExactlyOnceWith('alldebrid');
+      await vi.waitFor(() => {
+        expect(service.queryByText(NOT_READ)).not.toBeInTheDocument();
+      });
+      expect(service.queryByRole('button', { name: 'Disconnect' })).not.toBeInTheDocument();
+      expect(service.getByRole('status')).toHaveTextContent(/^Not connected$/);
+      expect(service.getByRole('button', { name: 'Connect with a code' })).toHaveFocus();
+    });
+
+    it('says nothing of it after a connected service is disconnected', async () => {
+      listing([connected]);
+      vi.spyOn(api, 'disconnectIntegration').mockResolvedValue();
+      render(<IntegrationsSection open onError={ignore} />);
+      const service = await theService();
+
+      await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+      await userEvent.click(service.getByRole('button', { name: 'Disconnect' }));
+
+      expect(await service.findByText('Not connected')).toBeInTheDocument();
+      expect(service.queryByText(NOT_READ)).not.toBeInTheDocument();
+    });
+
     it('says nothing of it for a service that was never connected', async () => {
       listing([notConnected]);
       render(<IntegrationsSection open onError={ignore} />);

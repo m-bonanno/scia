@@ -324,6 +324,31 @@ describe('KeyVault', () => {
       expect(seal.looks()).toBe(2);
     });
 
+    it('keeps what it saw on disk, also when an older look answers after it', async () => {
+      // The start's look is held while a write's look finds it on disk; the start's then says
+      // it was not there yet, which it was not when it looked.
+      let release: (onDisk: boolean) => void = () => undefined;
+      let looks = 0;
+      const sealKept = () => {
+        looks += 1;
+        if (looks === 1) {
+          return new Promise<boolean>((resolve) => {
+            release = resolve;
+          });
+        }
+        return Promise.resolve(true);
+      };
+      const { vault } = aVault(aCipher({ sealKept }), someFiles(), { sealPollMs: 1 });
+
+      const preparing = vault.prepare();
+      await vault.answer(WRITE);
+      release(false);
+      await preparing;
+      await vault.answer({ ...WRITE, id: 2 });
+
+      expect(looks).toBe(2);
+    });
+
     it('does not wait for it to read or to remove a key', async () => {
       const sealKept = vi.fn(() => Promise.resolve(false));
       const { vault, kept } = aVault(aCipher({ sealKept }), someFiles(), { sealLimitMs: 60_000 });
