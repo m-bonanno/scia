@@ -8,26 +8,37 @@ import { captureTo, viewportOf } from './under-notices.ts';
 
 const MIB = 1024 * 1024;
 
-// A host slow enough for a download to be seen running, and paused before it ends.
-async function slowHost(run: Run, fileName: string, options: { ranges?: boolean } = {}) {
+// A host slow enough for a download to be seen running, and paused before it ends: each
+// connection gets `chunkKiB` every 200 ms.
+async function slowHost(
+  run: Run,
+  fileName: string,
+  { sizeMiB = 32, chunkKiB = 16, ranges = true } = {},
+) {
   return run.keep(
     await startRangeServer({
-      body: randomBytes(32 * MIB),
+      body: randomBytes(sizeMiB * MIB),
       fileName,
-      chunkBytes: 16 * 1024,
+      chunkBytes: chunkKiB * 1024,
       chunkDelayMs: 200,
-      ...options,
+      ranges,
     }),
   );
 }
 
-// Pauses a download once some of it has arrived, so that its bar has a stretch to draw.
-async function pauseOnceStarted(page: Page, fileName: string): Promise<void> {
+// Waits until this much of a download has arrived, so that its bar has stretches to draw.
+async function arrived(page: Page, fileName: string, fraction: number): Promise<void> {
   await until(async () =>
     (await downloadsOf(page)).some(
-      (download) => download.fileName === fileName && download.downloadedBytes > 256 * 1024,
+      (download) =>
+        download.fileName === fileName &&
+        download.totalBytes !== null &&
+        download.downloadedBytes >= download.totalBytes * fraction,
     ),
   );
+}
+
+async function pause(page: Page, fileName: string): Promise<void> {
   await rowOf(page, fileName).getByRole('button', { name: 'Pause' }).click();
   await rowOf(page, fileName).getByRole('button', { name: 'Resume' }).waitFor();
   await until(async () =>
@@ -57,7 +68,8 @@ describe('a paused bar', () => {
       );
 
       await paste(page, host.url);
-      await pauseOnceStarted(page, 'paused.bin');
+      await arrived(page, 'paused.bin', 0.01);
+      await pause(page, 'paused.bin');
 
       const drawn = await rowOf(page, 'paused.bin').evaluate((row) => {
         const stretches = [...row.querySelectorAll<HTMLElement>('[role="progressbar"] > div')];
@@ -84,17 +96,21 @@ describe('a paused bar', () => {
   );
 
   // docs/design/downloads-paused.png, taken from the real app by CI (the owner, on #143): a paused
-  // download beside running ones, a failed and a finished one, in the default theme's dark variant.
+  // download beside running ones, a failed and a finished one, in the default theme's dark variant,
+  // each bar far enough along for its stretches to be seen.
   it('takes the capture of a paused download beside the running ones', async () => {
     const profile = await run.profile();
-    const film = await slowHost(run, 'Big Buck Bunny 1080p.mkv');
-    const image = await slowHost(run, 'ubuntu-26.04-desktop-amd64.iso');
+    const film = await slowHost(run, 'Big Buck Bunny 1080p.mkv', { sizeMiB: 64, chunkKiB: 32 });
+    const image = await slowHost(run, 'ubuntu-26.04-desktop-amd64.iso', {
+      sizeMiB: 64,
+      chunkKiB: 32,
+    });
     const report = run.keep(
       await startRangeServer({ body: randomBytes(6 * MIB), fileName: 'Annual report 2026.pdf' }),
     );
     const photos = run.keep(await startRangeServer({ body: Buffer.alloc(0), status: 404 }));
-    const concert = await slowHost(run, 'Live concert.flac', { ranges: false });
-    const setup = await slowHost(run, 'old-setup.exe');
+    const concert = await slowHost(run, 'Live concert.flac', { chunkKiB: 128, ranges: false });
+    const setup = await slowHost(run, 'old-setup.exe', { chunkKiB: 32 });
     const scia = await run.launch(profile);
     const { page } = scia;
     await scia.app.evaluate(({ nativeTheme }) => {
@@ -104,7 +120,8 @@ describe('a paused bar', () => {
 
     await paste(page, film.url);
     await paste(page, image.url);
-    await pauseOnceStarted(page, 'ubuntu-26.04-desktop-amd64.iso');
+    await arrived(page, 'ubuntu-26.04-desktop-amd64.iso', 0.12);
+    await pause(page, 'ubuntu-26.04-desktop-amd64.iso');
     await paste(page, report.url);
     await rowOf(page, 'Annual report 2026.pdf')
       .getByRole('button', { name: 'Show in folder' })
@@ -115,12 +132,19 @@ describe('a paused bar', () => {
       .getByText('The file is no longer at this address.')
       .waitFor({ timeout: 30_000 });
     await paste(page, concert.url, setup.url);
-    await until(async () =>
-      (await downloadsOf(page)).every(
-        (download) => download.status !== DownloadStatus.Downloading || download.bytesPerSecond > 0,
-      ),
+    await arrived(page, 'old-setup.exe', 0.1);
+    await arrived(page, 'Live concert.flac', 0.15);
+    await arrived(page, 'Big Buck Bunny 1080p.mkv', 0.25);
+    expect((await downloadsOf(page)).map((download) => download.status).sort()).toEqual(
+      [
+        DownloadStatus.Completed,
+        DownloadStatus.Downloading,
+        DownloadStatus.Downloading,
+        DownloadStatus.Downloading,
+        DownloadStatus.Failed,
+        DownloadStatus.Paused,
+      ].sort(),
     );
-    await until(async () => (await downloadsOf(page)).length === 6);
 
     // Nothing under the pointer, and nothing moving but the bars filling, before the capture.
     await page.mouse.move(1, 1);
