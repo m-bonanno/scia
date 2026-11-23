@@ -90,6 +90,7 @@ None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisio
 | [The `--inspect` fuse off in the shipped app](./evidence.md#the---inspect-fuse-off)                                       | #115       | yes   | CI install, every PR and release     | a debugger asked for by a hand                              | yes       |
 | [A save of `state.json` while another process holds it](./evidence.md#a-save-of-statejson-while-another-process-holds-it) | #151       | yes   | Specs (integration, on Windows)      | the real app with `state.json` held                         | yes       |
 | [Zero-filling on NTFS: measured, and a part file made sparse](./evidence.md#zero-filling-on-ntfs)                         | #182, #265 | yes   | E2E, Script (the engine's task)      | a large file in the app; a USB disk with the fix (#265)     | yes       |
+| A way to support Scia: GitHub Sponsors and Ko-fi in the repository, Ko-fi in Settings                                     | #271       | yes   | Specs, E2E in CI only                | the page opened from the app by a hand                      | no        |
 
 ## M2 — The whole extension
 

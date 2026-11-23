@@ -53,6 +53,7 @@ describe('SettingsDialog', () => {
       onUpdateChanged: vi.fn(() => () => undefined),
       restartToUpdate: vi.fn(async () => 'nothing'),
       openCodePage: vi.fn(async () => undefined),
+      openSupportPage: vi.fn(async () => undefined),
     };
   }
 
@@ -158,6 +159,18 @@ describe('SettingsDialog', () => {
     expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
     // Whoever opened it learns what was read, not only what is changed here.
     expect(onSettings).toHaveBeenCalledExactlyOnceWith(settings);
+  });
+
+  it('offers a way to support Scia, beside its version (#271)', async () => {
+    aShell(async () => 'kept');
+    const openSupportPage = vi.fn(async () => undefined);
+    window.scia = { ...window.scia!, openSupportPage };
+    render(<SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} />);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Support Scia' }));
+
+    expect(openSupportPage).toHaveBeenCalledOnce();
+    expect(screen.getByText('Scia 1.0.0')).toBeInTheDocument();
   });
 
   describe('the links of the clipboard', () => {
