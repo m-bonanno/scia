@@ -73,7 +73,7 @@ describe('IntegrationsSection', () => {
 
   // Its boundary is held to no ratio: at rest and empty, the placeholder is what draws the field,
   // in the secondary text's colour, which the contrast spec holds at 4.5:1 on the dialog (#66).
-  it('says what goes in the key’s field while it is empty, at the contrast of text', async () => {
+  it("says what goes in the key's field while it is empty, at the contrast of text", async () => {
     listing([notConnected]);
     render(<IntegrationsSection open onError={ignore} />);
     const service = await theService();

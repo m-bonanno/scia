@@ -105,11 +105,25 @@ describe('the real app, with what Settings says', () => {
 
     expect(await field.getAttribute('placeholder')).toBe('Paste your API key');
     expect(await field.inputValue()).toBe('');
-    const { placeholder, ground } = await field.evaluate((element) => ({
-      placeholder: getComputedStyle(element, '::placeholder').color,
-      ground: getComputedStyle(element.closest('dialog') ?? element).backgroundColor,
-    }));
-    expect(contrast(placeholder, ground)).toBeGreaterThanOrEqual(4.5);
+    // In both variants, chosen in main as a system would choose them (#155), not the runner's.
+    for (const variant of ['light', 'dark'] as const) {
+      await scia.app.evaluate(({ nativeTheme }, source) => {
+        nativeTheme.themeSource = source;
+      }, variant);
+      await until(() =>
+        page.evaluate(
+          (wanted) =>
+            matchMedia(`(prefers-color-scheme: ${wanted})`).matches &&
+            document.getAnimations().length === 0,
+          variant,
+        ),
+      );
+      const { placeholder, ground } = await field.evaluate((element) => ({
+        placeholder: getComputedStyle(element, '::placeholder').color,
+        ground: getComputedStyle(element.closest('dialog') ?? element).backgroundColor,
+      }));
+      expect(contrast(placeholder, ground), variant).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it('connects AllDebrid with a code confirmed on its site, whose page main opens', async () => {
@@ -152,8 +166,10 @@ describe('the real app, with what Settings says', () => {
 });
 
 // The ratio of WCAG 2.2 between two opaque colours as the page computes them, `rgb(r, g, b)`.
+// Anything else — a colour with an alpha, `oklab(…)` — is refused, not read as three channels.
 function contrast(one: string, other: string): number {
   const luminance = (colour: string) => {
+    expect(colour).toMatch(/^rgb\(\d+, \d+, \d+\)$/);
     const [red = 0, green = 0, blue = 0] = (colour.match(/\d+(\.\d+)?/g) ?? [])
       .slice(0, 3)
       .map((channel) => Number(channel) / 255)
