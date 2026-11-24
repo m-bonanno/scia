@@ -69,6 +69,37 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
       () => undefined,
       (error: unknown) => (error instanceof PageError ? error.failure : error),
     );
+  // What a read given up at its limit failed with, the limit on the spec's clock (#165): the
+  // adapter's own timers move only once the reader has started, so a loaded machine slower to
+  // start it than the limit never ends it before it wrote what it was given. The process, its
+  // pipes and the spec's waits run as they do.
+  async function givenUpAt(
+    limitMs: number,
+    read: () => Promise<unknown>,
+    started: () => Promise<void> = () => until(() => existsSync(givenFile)),
+  ): Promise<unknown> {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      let settled = false;
+      // Set by the read as it settles, while the spec waits.
+      const hasSettled = () => settled;
+      const failure = failureOf(read()).finally(() => {
+        settled = true;
+      });
+      await started();
+      vi.advanceTimersByTime(limitMs);
+      // The grace of a reader's output once it is ended, and no more: two seconds of the
+      // adapter's time at most, far inside a longer limit.
+      for (let step = 0; step < 40 && !hasSettled(); step += 1) {
+        vi.advanceTimersByTime(50);
+        await sleep(50);
+      }
+      await until(hasSettled);
+      return await failure;
+    } finally {
+      vi.useRealTimers();
+    }
+  }
 
   it('reads the formats of a page, with what the site calls the video', async () => {
     const media = await reader().read('https://site.example/video/1', never);
@@ -180,7 +211,8 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     await reader().read('https://site.example/video/1', never);
     expect(await readdir(tempDir)).toEqual([]);
 
-    await failureOf(reader({ timeoutMs: 300 }).read('https://site.example/slow', never));
+    await rm(givenFile);
+    await givenUpAt(300, () => reader({ timeoutMs: 300 }).read('https://site.example/slow', never));
     expect(await readdir(tempDir)).toEqual([]);
 
     await rm(givenFile);
@@ -262,11 +294,11 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
   });
 
   it('gives up, and ends, a reader that says nothing in time', async () => {
-    const startedAt = Date.now();
     expect(
-      await failureOf(reader({ timeoutMs: 300 }).read('https://site.example/slow', never)),
+      await givenUpAt(300, () =>
+        reader({ timeoutMs: 300 }).read('https://site.example/slow', never),
+      ),
     ).toBe(PageFailure.SiteBusy);
-    expect(Date.now() - startedAt).toBeLessThan(5000);
     expect(isRunning(given().pid)).toBe(false);
   });
 
@@ -435,16 +467,14 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     }, 20_000);
 
     it('gives up, and ends, a reader that says nothing in its own time, not the time of a whole read', async () => {
-      const startedAt = Date.now();
       expect(
-        await failureOf(
+        await givenUpAt(300, () =>
           reader({ timeoutMs: 60_000, titleTimeoutMs: 300 }).readTitle(
             'https://site.example/slow',
             never,
           ),
         ),
       ).toBe(PageFailure.SiteBusy);
-      expect(Date.now() - startedAt).toBeLessThan(5000);
       expect(isRunning(given().pid)).toBe(false);
     });
 
@@ -497,12 +527,13 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     });
 
     it('gives up in time, and ends the second process with the first', async () => {
-      const reading = reader({ timeoutMs: 1000 }).read('https://site.example/two-processes', never);
-      await started();
-
-      const startedAt = Date.now();
-      expect(await failureOf(reading)).toBe(PageFailure.SiteBusy);
-      expect(Date.now() - startedAt).toBeLessThan(5000);
+      expect(
+        await givenUpAt(
+          1000,
+          () => reader({ timeoutMs: 1000 }).read('https://site.example/two-processes', never),
+          started,
+        ),
+      ).toBe(PageFailure.SiteBusy);
       await until(() => !isRunning(holderPid()));
     });
 
@@ -554,11 +585,17 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     );
 
     it('gives up in time a reader whose first process ended by itself and left the second holding its output', async () => {
-      const reading = reader({ timeoutMs: 1000 }).read('https://site.example/first-gone', never);
-      await started();
-      await until(() => !isRunning(given().pid));
-
-      expect(await failureOf(reading)).toBe(PageFailure.SiteBusy);
+      const firstGone = async () => {
+        await started();
+        await until(() => !isRunning(given().pid));
+      };
+      expect(
+        await givenUpAt(
+          1000,
+          () => reader({ timeoutMs: 1000 }).read('https://site.example/first-gone', never),
+          firstGone,
+        ),
+      ).toBe(PageFailure.SiteBusy);
     });
   });
 });
