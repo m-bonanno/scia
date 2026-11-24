@@ -95,6 +95,14 @@ function testsReached(outcome) {
   return outcome.ok || at(outcome.failed) >= at('test');
 }
 
+// An unhandled error or a leak fails the test gate with every test passed, and the report names
+// neither: Vitest prints them above its summary.
+function whyRed(outcome, failedFiles) {
+  const named = failedFiles.map((file) => `\`${file}\``).join(', ');
+  if (named) return `; failed: ${named}`;
+  return outcome.failed === 'test' ? "; no test failed: Vitest's errors are printed above" : '';
+}
+
 // The line for the test plan of a PR body, as it is pasted there.
 export function bodyLineOf({ outcome, head, dirty, workers, seconds, counts }) {
   const verdict = outcome.ok ? 'green' : `red at \`${outcome.failed}\``;
@@ -104,10 +112,9 @@ export function bodyLineOf({ outcome, head, dirty, workers, seconds, counts }) {
   const line = `\`npm run gates\` ${verdict} on ${commit}, ${workersUsed}, ${seconds} s`;
   if (!testsReached(outcome)) return line;
   if (!counts) return `${line} — Vitest wrote no report of its counts`;
-  const failed = counts.failedFiles.map((file) => `\`${file}\``).join(', ');
   return (
     `${line} — Test Files ${inVitestsWords(counts.files)}; Tests ${inVitestsWords(counts.tests)}` +
-    (failed ? `; failed: ${failed}` : '')
+    whyRed(outcome, counts.failedFiles)
   );
 }
 

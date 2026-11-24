@@ -137,6 +137,14 @@ describe('bodyLineOf', () => {
     );
   });
 
+  it('says no test failed when the test gate is red for an error outside the tests', () => {
+    expect(bodyLineOf({ ...run, outcome: { ok: false, failed: 'test' }, counts: green })).toBe(
+      '`npm run gates` red at `test` on `d0bfecb`, SCIA_TEST_WORKERS=2, 97 s — ' +
+        'Test Files 134 passed | 2 skipped (136); Tests 1982 passed | 82 skipped (2064); ' +
+        "no test failed: Vitest's errors are printed above",
+    );
+  });
+
   it('keeps the counts of the tests when a gate after them is red', () => {
     expect(bodyLineOf({ ...run, outcome: { ok: false, failed: 'build' }, counts: green })).toBe(
       '`npm run gates` red at `build` on `d0bfecb`, SCIA_TEST_WORKERS=2, 97 s — ' +
@@ -165,7 +173,7 @@ describe('bodyLineOf', () => {
   });
 
   it('leaves the workers to Vitest when SCIA_TEST_WORKERS is not a positive whole number', () => {
-    for (const workers of [undefined, '', '0', 'abc']) {
+    for (const workers of [undefined, '', '0', '-1', '1.5', 'abc']) {
       expect(
         bodyLineOf({ ...run, workers, outcome: { ok: true, failed: undefined }, counts: green }),
         String(workers),
