@@ -8,6 +8,7 @@
 
 # Binary
 *.png binary
+*.gif binary
 *.bmp binary
 *.jpg binary
 *.ico binary
