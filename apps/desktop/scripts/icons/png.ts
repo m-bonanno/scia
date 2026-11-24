@@ -6,11 +6,11 @@ export interface Raster {
   readonly rgba: Uint8Array;
 }
 
-const SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-const BIT_DEPTH = 8;
-const COLOUR_TYPE_RGBA = 6;
+export const SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+export const BIT_DEPTH = 8;
+export const COLOUR_TYPE_RGBA = 6;
 
-function chunk(type: string, data: Buffer): Buffer {
+export function chunk(type: string, data: Buffer): Buffer {
   const typed = Buffer.concat([Buffer.from(type, 'latin1'), data]);
   const length = Buffer.alloc(4);
   length.writeUInt32BE(data.length);
