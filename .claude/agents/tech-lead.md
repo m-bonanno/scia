@@ -16,7 +16,7 @@ Everything no specialist owns: `.github/`, `scripts/`, root tooling and configs,
 3. **Security**: nothing from a host or from the page reaches a path, a URL opened by the shell, or a command, unchecked; tokens and scopes as ADR 0002; no secret in the repository or in a log.
 4. **Tests are the right layer and came first**: rules in unit specs, adapters against the real thing, the API through `app.request()`, runtime changes with real-runtime evidence in the PR body. A spec that cannot fail is not a spec.
 5. **Docs in lock-step**: contracts, ADR for an architectural decision, roadmap honest.
-6. **The gates, run by you**, all of them, as listed in `docs/development/review-flow.md`, on the head commit you review. Report the numbers. **On a PR from a fork, run nothing of it**: read CI's run on that head instead, and the diff with `gh pr diff` (`review-flow.md`, "A pull request from outside").
+6. **The gates, run by you** in the first round, all of them, as listed in `docs/development/review-flow.md`, on the head commit you review. Report the numbers. **In a later round, read CI's run on the new head instead** — every required check, with its numbers — rather than running every gate again (the owner, #187). **On a PR from a fork, run nothing of it**: read CI's run on that head instead, and the diff with `gh pr diff` (`review-flow.md`, "A pull request from outside").
 7. **Gotchas**: read `.claude/gotchas.md` and look for each mistake listed there.
 
 ## Synthesis
@@ -52,6 +52,7 @@ What earlier reviews taught, each with the PR that taught it.
 - A condition is attacked in each of its halves and in its `else`, from each road into it: round 1 of #303 took `|| refusal === text` away and not the `else` the field reached, where a link and a magnet refused together were said in two places, the magnets in a notice — a line no spec held. (#303)
 - A body's "Not seen in the real app" is weighed against "What the E2E suite can hold is held there" (`testing.md`, "Proving the real app"): round 2 of #303 let "201 links pasted and downloaded" stand as unseen, and the product manager found that the suite could hold it with what it has. (#303)
 - A comparison is attacked at its boundary as well as at its ends: round 3 of #303 took `refused.length < all` to `true` and to `false`, which the specs of an add wholly taken and wholly refused caught, and not to `refused.length === 0`, which differs only on an add partly taken — the road the batches opened, with no spec. (#303)
+- Mutants and probes run in a worktree of your own (`git worktree add --detach <dir> <head>`), never in the checkout under review: the other roles read and run their specs there, and a file you mutate makes their runs fail at random. Its setup is in `.claude/gotchas.md`, "Specs". (#135, #322, #144)
 
 ## Output
 

@@ -2,7 +2,7 @@
 
 Every site, service and program Scia reaches beyond the host of a link it was given, and what each one adds. One row per integration. **A PR that adds one, or changes what one does, changes its row here, and the line of [vision.md](./vision.md) ("It collects nothing") that says whom Scia talks to and what it sends.** That line is where what each host is sent is written; this file does not repeat it. What was seen of each, and how: [evidence.md](./evidence.md). The order of the work: [roadmap.md](./roadmap.md).
 
-Every integration keeps to "Respect the hosts" (`CLAUDE.md`). Scia fetches only what the person can already reach. It never circumvents DRM, and never evades a paywall, a login the person does not have, or a geographic restriction.
+Every integration keeps to "Respect the hosts", the principle as the root [`CLAUDE.md`](../../CLAUDE.md) states it, whole: what it lets Scia fetch, a debrid service among it, and what it forbids.
 
 ## Services the person connects
 

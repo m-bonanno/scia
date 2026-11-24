@@ -29,13 +29,13 @@ A release into `main` is never small.
 
 ## The gates
 
-One list, for the author before opening the PR, for the tech lead during the review, for CI on GitHub. On a PR from a fork, CI's run is the only one: "A pull request from outside".
+One list, for the author before opening the PR, for the tech lead in the first round of the review, for CI on GitHub. In a later round the tech lead reads CI's run on the new head instead of running the gates again (the owner, 21 November 2026, #187): "Rules", below. On a PR from a fork, CI's run is the only one: "A pull request from outside".
 
 ```bash
 npm run gates
 ```
 
-It runs `check:adr` (no two ADRs of one number: [`git-flow.md`](./git-flow.md), "Work in parallel"), `format:check`, `lint`, `typecheck`, `test` (with a reporter of dots) and `build`, in that order, and stops at the first that fails, naming it (`scripts/gates.mjs`). Each can still be run alone while working. On a machine where other sessions run their suites, `SCIA_TEST_WORKERS=<n>` runs the tests on fewer workers.
+It runs `check:adr` (no two ADRs of one number: [`git-flow.md`](./git-flow.md), "Work in parallel"), `format:check`, `lint`, `typecheck`, `test` (with a reporter of dots) and `build`, in that order, and stops at the first that fails, naming it (`scripts/gates.mjs`). Each can still be run alone while working. `SCIA_TEST_WORKERS=<n>` runs the tests on fewer workers: on the owner's machine the gates run with `SCIA_TEST_WORKERS=2`, one run at a time ([`git-flow.md`](./git-flow.md), "Work in parallel").
 
 With untracked files of other work in the tree, check the format of tracked files only: `git ls-files | xargs npx prettier --check --ignore-unknown`.
 
@@ -63,8 +63,12 @@ A red check on a spec the PR does not touch, with no cause in its diff, is not a
 - **Independent.** A reviewer gets its role file, the PR and the issue it closes, never the author's reasoning: an agent handed a conclusion returns it confirmed. What the owner asked for belongs in the issue, where every reviewer reads it.
 - **Read-only.** Reviewers do not edit, commit, push or comment. Each writes its review to a file outside the repository, in a folder of its own that the other roles are told not to read, and answers with its verdict; the orchestrating session posts the files as they are and applies the fixes. On a PR from a fork they run nothing of it either — no script, harness, install or gate: "A pull request from outside".
 - **The team verdict is deterministic**: approved only if no role has a blocking finding, and it holds for one head commit.
-- **Changes requested** → the fix lands on the same branch as new commits, never a force-push. Then: the roles are decided again on the whole diff, size included (a fix can reach a new area, or make a small PR a large one); every role that blocked reviews again, resumed so that it checks its own findings; a role that had approved reviews again if the fix changes its area; a role the fix newly involves reviews for the first time; and the tech lead runs the gates again on the new head — on a fork's PR, reads CI's run on it ("A pull request from outside"). Every round is posted.
+- **Changes requested** → the fix lands on the same branch as new commits, never a force-push. Every round is posted, and the rounds after the first are lighter (the owner, 21 November 2026, #187):
+  - **A fix that touches only specs or the PR body** is reviewed by the roles that blocked, each resumed so that it checks its own findings, and by no other.
+  - **Any other fix**: the roles are decided again on the whole diff, size included (a fix can reach a new area, or make a small PR a large one); every role that blocked reviews again, resumed so that it checks its own findings; a role that had approved reviews again if the fix changes its area; a role the fix newly involves reviews for the first time.
+  - **The gates**: the tech lead, when it reviews the round, reads CI's run on the new head — every required check, with its numbers — instead of running every gate again, as it already does on a fork's PR ("A pull request from outside"). CI green on the head is a condition of the merge in any round ("Merging").
 - **Nothing unreviewed is merged.** A commit pushed after the approval — a non-blocking finding taken at the last moment — is reviewed before the merge. The roles are decided again on the whole diff, as after a fix, size included: a late commit can make a small PR a large one. Then the tech lead reviews it; so does every role of that set whose area the commit changes; and a role of that set that had not reviewed the PR yet reviews all of it. The verdict is posted again for the new head.
+- **A wording point raised after the approving verdict goes into a follow-up issue**, not into a commit after the approval (the owner, 24 November 2026, #337): such a commit is a round of its own, above. A finding that is blocking ("What is blocking") is not a wording point: it is fixed, and its commit reviewed.
 - **Non-blocking findings are not lost**: taken in the same PR when they are in its scope and cheap, otherwise collected in a follow-up issue — searched for first, open and closed, as [`git-flow.md`](./git-flow.md) says ("Work in parallel") — opened before the approving verdict and linked from it. A verdict that asks for changes names none: its findings are still being fixed.
 - **A blocking finding the author contests goes to the owner.** The orchestrating session never overrules a reviewer; it fixes, or it asks.
 - **Every review teaches.** A blocking finding that a checklist would have prevented becomes a line under "Lessons" in that role's file, or an entry in `.claude/gotchas.md`, in the PR that fixes it.
@@ -99,7 +103,7 @@ The last line is `Follow-ups: none` when an approving verdict leaves nothing to 
 
 The two merge commits are what lets semantic-release count the next version from the last one ([`release-flow.md`](./release-flow.md)): squashing either breaks the count.
 
-**A squash is given its own body: `gh pr merge <n> --squash … --body "Closes #N"`.** Left to GitHub, the squash's body is the message of every commit of the branch, and semantic-release's notes list each issue that body names: "closes #99" six times in `v1.0.0-beta.30` (#249). The title is the PR's, and the body names the issue once — and, for a breaking change, carries the `BREAKING CHANGE:` footer too, the one thing semantic-release's Angular preset reads as breaking ([`release-flow.md`](./release-flow.md)). Nothing else goes there.
+**A squash is given its own body: `gh pr merge <n> --squash … --body "Closes #N"`.** Left to GitHub, the squash's body is the message of every commit of the branch, and semantic-release's notes list each issue that body names: "closes #99" six times in `v1.0.0-beta.30` (#249). The title is the PR's, and the body names the issue once — and, for a breaking change, carries the `BREAKING CHANGE:` footer too, the one thing semantic-release's Angular preset reads as breaking ([`release-flow.md`](./release-flow.md)) — and, for a revert, the line `This reverts commit <sha>.`, without which the preset reads no revert and releases nothing for it (`release-flow.md`). Nothing else goes there.
 
 **After every merge into `develop` or `main`**, whoever merged reads that a Release run started for the merge commit, and starts one by hand when none has. GitHub once recorded no push for a merge, and nothing was released (#95). The steps are in [`release-flow.md`](./release-flow.md), "A merge nothing released".
 
