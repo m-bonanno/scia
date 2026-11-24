@@ -51,6 +51,7 @@ What earlier reviews taught, each with the PR that taught it.
 - An approval reads CI's checks on the head (`gh pr checks`) beside the gates run here: round 3 of #158 was approved on local gates while CI's Ubuntu and Windows jobs were already red on that head, for a spec that passed six times here. "A gate green here and red on one of CI's systems is red" holds only when CI is read — every required check; "Quarantine (report only)" is not one (ADR 0019).
 - A condition is attacked in each of its halves and in its `else`, from each road into it: round 1 of #303 took `|| refusal === text` away and not the `else` the field reached, where a link and a magnet refused together were said in two places, the magnets in a notice — a line no spec held. (#303)
 - A body's "Not seen in the real app" is weighed against "What the E2E suite can hold is held there" (`testing.md`, "Proving the real app"): round 2 of #303 let "201 links pasted and downloaded" stand as unseen, and the product manager found that the suite could hold it with what it has. (#303)
+- A comparison is attacked at its boundary as well as at its ends: round 3 of #303 took `refused.length < all` to `true` and to `false`, which the specs of an add wholly taken and wholly refused caught, and not to `refused.length === 0`, which differs only on an add partly taken — the road the batches opened, with no spec. (#303)
 
 ## Output
 
