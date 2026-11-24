@@ -25,7 +25,7 @@ interface VideoSite {
   readonly video: RegExp;
 }
 
-// Sites yt-dlp reads, among the most used for video (the owner, #128): recognised by their
+// Sites yt-dlp reads, among the most used for video (the owner, #128, #325): recognised by their
 // address alone, with nothing asked of the network when a link is copied. A site not here is
 // still read when its link is pasted.
 const VIDEO_SITES: readonly VideoSite[] = [
@@ -50,6 +50,8 @@ const VIDEO_SITES: readonly VideoSite[] = [
   { domain: 'ted.com', video: /^\/talks\/\w+/ },
   { domain: 'bitchute.com', video: /^\/video\/[\w-]+/ },
   { domain: 'odysee.com', video: /^\/@[^/]+\/[^/]+/ },
+  // One video's page has its key first in the query: another parameter before it is a list to yt-dlp.
+  { domain: 'pornhub.com', video: /^\/(view_video\.php\?viewkey=[\da-z]+|embed\/[\da-z]+)/ },
 ];
 
 function isVideoPage(address: URL): boolean {

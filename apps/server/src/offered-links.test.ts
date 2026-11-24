@@ -45,6 +45,10 @@ describe('offeredAs', () => {
       'https://www.twitch.tv/videos/123456789',
       'https://www.tiktok.com/@someone/video/7234567890123456789',
       'https://archive.org/details/some-film',
+      'https://www.pornhub.com/view_video.php?viewkey=ph5f1a2b3c4d5e6',
+      'https://it.pornhub.com/view_video.php?viewkey=64a1b2c3d4e5f',
+      'https://www.pornhub.com/view_video.php?viewkey=ph5f1a2b3c4d5e6&pkey=1',
+      'https://www.pornhub.com/embed/ph5f1a2b3c4d5e6',
     ]) {
       expect(offeredAs(url), url).toBe(Offered.VideoPage);
     }
@@ -62,6 +66,17 @@ describe('offeredAs', () => {
       'https://www.twitch.tv/someone',
       'https://www.tiktok.com/@someone',
       'https://archive.org/search?query=film',
+      'https://www.pornhub.com/',
+      'https://www.pornhub.com/model/someone',
+      'https://www.pornhub.com/video/search?search=cats',
+      'https://www.pornhub.com/playlist/123456',
+      'https://www.pornhub.com/view_video.php',
+      'https://www.pornhub.com/view_video.php?viewkey=',
+      'https://www.pornhub.com/view_video.php?pkey=1&viewkey=64a1b2c3d4e5f',
+      'https://www.pornhub.com/view_video.php?viewkey=PH5F1A2B3C4D5E6',
+      'https://www.pornhub.com/embed/PH5F1A2B3C4D5E6',
+      'https://www.pornhub.com/embed/',
+      'https://www.pornhub.com/model/someone/embed/ph5f1a2b3c4d5e6',
     ]) {
       expect(offeredAs(url), url).toBeUndefined();
     }
