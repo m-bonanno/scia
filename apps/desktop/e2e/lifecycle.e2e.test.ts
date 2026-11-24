@@ -47,7 +47,8 @@ describe('the real app, from start to quit', () => {
     await scia.closeWindow();
 
     await scia.exited;
-    expect(await profile.log()).toMatch(/\bquit\b/);
+    // The engine's `stopped`, relayed from its output, is read before Quit's own last line (#273).
+    expect(await profile.log()).toMatch(/"event":"stopped"[\s\S]*\squit\s*$/m);
   });
 
   it('stays in the tray when its window is closed during a download, and finishes it', async () => {
@@ -154,9 +155,9 @@ describe('the real app, from start to quit', () => {
       const log = await profile.log();
       expect(log).toMatch(/\bsession_ended\b/);
       // Quit's own last line, written once the engine's process has ended: Scia ended itself, not
-      // Electron at once. The engine's own `stopped` is not read: main relays it from a pipe that
-      // the engine's exit can outrun, and two runs in three of round 2 lost it with the state
-      // written (#262).
+      // Electron at once. Before it, the engine's own `stopped`, relayed from its output, which
+      // the stop now reads to its end: two runs in three of #262's round 2 lost it (#273).
+      expect(log).toMatch(/"event":"stopped"[\s\S]*\squit\s*$/m);
       expect(log).toMatch(/\squit\s*$/m);
       expect(log).not.toContain('update_installing');
 

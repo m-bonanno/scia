@@ -1,5 +1,6 @@
 import { utilityProcess } from 'electron';
 import type { ReadyMessage, ShutdownMessage } from '@scia/server';
+import { endOfProcess } from './engine/process-end.ts';
 import type { StartedServer } from './engine/server-supervisor.ts';
 
 // Never tuned against a warm start: the first launch after an install is slow (the antivirus
@@ -7,10 +8,13 @@ import type { StartedServer } from './engine/server-supervisor.ts';
 const READY_LIMIT_MS = 60_000;
 // An engine that does not stop when asked is stopped.
 const STOP_LIMIT_MS = 5000;
+// What the engine wrote before its exit is read within this after it: an output still open then
+// is held by a process of the engine's own, and the quit does not wait for it.
+const OUTPUT_END_LIMIT_MS = 1000;
 
 export interface ServerLog {
   info(message: string): void;
-  warn(message: string): void;
+  warn(message: string, details?: object): void;
 }
 
 export interface StartServerOptions {
@@ -57,6 +61,15 @@ export async function startServer(options: StartServerOptions): Promise<StartedS
       resolve(code);
     });
   });
+  // The engine's last lines — `stopped`, `shutdown_failed`, `state_not_saved` — are in main.log
+  // once the stop resolves (#273).
+  const ended = endOfProcess(exited, [child.stdout, child.stderr], OUTPUT_END_LIMIT_MS).then(
+    (outputEnded) => {
+      if (!outputEnded) {
+        options.log.warn('engine_output_open', { limitMs: OUTPUT_END_LIMIT_MS });
+      }
+    },
+  );
 
   const port = await new Promise<number>((resolve, reject) => {
     const limit = setTimeout(() => {
@@ -78,13 +91,15 @@ export async function startServer(options: StartServerOptions): Promise<StartedS
     port,
     exited,
     stop: async () => {
-      if (hasExited) return;
-      const limit = setTimeout(() => {
-        child.kill();
-      }, STOP_LIMIT_MS);
-      child.postMessage({ type: 'shutdown' } satisfies ShutdownMessage);
-      await exited;
-      clearTimeout(limit);
+      if (!hasExited) {
+        const limit = setTimeout(() => {
+          child.kill();
+        }, STOP_LIMIT_MS);
+        child.postMessage({ type: 'shutdown' } satisfies ShutdownMessage);
+        await exited;
+        clearTimeout(limit);
+      }
+      await ended;
     },
   };
 }
