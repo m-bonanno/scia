@@ -730,6 +730,64 @@ describe('App', () => {
     expect(notices).not.toHaveTextContent('some of');
   });
 
+  // "Some of" is counted from everything not taken, whatever the cause: a batch the engine did not
+  // answer was not taken either (#142).
+  it('says that none of the links pasted on the page were taken, when one batch was refused and the other not answered', async () => {
+    const links = manyLinks(MAX_URLS_PER_REQUEST + 1);
+    vi.spyOn(api, 'addDownloads')
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'))
+      .mockRejectedValueOnce(new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'));
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /^All/ }));
+
+    await userEvent.paste(links.join(' '));
+
+    const notices = await screen.findByRole('list', { name: 'Notices' });
+    await vi.waitFor(() => {
+      expect(notices).toHaveTextContent('Scia’s engine did not take the links you pasted.');
+    });
+    expect(notices).toHaveTextContent(ENGINE_UNREACHABLE);
+    expect(notices).not.toHaveTextContent('some of');
+  });
+
+  // Each kind is counted apart: a magnet taken beside a link refused is not "some of" the links.
+  it('says that the one link pasted on the page was not taken, beside a magnet that was', async () => {
+    vi.spyOn(api, 'addDownloads').mockRejectedValue(
+      new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'),
+    );
+    vi.spyOn(api, 'addMagnets').mockResolvedValue([]);
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /^All/ }));
+
+    await userEvent.paste(`https://example.com/a.zip magnet:?xt=urn:btih:${'a'.repeat(40)}`);
+
+    const notices = await screen.findByRole('list', { name: 'Notices' });
+    expect(notices).toHaveTextContent('Scia’s engine did not take the link you pasted.');
+    expect(notices).not.toHaveTextContent('some of');
+  });
+
+  // …and magnets that failed beside them do not hide that some of the links were taken.
+  it('says that some of the links pasted on the page were not taken, beside magnets that failed', async () => {
+    const links = manyLinks(MAX_URLS_PER_REQUEST + 1);
+    const magnets = Array.from(
+      { length: MAX_URLS_PER_REQUEST },
+      (_, index) => `magnet:?xt=urn:btih:${index.toString(16).padStart(40, '0')}`,
+    );
+    vi.spyOn(api, 'addDownloads')
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'));
+    vi.spyOn(api, 'addMagnets').mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /^All/ }));
+
+    await userEvent.paste([...links, ...magnets].join(' '));
+
+    const notices = await screen.findByRole('list', { name: 'Notices' });
+    await vi.waitFor(() => {
+      expect(notices).toHaveTextContent('Scia’s engine did not take some of the links you pasted.');
+    });
+  });
+
   it('names magnets in a notice when the engine refused magnets pasted on the page', async () => {
     vi.spyOn(api, 'addMagnets').mockRejectedValue(
       new ApiError(400, ApiErrorCode.InvalidRequest, 'not magnets'),

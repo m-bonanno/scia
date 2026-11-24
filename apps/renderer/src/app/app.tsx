@@ -166,8 +166,9 @@ export function App(): ReactNode {
   // Links and magnets are sent apart, each in batches of the most the engine takes in one request,
   // one after the other (#142): what is refused, the field keeps, and the rest is taken. From the
   // field, a refusal of what was sent is the field's to say, once, whatever batches were refused;
-  // anything else is a notice. A paste on the page is told once for each kind refused, saying
-  // whether some of it was taken.
+  // anything else is a notice. A paste on the page is told once for each kind the engine refused,
+  // saying whether some of it was taken: counted from everything of that kind not taken, whatever
+  // the cause.
   const add = useCallback(
     async ({ links, magnets }: Pasted, fromField: boolean): Promise<Added> => {
       const batches = [
@@ -176,16 +177,18 @@ export function App(): ReactNode {
       ];
       const refused: string[] = [];
       const notTaken = { links: 0, magnets: 0 };
+      const refusedByEngine = { links: 0, magnets: 0 };
       for (const { batch, sent } of batches) {
         try {
           await (sent === 'links' ? api.addDownloads(batch) : api.addMagnets(batch));
         } catch (error) {
           refused.push(...batch);
+          notTaken[sent] += batch.length;
           if (!(error instanceof ApiError && error.code === ApiErrorCode.InvalidRequest)) {
             report(error);
             continue;
           }
-          notTaken[sent] += batch.length;
+          refusedByEngine[sent] += batch.length;
         }
       }
       let refusal: string | null = null;
@@ -193,7 +196,7 @@ export function App(): ReactNode {
         ['links', links],
         ['magnets', magnets],
       ] as const) {
-        if (notTaken[sent] === 0) continue;
+        if (refusedByEngine[sent] === 0) continue;
         if (fromField) refusal = fieldNotTakenMessage(refused.length);
         else tell(pastedNotTakenMessage(sent, notTaken[sent], pasted.length));
       }
