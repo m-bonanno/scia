@@ -13,6 +13,7 @@ import { TEXT_BUTTON } from '@/components/button-styles.ts';
 import { AccountMagnets } from '@/features/account/account-magnets.tsx';
 import { type Added, AddBar } from '@/features/downloads/add-bar.tsx';
 import { type Pasted, pastedIn } from '@/features/downloads/pasted.ts';
+import { ClearCompleted } from '@/features/downloads/clear-completed.tsx';
 import { DownloadList } from '@/features/downloads/download-list.tsx';
 import type { RowActions } from '@/features/downloads/download-row.tsx';
 import type { BundleActions } from '@/features/downloads/bundle-row.tsx';
@@ -321,6 +322,11 @@ export function App(): ReactNode {
       filterTabs.current?.focus();
     }
   }, [hasReady]);
+  // And "Clear completed", which says itself whether it held the focus as it left.
+  const focusFilter = useCallback(() => {
+    filterTabs.current?.focus();
+  }, []);
+  const counts = countByFilter(live.downloads, live.magnets.length + live.bundles.length);
   // So does a row that leaves under its own press (`pressedRows`).
   const rowIds = [...live.downloads, ...live.bundles].map((row) => row.id).join(' ');
   const rowsBefore = useRef(rowIds);
@@ -402,22 +408,32 @@ export function App(): ReactNode {
               takesMagnets={connected}
             />
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <FilterTabs
-                ref={filterTabs}
-                filter={filter}
-                counts={countByFilter(live.downloads, live.magnets.length + live.bundles.length)}
-                onChange={setFilter}
-              />
-              {hasReady && (
-                <button
-                  type="button"
-                  className={TEXT_BUTTON}
-                  onClick={() => {
-                    api.startReady().catch(report);
-                  }}
-                >
-                  Start all
-                </button>
+              <FilterTabs ref={filterTabs} filter={filter} counts={counts} onChange={setFilter} />
+              {(hasReady || counts.completed > 0) && (
+                <div className="flex gap-2">
+                  {hasReady && (
+                    <button
+                      type="button"
+                      className={TEXT_BUTTON}
+                      onClick={() => {
+                        api.startReady().catch(report);
+                      }}
+                    >
+                      Start all
+                    </button>
+                  )}
+                  {/* Last, so that beside the filters it stays put when "Start all" leaves; and
+                      the second click of a burst that it slides under only makes it ask. */}
+                  {counts.completed > 0 && (
+                    <ClearCompleted
+                      count={counts.completed}
+                      onClear={() => {
+                        api.clearCompleted().catch(report);
+                      }}
+                      onLeaveFocused={focusFilter}
+                    />
+                  )}
+                </div>
               )}
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ConfirmButton, type ConfirmButtonHandle } from './confirm-button.tsx';
@@ -181,5 +181,62 @@ describe('ConfirmButton', () => {
 
     await userEvent.dblClick(screen.getByRole('button', { name: 'Open' }));
     expect(onConfirm).toHaveBeenCalledTimes(2);
+  });
+
+  it('as a word beside other text buttons, is named by its word and asks in place (#215)', async () => {
+    const onConfirm = vi.fn();
+    render(
+      <ConfirmButton shape="word" confirmLabel="Clear 3 completed" onConfirm={onConfirm}>
+        Clear completed
+      </ConfirmButton>,
+    );
+    const button = screen.getByRole('button', { name: 'Clear completed' });
+    // Its word says it: no tooltip repeats it.
+    expect(button).not.toHaveAttribute('title');
+    expect(button).not.toHaveAttribute('aria-label');
+    // The question is laid out beside the word from the start, hidden, so that the button is as
+    // wide as it already; the E2E suite measures the box.
+    expect(within(button).getByText('Clear 3 completed')).toHaveAttribute('aria-hidden', 'true');
+    // Numbers are drawn tabular: the box a count sets does not move when one figure replaces another.
+    expect(within(button).getByText('Clear 3 completed').parentElement).toHaveClass('tabular-nums');
+
+    await userEvent.click(button);
+    expect(onConfirm).not.toHaveBeenCalled();
+    expect(button).toHaveAccessibleName('Clear 3 completed');
+    expect(within(button).getByText('Clear completed')).toHaveAttribute('aria-hidden', 'true');
+    await userEvent.click(button);
+
+    expect(onConfirm).toHaveBeenCalledOnce();
+    expect(button).toHaveAccessibleName('Clear completed');
+  });
+
+  it('asks in the colour of what cannot be undone when it throws something away, its tooltip gone while it asks', async () => {
+    render(
+      <ConfirmButton
+        label="Delete"
+        confirmLabel="Cancel and delete"
+        destructive
+        onConfirm={vi.fn()}
+      >
+        ×
+      </ConfirmButton>,
+    );
+    const button = screen.getByRole('button', { name: 'Delete' });
+    expect(button).toHaveAttribute('title', 'Delete');
+
+    await userEvent.click(button);
+
+    expect(button).toHaveAccessibleName('Cancel and delete');
+    expect(button).toHaveClass('bg-destructive');
+    expect(button).not.toHaveAttribute('title');
+  });
+
+  it('asks on the tonal ground when nothing is thrown away', async () => {
+    render(aButton(vi.fn()));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+
+    expect(screen.getByRole('button', { name: 'Run' })).toHaveClass('bg-tonal');
+    expect(screen.getByRole('button', { name: 'Run' })).not.toHaveClass('bg-destructive');
   });
 });

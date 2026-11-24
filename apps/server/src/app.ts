@@ -163,6 +163,12 @@ export function createApp(deps: AppDeps): Hono {
 
   app.post(`${API_PREFIX}/downloads/start-ready`, (c) => c.json({ data: manager.startReady() }));
 
+  // Every finished download off the list, its file kept (#215).
+  app.post(`${API_PREFIX}/downloads/clear-completed`, (c) => {
+    manager.clearCompleted();
+    return c.body(null, 204);
+  });
+
   // Magnets pasted into the page, for the connected service to fetch (#137; docs/adr/0014).
   app.post(`${API_PREFIX}/magnets`, async (c) => {
     const parsed = addMagnetsSchema.safeParse(await c.req.json().catch(() => null));

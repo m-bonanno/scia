@@ -730,9 +730,21 @@ export class DownloadManager {
         await rm(join(record.directory, record.fileName), { force: true });
       }
     }
-    this.#records.splice(this.#records.indexOf(record), 1);
+    // Read after the waits: "Clear completed", or a second removal, may have taken it meanwhile.
+    const at = this.#records.indexOf(record);
+    if (at === -1) return;
+    this.#records.splice(at, 1);
     this.#changed();
     this.#schedule();
+  }
+
+  // Every finished download leaves the list at once, its file kept, in one change and one save
+  // (#215): a remove of each would save the list once per row.
+  clearCompleted(): void {
+    const kept = this.#records.filter((record) => record.status !== DownloadStatus.Completed);
+    if (kept.length === this.#records.length) return;
+    this.#records.splice(0, this.#records.length, ...kept);
+    this.#changed();
   }
 
   settings(): Settings {

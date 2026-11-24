@@ -257,6 +257,33 @@ describe('the engine API', () => {
     expect(await codeOf(pausedTwice)).toBe(ApiErrorCode.Conflict);
   });
 
+  it('takes every finished download off the list for the app alone, in one request (#215)', async () => {
+    const clear = vi.spyOn(manager, 'clearCompleted');
+    const clearAll = (token?: string) =>
+      call('/downloads/clear-completed', {
+        method: 'POST',
+        ...(token === undefined ? {} : { token }),
+      });
+    await call('/downloads', {
+      method: 'POST',
+      token: APP_TOKEN,
+      body: JSON.stringify({ urls: ['https://example.com/a.zip'] }),
+    });
+
+    expect((await clearAll()).status).toBe(401);
+    expect((await clearAll(EXTENSION_TOKEN)).status).toBe(403);
+    expect(clear).not.toHaveBeenCalled();
+    const cleared = await clearAll(APP_TOKEN);
+    expect(cleared.status).toBe(204);
+    expect(await cleared.text()).toBe('');
+    expect(clear).toHaveBeenCalledOnce();
+    // A download that is not finished stays.
+    const listed = (await (await call('/downloads', { token: APP_TOKEN })).json()) as {
+      data: { fileName: string }[];
+    };
+    expect(listed.data.map((download) => download.fileName)).toEqual(['a.zip']);
+  });
+
   it('gives the pairing of the extension to the app only', async () => {
     const response = await call('/extension/pairing', { token: APP_TOKEN });
 

@@ -1,5 +1,6 @@
 import { type ReactNode, type Ref, useImperativeHandle, useRef } from 'react';
 import { cn } from '@/lib/cn.ts';
+import { formatCount } from '@/lib/format.ts';
 import { Filter, FILTER_LABELS } from './filters.ts';
 
 export interface FilterTabsHandle {
@@ -16,11 +17,17 @@ interface FilterTabsProps {
 
 export function FilterTabs({ filter, counts, onChange, ref }: FilterTabsProps): ReactNode {
   const selected = useRef<HTMLButtonElement>(null);
-  useImperativeHandle(ref, () => ({
-    focus: () => {
-      selected.current?.focus();
-    },
-  }));
+  // Made once: a handle made again at every drawing is let go while React walks the tabs, and a
+  // control beside them that leaves in the same drawing would find none.
+  useImperativeHandle(
+    ref,
+    () => ({
+      focus: () => {
+        selected.current?.focus();
+      },
+    }),
+    [],
+  );
   return (
     <div className="flex items-center gap-1" role="group" aria-label="Filter downloads">
       {Object.values(Filter).map((option) => (
@@ -41,7 +48,7 @@ export function FilterTabs({ filter, counts, onChange, ref }: FilterTabsProps): 
           )}
         >
           {FILTER_LABELS[option]}
-          <span className="text-muted-foreground tabular-nums">{counts[option]}</span>
+          <span className="text-muted-foreground tabular-nums">{formatCount(counts[option])}</span>
         </button>
       ))}
     </div>

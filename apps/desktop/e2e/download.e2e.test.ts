@@ -5,8 +5,10 @@ import { API_PREFIX, ApiErrorCode, MAX_URLS_PER_REQUEST } from '@scia/contracts'
 import { DownloadStatus } from '@scia/core';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import { sparseFlagOf } from '@scia/server/testing/scratch.ts';
+import type { Locator } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
-import { downloadsOf, paste, rowOf, until, useRun } from './scia.ts';
+import { allCompleted, downloadsOf, drawnCompleted, paste, rowOf, until, useRun } from './scia.ts';
+import { captureTo, viewportOf } from './under-notices.ts';
 
 describe('the real app downloads', () => {
   const run = useRun();
@@ -38,6 +40,195 @@ describe('the real app downloads', () => {
     // Besides the probe of the first byte, the host was asked for more than one range.
     const ranges = host.ranges.filter((range) => range !== undefined && range !== 'bytes=0-0');
     expect(ranges.length).toBeGreaterThan(1);
+  });
+
+  it('takes every completed download off the list at the second press of "Clear completed", keeping the files (#215)', async () => {
+    const profile = await run.profile();
+    const first = randomBytes(1024 * 1024);
+    const second = randomBytes(1024 * 1024);
+    const one = run.keep(await startRangeServer({ body: first, fileName: 'one.bin' }));
+    const two = run.keep(await startRangeServer({ body: second, fileName: 'two.bin' }));
+    // Slow enough to be paused while it runs.
+    const slow = run.keep(
+      await startRangeServer({
+        body: randomBytes(8 * 1024 * 1024),
+        fileName: 'slow.bin',
+        chunkBytes: 16 * 1024,
+        chunkDelayMs: 40,
+      }),
+    );
+    const { page } = await run.launch(profile);
+    await paste(page, one.url, two.url, slow.url);
+    await until(async () =>
+      (await downloadsOf(page)).some(
+        (download) => download.fileName === 'slow.bin' && download.downloadedBytes > 0,
+      ),
+    );
+    await rowOf(page, 'slow.bin').getByRole('button', { name: 'Pause' }).click();
+    await until(async () => {
+      const statuses = (await downloadsOf(page)).map((download) => download.status).sort();
+      return (
+        JSON.stringify(statuses) ===
+        JSON.stringify(
+          [DownloadStatus.Completed, DownloadStatus.Completed, DownloadStatus.Paused].sort(),
+        )
+      );
+    });
+
+    const clear = page.getByRole('button', { name: 'Clear completed' });
+    await clear.focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Clear 2 completed' }).waitFor();
+    expect((await downloadsOf(page)).length).toBe(3);
+    await page.keyboard.press('Enter');
+
+    await page.getByRole('button', { name: /^Clear/ }).waitFor({ state: 'detached' });
+    const left = await downloadsOf(page);
+    expect(left.map((download) => [download.fileName, download.status])).toEqual([
+      ['slow.bin', DownloadStatus.Paused],
+    ]);
+    await rowOf(page, 'one.bin').waitFor({ state: 'detached' });
+    expect(await rowOf(page, 'slow.bin').count()).toBe(1);
+    expect(Buffer.compare(await readFile(join(profile.downloads, 'one.bin')), first)).toBe(0);
+    expect(Buffer.compare(await readFile(join(profile.downloads, 'two.bin')), second)).toBe(0);
+    // The focus it held goes to the filter in use, beside it.
+    expect(
+      await page
+        .getByRole('button', { name: /^All/ })
+        .evaluate((tab) => tab === document.activeElement),
+    ).toBe(true);
+  });
+
+  it('asks in place: "Clear completed" keeps its box at the first press, where its question would not fit beside the filters (#215)', async () => {
+    const profile = await run.profile();
+    const one = run.keep(
+      await startRangeServer({ body: randomBytes(1024 * 1024), fileName: 'report.pdf' }),
+    );
+    const two = run.keep(
+      await startRangeServer({ body: randomBytes(1024 * 1024), fileName: 'photos.zip' }),
+    );
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    await paste(page, one.url, two.url);
+    await until(() => allCompleted(page));
+    await until(async () => (await drawnCompleted(page)) === 2);
+    const clear = page.getByRole('button', { name: 'Clear completed' });
+    const question = page.getByRole('button', { name: 'Clear 2 completed' });
+
+    // The question, which nobody had seen, in both variants, the pointer away from it.
+    for (const variant of ['dark', 'light'] as const) {
+      await scia.app.evaluate(({ nativeTheme }, source) => {
+        nativeTheme.themeSource = source;
+      }, variant);
+      await clear.click();
+      await question.waitFor();
+      await page.mouse.move(1, 1);
+      await until(() =>
+        page.evaluate(
+          (scheme) =>
+            matchMedia(`(prefers-color-scheme: ${scheme})`).matches &&
+            document.getAnimations().length === 0,
+          variant,
+        ),
+      );
+      const name = `clear-completed-question${variant === 'dark' ? '' : '-light'}.png`;
+      await page.screenshot({ path: await captureTo(name) });
+      // The focus leaves it, and it is its word again.
+      await page.keyboard.press('Tab');
+      await clear.waitFor();
+    }
+
+    // A row with room for the word and not for the question: there a button that grew as it
+    // asked went to the next line, from under the pointer. Each is measured in the button's own
+    // font, whatever the button is made of — the question in its weight, semibold, and in the
+    // figures its own text is drawn in (read apart, below).
+    const measure = () =>
+      clear.evaluate((button) => {
+        const filters = document.querySelector('[role="group"][aria-label="Filter downloads"]');
+        const row = filters?.parentElement;
+        if (!filters || !row) return undefined;
+        const style = getComputedStyle(button);
+        const asked = [...button.querySelectorAll('span')].find(
+          (span) => span.children.length === 0 && span.textContent === 'Clear 2 completed',
+        );
+        // The shorthand resets the figures.
+        const figures = getComputedStyle(asked ?? button).fontVariantNumeric;
+        const widthOf = (text: string, weight: string) => {
+          const probe = document.createElement('span');
+          probe.style.font = style.font;
+          probe.style.fontWeight = weight;
+          probe.style.fontVariantNumeric = figures;
+          probe.style.whiteSpace = 'nowrap';
+          probe.style.position = 'absolute';
+          probe.textContent = text;
+          document.body.append(probe);
+          const width = probe.getBoundingClientRect().width;
+          probe.remove();
+          return width;
+        };
+        const around = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+        const before =
+          filters.getBoundingClientRect().width + parseFloat(getComputedStyle(row).columnGap);
+        return {
+          viewport: window.innerWidth,
+          row: row.getBoundingClientRect().width,
+          forWord: Math.ceil(before + widthOf('Clear completed', style.fontWeight) + around),
+          forQuestion: Math.floor(before + widthOf('Clear 2 completed', '600') + around),
+          question: widthOf('Clear 2 completed', '600') + around,
+        };
+      });
+    // What the button draws: its width, whether each of its two words is seen, and the figures
+    // of the question.
+    const drawn = (button: Locator) =>
+      button.evaluate((element) => {
+        const spans = (text: string) =>
+          [...element.querySelectorAll('span')].filter(
+            (span) => span.children.length === 0 && span.textContent === text,
+          );
+        const seen = (text: string) => spans(text).map((span) => getComputedStyle(span).visibility);
+        return {
+          width: element.getBoundingClientRect().width,
+          word: seen('Clear completed'),
+          question: seen('Clear 2 completed'),
+          figures: spans('Clear 2 completed').map(
+            (span) => getComputedStyle(span).fontVariantNumeric,
+          ),
+        };
+      });
+    // Below the width at which the column stops growing, the row follows the viewport.
+    await viewportOf(page, 700, 720);
+    const wide = await measure();
+    expect(wide).toBeDefined();
+    const target = Math.floor(((wide?.forWord ?? 0) + (wide?.forQuestion ?? 0)) / 2);
+    await viewportOf(page, 700 - ((wide?.row ?? 0) - target), 720);
+    const narrow = await measure();
+    expect(
+      narrow?.row === target && narrow.forWord <= narrow.row && narrow.row < narrow.forQuestion,
+      `the premise: ${JSON.stringify({ wide, target, narrow })}`,
+    ).toBe(true);
+
+    await clear.focus();
+    const atRest = await clear.boundingBox();
+    const rest = await drawn(clear);
+    await page.keyboard.press('Enter');
+    await question.waitFor();
+    const asking = await question.boundingBox();
+    const asked = await drawn(question);
+    // Each hold in turn, so that a line taken away fails at its own: the box at the press first;
+    // then the box at rest, the question's own width; at rest the word seen and the question not;
+    // while it asks, the other way round; and the question's figures, of one width.
+    const numbers = JSON.stringify({ atRest, asking, rest, asked, narrow });
+    expect(asking, numbers).toEqual(atRest);
+    expect(Math.abs(rest.width - (narrow?.question ?? 0)), numbers).toBeLessThanOrEqual(1);
+    expect({ word: rest.word, question: rest.question }, numbers).toEqual({
+      word: ['visible'],
+      question: ['hidden'],
+    });
+    expect({ word: asked.word, question: asked.question }, numbers).toEqual({
+      word: ['hidden'],
+      question: ['visible'],
+    });
+    expect(rest.figures, numbers).toEqual(['tabular-nums']);
   });
 
   // The engine takes at most MAX_URLS_PER_REQUEST links in one request (#142): the page sends a

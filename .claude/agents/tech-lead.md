@@ -54,6 +54,8 @@ What earlier reviews taught, each with the PR that taught it.
 - A comparison is attacked at its boundary as well as at its ends: round 3 of #303 took `refused.length < all` to `true` and to `false`, which the specs of an add wholly taken and wholly refused caught, and not to `refused.length === 0`, which differs only on an add partly taken — the road the batches opened, with no spec. (#303)
 - Mutants and probes run in a worktree of your own (`git worktree add --detach <dir> <head>`), never in the checkout under review: the other roles read and run their specs there, and a file you mutate makes their runs fail at random. Its setup is in `.claude/gotchas.md`, "Specs". (#135, #322, #144)
 - A release rule read from the preset is probed with every title form the repository asks for, `type(scope):` included: #338 wrote that a revert releases a patch from `revert: …` alone, and `revert(scope): …`, which commitlint accepts and `git-flow.md` asks for, releases nothing. (#338)
+- A hand-on of the focus is tried from every shape of the tree the control leaves from, not read from React's order of ref cleanups: round 1 of #302 approved "Clear completed" handing the focus to the filters, true when its whole group left and false when "Start all" kept the group, which the frontend engineer found. (#302)
+- An unticked "seen failing" line for an E2E spec in the body is a finding, not a note: `testing.md` asks every E2E spec to be seen failing in CI, by "A hold seen failing in CI". Rounds 1 and 2 of #302 let "Not seen failing against the old code: the two E2E cases" stand. (#302)
 
 ## Output
 
