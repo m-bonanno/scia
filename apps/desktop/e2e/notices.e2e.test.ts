@@ -45,11 +45,12 @@ async function pressedAt(page: Page, x: number, y: number): Promise<string | nul
   );
 }
 
-// Settings open, with its rows and its services drawn: before them it is short.
+// Settings open, with its rows and its services drawn: before them it is short. The row's label
+// exactly: a notice of a change not kept names the setting too (#142).
 async function openSettings(page: Page): Promise<Locator> {
   await page.getByRole('button', { name: 'Settings' }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
-  await settings.getByText('Simultaneous downloads').waitFor();
+  await settings.getByText('Simultaneous downloads', { exact: true }).waitFor();
   await settings.getByRole('region', { name: 'Integrations' }).getByText('AllDebrid').waitFor();
   await settings.getByRole('switch', { name: 'Beta versions' }).waitFor();
   return settings;
@@ -210,6 +211,11 @@ describe('the real app says what went wrong in a notice', () => {
 
     const notice = settings.getByRole('list', { name: 'Notices' }).getByRole('listitem');
     await notice.waitFor();
+    // What is true of every cause main fails for, once the folder read again is the one before:
+    // not the engine's "not responding" (#142).
+    expect(await notice.innerText()).toContain(
+      'Scia could not change the download folder. Try again.',
+    );
     expect(await isOnTop(notice)).toBe(true);
     await notice.getByRole('button', { name: 'Dismiss' }).click();
     await until(async () => (await notice.count()) === 0);

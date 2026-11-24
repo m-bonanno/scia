@@ -7,7 +7,10 @@ import {
   bundleActionMessage,
   bundleFailureMessage,
   errorMessage,
+  fieldNotTakenMessage,
   magnetActionMessage,
+  pastedNotTakenMessage,
+  settingNotChangedMessage,
 } from './messages.ts';
 
 describe('the sentence of a code', () => {
@@ -20,6 +23,77 @@ describe('the sentence of a code', () => {
       expect(accountMagnetMessage(error), code).toBe(fallback);
       expect(bundleActionMessage(error, 'retry'), code).toBe(fallback);
     }
+  });
+
+  // INVALID_REQUEST answers a choice of files, a setting and a folder as well as links (#142).
+  it('names no links for a refusal of what any request carried', () => {
+    expect(errorMessage(new ApiError(400, ApiErrorCode.InvalidRequest, 'x'))).toBe(
+      'Scia could not complete the operation. Try again.',
+    );
+  });
+});
+
+describe('what the engine refused of an add', () => {
+  it('names what a paste on the page sent, counted: links, or magnets', () => {
+    expect(pastedNotTakenMessage('links', 2, 2)).toBe(
+      'Scia’s engine did not take the links you pasted.',
+    );
+    expect(pastedNotTakenMessage('magnets', 2, 2)).toBe(
+      'Scia’s engine did not take the magnets you pasted.',
+    );
+    expect(pastedNotTakenMessage('links', 1, 1)).toBe(
+      'Scia’s engine did not take the link you pasted.',
+    );
+    expect(pastedNotTakenMessage('magnets', 1, 1)).toBe(
+      'Scia’s engine did not take the magnet you pasted.',
+    );
+  });
+
+  // The rows taken are in the list above the notice.
+  it('says when some of a paste on the page was taken', () => {
+    expect(pastedNotTakenMessage('links', 1, 201)).toBe(
+      'Scia’s engine did not take some of the links you pasted.',
+    );
+    expect(pastedNotTakenMessage('magnets', 1, 2)).toBe(
+      'Scia’s engine did not take some of the magnets you pasted.',
+    );
+  });
+
+  // Counted as the field's button counts: magnets among links.
+  it('points at what the field keeps, one link or several', () => {
+    expect(fieldNotTakenMessage(1)).toBe('Scia’s engine did not take this link.');
+    expect(fieldNotTakenMessage(2)).toBe('Scia’s engine did not take these links.');
+  });
+});
+
+describe('a change in Settings not kept', () => {
+  const failure = new ApiError(400, ApiErrorCode.InvalidRequest, 'x');
+
+  it('names the setting whose change was lost, for every cause', () => {
+    expect(settingNotChangedMessage('maxConcurrentDownloads', failure)).toBe(
+      'Scia could not change the number of simultaneous downloads. Try again.',
+    );
+    expect(settingNotChangedMessage('connectionsPerDownload', new TypeError('offline'))).toBe(
+      'Scia could not change the number of connections per download. Try again.',
+    );
+    expect(settingNotChangedMessage('speedLimitBytesPerSecond', failure)).toBe(
+      'Scia could not change the speed limit. Try again.',
+    );
+    expect(settingNotChangedMessage('theme', failure)).toBe(
+      'Scia could not change the theme. Try again.',
+    );
+    expect(settingNotChangedMessage('betaUpdates', failure)).toBe(
+      'Scia could not change whether it updates to beta versions. Try again.',
+    );
+    expect(settingNotChangedMessage('watchClipboard', failure)).toBe(
+      'Scia could not change whether it takes links from the clipboard. Try again.',
+    );
+  });
+
+  // Trying again does not mend a window the engine does not know: the remedy is its own.
+  it('says what a window the engine does not recognize says', () => {
+    const unknown = new ApiError(401, ApiErrorCode.Unauthorized, 'x');
+    expect(settingNotChangedMessage('theme', unknown)).toBe(errorMessage(unknown));
   });
 });
 

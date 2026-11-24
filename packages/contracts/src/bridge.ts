@@ -20,7 +20,8 @@ export type BridgeChannel = (typeof BridgeChannel)[keyof typeof BridgeChannel];
 export const SUPPORT_PAGE = 'https://ko-fi.com/notsosnake';
 
 // What main answers to `chooseDownloadFolder`: what became of the folder. Anything that is not
-// about the folder — an engine that fails or is silent — is a rejection, not one of these.
+// about the folder — the system's dialog failing, an engine that fails or is silent — is a
+// rejection, not one of these.
 export const FolderChange = {
   Changed: 'changed',
   // The person closed the dialog without choosing.

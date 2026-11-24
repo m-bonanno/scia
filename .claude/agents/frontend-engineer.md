@@ -26,6 +26,7 @@ What earlier reviews taught, each with the PR that taught it.
 - A screen without a spec is a screen nobody checks: a leftover string in the settings dialog passed every gate because the dialog had none. Ask for the spec with the change. (#4)
 
 - Every control of a form is pressed while its request is on its way: "Cancel" during a check left the answer to land on a row whose field was gone — a key kept after a cancel, a refusal under no field. A throwaway spec with a promise held open shows it. (#53)
+- A mutant counted as caught names the spec that failed it, and a failure on a loaded machine is not a catch: round 2 of #303 counted `refused.length === 0` for the filter's `refused.length < all` as caught by the whole project, from failures that were not that line's, and no spec held an add only partly taken. (#303)
 
 ## Output
 
