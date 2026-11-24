@@ -2,12 +2,24 @@
 
 Thank you for wanting to help. Scia is kept small on purpose, and one person decides what goes in: read this before writing code, so that your work is not lost.
 
+Everyone here follows the [code of conduct](./CODE_OF_CONDUCT.md). A security problem is never an issue: report it privately, as [`SECURITY.md`](./SECURITY.md) says.
+
+## Ways to help without code
+
+The help Scia needs most is not code:
+
+- **Try a beta and say what you saw.** Much of Scia is held by tests and still to be seen by a person, against real services and sites, and nothing of it on Linux ([`docs/product/evidence.md`](./docs/product/evidence.md)). Your run is the evidence it lacks: open a [**Beta report**](https://github.com/m-bonanno/scia/issues/new?template=beta.yml).
+- **Report a bug**, with what you saw and how to see it again.
+- **Propose a feature**, starting from what you need rather than how to build it.
+- **Say which site or service Scia should reach**, with a proposal: what it is, and what you would do with it.
+
 ## An issue first
 
 Every change starts as an issue. Open one with a form, and say what the problem is before how to solve it:
 
 - [**Bug**](https://github.com/m-bonanno/scia/issues/new?template=bug.yml): something that does not work. For an example, see [#205](https://github.com/m-bonanno/scia/issues/205): what was seen, in which version, and what is likely behind it.
 - [**Proposal**](https://github.com/m-bonanno/scia/issues/new?template=feature.yml): a feature or an improvement. For an example, see [#215](https://github.com/m-bonanno/scia/issues/215): the need first, then what to settle and when it is done.
+- [**Beta report**](https://github.com/m-bonanno/scia/issues/new?template=beta.yml): what you tried in a beta, and what you saw, whether it worked or not.
 
 [All the forms](https://github.com/m-bonanno/scia/issues/new/choose).
 

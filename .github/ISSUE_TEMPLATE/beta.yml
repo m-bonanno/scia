@@ -1,0 +1,57 @@
+name: 🧪 Beta report
+description: What you tried in a beta of Scia, and what you saw — whether it worked or not.
+title: 'docs(evidence): '
+labels: ['docs', 'status:triage']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for trying Scia. Much of it is held by tests and has not been seen by a person yet: what you saw is what [`evidence.md`](https://github.com/m-bonanno/scia/blob/develop/docs/product/evidence.md) lacks, also when everything worked.
+
+        **Do not paste private links or links with tokens** (personal download addresses, debrid service keys): name the kind of site or service instead.
+  - type: input
+    id: version
+    attributes:
+      label: Version of Scia
+      description: At the bottom of Settings.
+      placeholder: '1.0.0-beta.42'
+    validations:
+      required: true
+  - type: dropdown
+    id: system
+    attributes:
+      label: System
+      options:
+        - Windows 11
+        - Windows 10
+        - Linux
+    validations:
+      required: true
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you tried
+      description: The steps, one per line, and the kind of site or service — a file host through AllDebrid, a video site, a Bunkr album, a plain file.
+      placeholder: |
+        1. Connected AllDebrid with a code
+        2. Pasted a file host's link to a 3 GB file
+        3. Paused halfway, quit Scia, opened it again, resumed
+    validations:
+      required: true
+  - type: dropdown
+    id: outcome
+    attributes:
+      label: Did it work?
+      options:
+        - Yes, as I expected
+        - Partly
+        - No
+    validations:
+      required: true
+  - type: textarea
+    id: seen
+    attributes:
+      label: What you saw
+      description: What Scia showed and did, with the exact words of any message. A screenshot helps; check it shows nothing private.
+    validations:
+      required: true

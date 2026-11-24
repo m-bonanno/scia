@@ -1,0 +1,85 @@
+<!doctype html>
+<!--
+  The social preview GitHub shows for the repository (Settings → Social preview), 1280 by 640.
+  Drawn by Chromium from this file, then uploaded by hand: GitHub has no API for it (#310).
+  From the repository's root, after `npm ci`:
+    chrome --headless=new --hide-scrollbars --window-size=1280,640 \
+      --screenshot=docs/design/social-preview.png docs/design/social-preview.html
+  Black Tie's dark variant (themes.md): #111111 ground, #e3e3e3 text, the mark of the app's icon.
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      @font-face {
+        font-family: 'Geist Variable';
+        src: url('../../node_modules/@fontsource-variable/geist/files/geist-latin-wght-normal.woff2')
+          format('woff2');
+        font-weight: 100 900;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 1280px;
+        height: 640px;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        gap: 72px;
+        padding: 0 120px;
+        box-sizing: border-box;
+        background: radial-gradient(circle at 18% 50%, #202020 0, #111111 60%);
+        color: #e3e3e3;
+        font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+      }
+      svg {
+        flex: none;
+        width: 240px;
+        height: 240px;
+        border-radius: 52px;
+        box-shadow: 0 0 0 2px #424242;
+      }
+      h1 {
+        margin: 0;
+        font-size: 132px;
+        font-weight: 650;
+        letter-spacing: -4px;
+        line-height: 1;
+      }
+      .tagline {
+        margin: 20px 0 0;
+        font-size: 40px;
+        font-weight: 500;
+      }
+      .features {
+        margin: 28px 0 0;
+        font-size: 26px;
+        color: #a3a3a3;
+      }
+    </style>
+  </head>
+  <body>
+    <svg viewBox="0 0 32 32" aria-hidden="true">
+      <rect width="32" height="32" rx="7" fill="#111111" />
+      <g
+        fill="none"
+        stroke="#e3e3e3"
+        stroke-width="3"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
+        <path d="M16 6v18" />
+        <path d="M9 17.5 16 24.5l7-7" />
+        <path d="M9 6.5v4.5" opacity="0.5" />
+        <path d="M23 6.5v4.5" opacity="0.5" />
+      </g>
+    </svg>
+    <div>
+      <h1>Scia</h1>
+      <p class="tagline">A download manager for Windows.</p>
+      <p class="features">Several connections · Pause and resume · Videos · AllDebrid</p>
+    </div>
+  </body>
+</html>
