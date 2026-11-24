@@ -52,7 +52,7 @@
 - 🔄 **Updates itself** from this repository's releases, without stopping a download.
 
 > [!NOTE]
-> All of it is built and held by tests, and much of it is still to be seen by a person before the first stable release. That holds for the installed app, and for the real services and sites Scia reaches: a download through AllDebrid to its end, the real Bunkr, and a real site's video: its stream, its picture and sound joined, its title. None of it has been tried on Linux, and the browser extension that hands Scia links is neither tried in a browser nor published. What was seen of each feature, and how: [`docs/product/evidence.md`](docs/product/evidence.md). What is left and what comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
+> All of it is built and held by tests, and much of it is still to be seen by a person before the first stable release. That holds for the installed app, and for the real services and sites Scia reaches: a download through AllDebrid to its end, the real Bunkr, and a video read from a real site, whether a stream, a picture and its sound joined, or its title alone. None of it has been tried on Linux, and the browser extension that hands Scia links is neither tried in a browser nor published. What was seen of each feature, and how: [`docs/product/evidence.md`](docs/product/evidence.md). What is left and what comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
 
 ## Get it
 
@@ -81,7 +81,7 @@ npm run dist    # build the installer for this system
 
 Scia downloads from the hosts of the links you give it, and from the servers those lead to for the files themselves. Beyond them, it reaches only these:
 
-- **AllDebrid**, once you connect it in Settings. Its key is kept where the system protects it. Of your links, it is sent only file hosts' links and folders, protectors' and shorteners' links, and magnets, and their files come from its servers. Connecting with a code asks it for a code, with no key, then every five seconds whether you confirmed it on its site. Otherwise, with no service connected, Scia asks it only for its public list of file hosts, with no key and nothing of your links.
+- **AllDebrid**, once you connect it in Settings. Its key is kept where the system protects it. Scia sends it file hosts' links and folders, protectors' and shorteners' links, and magnets, and no other link of yours; their files come from its servers. Connecting with a code asks it for a code, with no key, then every five seconds whether you confirmed it on its site. Otherwise, with no service connected, Scia asks it only for its public list of file hosts, with no key and nothing of your links.
 - **yt-dlp**, shipped with Scia, reads a video's page on its site, and whatever that site's reader asks in turn. Scia downloads the video from the servers its answer names. With the clipboard on, a video's page you copy is read for its title at once, even if you never start it.
 - **Bunkr**, read by a reader of Scia's own: its pages, its API, and the file servers it names.
 - **GitHub**, for Scia's updates and yt-dlp's.
