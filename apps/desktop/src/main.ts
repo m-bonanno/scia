@@ -143,7 +143,7 @@ async function boot(): Promise<void> {
 
   // The theme the engine said last time: the window shows before the engine can say it. Read
   // before anything exists that could ask for a quit.
-  const theme = new RememberedTheme(new JsonFile(layout.themePath));
+  const theme = new RememberedTheme(new JsonFile(layout.themePath), log);
   const startingTheme = await theme.read();
 
   let port = 0;
