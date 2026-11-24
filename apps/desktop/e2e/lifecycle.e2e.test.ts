@@ -95,11 +95,14 @@ describe('the real app, from start to quit', () => {
     const first = await run.launch(profile);
     await first.page.getByRole('button', { name: 'Settings' }).click();
     await first.page.getByRole('combobox', { name: 'Theme' }).selectOption(Theme.Ice);
-    await until(async () => {
-      const kept = await readFile(join(profile.path, 'theme.json'), 'utf8').catch(() => '');
-      return kept.includes(Theme.Ice);
-    });
+    // Main says when the write landed. Never by reading theme.json meanwhile: on Windows a file
+    // another process has open cannot be renamed onto, and a spec that read it every 10 ms made
+    // main's write fail (#280; .claude/gotchas.md, #137).
+    await until(async () => (await profile.log()).includes(`theme_kept { theme: '${Theme.Ice}' }`));
     await first.quit();
+    expect(JSON.parse(await readFile(join(profile.path, 'theme.json'), 'utf8'))).toEqual({
+      theme: Theme.Ice,
+    });
 
     const again = await run.launch(profile);
 
