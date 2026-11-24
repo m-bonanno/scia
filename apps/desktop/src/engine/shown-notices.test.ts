@@ -191,6 +191,54 @@ describe('ShownNotices', () => {
     });
   });
 
+  // A read refused for a moment shows the notice again; the write reads the file again first.
+  it('writes nothing for a notice the file already holds, when its first read could not see it', async () => {
+    let reads = 0;
+    const writes: unknown[] = [];
+    const store: NoticeStore = {
+      read: async () => {
+        reads += 1;
+        if (reads === 1) throw Object.assign(new Error('EBUSY: resource busy'), { code: 'EBUSY' });
+        return ['hidden-to-tray'];
+      },
+      write: async (shown) => {
+        writes.push(shown);
+      },
+    };
+    const notices = new ShownNotices(store, silent);
+
+    expect(await notices.firstTime('hidden-to-tray')).toBe(true);
+    await vi.waitFor(() => {
+      expect(reads).toBe(2);
+    });
+    await settle();
+
+    expect(writes).toEqual([]);
+  });
+
+  it('goes on writing the notices that follow when a line of its log fails', async () => {
+    const store = memoryStore();
+    let lineFails = true;
+    const notices = new ShownNotices(store, {
+      info: () => {
+        if (!lineFails) return;
+        lineFails = false;
+        throw new Error('the log could not be written');
+      },
+      warn: () => undefined,
+    });
+
+    expect(await notices.firstTime('hidden-to-tray')).toBe(true);
+    await vi.waitFor(() => {
+      expect(lineFails).toBe(false);
+    });
+    expect(await notices.firstTime('another')).toBe(true);
+
+    await vi.waitFor(() => {
+      expect(store.saved).toEqual(['hidden-to-tray', 'another']);
+    });
+  });
+
   it('shows a notice again at the next launch when its write was given up', async () => {
     let refuses = true;
     const disk = memoryStore();

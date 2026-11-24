@@ -12,6 +12,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Logger } from './logger.ts';
 import { signingKeyOf } from './openpgp.ts';
@@ -239,21 +240,19 @@ describe('YtDlpUpdates against a host that publishes releases as yt-dlp does', (
       logged = [];
 
       const second = await open({ now: () => secondAt });
-      const startedAt = performance.now();
       second.start(downloads);
-      setTimeout(() => void held.close(), 300);
+      // Held until the state's write has begun — its `.tmp` beside the file, read from the folder,
+      // never by opening either — and 300 ms more: the case itself, well inside the two seconds
+      // the write waits.
+      await until(async () => (await readdir(updatesFolder())).includes('state.json.tmp'));
+      await sleep(300);
+      await held.close();
       await until(() => events().some((event) => event.startsWith('yt_dlp_check')));
-      const tookMs = performance.now() - startedAt;
 
       expect(events()).not.toContain('yt_dlp_check_failed');
       expect(JSON.parse(await readFile(state, 'utf8'))).toMatchObject({
         checkedAt: new Date(secondAt).toISOString(),
       });
-      // The premise: the state's write waited for the file. One that landed at once would hold
-      // nothing of the retry.
-      expect(tookMs, `the check ended in ${String(Math.round(tookMs))} ms`).toBeGreaterThanOrEqual(
-        250,
-      );
     },
   );
 

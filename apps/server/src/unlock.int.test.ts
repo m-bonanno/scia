@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { open as openFile, readdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { type IntegrationAccount, IntegrationId } from '@scia/contracts';
 import { DownloadFailure, DownloadStatus, ServiceFailure, UnlockFailure } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -726,22 +727,27 @@ describe('a link that goes through a service', () => {
       await writeFile(hostsFile(), JSON.stringify({ domains: ['before.example'] }));
       const integrations = await connected(await serviceWith({ links: {} }));
       const held = await openFile(hostsFile(), 'r');
-      const startedAt = performance.now();
-      setTimeout(() => void held.close(), 300);
+      // Held until the list's write has begun — its `.tmp` beside the file, read from the folder,
+      // never by opening either — and 300 ms more: the case itself, well inside the two seconds
+      // the write waits.
+      const released = (async () => {
+        await until(async () =>
+          (await readdir(join(folder.path, 'data'))).includes('alldebrid-hosts.json.tmp'),
+        );
+        await sleep(300);
+        await held.close();
+      })();
 
-      expect(await integrations.serviceFor(LINK, new AbortController().signal)).toBe('alldebrid');
-      const tookMs = performance.now() - startedAt;
+      const [service] = await Promise.all([
+        integrations.serviceFor(LINK, new AbortController().signal),
+        released,
+      ]);
 
+      expect(service).toBe('alldebrid');
       expect(logged.filter((line) => line.includes('service_hosts_not_kept'))).toEqual([]);
       expect(JSON.parse(await readFile(hostsFile(), 'utf8'))).toEqual({
         domains: ['hoster.example'],
       });
-      // The premise: the list's write waited for the file. One that landed at once would hold
-      // nothing of the retry.
-      expect(
-        tookMs,
-        `the list was kept in ${String(Math.round(tookMs))} ms`,
-      ).toBeGreaterThanOrEqual(250);
     },
   );
 

@@ -58,6 +58,7 @@ export class ShownNotices {
         this.#log.warn('notices_not_kept', { notice: id, code: failureCode(failed.error) });
       }
     };
-    this.#writing = this.#writing.then(write, write);
+    // A write says how it ended; a line of the log that fails to say it stops none that follows.
+    this.#writing = this.#writing.then(write).catch(() => undefined);
   }
 }
