@@ -3,7 +3,7 @@
 // its process id — since the adapter hands it no environment of the spec's. Like yt-dlp's builds,
 // it unpacks itself into its TEMP first, and leaves that there when it is stopped.
 import { spawn } from 'node:child_process';
-import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const [given, ...args] = process.argv.slice(2);
@@ -12,10 +12,19 @@ if (process.env.TEMP) {
   writeFileSync(join(process.env.TEMP, '_MEI1', 'python.dll'), 'unpacked');
 }
 // Written beside and renamed into place: a spec that sees the file reads it whole, also when the
-// process is ended a moment after it began to write (#165).
+// process is ended a moment after it began to write (#165). Stand-ins started together share one
+// file: each writes beside it under a name of its own, and one whose rename loses to another's —
+// on Windows `EPERM`, two processes replacing one file at once — drops its own and leaves theirs,
+// which is whole too (#306).
 const writeWhole = (path, text) => {
-  writeFileSync(`${path}.tmp`, text);
-  renameSync(`${path}.tmp`, path);
+  const beside = `${path}.${process.pid}.tmp`;
+  writeFileSync(beside, text);
+  try {
+    renameSync(beside, path);
+  } catch (error) {
+    rmSync(beside, { force: true });
+    if (!existsSync(path)) throw error;
+  }
 };
 writeWhole(given, JSON.stringify({ args, env: process.env, pid: process.pid }));
 const url = args.at(-1) ?? '';
@@ -311,9 +320,9 @@ else if (
     ? `const { spawn } = require('node:child_process');
        const held = spawn(process.execPath, ['-e', ${JSON.stringify(holder)}], { stdio: ['ignore', 'inherit', 'inherit'], detached: ${String(apart)} });
        held.unref();
-       const fs = require('node:fs');
-       fs.writeFileSync(process.argv[1] + '.tmp', String(held.pid));
-       fs.renameSync(process.argv[1] + '.tmp', process.argv[1]);`
+       const { existsSync, renameSync, rmSync, writeFileSync } = require('node:fs');
+       const writeWhole = ${String(writeWhole)};
+       writeWhole(process.argv[1], String(held.pid));`
     : holder;
   const holderPidFile = `${given}.holder`;
   const second = spawn(process.execPath, ['-e', code, holderPidFile], {
