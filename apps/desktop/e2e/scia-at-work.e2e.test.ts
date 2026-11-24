@@ -35,23 +35,26 @@ async function publicFile(run: Run, fileName: string, sizeMiB: number) {
   );
 }
 
-// The page as Chromium draws it, over the DevTools protocol: a frame each time it changes, timed
-// when it arrives. The first picture is the page before anything moves.
+// The page captured again and again, each capture timed when it was asked for, from the page
+// before anything moves until the spec stops it; then once more, so that the last picture is the
+// page the spec saw settled. A screencast of the DevTools protocol drops the frames still on their
+// way when it is stopped: the first loop CI took ended on a download at 94%.
 async function filmOf(page: Page) {
-  const shots: Shot[] = [{ png: await page.screenshot(), at: performance.now() }];
-  const protocol = await page.context().newCDPSession(page);
-  protocol.on('Page.screencastFrame', ({ data, sessionId }) => {
-    shots.push({ png: Buffer.from(data, 'base64'), at: performance.now() });
-    void protocol.send('Page.screencastFrameAck', { sessionId });
-  });
-  await protocol.send('Page.startScreencast', {
-    format: 'png',
-    maxWidth: WIDTH,
-    maxHeight: HEIGHT,
-  });
+  const shots: Shot[] = [];
+  let filming = true;
+  const stillFilming = () => filming;
+  const shoot = async () => {
+    const at = performance.now();
+    shots.push({ png: await page.screenshot(), at });
+  };
+  await shoot();
+  const film = (async () => {
+    while (stillFilming()) await shoot();
+  })();
   return async (): Promise<Shot[]> => {
-    await protocol.send('Page.stopScreencast');
-    await protocol.detach();
+    filming = false;
+    await film;
+    await shoot();
     return shots;
   };
 }
