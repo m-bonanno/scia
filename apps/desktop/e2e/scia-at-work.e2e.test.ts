@@ -173,6 +173,7 @@ describe('Scia at work, the loop of the README', () => {
       await settled(page, variant);
       // The whole title bar is in the loop, and nothing of the page lies beside it.
       const settings = await page.getByRole('button', { name: 'Settings' }).boundingBox();
+      expect(settings).not.toBeNull();
       expect((settings?.x ?? WIDTH) + (settings?.width ?? 0)).toBeLessThanOrEqual(WIDTH);
       expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(WIDTH);
 
