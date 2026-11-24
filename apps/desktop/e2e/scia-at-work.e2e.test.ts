@@ -31,6 +31,9 @@ const CLOSING_MS = 2_000;
 // The length #310 asks of the loop.
 const SHORTEST_LOOP_MS = 5_000;
 const LONGEST_LOOP_MS = 10_000;
+// The owner's choice on #313: the loop plays two or three times, then stays on its last frame, the
+// three files completed. Twice: a reader who arrives during the first play sees the second whole.
+const PLAYS = 2;
 // Text drawn in greys, as on a screen without ClearType: a GIF holds 256 colours a frame, and
 // ClearType's coloured edges are thousands.
 const GREY_TEXT = '--disable-lcd-text';
@@ -202,7 +205,7 @@ describe('Scia at work, the loop of the README', () => {
       expect(length).toBeGreaterThanOrEqual(SHORTEST_LOOP_MS);
       expect(length).toBeLessThanOrEqual(LONGEST_LOOP_MS);
       const name = variant === 'dark' ? 'scia-at-work.gif' : 'scia-at-work-light.gif';
-      await writeFile(await captureTo(name), encodeGif(frames));
+      await writeFile(await captureTo(name), encodeGif(frames, { plays: PLAYS }));
     },
   );
 });

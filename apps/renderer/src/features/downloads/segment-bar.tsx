@@ -51,17 +51,23 @@ export function SegmentBar({ download }: { readonly download: Download }): React
       aria-valuemax={100}
       aria-valuenow={Math.floor((measure.done / total) * 100)}
     >
-      {measure.segments.map((segment, index) => (
-        <div
-          // Two pieces of no length start at the same moment.
-          key={index}
-          className={cn('absolute inset-y-0 transition-[width] duration-300 ease-linear', fill)}
-          style={{
-            left: `${String((segment.start / total) * 100)}%`,
-            width: `${String((segment.downloaded / total) * 100)}%`,
-          }}
-        />
-      ))}
+      {measure.segments
+        // A piece of a stream that lasts no time fills nothing, and two of them, starting at the same
+        // moment, would share a key.
+        .filter((segment) => segment.end > segment.start)
+        .map((segment) => (
+          <div
+            // A stretch is the range it fills: only one whose range stays moves to its new width. The
+            // engine joins a finished range to the next and splits one in two, and a stretch that
+            // moved from its old width there would draw less of the file before it drew more (#316).
+            key={`${String(segment.start)}-${String(segment.end)}`}
+            className={cn('absolute inset-y-0 transition-[width] duration-300 ease-linear', fill)}
+            style={{
+              left: `${String((segment.start / total) * 100)}%`,
+              width: `${String((segment.downloaded / total) * 100)}%`,
+            }}
+          />
+        ))}
     </div>
   );
 }
