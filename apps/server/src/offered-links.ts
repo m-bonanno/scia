@@ -50,6 +50,7 @@ const VIDEO_SITES: readonly VideoSite[] = [
   { domain: 'ted.com', video: /^\/talks\/\w+/ },
   { domain: 'bitchute.com', video: /^\/video\/[\w-]+/ },
   { domain: 'odysee.com', video: /^\/@[^/]+\/[^/]+/ },
+  { domain: 'pornhub.com', video: /^\/(view_video\.php\?(.*&)?viewkey=\w+|embed\/\w+)/ },
 ];
 
 function isVideoPage(address: URL): boolean {

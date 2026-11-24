@@ -106,6 +106,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
   - **The repository's settings** are changed on the owner's word, given there: the topics, the homepage set to the latest release, private vulnerability reporting and Dependabot alerts on (as #190 decided). The social preview is uploaded by hand in Settings: GitHub has no API for it.
   - **The code of conduct's channel for reports**: the repository's private reporting, the one `SECURITY.md` names. No address is published. #190's files land with #310's pull request.
   - **The loop of Scia at work** is recorded by CI's E2E run on Windows, as `docs/design/`'s captures are, and lands with #310's pull request. Changed the same day: it was to be recorded by hand on Windows later, in an issue of its own.
+- #325: one more site, among the most visited for video and read by yt-dlp, joins those whose video pages are taken from the clipboard (`VIDEO_SITES`), by its domain and the shape of one video's page. Its links pasted already downloaded; the site is named in the code alone, as every site of the list is.
 
 ## Undated in the roadmap
 
