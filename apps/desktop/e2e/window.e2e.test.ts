@@ -151,7 +151,7 @@ describe('the real app, in the colours of the system', () => {
       await page.getByRole('button', { name: 'Settings' }).click();
       const dialog = page.getByRole('dialog', { name: 'Settings' });
       // Its rows and its services drawn: before them it is short, and nothing scrolls.
-      await page.getByText('Simultaneous downloads').waitFor();
+      await page.getByText('Simultaneous downloads', { exact: true }).waitFor();
       await page.getByRole('region', { name: 'Integrations' }).getByText('AllDebrid').waitFor();
       await until(() => dialog.evaluate((element) => element.scrollHeight > element.clientHeight));
       await dialog.evaluate((element, to) => {

@@ -5,6 +5,7 @@ import {
   ApiErrorCode,
   DEFAULT_API_PORT,
   IntegrationId,
+  MAX_URLS_PER_REQUEST,
   SETTINGS_LIMITS,
 } from '@scia/contracts';
 import { BundleFailure, UnlockFailure } from '@scia/core';
@@ -111,6 +112,26 @@ describe('the engine API', () => {
       data: { fileName: string }[];
     };
     expect(listed.data.map((download) => download.fileName)).toEqual(['a.zip', 'b.zip']);
+  });
+
+  // The page cuts a paste into requests of this many (#142): an add takes as many, and no more.
+  it('takes as many links in one add as a request holds, and refuses one more', async () => {
+    const add = (count: number) =>
+      call('/downloads', {
+        method: 'POST',
+        token: APP_TOKEN,
+        body: JSON.stringify({
+          urls: Array.from({ length: count }, (_, n) => `https://example.com/${String(n)}.zip`),
+        }),
+      });
+
+    const refused = await add(MAX_URLS_PER_REQUEST + 1);
+
+    expect(refused.status).toBe(400);
+    expect(await codeOf(refused)).toBe(ApiErrorCode.InvalidRequest);
+    expect(manager.snapshot().downloads).toEqual([]);
+    expect((await add(MAX_URLS_PER_REQUEST)).status).toBe(201);
+    expect(manager.snapshot().downloads).toHaveLength(MAX_URLS_PER_REQUEST);
   });
 
   it('lets the extension add downloads and nothing else', async () => {
@@ -484,6 +505,23 @@ describe('the engine API', () => {
         expect(await codeOf(response)).toBe(ApiErrorCode.InvalidRequest);
       }
       expect(manager.snapshot().magnets).toEqual([]);
+    });
+
+    // The page cuts a paste into requests of this many (#142): an add takes as many, and no more.
+    it('takes as many magnets in one add as a request holds, and refuses one more', async () => {
+      const magnets = (count: number) =>
+        Array.from(
+          { length: count },
+          (_, n) => `magnet:?xt=urn:btih:${n.toString(16).padStart(40, '0')}`,
+        );
+
+      const refused = await add(magnets(MAX_URLS_PER_REQUEST + 1));
+
+      expect(refused.status).toBe(400);
+      expect(await codeOf(refused)).toBe(ApiErrorCode.InvalidRequest);
+      expect(manager.snapshot().magnets).toEqual([]);
+      expect((await add(magnets(MAX_URLS_PER_REQUEST))).status).toBe(201);
+      expect(manager.snapshot().magnets).toHaveLength(MAX_URLS_PER_REQUEST);
     });
 
     it('lets the app alone stop waiting for a magnet, and try again one that failed', async () => {

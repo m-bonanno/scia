@@ -1,4 +1,4 @@
-import { ApiErrorCode, type Settings } from '@scia/contracts';
+import { ApiErrorCode, MAX_URLS_PER_REQUEST, type Settings } from '@scia/contracts';
 import { DownloadStatus, isUnderWay } from '@scia/core';
 import {
   type CSSProperties,
@@ -31,8 +31,10 @@ import {
   bundleActionMessage,
   ENGINE_UNREACHABLE,
   errorMessage,
+  fieldNotTakenMessage,
   FILE_NOT_OPENED,
   magnetActionMessage,
+  pastedNotTakenMessage,
 } from '@/lib/messages.ts';
 import { wearTheme } from '@/lib/theme.ts';
 import { TitleBar } from './title-bar.tsx';
@@ -41,6 +43,14 @@ const PANEL_ID = 'account-magnets';
 
 function isTextField(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement;
+}
+
+function inBatches(items: readonly string[]): string[][] {
+  const batches: string[][] = [];
+  for (let at = 0; at < items.length; at += MAX_URLS_PER_REQUEST) {
+    batches.push(items.slice(at, at + MAX_URLS_PER_REQUEST));
+  }
+  return batches;
 }
 
 export function App(): ReactNode {
@@ -154,34 +164,51 @@ export function App(): ReactNode {
     if (reached) learnConnected();
   }, [reached, services, learnConnected]);
 
-  // From the field, a refusal of what was sent is the field's to say; anything else, and any
-  // failure of links pasted on the page, is a notice. Links and magnets are sent apart: when one
-  // half is refused, the other is taken, and the field keeps only what was refused.
+  // Links and magnets are sent apart, each in batches of the most the engine takes in one request,
+  // one after the other (#142): what is refused, the field keeps, and the rest is taken. From the
+  // field, a refusal of what was sent is the field's to say, once, whatever batches were refused;
+  // anything else is a notice. A paste on the page is told once for each kind the engine refused,
+  // saying whether some of it was taken: counted from everything of that kind not taken, whatever
+  // the cause.
   const add = useCallback(
     async ({ links, magnets }: Pasted, fromField: boolean): Promise<Added> => {
-      const halves = [links, magnets] as const;
-      const answers = await Promise.allSettled([
-        links.length === 0 ? Promise.resolve() : api.addDownloads(links),
-        magnets.length === 0 ? Promise.resolve() : api.addMagnets(magnets),
-      ]);
-      const refused = halves.filter((_, index) => answers[index]?.status === 'rejected').flat();
-      if (refused.length < links.length + magnets.length) {
+      const batches = [
+        ...inBatches(links).map((batch) => ({ batch, sent: 'links' as const })),
+        ...inBatches(magnets).map((batch) => ({ batch, sent: 'magnets' as const })),
+      ];
+      const refused: string[] = [];
+      const notTaken = { links: 0, magnets: 0 };
+      const refusedByEngine = { links: 0, magnets: 0 };
+      for (const { batch, sent } of batches) {
+        try {
+          await (sent === 'links' ? api.addDownloads(batch) : api.addMagnets(batch));
+        } catch (error) {
+          refused.push(...batch);
+          notTaken[sent] += batch.length;
+          if (!(error instanceof ApiError && error.code === ApiErrorCode.InvalidRequest)) {
+            report(error);
+            continue;
+          }
+          refusedByEngine[sent] += batch.length;
+        }
+      }
+      let refusal: string | null = null;
+      for (const [sent, pasted] of [
+        ['links', links],
+        ['magnets', magnets],
+      ] as const) {
+        if (refusedByEngine[sent] === 0) continue;
+        if (fromField) refusal = fieldNotTakenMessage(refused.length);
+        else tell(pastedNotTakenMessage(sent, notTaken[sent], pasted.length));
+      }
+      const all = links.length + magnets.length;
+      if (refused.length < all) {
         setFilter((current) => (current === Filter.Completed ? Filter.All : current));
       }
       if (refused.length === 0) return { taken: true };
-      let refusal: string | null = null;
-      for (const answer of answers) {
-        if (answer.status === 'fulfilled') continue;
-        const error: unknown = answer.reason;
-        const theFields =
-          fromField && error instanceof ApiError && error.code === ApiErrorCode.InvalidRequest;
-        if (theFields && refusal === null) refusal = errorMessage(error);
-        else report(error);
-      }
-      const partly = refused.length < links.length + magnets.length;
-      return { taken: false, refusal, left: partly ? refused.join(' ') : null };
+      return { taken: false, refusal, left: refused.length < all ? refused.join(' ') : null };
     },
-    [report],
+    [report, tell],
   );
 
   // A link on the clipboard is a download one keystroke away: Ctrl+V anywhere but in a field.
@@ -439,6 +466,7 @@ export function App(): ReactNode {
           learnConnected();
         }}
         onError={report}
+        tell={tell}
         onSettings={keepSettings}
         noticesHeight={noticesHeight}
       />
