@@ -400,6 +400,42 @@ describe('DownloadManager and a picture and a sound offered apart (docs/adr/0021
     expect(await readFile(join(downloadsFolder(), 'Webm beside.webm'))).toEqual(webmBytes);
   });
 
+  // A run before the pair fetched one file and failed on its way, leaving its part file: the name
+  // let go at the refusal must not leave that file behind, beside the next one or in its name's way.
+  it.each([
+    ['of the same container', 'mp4', 'Stale.mp4'],
+    ['of another container', 'webm', 'Stale.webm'],
+  ] as const)(
+    'removes the part file an earlier run left when a join is refused, and the next file %s takes the name (#241)',
+    async (_, ext, named) => {
+      const refusing = await host({ body: await fixture('picture.mp4'), refusesRanges: 403 });
+      const { site, picture, sound } = await pairOf('picture.mp4', 'sound-fragmented.m4a');
+      const lastBytes = Buffer.from(`the page's one ${ext} file, fetched at last`);
+      const last = await host({ body: lastBytes });
+      let formats: PageFormat[] = [format(refusing.url, { acodec: 'mp4a.40.2', height: 32 })];
+      const downloads = await open({
+        pageReader: reader(() => ({ title: 'Stale', formats })),
+      });
+
+      const [added] = downloads.add({ urls: [site.url] });
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+      expect(await readdir(downloadsFolder())).toEqual(['Stale.mp4.scia']);
+
+      formats = [pictureAt(picture.url), soundAt(sound.url)];
+      downloads.resume(added!.id);
+      await until(() => downloads.find(added!.id).failure === PageFailure.NotJoined);
+      expect(await readdir(downloadsFolder())).toEqual([]);
+
+      formats = [format(last.url, { ext, vcodec: 'vp9', acodec: 'opus', height: 32 })];
+      downloads.resume(added!.id);
+      await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+      expect(downloads.find(added!.id).fileName).toBe(named);
+      expect(await readdir(downloadsFolder())).toEqual([named]);
+      expect(await readFile(join(downloadsFolder(), named))).toEqual(lastBytes);
+    },
+  );
+
   it('remembers a join it refused across a restart, and fetches the one file at the retry (#241)', async () => {
     const { site, picture, sound } = await pairOf('picture.mp4', 'sound-fragmented.m4a');
     const singleBytes = await fixture('picture.mp4');
