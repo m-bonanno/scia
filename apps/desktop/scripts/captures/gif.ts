@@ -23,12 +23,15 @@ const HEADER = Buffer.from('GIF89a', 'latin1');
 const TRAILER = Buffer.from([0x3b]);
 // The logical screen has no colour table of its own (each frame carries one) and 8 bits a colour.
 const SCREEN_FLAGS = 0x70;
-// NETSCAPE2.0's extension, which every browser reads as the number of times to play: 0, forever.
-const PLAY_FOREVER = Buffer.concat([
+// NETSCAPE2.0's loop count is how many times the frames play again after the first, in 16 bits,
+// and 0 is forever: Chromium, Firefox and Safari count so (WebKit r230712 came round to it). A GIF
+// without the extension plays once.
+const NETSCAPE = Buffer.concat([
   Buffer.from([0x21, 0xff, 0x0b]),
   Buffer.from('NETSCAPE2.0', 'latin1'),
-  Buffer.from([0x03, 0x01, 0x00, 0x00, 0x00]),
+  Buffer.from([0x03, 0x01]),
 ]);
+const MOST_PLAYS = 0xffff + 1;
 const MOST_COLOURS = 256;
 // A frame's time is hundredths of a second, in 16 bits.
 const MS_IN_A_DELAY = 10;
@@ -45,12 +48,17 @@ const MOST_IN_A_BLOCK = 255;
 const colourAt = (rgba: Uint8Array, pixel: number) =>
   ((rgba[pixel * 4] ?? 0) << 16) | ((rgba[pixel * 4 + 1] ?? 0) << 8) | (rgba[pixel * 4 + 2] ?? 0);
 
-// A GIF that plays the frames in turn, forever. Each frame writes only the region that changed since
-// the one before, and a frame that changed nothing adds its time to that one. A GIF holds 256
-// colours a frame and no partial transparency: a picture that needs more is refused, not changed.
-export function encodeGif(frames: readonly Frame[]): Buffer {
+// A GIF that plays the frames in turn as many times as asked, then shows its last. Each frame writes
+// only the region that changed since the one before, and a frame that changed nothing adds its time
+// to that one. A GIF holds 256 colours a frame and no partial transparency: a picture that needs
+// more is refused, not changed.
+export function encodeGif(frames: readonly Frame[], { plays }: { readonly plays: number }): Buffer {
   const [first] = frames;
   if (first === undefined) throw new Error('no picture to play');
+  if (!Number.isInteger(plays) || plays < 1 || plays > MOST_PLAYS)
+    throw new Error(
+      `${String(plays)} plays, where a GIF plays from 1 to ${String(MOST_PLAYS)} times`,
+    );
   const { width, height } = first.picture;
   const kept: Kept[] = [];
   for (const { picture, ms } of frames) {
@@ -74,7 +82,13 @@ export function encodeGif(frames: readonly Frame[]): Buffer {
   screen.writeUInt16LE(width, 0);
   screen.writeUInt16LE(height, 2);
   screen[4] = SCREEN_FLAGS;
-  const parts: Buffer[] = [HEADER, screen, PLAY_FOREVER];
+  const parts: Buffer[] = [HEADER, screen];
+  if (plays > 1) {
+    // The loop count, then the empty sub-block that ends the extension.
+    const loopCount = Buffer.alloc(3);
+    loopCount.writeUInt16LE(plays - 1, 0);
+    parts.push(NETSCAPE, loopCount);
+  }
   let elapsedMs = 0;
   let shown = 0;
   kept.forEach(({ picture, region, ms }, index) => {
