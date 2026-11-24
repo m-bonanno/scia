@@ -21,6 +21,12 @@ const PAGE_NOT_DOWNLOADED: Readonly<Record<PageFailure, string>> = {
   // DASH, picture and sound apart in a form Scia does not join (docs/adr/0021), or a stream that
   // changes partway — the page may offer another form beside it: the sentence is true of all.
   [PageFailure.FormatUnsupported]: 'The site offers this video in a form Scia cannot download yet.',
+  // Any refusal of the join — a layout Scia does not join, boxes that do not hold together — and
+  // whether or not the page offers another version: Retry looks, and says what it finds (#241).
+  // "Best version", not "best quality": best by Scia's rank, where an mp4 stands above more lines
+  // in another container, so what Retry takes may have more lines than the pair it replaces.
+  [PageFailure.NotJoined]:
+    'Scia could not join the picture and sound of the best version of this video. Try again: Scia looks for another version on the page.',
   // A list of videos, of tracks, of episodes: the sentence names none of them.
   [PageFailure.Playlist]:
     'This page lists several items, not one video. Add the link of one of them.',
