@@ -34,7 +34,7 @@ _What this PR deliberately does not do._
 
 ## Test plan
 
-- [ ] The gates, all of them (`docs/development/review-flow.md`) — green: _N tests passed_
+- [ ] The gates, all of them (`docs/development/review-flow.md`) — green: _the last line `npm run gates` printed, pasted as it is_
 - [ ] E2E specs _(shell, boot, quit, a download in the real app)_: _which spec holds it, seen failing with its line taken away_
 - [ ] Real-runtime evidence _(what the E2E suite cannot reach: what the system draws, packaging, a long run)_: _what ran, what the log says_
 - [ ] Keyboard-only path checked _(UI changes)_
