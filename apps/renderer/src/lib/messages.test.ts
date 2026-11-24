@@ -7,6 +7,7 @@ import {
   bundleActionMessage,
   bundleFailureMessage,
   errorMessage,
+  fieldNotTakenMessage,
   magnetActionMessage,
   pastedNotTakenMessage,
   settingNotChangedMessage,
@@ -33,11 +34,35 @@ describe('the sentence of a code', () => {
 });
 
 describe('what the engine refused of an add', () => {
-  it('names what a paste on the page sent: links, or magnets', () => {
-    expect(pastedNotTakenMessage('links')).toBe('Scia’s engine did not take the links you pasted.');
-    expect(pastedNotTakenMessage('magnets')).toBe(
+  it('names what a paste on the page sent, counted: links, or magnets', () => {
+    expect(pastedNotTakenMessage('links', 2, 2)).toBe(
+      'Scia’s engine did not take the links you pasted.',
+    );
+    expect(pastedNotTakenMessage('magnets', 2, 2)).toBe(
       'Scia’s engine did not take the magnets you pasted.',
     );
+    expect(pastedNotTakenMessage('links', 1, 1)).toBe(
+      'Scia’s engine did not take the link you pasted.',
+    );
+    expect(pastedNotTakenMessage('magnets', 1, 1)).toBe(
+      'Scia’s engine did not take the magnet you pasted.',
+    );
+  });
+
+  // The rows taken are in the list above the notice.
+  it('says when some of a paste on the page was taken', () => {
+    expect(pastedNotTakenMessage('links', 1, 201)).toBe(
+      'Scia’s engine did not take some of the links you pasted.',
+    );
+    expect(pastedNotTakenMessage('magnets', 1, 2)).toBe(
+      'Scia’s engine did not take some of the magnets you pasted.',
+    );
+  });
+
+  // Counted as the field's button counts: magnets among links.
+  it('points at what the field keeps, one link or several', () => {
+    expect(fieldNotTakenMessage(1)).toBe('Scia’s engine did not take this link.');
+    expect(fieldNotTakenMessage(2)).toBe('Scia’s engine did not take these links.');
   });
 });
 

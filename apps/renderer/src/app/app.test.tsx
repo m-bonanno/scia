@@ -135,7 +135,7 @@ describe('App', () => {
     await vi.waitFor(() => {
       expect(field).toHaveAttribute('aria-invalid', 'true');
     });
-    expect(field).toHaveAccessibleDescription('Scia’s engine did not take these links.');
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take this link.');
     expect(field).toHaveValue('https://example.com/a.zip');
     expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
 
@@ -179,7 +179,7 @@ describe('App', () => {
     await vi.waitFor(() => {
       expect(field).toHaveValue(links.at(-1));
     });
-    expect(field).toHaveAccessibleDescription('Scia’s engine did not take these links.');
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take this link.');
   });
 
   // Each batch is its own request, and two can be refused for the same cause: the field says it
@@ -333,6 +333,27 @@ describe('App', () => {
     expect(add.mock.calls).toEqual([[links.slice(0, MAX_URLS_PER_REQUEST)], [links.slice(-1)]]);
   });
 
+  // The batches are sent from Completed: what was taken is on rows the filter must show, also when
+  // a later batch is refused (#142).
+  it('shows All after an add from Completed of which a part was taken', async () => {
+    const links = manyLinks(MAX_URLS_PER_REQUEST + 1);
+    vi.spyOn(api, 'addDownloads')
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'));
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /^Completed/ }));
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+    await userEvent.click(field);
+    await userEvent.paste(links.join(' '));
+    await userEvent.click(screen.getByRole('button', { name: 'Download 201 files' }));
+
+    await vi.waitFor(() => {
+      expect(field).toHaveValue(links.at(-1));
+    });
+    expect(screen.getByRole('button', { name: /^All/ })).toHaveAttribute('aria-pressed', 'true');
+  });
+
   it('sends more magnets than one request holds in batches, and keeps the one refused in the field', async () => {
     const magnets = Array.from(
       { length: MAX_URLS_PER_REQUEST + 1 },
@@ -353,7 +374,7 @@ describe('App', () => {
       expect(field).toHaveValue(magnets.at(-1));
     });
     expect(add.mock.calls).toEqual([[magnets.slice(0, MAX_URLS_PER_REQUEST)], [magnets.slice(-1)]]);
-    expect(field).toHaveAccessibleDescription('Scia’s engine did not take these links.');
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take this link.');
   });
 
   it('does not say under the field a refusal of text the field no longer holds', async () => {
@@ -375,7 +396,7 @@ describe('App', () => {
       expect(screen.getByRole('button', { name: 'Download' })).toBeEnabled();
     });
     expect(field).not.toHaveAttribute('aria-invalid', 'true');
-    expect(screen.queryByText('Scia’s engine did not take these links.')).not.toBeInTheDocument();
+    expect(screen.queryByText('Scia’s engine did not take this link.')).not.toBeInTheDocument();
   });
 
   it('takes back what the field said once the same text is taken', async () => {
@@ -674,8 +695,39 @@ describe('App', () => {
     await userEvent.paste('https://example.com/a.zip');
 
     const notices = await screen.findByRole('list', { name: 'Notices' });
-    expect(notices).toHaveTextContent('Scia’s engine did not take the links you pasted.');
+    expect(notices).toHaveTextContent('Scia’s engine did not take the link you pasted.');
     expect(field).not.toHaveAttribute('aria-invalid', 'true');
+  });
+
+  // A paste on the page cut into batches can be taken in part: the rows taken are in the list above
+  // the notice, which says that only some were not (#142).
+  it('says that some of the links pasted on the page were not taken, when a later batch was refused', async () => {
+    const links = manyLinks(MAX_URLS_PER_REQUEST + 1);
+    vi.spyOn(api, 'addDownloads')
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'));
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /^All/ }));
+
+    await userEvent.paste(links.join(' '));
+
+    const notices = await screen.findByRole('list', { name: 'Notices' });
+    expect(notices).toHaveTextContent('Scia’s engine did not take some of the links you pasted.');
+  });
+
+  it('says that the links pasted on the page were not taken, when every batch was refused', async () => {
+    const links = manyLinks(MAX_URLS_PER_REQUEST + 1);
+    vi.spyOn(api, 'addDownloads').mockRejectedValue(
+      new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'),
+    );
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /^All/ }));
+
+    await userEvent.paste(links.join(' '));
+
+    const notices = await screen.findByRole('list', { name: 'Notices' });
+    expect(notices).toHaveTextContent('Scia’s engine did not take the links you pasted.');
+    expect(notices).not.toHaveTextContent('some of');
   });
 
   it('names magnets in a notice when the engine refused magnets pasted on the page', async () => {
@@ -688,7 +740,7 @@ describe('App', () => {
     await userEvent.paste(`magnet:?xt=urn:btih:${'a'.repeat(40)}`);
 
     const notices = await screen.findByRole('list', { name: 'Notices' });
-    expect(notices).toHaveTextContent('Scia’s engine did not take the magnets you pasted.');
+    expect(notices).toHaveTextContent('Scia’s engine did not take the magnet you pasted.');
   });
 
   it('says that the engine is not answering for as long as it is not, with nothing to dismiss', () => {

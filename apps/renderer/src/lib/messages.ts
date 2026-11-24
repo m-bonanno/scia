@@ -49,12 +49,25 @@ export const FOLDER_NOT_CHANGED = 'Scia could not change the download folder. Tr
 // Said when the engine refused, as no request it takes, what the page sent of a paste or of the
 // field: the page reads them by the engine's own contract and sends at most MAX_URLS_PER_REQUEST
 // at a time, so no cause a person can mend is known (#142). Under the field, which keeps what was
-// refused, typed or pasted, one sentence points at it: its button counts magnets among links.
-export const LINKS_NOT_TAKEN = 'Scia’s engine did not take these links.';
+// refused, typed or pasted, one sentence points at it, counted as its button counts: magnets among
+// links.
+export function fieldNotTakenMessage(kept: number): string {
+  return kept === 1
+    ? 'Scia’s engine did not take this link.'
+    : 'Scia’s engine did not take these links.';
+}
 
 // The same for a paste on the page, in a notice: there is no field to point at, so it names what
-// was sent.
-export function pastedNotTakenMessage(sent: 'links' | 'magnets'): string {
+// was sent, counted, and says when some of it was taken, which the list shows above it.
+const ONE_OF = { links: 'link', magnets: 'magnet' } as const;
+
+export function pastedNotTakenMessage(
+  sent: 'links' | 'magnets',
+  notTaken: number,
+  pasted: number,
+): string {
+  if (notTaken < pasted) return `Scia’s engine did not take some of the ${sent} you pasted.`;
+  if (pasted === 1) return `Scia’s engine did not take the ${ONE_OF[sent]} you pasted.`;
   return `Scia’s engine did not take the ${sent} you pasted.`;
 }
 
@@ -69,9 +82,9 @@ const SETTING_CHANGED: Readonly<Record<keyof SettingsPatch, string>> = {
 };
 
 // Refused, out of its range, not answered: what is true of every cause the page can tell is that
-// the change was not kept, and the control shows what the page last read of the engine. A change
-// kept whose answer was lost is told so too, until a failure is read again (#321). A window the
-// engine does not recognize has a remedy of its own.
+// the change was not kept, and the control shows what the page last learned of the engine. A
+// change kept whose answer was lost is told so too, until a failure is read again (#321). A window
+// the engine does not recognize has a remedy of its own.
 export function settingNotChangedMessage(setting: keyof SettingsPatch, error: unknown): string {
   if (error instanceof ApiError && error.code === ApiErrorCode.Unauthorized) {
     return errorMessage(error);

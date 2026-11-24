@@ -85,7 +85,7 @@ describe('the real app downloads', () => {
       (element) =>
         document.getElementById(element.getAttribute('aria-describedby') ?? '')?.textContent,
     );
-    expect(described).toBe('Scia’s engine did not take these links.');
+    expect(described).toBe('Scia’s engine did not take this link.');
     expect(await field.inputValue()).toBe('http://127.0.0.1/a.zip');
     expect(await page.getByRole('list', { name: 'Notices' }).count()).toBe(0);
   });

@@ -30,8 +30,8 @@ import {
   bundleActionMessage,
   ENGINE_UNREACHABLE,
   errorMessage,
+  fieldNotTakenMessage,
   FILE_NOT_OPENED,
-  LINKS_NOT_TAKEN,
   magnetActionMessage,
   pastedNotTakenMessage,
 } from '@/lib/messages.ts';
@@ -163,11 +163,11 @@ export function App(): ReactNode {
     if (reached) learnConnected();
   }, [reached, services, learnConnected]);
 
-  // From the field, a refusal of what was sent is the field's to say, once, whatever batches of
-  // links or magnets were refused; anything else, and any failure of links pasted on the page, is
-  // a notice. Links and magnets are sent apart, each in
-  // batches of the most the engine takes in one request, one after the other (#142): what is
-  // refused, the field keeps, and the rest is taken.
+  // Links and magnets are sent apart, each in batches of the most the engine takes in one request,
+  // one after the other (#142): what is refused, the field keeps, and the rest is taken. From the
+  // field, a refusal of what was sent is the field's to say, once, whatever batches were refused;
+  // anything else is a notice. A paste on the page is told once for each kind refused, saying
+  // whether some of it was taken.
   const add = useCallback(
     async ({ links, magnets }: Pasted, fromField: boolean): Promise<Added> => {
       const batches = [
@@ -175,7 +175,7 @@ export function App(): ReactNode {
         ...inBatches(magnets).map((batch) => ({ batch, sent: 'magnets' as const })),
       ];
       const refused: string[] = [];
-      let refusal: string | null = null;
+      const notTaken = { links: 0, magnets: 0 };
       for (const { batch, sent } of batches) {
         try {
           await (sent === 'links' ? api.addDownloads(batch) : api.addMagnets(batch));
@@ -185,9 +185,17 @@ export function App(): ReactNode {
             report(error);
             continue;
           }
-          if (fromField) refusal = LINKS_NOT_TAKEN;
-          else tell(pastedNotTakenMessage(sent));
+          notTaken[sent] += batch.length;
         }
+      }
+      let refusal: string | null = null;
+      for (const [sent, pasted] of [
+        ['links', links],
+        ['magnets', magnets],
+      ] as const) {
+        if (notTaken[sent] === 0) continue;
+        if (fromField) refusal = fieldNotTakenMessage(refused.length);
+        else tell(pastedNotTakenMessage(sent, notTaken[sent], pasted.length));
       }
       const all = links.length + magnets.length;
       if (refused.length < all) {
