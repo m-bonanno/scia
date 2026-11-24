@@ -211,6 +211,11 @@ describe('the real app says what went wrong in a notice', () => {
 
     const notice = settings.getByRole('list', { name: 'Notices' }).getByRole('listitem');
     await notice.waitFor();
+    // What is true of every cause main fails for, once the folder read again is the one before:
+    // not the engine's "not responding" (#142).
+    expect(await notice.innerText()).toContain(
+      'Scia could not change the download folder. Try again.',
+    );
     expect(await isOnTop(notice)).toBe(true);
     await notice.getByRole('button', { name: 'Dismiss' }).click();
     await until(async () => (await notice.count()) === 0);
