@@ -23,9 +23,11 @@ interface Shot {
 }
 
 // A public file served by a host of this computer, fast enough for the loop to last seconds and
-// slow enough for its connections to be seen filling the bar.
-async function publicFile(run: Run, fileName: string, sizeMiB: number) {
-  return run.keep(
+// slow enough for its connections to be seen filling the bar. Its link ends in its name, as a
+// public file's does: a row is named from the link until the host answers, and the first loop CI
+// took opened on three rows of the test host's own path.
+async function publicFile(run: Run, fileName: string, sizeMiB: number): Promise<string> {
+  const host = run.keep(
     await startRangeServer({
       body: randomBytes(sizeMiB * MIB),
       fileName,
@@ -33,6 +35,7 @@ async function publicFile(run: Run, fileName: string, sizeMiB: number) {
       chunkDelayMs: 100,
     }),
   );
+  return new URL(encodeURIComponent(fileName), host.url).href;
 }
 
 // The page captured again and again, each capture timed when it was asked for, from the page
@@ -114,7 +117,7 @@ describe('Scia at work, the loop of the README', () => {
       await settled(page, variant);
 
       const stop = await filmOf(page);
-      await paste(page, ...files.map((file) => file.url));
+      await paste(page, ...files);
       await until(() => allCompleted(page), 60_000);
       await until(async () => (await drawnCompleted(page)) === files.length);
       await settled(page, variant);
