@@ -1,8 +1,18 @@
 import { spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { chmod, copyFile, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  copyFile,
+  mkdir,
+  open as openFile,
+  readdir,
+  readFile,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Logger } from './logger.ts';
 import { signingKeyOf } from './openpgp.ts';
@@ -213,6 +223,38 @@ describe('YtDlpUpdates against a host that publishes releases as yt-dlp does', (
     expect(delays).toEqual([0]);
     await until(() => host.asked.length === 2);
   });
+
+  // Windows refuses a rename onto a file another process has open; Linux allows it.
+  it.runIf(process.platform === 'win32')(
+    'keeps the time of a check while another program holds its file for a moment, as an antivirus does on Windows (#307)',
+    async () => {
+      // The spec's clock: the second check is due because a day went by since the first.
+      const firstAt = Date.parse('2026-11-24T12:00:00.000Z');
+      const secondAt = firstAt + 2 * DAY_MS;
+      const first = await open({ now: () => firstAt });
+      first.start(downloads);
+      await until(() => events().includes('yt_dlp_checked'));
+      await first.close();
+      const state = join(updatesFolder(), 'state.json');
+      const held = await openFile(state, 'r');
+      logged = [];
+
+      const second = await open({ now: () => secondAt });
+      second.start(downloads);
+      // Held until the state's write has begun — its `.tmp` beside the file, read from the folder,
+      // never by opening either — and 300 ms more: the case itself, well inside the two seconds
+      // the write waits.
+      await until(async () => (await readdir(updatesFolder())).includes('state.json.tmp'));
+      await sleep(300);
+      await held.close();
+      await until(() => events().some((event) => event.startsWith('yt_dlp_check')));
+
+      expect(events()).not.toContain('yt_dlp_check_failed');
+      expect(JSON.parse(await readFile(state, 'utf8'))).toMatchObject({
+        checkedAt: new Date(secondAt).toISOString(),
+      });
+    },
+  );
 
   it('goes back to the build it shipped with when the one it took has changed on the disk', async () => {
     publish(NEWER);

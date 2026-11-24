@@ -1,12 +1,14 @@
 import { randomBytes } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { open, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { DEFAULT_THEME, Theme, WINDOW_COLOURS } from '@scia/contracts/theme';
 import { DownloadStatus } from '@scia/core';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import type { ElectronApplication } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { STARTING_LINE } from '../src/engine/starting-page.ts';
+import { HIDDEN_TO_TRAY_NOTICE } from '../src/engine/tray-presentation.ts';
 import { allCompleted, downloadsOf, paste, until, useRun } from './scia.ts';
 import { EndSession, endSessionOf, sessionMayEnd } from './session-end.ts';
 
@@ -30,6 +32,26 @@ const startsOf = (ranges: readonly (string | undefined)[]) =>
     const start = /^bytes=(\d+)-/.exec(range ?? '')?.[1];
     return start === undefined || range === 'bytes=0-0' ? [] : [Number(start)];
   });
+
+// Holds a file of the profile open from the spec's own process, as an antivirus or the indexer
+// reading it does — on Windows a rename onto it is refused meanwhile (#307) — until main has begun
+// to write it, and a while after: its `.tmp` beside it is read from the folder, never by opening
+// either file, which would hold it too. The while is the case itself, well inside the two seconds
+// main waits for the file.
+async function heldWhileWritten(
+  folder: string,
+  name: string,
+  write: () => Promise<void>,
+): Promise<void> {
+  const reader = await open(join(folder, name), 'r');
+  try {
+    await write();
+    await until(async () => (await readdir(folder)).includes(`${name}.tmp`));
+    await sleep(300);
+  } finally {
+    await reader.close();
+  }
+}
 
 interface Segment {
   readonly start: number;
@@ -76,6 +98,34 @@ describe('the real app, from start to quit', () => {
     expect(Buffer.compare(written, body)).toBe(0);
   });
 
+  it('keeps the notice of the first hide while another program holds notices.json for a moment', async () => {
+    const profile = await run.profile();
+    // The notices of an earlier start, for another program to read.
+    await writeFile(join(profile.path, 'notices.json'), '[]');
+    const body = randomBytes(2 * 1024 * 1024);
+    const host = run.keep(
+      await startRangeServer({ body, chunkBytes: 16 * 1024, chunkDelayMs: 40 }),
+    );
+    const scia = await run.launch(profile);
+    await paste(scia.page, host.url);
+    await until(async () =>
+      (await downloadsOf(scia.page)).some(
+        (download) => download.status === DownloadStatus.Downloading,
+      ),
+    );
+
+    await heldWhileWritten(profile.path, 'notices.json', () => scia.closeWindow());
+    await until(async () => /notices_(not_)?kept/.test(await profile.log()));
+
+    const log = await profile.log();
+    expect(log).toContain(`notices_kept { notice: '${HIDDEN_TO_TRAY_NOTICE.id}' }`);
+    expect(log).not.toContain('notices_not_kept');
+    await scia.quit();
+    expect(JSON.parse(await readFile(join(profile.path, 'notices.json'), 'utf8'))).toEqual([
+      HIDDEN_TO_TRAY_NOTICE.id,
+    ]);
+  });
+
   // The window shows before the engine is ready, on a page of main's own: a cold start can take a
   // minute (#13).
   it('shows its window at once, saying that Scia is starting', async () => {
@@ -111,6 +161,36 @@ describe('the real app, from start to quit', () => {
     const page = await firstPageOf(again.app);
     expect(page).toContain(WINDOW_COLOURS[Theme.Ice].light.background);
     expect(page).toContain(WINDOW_COLOURS[Theme.Ice].dark.background);
+  });
+
+  it('keeps the theme chosen while another program holds theme.json for a moment', async () => {
+    const profile = await run.profile();
+    const scia = await run.launch(profile);
+    // The theme of the first start, kept once the engine said it: the file another program reads.
+    await until(async () =>
+      (await profile.log()).includes(`theme_kept { theme: '${DEFAULT_THEME}' }`),
+    );
+
+    await heldWhileWritten(profile.path, 'theme.json', async () => {
+      await scia.page.getByRole('button', { name: 'Settings' }).click();
+      await scia.page.getByRole('combobox', { name: 'Theme' }).selectOption(Theme.Ice);
+    });
+    // Either line ends the wait: a write given up says so at once, and the spec fails on it.
+    await until(async () => {
+      const log = await profile.log();
+      return (
+        log.includes(`theme_kept { theme: '${Theme.Ice}' }`) ||
+        log.includes(`theme_not_kept { theme: '${Theme.Ice}'`)
+      );
+    });
+
+    const log = await profile.log();
+    expect(log).toContain(`theme_kept { theme: '${Theme.Ice}' }`);
+    expect(log).not.toContain('theme_not_kept');
+    await scia.quit();
+    expect(JSON.parse(await readFile(join(profile.path, 'theme.json'), 'utf8'))).toEqual({
+      theme: Theme.Ice,
+    });
   });
 
   // Windows tells every top-level window, a hidden one too, that the session ends: at a shutdown

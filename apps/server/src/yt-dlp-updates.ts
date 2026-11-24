@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
 import { chmod, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { renameWhenFree } from '@scia/core';
 import { z } from 'zod';
 import { describeFailure, type Logger } from './logger.ts';
 import { type SigningKey, signedAt } from './openpgp.ts';
@@ -318,11 +320,11 @@ export class YtDlpUpdates {
     return this.#activity;
   }
 
-  // The state, written whole and renamed into place.
+  // The state, written whole and renamed into place, once no other program holds it (@scia/core).
   async #keep(state: State): Promise<void> {
     const path = join(this.#options.folder, STATE);
     await writeFile(`${path}.tmp`, JSON.stringify(state));
-    await rename(`${path}.tmp`, path);
+    await renameWhenFree(() => rename(`${path}.tmp`, path), sleep);
     this.#state = state;
   }
 }

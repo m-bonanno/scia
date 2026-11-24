@@ -190,7 +190,7 @@ async function boot(): Promise<void> {
     tooltip: async () => trayTooltip(await activity().catch(() => undefined)),
     log,
   });
-  const notices = new ShownNotices(new JsonFile(layout.noticesPath));
+  const notices = new ShownNotices(new JsonFile(layout.noticesPath), log);
 
   // The window goes at once; then Scia stays in the tray while it has downloads to finish, and
   // quits otherwise (engine/close-policy.ts).
@@ -373,7 +373,8 @@ async function boot(): Promise<void> {
       const chosen = await askTheme();
       if (chosen === undefined) return;
       window.wear(chosen);
-      // Never waited for: the page loads without it, and it never rejects.
+      // Never waited for: the page loads without it. It rejects only for a line of the log that
+      // throws, which electron-log does not, and its error handler would catch.
       void theme.keep(chosen);
     } catch (error) {
       log.warn('theme_unknown', { error: String(error) });

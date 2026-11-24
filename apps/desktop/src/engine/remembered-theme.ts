@@ -1,4 +1,5 @@
 import { DEFAULT_THEME, type Theme, THEMES } from '@scia/contracts/theme';
+import { failureCode } from './failure-code.ts';
 
 // Where main keeps the theme between launches.
 export interface ThemeStore {
@@ -52,15 +53,19 @@ export class RememberedTheme {
   async #writeWanted(): Promise<void> {
     try {
       for (let theme = this.#wanted; theme !== this.#kept; theme = this.#wanted) {
-        try {
-          await this.#store.write({ theme });
+        // What is kept follows the write alone, whatever its line in the log does.
+        const failed = await this.#store.write({ theme }).then(
+          () => undefined,
+          (error: unknown) => ({ error }),
+        );
+        if (failed === undefined) {
           this.#kept = theme;
           this.#log.info('theme_kept', { theme });
-        } catch (error) {
+        } else {
           // Written again the next time the engine says it — or now, when it has said another.
-          // On Windows another program reading the file is enough to fail the rename (#280).
+          // The store tried a while: another program held the file throughout, or the disk refused.
           this.#kept = undefined;
-          this.#log.warn('theme_not_kept', { theme, error: String(error) });
+          this.#log.warn('theme_not_kept', { theme, code: failureCode(failed.error) });
           if (this.#wanted === theme) return;
         }
       }
