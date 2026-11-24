@@ -3,45 +3,58 @@ import { writeFile } from 'node:fs/promises';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import type { Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
-import { decodePng, encodeApng, type Frame } from '../scripts/captures/apng.ts';
-import { allCompleted, drawnCompleted, paste, until, useRun, type Run } from './scia.ts';
+import { decodePng } from '../scripts/captures/decode-png.ts';
+import { encodeGif, type Frame } from '../scripts/captures/gif.ts';
+import { allCompleted, drawnCompleted, paste, rowOf, until, useRun, type Run } from './scia.ts';
 import { captureTo, viewportOf } from './under-notices.ts';
 
 const MIB = 1024 * 1024;
-// The loop's page: wide enough for a row's name, bar and speed, short enough for three rows.
-const WIDTH = 1040;
-const HEIGHT = 520;
+// The loop's page: as wide as the README's column on GitHub, which then draws it at its size, and
+// tall enough for three rows.
+const WIDTH = 760;
+const HEIGHT = 450;
 // Frames closer than this are not told apart by a viewer, and each one makes the file larger.
 const FRAME_MS = 100;
 // How long the loop holds its first picture, the empty list, and its last, every file done.
-const OPENING_MS = 1_500;
-const CLOSING_MS = 3_000;
+const OPENING_MS = 1_000;
+const CLOSING_MS = 2_000;
+// The length #310 asks of the loop.
+const SHORTEST_LOOP_MS = 5_000;
+const LONGEST_LOOP_MS = 10_000;
+// Text drawn in greys, as on a screen without ClearType: a GIF holds 256 colours a frame, and
+// ClearType's coloured edges are thousands.
+const GREY_TEXT = '--disable-lcd-text';
 
 interface Shot {
   readonly png: Buffer;
   readonly at: number;
 }
 
-// A public file served by a host of this computer, fast enough for the loop to last seconds and
-// slow enough for its connections to be seen filling the bar. Its link ends in its name, as a
-// public file's does: a row is named from the link until the host answers, and the first loop CI
-// took opened on three rows of the test host's own path.
-async function publicFile(run: Run, fileName: string, sizeMiB: number): Promise<string> {
+interface PublicFile {
+  readonly name: string;
+  readonly url: string;
+}
+
+// A file named after a public one and about its size, served by a host of this computer: fast
+// enough for the loop to last seconds and slow enough for its connections to be seen filling the
+// bar. Its link ends in its name, as a public file's does: a row is named from the link until the
+// host answers, and a loop CI took opened on three rows of the test host's own path.
+async function publicFile(run: Run, name: string, sizeMiB: number): Promise<PublicFile> {
   const host = run.keep(
     await startRangeServer({
       body: randomBytes(sizeMiB * MIB),
-      fileName,
+      fileName: name,
       chunkBytes: 96 * 1024,
-      chunkDelayMs: 100,
+      chunkDelayMs: 50,
     }),
   );
-  return new URL(encodeURIComponent(fileName), host.url).href;
+  return { name, url: new URL(encodeURIComponent(name), host.url).href };
 }
 
 // The page captured again and again, each capture timed when it was asked for, from the page
 // before anything moves until the spec stops it; then once more, so that the last picture is the
 // page the spec saw settled. A screencast of the DevTools protocol drops the frames still on their
-// way when it is stopped: the first loop CI took ended on a download at 94%.
+// way when it is stopped: a loop CI took that way ended on a download at 94%.
 async function filmOf(page: Page) {
   const shots: Shot[] = [];
   let filming = true;
@@ -54,21 +67,36 @@ async function filmOf(page: Page) {
   const film = (async () => {
     while (stillFilming()) await shoot();
   })();
-  return async (): Promise<Shot[]> => {
-    filming = false;
-    await film;
-    await shoot();
-    return shots;
+  // Heard here, so that a spec that fails before it stops the film leaves no rejection unheard;
+  // `stop` still says a capture that failed.
+  film.catch(() => undefined);
+  return {
+    stop: async (): Promise<Shot[]> => {
+      filming = false;
+      await film;
+      await shoot();
+      return shots;
+    },
+    // Ends the film whatever became of it, before the app is closed under it.
+    halt: async (): Promise<void> => {
+      filming = false;
+      await film.catch(() => undefined);
+    },
   };
 }
 
 // The frames a viewer is shown: one every FRAME_MS at most, each for as long as the page kept it.
+// The last capture, the page settled, takes the place of a frame kept less than FRAME_MS before it.
 function paced(shots: readonly Shot[]): Frame[] {
   const spaced: Shot[] = [];
-  for (const [index, shot] of shots.entries()) {
+  for (const shot of shots) {
     const last = spaced.at(-1);
-    if (last === undefined || index === shots.length - 1 || shot.at - last.at >= FRAME_MS)
-      spaced.push(shot);
+    if (last === undefined || shot.at - last.at >= FRAME_MS) spaced.push(shot);
+  }
+  const settled = shots.at(-1);
+  if (settled !== undefined && spaced.at(-1) !== settled) {
+    if (spaced.length > 1) spaced.pop();
+    spaced.push(settled);
   }
   return spaced.map((shot, index) => {
     const next = spaced[index + 1];
@@ -98,17 +126,18 @@ async function settled(page: Page, variant: 'dark' | 'light'): Promise<void> {
 describe('Scia at work, the loop of the README', () => {
   const run = useRun();
 
-  // Public files only, named as their sites name them: the front window respects the hosts too.
+  // Files named after public ones, never a streaming site's video: the front window respects the
+  // hosts too.
   it.each(['dark', 'light'] as const)(
     'takes the loop of three files pasted and downloaded, in the %s variant',
     async (variant) => {
       const profile = await run.profile();
       const files = [
-        await publicFile(run, 'ubuntu-26.04-desktop-amd64.iso', 48),
-        await publicFile(run, 'LibreOffice_26.2_Win_x86-64.msi', 24),
-        await publicFile(run, 'Big Buck Bunny 1080p.mkv', 36),
+        await publicFile(run, 'TinyCore-current.iso', 25),
+        await publicFile(run, 'vlc-3.0.21-win64.exe', 42),
+        await publicFile(run, 'BigBuckBunny_320x180.mp4', 62),
       ];
-      const scia = await run.launch(profile);
+      const scia = await run.launch(profile, { args: [GREY_TEXT] });
       const { page } = scia;
       await scia.app.evaluate(({ nativeTheme }, source) => {
         nativeTheme.themeSource = source;
@@ -116,18 +145,30 @@ describe('Scia at work, the loop of the README', () => {
       await viewportOf(page, WIDTH, HEIGHT);
       await settled(page, variant);
 
-      const stop = await filmOf(page);
-      await paste(page, ...files);
-      await until(() => allCompleted(page), 60_000);
-      await until(async () => (await drawnCompleted(page)) === files.length);
-      await settled(page, variant);
-      const frames = paced(await stop());
+      const film = await filmOf(page);
+      let shots: Shot[];
+      try {
+        await paste(page, ...files.map((file) => file.url));
+        // The rows are named after their files from the first list the page draws.
+        await until(async () => (await page.getByRole('main').getByRole('listitem').count()) > 0);
+        for (const { name } of files) expect(await rowOf(page, name).count()).toBe(1);
+        await until(() => allCompleted(page), 60_000);
+        await until(async () => (await drawnCompleted(page)) === files.length);
+        await settled(page, variant);
+        shots = await film.stop();
+      } finally {
+        await film.halt();
+      }
+      const frames = paced(shots);
 
       expect(frames.length).toBeGreaterThan(10);
       for (const { picture } of frames)
         expect([picture.width, picture.height]).toEqual([WIDTH, HEIGHT]);
-      const name = variant === 'dark' ? 'scia-at-work.png' : 'scia-at-work-light.png';
-      await writeFile(await captureTo(name), encodeApng(frames));
+      const length = frames.reduce((sum, frame) => sum + frame.ms, 0);
+      expect(length).toBeGreaterThanOrEqual(SHORTEST_LOOP_MS);
+      expect(length).toBeLessThanOrEqual(LONGEST_LOOP_MS);
+      const name = variant === 'dark' ? 'scia-at-work.gif' : 'scia-at-work-light.gif';
+      await writeFile(await captureTo(name), encodeGif(frames));
     },
   );
 });
