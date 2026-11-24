@@ -6,13 +6,14 @@ import { describe, expect, it } from 'vitest';
 import { decodePng } from '../scripts/captures/decode-png.ts';
 import { encodeGif, type Frame } from '../scripts/captures/gif.ts';
 import { allCompleted, drawnCompleted, paste, rowOf, until, useRun, type Run } from './scia.ts';
-import { captureTo, viewportOf } from './under-notices.ts';
+import { captureTo, scrollsAround, viewportOf } from './under-notices.ts';
 
 const MIB = 1024 * 1024;
 // The loop's page: as wide as the README's column on GitHub, which then draws it at its size, and
-// tall enough for three rows.
+// tall enough for three rows in progress and the room under the list: at 450 a scrollbar came and
+// went beside them.
 const WIDTH = 760;
-const HEIGHT = 450;
+const HEIGHT = 480;
 // Frames closer than this are not told apart by a viewer, and each one makes the file larger.
 const FRAME_MS = 100;
 // How long the loop holds its first picture, the empty list, and its last, every file done.
@@ -152,6 +153,8 @@ describe('Scia at work, the loop of the README', () => {
         // The rows are named after their files from the first list the page draws.
         await until(async () => (await page.getByRole('main').getByRole('listitem').count()) > 0);
         for (const { name } of files) expect(await rowOf(page, name).count()).toBe(1);
+        // The rows in progress, the tallest they are, fit the page: no scrollbar comes and goes.
+        expect(await scrollsAround(page.getByRole('main').getByRole('list'))).toBe(false);
         await until(() => allCompleted(page), 60_000);
         await until(async () => (await drawnCompleted(page)) === files.length);
         await settled(page, variant);
