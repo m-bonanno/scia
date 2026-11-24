@@ -230,8 +230,10 @@ describe('the installer, installed and started', () => {
     const log = await profile!.log();
     expect(log).toMatch(/session_ended {[^}]*'close-app'/);
     // Quit's own last line, written once the engine's process has ended: Scia ended itself, not
-    // Electron at once. The engine's own `stopped` is not read: main relays it from a pipe that the
-    // engine's exit can outrun (#262).
+    // Electron at once. Before it, the engine's own `stopped`, relayed from its output, which the
+    // stop now reads to its end (#273). Read from this end on: the profile has quit before.
+    const thisEnd = log.slice(log.lastIndexOf('session_ended'));
+    expect(thisEnd).toMatch(/"event":"stopped"[\s\S]*\squit\s*$/m);
     expect(log).toMatch(/\squit\s*$/m);
     expect(log).not.toContain('update_installing');
 

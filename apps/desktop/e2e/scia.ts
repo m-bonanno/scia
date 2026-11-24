@@ -306,3 +306,11 @@ export async function allCompleted(page: Page): Promise<boolean> {
     downloads.every((download) => download.status === DownloadStatus.Completed)
   );
 }
+
+// The rows the page draws completed, each with its "Remove from list". The page hears the engine's
+// list at most four times a second, so it draws a download completed up to a list after the
+// engine says so — and a row that completes loses its bar and grows shorter, moving the rows under
+// it (#268). A spec that measures rows waits for this, not for `allCompleted`.
+export async function drawnCompleted(page: Page): Promise<number> {
+  return page.getByRole('main').getByRole('button', { name: 'Remove from list' }).count();
+}

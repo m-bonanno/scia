@@ -1,7 +1,7 @@
 import { ApiErrorCode, type Integration, type IntegrationCode } from '@scia/contracts';
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { api, ApiError } from '@/lib/api.ts';
 import type { SciaBridge } from '@/lib/bridge.ts';
 import { CODE_READ_MS, IntegrationsSection } from './integrations.tsx';
@@ -656,10 +656,13 @@ describe('IntegrationsSection', () => {
     expect(screen.queryByRole('listitem')).not.toBeInTheDocument();
   });
   describe("a code confirmed on the service's site", () => {
+    // Every spec here starts at this moment, whenever it runs: a code's time read from the machine's
+    // clock lost a minute when a loaded run reached a spec 30 s after collecting the file (#292).
+    const NOW = Date.parse('2026-11-23T12:00:00.000Z');
     const given: IntegrationCode = {
       code: 'ABCD',
       url: 'https://alldebrid.com/pin/?pin=ABCD',
-      expiresAt: new Date(Date.now() + 600_000).toISOString(),
+      expiresAt: new Date(NOW + 600_000).toISOString(),
       status: 'waiting',
       failure: null,
     };
@@ -691,6 +694,10 @@ describe('IntegrationsSection', () => {
       return userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
     }
 
+    // `setUp`'s fake timers start from this time and move on from it.
+    beforeEach(() => {
+      vi.setSystemTime(NOW);
+    });
     afterEach(() => {
       vi.useRealTimers();
       delete window.scia;
