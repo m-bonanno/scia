@@ -175,9 +175,14 @@ describe('the real app, from start to quit', () => {
       await scia.page.getByRole('button', { name: 'Settings' }).click();
       await scia.page.getByRole('combobox', { name: 'Theme' }).selectOption(Theme.Ice);
     });
-    await until(async () =>
-      new RegExp(`theme_(not_)?kept { theme: '${Theme.Ice}' }`).test(await profile.log()),
-    );
+    // Either line ends the wait: a write given up says so at once, and the spec fails on it.
+    await until(async () => {
+      const log = await profile.log();
+      return (
+        log.includes(`theme_kept { theme: '${Theme.Ice}' }`) ||
+        log.includes(`theme_not_kept { theme: '${Theme.Ice}'`)
+      );
+    });
 
     const log = await profile.log();
     expect(log).toContain(`theme_kept { theme: '${Theme.Ice}' }`);
