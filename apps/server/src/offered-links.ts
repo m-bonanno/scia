@@ -50,7 +50,8 @@ const VIDEO_SITES: readonly VideoSite[] = [
   { domain: 'ted.com', video: /^\/talks\/\w+/ },
   { domain: 'bitchute.com', video: /^\/video\/[\w-]+/ },
   { domain: 'odysee.com', video: /^\/@[^/]+\/[^/]+/ },
-  { domain: 'pornhub.com', video: /^\/(view_video\.php\?(.*&)?viewkey=\w+|embed\/\w+)/ },
+  // One video's page has its key first in the query: another parameter before it is a list to yt-dlp.
+  { domain: 'pornhub.com', video: /^\/(view_video\.php\?viewkey=[\da-z]+|embed\/[\da-z]+)/ },
 ];
 
 function isVideoPage(address: URL): boolean {
