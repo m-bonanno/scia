@@ -25,7 +25,7 @@ interface VideoSite {
   readonly video: RegExp;
 }
 
-// Sites yt-dlp reads, among the most used for video (the owner, #128): recognised by their
+// Sites yt-dlp reads, among the most used for video (the owner, #128, #325): recognised by their
 // address alone, with nothing asked of the network when a link is copied. A site not here is
 // still read when its link is pasted.
 const VIDEO_SITES: readonly VideoSite[] = [
