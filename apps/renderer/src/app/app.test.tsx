@@ -204,6 +204,83 @@ describe('App', () => {
     expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
   });
 
+  // Links and magnets are sent apart: both refused, the field keeps both and says it once, as its
+  // button counts them together (#142).
+  it('says once, under the field, that a link and a magnet sent together were both refused', async () => {
+    vi.spyOn(api, 'addDownloads').mockRejectedValue(
+      new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'),
+    );
+    vi.spyOn(api, 'addMagnets').mockRejectedValue(
+      new ApiError(400, ApiErrorCode.InvalidRequest, 'not magnets'),
+    );
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+    const sent = `https://example.com/a.zip magnet:?xt=urn:btih:${'a'.repeat(40)}`;
+
+    await userEvent.type(field, sent);
+    await userEvent.click(screen.getByRole('button', { name: 'Download 2 links' }));
+
+    await vi.waitFor(() => {
+      expect(field).toHaveAttribute('aria-invalid', 'true');
+    });
+    expect(field).toHaveValue(sent);
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take these links.');
+    expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
+  });
+
+  // "A failed add never clears what was typed" (apps/renderer/CLAUDE.md, "Forgiving"): the words
+  // around the links too, when nothing of them was taken.
+  it('keeps the words typed around the links when nothing of them was taken', async () => {
+    vi.spyOn(api, 'addDownloads').mockRejectedValue(new TypeError('Failed to fetch'));
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+    const typed = 'get https://example.com/a.zip and https://example.com/b.zip';
+    await userEvent.type(field, typed);
+    const download = screen.getByRole('button', { name: 'Download 2 files' });
+
+    await userEvent.click(download);
+
+    await screen.findByRole('list', { name: 'Notices' });
+    await vi.waitFor(() => {
+      expect(download).toBeEnabled();
+    });
+    expect(field).toHaveValue(typed);
+  });
+
+  it('shows All after an add made from Completed, where the new rows are', async () => {
+    vi.spyOn(api, 'addDownloads').mockResolvedValue([]);
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /^Completed/ }));
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+    await userEvent.type(field, 'https://example.com/a.zip');
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+    await vi.waitFor(() => {
+      expect(screen.getByRole('button', { name: /^All/ })).toHaveAttribute('aria-pressed', 'true');
+    });
+  });
+
+  it('stays on Completed when nothing of an add was taken', async () => {
+    vi.spyOn(api, 'addDownloads').mockRejectedValue(
+      new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'),
+    );
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /^Completed/ }));
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+    await userEvent.type(field, 'https://example.com/a.zip');
+    await userEvent.click(screen.getByRole('button', { name: 'Download' }));
+
+    await vi.waitFor(() => {
+      expect(field).toHaveAttribute('aria-invalid', 'true');
+    });
+    expect(screen.getByRole('button', { name: /^Completed/ })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
   // Not a refusal of what was sent: nothing is said under the field, and what was not taken stays
   // in it, to be sent again.
   it('keeps in the field a later batch the engine did not answer, and says so in a notice', async () => {
@@ -256,7 +333,7 @@ describe('App', () => {
     expect(add.mock.calls).toEqual([[links.slice(0, MAX_URLS_PER_REQUEST)], [links.slice(-1)]]);
   });
 
-  it('sends more magnets than one request holds in batches, and names magnets when one is refused', async () => {
+  it('sends more magnets than one request holds in batches, and keeps the one refused in the field', async () => {
     const magnets = Array.from(
       { length: MAX_URLS_PER_REQUEST + 1 },
       (_, index) => `magnet:?xt=urn:btih:${index.toString(16).padStart(40, '0')}`,
@@ -276,7 +353,7 @@ describe('App', () => {
       expect(field).toHaveValue(magnets.at(-1));
     });
     expect(add.mock.calls).toEqual([[magnets.slice(0, MAX_URLS_PER_REQUEST)], [magnets.slice(-1)]]);
-    expect(field).toHaveAccessibleDescription('Scia’s engine did not take these magnets.');
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take these links.');
   });
 
   it('does not say under the field a refusal of text the field no longer holds', async () => {
@@ -599,6 +676,19 @@ describe('App', () => {
     const notices = await screen.findByRole('list', { name: 'Notices' });
     expect(notices).toHaveTextContent('Scia’s engine did not take the links you pasted.');
     expect(field).not.toHaveAttribute('aria-invalid', 'true');
+  });
+
+  it('names magnets in a notice when the engine refused magnets pasted on the page', async () => {
+    vi.spyOn(api, 'addMagnets').mockRejectedValue(
+      new ApiError(400, ApiErrorCode.InvalidRequest, 'not magnets'),
+    );
+    render(<App />);
+    await userEvent.click(screen.getByRole('button', { name: /^All/ }));
+
+    await userEvent.paste(`magnet:?xt=urn:btih:${'a'.repeat(40)}`);
+
+    const notices = await screen.findByRole('list', { name: 'Notices' });
+    expect(notices).toHaveTextContent('Scia’s engine did not take the magnets you pasted.');
   });
 
   it('says that the engine is not answering for as long as it is not, with nothing to dismiss', () => {

@@ -27,12 +27,13 @@ import { api, ApiError } from '@/lib/api.ts';
 import { bridge } from '@/lib/bridge.ts';
 import { Connection, useLive } from '@/lib/live.ts';
 import {
-  addRefusedMessage,
   bundleActionMessage,
   ENGINE_UNREACHABLE,
   errorMessage,
   FILE_NOT_OPENED,
+  LINKS_NOT_TAKEN,
   magnetActionMessage,
+  pastedNotTakenMessage,
 } from '@/lib/messages.ts';
 import { wearTheme } from '@/lib/theme.ts';
 import { TitleBar } from './title-bar.tsx';
@@ -162,8 +163,9 @@ export function App(): ReactNode {
     if (reached) learnConnected();
   }, [reached, services, learnConnected]);
 
-  // From the field, a refusal of what was sent is the field's to say; anything else, and any
-  // failure of links pasted on the page, is a notice. Links and magnets are sent apart, each in
+  // From the field, a refusal of what was sent is the field's to say, once, whatever batches of
+  // links or magnets were refused; anything else, and any failure of links pasted on the page, is
+  // a notice. Links and magnets are sent apart, each in
   // batches of the most the engine takes in one request, one after the other (#142): what is
   // refused, the field keeps, and the rest is taken.
   const add = useCallback(
@@ -183,9 +185,8 @@ export function App(): ReactNode {
             report(error);
             continue;
           }
-          const text = addRefusedMessage(sent, fromField);
-          if (fromField && (refusal === null || refusal === text)) refusal = text;
-          else tell(text);
+          if (fromField) refusal = LINKS_NOT_TAKEN;
+          else tell(pastedNotTakenMessage(sent));
         }
       }
       const all = links.length + magnets.length;
