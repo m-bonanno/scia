@@ -6,7 +6,7 @@ An item is done only when it was seen working in the real app: the built Electro
 
 What was seen of each item, how, and what was not: [evidence.md](./evidence.md). The owner's decisions, by date: [decisions.md](./decisions.md).
 
-In the tables, **Proven by** names the strongest proof: _Specs_ (unit, integration, feature); _E2E_ (the suite on the built app, in CI); _CI install_ (the installer installed silently on a runner); _Script_ (the real app on Windows, driven by a script); _Hand_ (the owner); _Report_ (a Beta report from someone outside the team, the word linked to its issue: evidence of its own, apart from a _Script_ and from the owner's _Hand_). **Not seen** is the main gap; the full list is in the evidence.
+In the tables, **Proven by** names the strongest proof: _Specs_ (unit, integration, feature); _E2E_ (the suite on the built app, in CI); _CI install_ (the installer installed silently on a runner); _Script_ (the real app on Windows, driven by a script); _Hand_ (the owner). Beside them, _Report_: a Beta report from someone outside the team that saw the item work, the word linked to its issue — evidence of its own, apart from a _Script_ and from the owner's _Hand_, ranked against none of them, and never in the place of what the owner's hand is to see. **Not seen** is the main gap; the full list is in the evidence.
 
 ## The gate of v1.0.0
 
