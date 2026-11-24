@@ -118,7 +118,8 @@ export function SettingsDialog({
   // dialog, an engine that is silent or restarting). Either way the settings are read again: an
   // engine that answered main too late may have taken the folder all the same, so a failure, or
   // an answer the page does not know, is told only when the folder read again is the one before
-  // (#142).
+  // (#142). An engine that takes it after that read too is told as a folder not changed, and shows
+  // it at the next read: trying again sets the same folder, and nothing is lost.
   const changeFolder = () => {
     setFolderRefused(false);
     const before = settings?.downloadDirectory;
@@ -172,8 +173,10 @@ export function SettingsDialog({
     };
   }, [open, noticesHeight]);
 
-  // One setting at a time: a change the engine did not keep is told by its name (#142).
-  const change = (setting: keyof SettingsPatch, patch: SettingsPatch) => {
+  // One setting at a time, named by the key it changes, so that the name and the change cannot
+  // part: a change the engine did not keep is told by that name (#142).
+  const change = <K extends keyof SettingsPatch>(setting: K, value: SettingsPatch[K]) => {
+    const patch: SettingsPatch = { [setting]: value };
     learn(api.updateSettings(patch)).catch((error: unknown) => {
       tell(settingNotChangedMessage(setting, error));
     });
@@ -211,7 +214,7 @@ export function SettingsDialog({
                 value={settings.maxConcurrentDownloads}
                 {...SETTINGS_LIMITS.maxConcurrentDownloads}
                 onChange={(maxConcurrentDownloads) => {
-                  change('maxConcurrentDownloads', { maxConcurrentDownloads });
+                  change('maxConcurrentDownloads', maxConcurrentDownloads);
                 }}
               />
               <Stepper
@@ -220,13 +223,13 @@ export function SettingsDialog({
                 value={settings.connectionsPerDownload}
                 {...SETTINGS_LIMITS.connectionsPerDownload}
                 onChange={(connectionsPerDownload) => {
-                  change('connectionsPerDownload', { connectionsPerDownload });
+                  change('connectionsPerDownload', connectionsPerDownload);
                 }}
               />
               <SpeedLimit
                 value={settings.speedLimitBytesPerSecond}
                 onChange={(speedLimitBytesPerSecond) => {
-                  change('speedLimitBytesPerSecond', { speedLimitBytesPerSecond });
+                  change('speedLimitBytesPerSecond', speedLimitBytesPerSecond);
                 }}
               />
               <div className="flex items-start justify-between gap-4">
@@ -273,7 +276,7 @@ export function SettingsDialog({
               <ThemeChoice
                 value={settings.theme}
                 onChange={(theme) => {
-                  change('theme', { theme });
+                  change('theme', theme);
                 }}
               />
               {/* Main reads the clipboard: a browser tab has no main to do it. */}
@@ -283,7 +286,7 @@ export function SettingsDialog({
                   hint="Links to files and videos you copy appear in the list, ready to start."
                   value={settings.watchClipboard}
                   onChange={(watchClipboard) => {
-                    change('watchClipboard', { watchClipboard });
+                    change('watchClipboard', watchClipboard);
                   }}
                 />
               )}
@@ -296,7 +299,7 @@ export function SettingsDialog({
               hint="Also update to versions still being tried. Scia updates itself when you quit it."
               value={settings.betaUpdates}
               onChange={(betaUpdates) => {
-                change('betaUpdates', { betaUpdates });
+                change('betaUpdates', betaUpdates);
               }}
             />
           )}

@@ -34,8 +34,18 @@ describe('the sentence of a code', () => {
 
 describe('what the engine refused of an add', () => {
   it('names what was sent: links, or magnets', () => {
-    expect(addRefusedMessage('links')).toBe('Scia’s engine did not take the links you pasted.');
-    expect(addRefusedMessage('magnets')).toBe('Scia’s engine did not take the magnets you pasted.');
+    expect(addRefusedMessage('links', false)).toBe(
+      'Scia’s engine did not take the links you pasted.',
+    );
+    expect(addRefusedMessage('magnets', false)).toBe(
+      'Scia’s engine did not take the magnets you pasted.',
+    );
+  });
+
+  // Typed or pasted, what the field sent and the engine refused is what the field still holds.
+  it('points at what the field keeps, however it got there', () => {
+    expect(addRefusedMessage('links', true)).toBe('Scia’s engine did not take these links.');
+    expect(addRefusedMessage('magnets', true)).toBe('Scia’s engine did not take these magnets.');
   });
 });
 

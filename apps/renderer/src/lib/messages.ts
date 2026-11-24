@@ -48,9 +48,12 @@ export const FOLDER_NOT_CHANGED = 'Scia could not change the download folder. Tr
 
 // Said when the engine refused, as no request it takes, what the page sent of a paste or of the
 // field: the page reads them by the engine's own contract and sends at most MAX_URLS_PER_REQUEST
-// at a time, so no cause a person can mend is known (#142).
-export function addRefusedMessage(sent: 'links' | 'magnets'): string {
-  return `Scia’s engine did not take the ${sent} you pasted.`;
+// at a time, so no cause a person can mend is known (#142). The field keeps what was refused,
+// typed or pasted, and "these" points at it; a paste on the page has no field to point at.
+export function addRefusedMessage(sent: 'links' | 'magnets', fromField: boolean): string {
+  return fromField
+    ? `Scia’s engine did not take these ${sent}.`
+    : `Scia’s engine did not take the ${sent} you pasted.`;
 }
 
 // What each setting the page changes is called in a sentence: the change lost is named (#142).

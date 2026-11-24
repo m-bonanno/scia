@@ -135,7 +135,7 @@ describe('App', () => {
     await vi.waitFor(() => {
       expect(field).toHaveAttribute('aria-invalid', 'true');
     });
-    expect(field).toHaveAccessibleDescription('Scia’s engine did not take the links you pasted.');
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take these links.');
     expect(field).toHaveValue('https://example.com/a.zip');
     expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
 
@@ -179,7 +179,81 @@ describe('App', () => {
     await vi.waitFor(() => {
       expect(field).toHaveValue(links.at(-1));
     });
-    expect(field).toHaveAccessibleDescription('Scia’s engine did not take the links you pasted.');
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take these links.');
+  });
+
+  // Each batch is its own request, and two can be refused for the same cause: the field says it
+  // once, and no notice says it again (#142).
+  it('says once, under the field, that two batches of links were refused', async () => {
+    const links = manyLinks(2 * MAX_URLS_PER_REQUEST + 1);
+    vi.spyOn(api, 'addDownloads')
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'))
+      .mockRejectedValueOnce(new ApiError(400, ApiErrorCode.InvalidRequest, 'not links'));
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+    await userEvent.click(field);
+    await userEvent.paste(links.join(' '));
+    await userEvent.click(screen.getByRole('button', { name: 'Download 401 files' }));
+
+    await vi.waitFor(() => {
+      expect(field).toHaveValue(links.slice(MAX_URLS_PER_REQUEST).join(' '));
+    });
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take these links.');
+    expect(screen.queryByRole('list', { name: 'Notices' })).not.toBeInTheDocument();
+  });
+
+  // Not a refusal of what was sent: nothing is said under the field, and what was not taken stays
+  // in it, to be sent again.
+  it('keeps in the field a later batch the engine did not answer, and says so in a notice', async () => {
+    const links = manyLinks(MAX_URLS_PER_REQUEST + 1);
+    vi.spyOn(api, 'addDownloads')
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+
+    await userEvent.click(field);
+    await userEvent.paste(links.join(' '));
+    await userEvent.click(screen.getByRole('button', { name: 'Download 201 files' }));
+
+    await vi.waitFor(() => {
+      expect(field).toHaveValue(links.at(-1));
+    });
+    expect(field).not.toHaveAttribute('aria-invalid', 'true');
+    expect(screen.getByRole('list', { name: 'Notices' })).toHaveTextContent(ENGINE_UNREACHABLE);
+  });
+
+  it('sends one batch at a time, and nothing more while they are on their way', async () => {
+    const links = manyLinks(MAX_URLS_PER_REQUEST + 1);
+    let take: (downloads: Download[]) => void = () => undefined;
+    const add = vi
+      .spyOn(api, 'addDownloads')
+      .mockReturnValueOnce(
+        new Promise((resolve) => {
+          take = resolve;
+        }),
+      )
+      .mockResolvedValueOnce([]);
+    render(<App />);
+    const field = screen.getByRole('textbox', { name: 'Links to download' });
+    await userEvent.click(field);
+    await userEvent.paste(links.join(' '));
+    const download = screen.getByRole('button', { name: 'Download 201 files' });
+
+    await userEvent.click(download);
+    await userEvent.type(field, '{Enter}');
+
+    expect(download).toBeDisabled();
+    expect(add).toHaveBeenCalledOnce();
+
+    take([]);
+
+    await vi.waitFor(() => {
+      expect(field).toHaveValue('');
+    });
+    expect(add.mock.calls).toEqual([[links.slice(0, MAX_URLS_PER_REQUEST)], [links.slice(-1)]]);
   });
 
   it('sends more magnets than one request holds in batches, and names magnets when one is refused', async () => {
@@ -202,7 +276,7 @@ describe('App', () => {
       expect(field).toHaveValue(magnets.at(-1));
     });
     expect(add.mock.calls).toEqual([[magnets.slice(0, MAX_URLS_PER_REQUEST)], [magnets.slice(-1)]]);
-    expect(field).toHaveAccessibleDescription('Scia’s engine did not take the magnets you pasted.');
+    expect(field).toHaveAccessibleDescription('Scia’s engine did not take these magnets.');
   });
 
   it('does not say under the field a refusal of text the field no longer holds', async () => {
@@ -224,9 +298,7 @@ describe('App', () => {
       expect(screen.getByRole('button', { name: 'Download' })).toBeEnabled();
     });
     expect(field).not.toHaveAttribute('aria-invalid', 'true');
-    expect(
-      screen.queryByText('Scia’s engine did not take the links you pasted.'),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByText('Scia’s engine did not take these links.')).not.toBeInTheDocument();
   });
 
   it('takes back what the field said once the same text is taken', async () => {

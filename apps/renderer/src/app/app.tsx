@@ -183,7 +183,7 @@ export function App(): ReactNode {
             report(error);
             continue;
           }
-          const text = addRefusedMessage(sent);
+          const text = addRefusedMessage(sent, fromField);
           if (fromField && (refusal === null || refusal === text)) refusal = text;
           else tell(text);
         }

@@ -223,6 +223,29 @@ describe('SettingsDialog', () => {
       ).toBeChecked();
     });
 
+    it('stay as the engine keeps them when it refuses the change, and the change lost is named', async () => {
+      aShell(async () => 'kept');
+      const update = vi.spyOn(api, 'updateSettings').mockRejectedValue(new Error('refused'));
+      const tell = vi.fn();
+      render(
+        <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={tell} />,
+      );
+
+      await userEvent.click(
+        await screen.findByRole('switch', { name: 'Take links from the clipboard' }),
+      );
+
+      await vi.waitFor(() => {
+        expect(tell).toHaveBeenCalledExactlyOnceWith(
+          'Scia could not change whether it takes links from the clipboard. Try again.',
+        );
+      });
+      expect(update).toHaveBeenCalledExactlyOnceWith({ watchClipboard: true });
+      expect(
+        screen.getByRole('switch', { name: 'Take links from the clipboard' }),
+      ).not.toBeChecked();
+    });
+
     it('are offered only in the desktop app, which reads the clipboard', async () => {
       render(
         <SettingsDialog open onClose={ignore} onError={ignore} onSettings={ignore} tell={ignore} />,
@@ -380,11 +403,21 @@ describe('SettingsDialog', () => {
     expect(path.closest('output')).not.toHaveAttribute('title');
   });
 
+  // The folder read again is the one before, as after a failure of main: the refusal is the
+  // folder's to say, and a notice that the folder did not change would say it twice (#142).
   it('says so, by the folder, when the engine refused the one that was chosen', async () => {
     aShell(async () => 'refused');
     const onError = vi.fn();
+    const onSettings = vi.fn();
+    const tell = vi.fn();
     render(
-      <SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} tell={ignore} />,
+      <SettingsDialog
+        open
+        onClose={ignore}
+        onError={onError}
+        onSettings={onSettings}
+        tell={tell}
+      />,
     );
 
     await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
@@ -392,7 +425,11 @@ describe('SettingsDialog', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Scia could not use the folder you chose. Choose one it can write to.',
     );
+    await vi.waitFor(() => {
+      expect(onSettings).toHaveBeenCalledTimes(2);
+    });
     expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
+    expect(tell).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -510,17 +547,31 @@ describe('SettingsDialog', () => {
     });
   });
 
+  // The folder read again is the one before, as after a failure of main, and nothing went wrong:
+  // a notice that the folder did not change would answer a question nobody asked (#142).
   it('says nothing when the person closed the dialog without choosing', async () => {
     aShell(async () => 'kept');
     const onError = vi.fn();
+    const onSettings = vi.fn();
+    const tell = vi.fn();
     render(
-      <SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} tell={ignore} />,
+      <SettingsDialog
+        open
+        onClose={ignore}
+        onError={onError}
+        onSettings={onSettings}
+        tell={tell}
+      />,
     );
 
     await userEvent.click(await screen.findByRole('button', { name: 'Change…' }));
 
-    expect(await screen.findByText('/home/me/Downloads')).toBeInTheDocument();
+    await vi.waitFor(() => {
+      expect(onSettings).toHaveBeenCalledTimes(2);
+    });
+    expect(screen.getByText('/home/me/Downloads')).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(tell).not.toHaveBeenCalled();
     expect(onError).not.toHaveBeenCalled();
   });
 
@@ -762,6 +813,42 @@ describe('SettingsDialog', () => {
     expect(onError).not.toHaveBeenCalled();
     expect(limit).toHaveValue('none');
   });
+
+  // Each stepper changes its own setting, and a change lost is told by that setting's name (#142).
+  it.each([
+    {
+      stepper: 'Simultaneous downloads',
+      patch: { maxConcurrentDownloads: 4 },
+      kept: '3',
+      told: 'Scia could not change the number of simultaneous downloads. Try again.',
+    },
+    {
+      stepper: 'Connections per download',
+      patch: { connectionsPerDownload: 9 },
+      kept: '8',
+      told: 'Scia could not change the number of connections per download. Try again.',
+    },
+  ])(
+    'keeps showing what the engine has when a change of $stepper fails, and names it',
+    async ({ stepper, patch, kept, told }) => {
+      const update = vi.spyOn(api, 'updateSettings').mockRejectedValue(new Error('refused'));
+      const onError = vi.fn();
+      const tell = vi.fn();
+      render(
+        <SettingsDialog open onClose={ignore} onError={onError} onSettings={ignore} tell={tell} />,
+      );
+      const group = await screen.findByRole('group', { name: stepper });
+
+      await userEvent.click(within(group).getByRole('button', { name: 'Increase' }));
+
+      await vi.waitFor(() => {
+        expect(tell).toHaveBeenCalledExactlyOnceWith(told);
+      });
+      expect(update).toHaveBeenCalledExactlyOnceWith(patch);
+      expect(onError).not.toHaveBeenCalled();
+      expect(within(group).getByText(kept)).toBeInTheDocument();
+    },
+  );
 
   it('offers no limit the engine would refuse', async () => {
     render(
