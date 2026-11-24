@@ -4,39 +4,6 @@ Loaded when working under `apps/server/`. **Extends** the root `CLAUDE.md`; wins
 
 The engine downloads. It is a plain Node process: Electron forks it as a `utilityProcess`, the tests and `npm run dev` run it under Node. **It never imports `electron`** (ESLint enforces it).
 
-```
-main.ts            wiring: config → integrations → store → manager → Hono on 127.0.0.1
-app.ts             the HTTP API (/api/v1), its two tokens, the renderer's static files
-download-manager   the queue, the names, the state on disk, what a pause/remove/shutdown means
-download-task      one download: connections, ranges, retries, writes
-sparse-file        a new part file made sparse on Windows, by the system's fsutil
-throttle           the speed limit as connections meet it: who waits, and who is woken
-remote-source      the PORT a download reaches its bytes through
-http-source        its one adapter today (node:http/https)
-state-store        state.json, written whole and renamed into place
-origin-mark        the mark a finished file carries of having come from the network
-offered-links      which links copied to the clipboard are files or videos' pages Scia knows
-integrations       the services Scia is connected to: the key of each, what each says of its account
-alldebrid          AllDebrid's API, as far as Scia uses it
-key-vault          the PORT the key of a service is kept through; main keeps it
-link-resolver      the PORT a debrid service plugs into: is this link a service's, and what is behind it
-magnet-service     the PORT a debrid service fetches magnets through
-magnet-watch       the pasted magnets watched at one pace, made downloads when ready
-bundle-links       the links that open into several files, as data: which they are, the folder they fill
-page-reader        the PORT a reader of sites plugs into: what video a page plays, and its title alone
-yt-dlp             its adapter: yt-dlp run once per page, its JSON read
-yt-dlp-updates     the shipped yt-dlp brought up to date, at most once a day, from its signed releases
-yt-dlp-releases    yt-dlp's releases on github.com: the latest one's name, its files
-openpgp            as much of OpenPGP as yt-dlp's signature of its sums takes, over node:crypto
-media-choice       which of a page's formats the engine fetches, or why none
-hls-task           a page's HLS stream: its pieces fetched, opened, made into one mp4
-transmuxer         what the engine uses of mux.js, typed: MPEG-TS into fragmented mp4
-pair-task          a page's picture and sound offered apart: both fetched, then joined into one mp4
-mp4-join           the join's IO: the boxes of both files read, the plan of @scia/core written
-bunkr              Bunkr's album and file pages and its API, asked: an album's files, a file's link
-bunkr-pages        what those pages and answers say, read with no IO; Bunkr's domains, the one list
-```
-
 ## Rules
 
 - **Ports where there is a seam.** `RemoteSource` (probe + open a range) is what HLS and any future source implement; `LinkResolver` is the step before it, which a debrid service plugs into; `StateStore` is what a database would replace. Do not add a port without a second implementation or a test that needs the seam.
