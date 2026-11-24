@@ -1,7 +1,7 @@
-import { open, readdir, readFile } from 'node:fs/promises';
+import { open, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { Theme } from '@scia/contracts/theme';
-import { scratchFolder } from '@scia/server/testing/scratch.ts';
+import { scratchFolder, until } from '@scia/server/testing/scratch.ts';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { RememberedTheme } from './engine/remembered-theme.ts';
 import { ShownNotices } from './engine/shown-notices.ts';
@@ -48,10 +48,15 @@ describe('JsonFile against a real folder', () => {
       await file.write({ theme: Theme.Brick });
 
       const reader = await open(path, 'r');
+      const startedAt = performance.now();
       setTimeout(() => void reader.close(), 300);
       await file.write({ theme: Theme.Ice });
+      const tookMs = performance.now() - startedAt;
 
       expect(await onDisk('theme.json')).toEqual({ theme: Theme.Ice });
+      // The premise: the system refused the rename while the file was held. A write that landed at
+      // once would hold nothing of the retry.
+      expect(tookMs, `the write took ${String(Math.round(tookMs))} ms`).toBeGreaterThanOrEqual(250);
     },
   );
 
@@ -78,15 +83,17 @@ describe('JsonFile against a real folder', () => {
   );
 
   it.runIf(process.platform === 'win32')(
-    'gives a notice’s write up when the file stays held, says so, and shows the notice again',
+    'gives a notice’s write up when the file stays held, says so, and keeps it at the next launch',
     async () => {
       const path = join(folder.path, 'notices.json');
+      await writeFile(path, JSON.stringify(['first']));
       const notices = new ShownNotices(new JsonFile(path), log);
-      await notices.firstTime('first');
 
       const reader = await open(path, 'r');
       try {
+        // Answered at once: the write goes on behind, and says how it ended.
         expect(await notices.firstTime('hidden-to-tray')).toBe(true);
+        await until(() => lines.length > 0);
       } finally {
         await reader.close();
       }
@@ -95,8 +102,12 @@ describe('JsonFile against a real folder', () => {
         ['warn', 'notices_not_kept', { notice: 'hidden-to-tray', code: held }],
       ]);
       expect(await onDisk('notices.json')).toEqual(['first']);
-      expect(await notices.firstTime('hidden-to-tray')).toBe(true);
-      expect(await notices.firstTime('hidden-to-tray')).toBe(false);
+      lines = [];
+      const next = new ShownNotices(new JsonFile(path), log);
+      expect(await next.firstTime('hidden-to-tray')).toBe(true);
+      await until(() => lines.length > 0);
+      expect(lines).toEqual([['info', 'notices_kept', { notice: 'hidden-to-tray' }]]);
+      expect(await onDisk('notices.json')).toEqual(['first', 'hidden-to-tray']);
     },
   );
 });

@@ -246,7 +246,8 @@ describe('RememberedTheme', () => {
 
   it('writes again a theme whose write failed while another was asked', async () => {
     const disk = slowStore();
-    const theme = new RememberedTheme(disk.store, silent);
+    const { log, lines } = recording();
+    const theme = new RememberedTheme(disk.store, log);
     const first = theme.keep(Theme.Brick);
     await settle();
     const second = theme.keep(Theme.Ice);
@@ -266,5 +267,11 @@ describe('RememberedTheme', () => {
       { theme: Theme.Brick },
     ]);
     expect(disk.landed()).toEqual({ theme: Theme.Brick });
+    // The failure names the theme its write carried, not the one asked while it was on its way.
+    expect(lines).toEqual([
+      ['warn', 'theme_not_kept', { theme: Theme.Brick, code: 'EPERM' }],
+      ['info', 'theme_kept', { theme: Theme.Ice }],
+      ['info', 'theme_kept', { theme: Theme.Brick }],
+    ]);
   });
 });

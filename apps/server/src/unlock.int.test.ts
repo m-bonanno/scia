@@ -726,14 +726,22 @@ describe('a link that goes through a service', () => {
       await writeFile(hostsFile(), JSON.stringify({ domains: ['before.example'] }));
       const integrations = await connected(await serviceWith({ links: {} }));
       const held = await openFile(hostsFile(), 'r');
+      const startedAt = performance.now();
       setTimeout(() => void held.close(), 300);
 
       expect(await integrations.serviceFor(LINK, new AbortController().signal)).toBe('alldebrid');
+      const tookMs = performance.now() - startedAt;
 
       expect(logged.filter((line) => line.includes('service_hosts_not_kept'))).toEqual([]);
       expect(JSON.parse(await readFile(hostsFile(), 'utf8'))).toEqual({
         domains: ['hoster.example'],
       });
+      // The premise: the list's write waited for the file. One that landed at once would hold
+      // nothing of the retry.
+      expect(
+        tookMs,
+        `the list was kept in ${String(Math.round(tookMs))} ms`,
+      ).toBeGreaterThanOrEqual(250);
     },
   );
 

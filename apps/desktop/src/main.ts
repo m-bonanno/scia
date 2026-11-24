@@ -373,7 +373,8 @@ async function boot(): Promise<void> {
       const chosen = await askTheme();
       if (chosen === undefined) return;
       window.wear(chosen);
-      // Never waited for: the page loads without it, and it never rejects.
+      // Never waited for: the page loads without it. It rejects only for a line of the log that
+      // throws, which electron-log does not, and its error handler would catch.
       void theme.keep(chosen);
     } catch (error) {
       log.warn('theme_unknown', { error: String(error) });

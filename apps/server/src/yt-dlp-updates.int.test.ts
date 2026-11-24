@@ -227,24 +227,33 @@ describe('YtDlpUpdates against a host that publishes releases as yt-dlp does', (
   it.runIf(process.platform === 'win32')(
     'keeps the time of a check while another program holds its file for a moment, as an antivirus does on Windows (#307)',
     async () => {
-      const first = await open({ now: () => Date.now() - 2 * DAY_MS });
+      // The spec's clock: the second check is due because a day went by since the first.
+      const firstAt = Date.parse('2026-11-24T12:00:00.000Z');
+      const secondAt = firstAt + 2 * DAY_MS;
+      const first = await open({ now: () => firstAt });
       first.start(downloads);
       await until(() => events().includes('yt_dlp_checked'));
       await first.close();
       const state = join(updatesFolder(), 'state.json');
       const held = await openFile(state, 'r');
       logged = [];
-      const now = Date.parse('2026-11-24T12:00:00.000Z');
 
-      const second = await open({ now: () => now });
+      const second = await open({ now: () => secondAt });
+      const startedAt = performance.now();
       second.start(downloads);
       setTimeout(() => void held.close(), 300);
       await until(() => events().some((event) => event.startsWith('yt_dlp_check')));
+      const tookMs = performance.now() - startedAt;
 
       expect(events()).not.toContain('yt_dlp_check_failed');
       expect(JSON.parse(await readFile(state, 'utf8'))).toMatchObject({
-        checkedAt: new Date(now).toISOString(),
+        checkedAt: new Date(secondAt).toISOString(),
       });
+      // The premise: the state's write waited for the file. One that landed at once would hold
+      // nothing of the retry.
+      expect(tookMs, `the check ended in ${String(Math.round(tookMs))} ms`).toBeGreaterThanOrEqual(
+        250,
+      );
     },
   );
 
