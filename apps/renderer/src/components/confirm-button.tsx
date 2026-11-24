@@ -118,8 +118,9 @@ export function ConfirmButton(props: ConfirmButtonProps): ReactNode {
     >
       {label === undefined ? (
         // Both words in one cell, the one not said hidden: the box is the wider of the two from
-        // the start, and the question takes no room the word did not have.
-        <span className="grid justify-items-center">
+        // the start, and the question takes no room the word did not have. Its figures are of one
+        // width, so that a count that changes does not move the box.
+        <span className="grid justify-items-center tabular-nums">
           <span
             aria-hidden={asking || undefined}
             className={cn('col-start-1 row-start-1', asking && 'invisible')}

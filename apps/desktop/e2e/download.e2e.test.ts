@@ -140,17 +140,24 @@ describe('the real app downloads', () => {
 
     // A row with room for the word and not for the question: there a button that grew as it
     // asked went to the next line, from under the pointer. Each is measured in the button's own
-    // font, whatever the button is made of — the question in its weight, semibold.
+    // font, whatever the button is made of — the question in its weight, semibold, and in the
+    // figures its own text is drawn in (read apart, below).
     const measure = () =>
       clear.evaluate((button) => {
         const filters = document.querySelector('[role="group"][aria-label="Filter downloads"]');
         const row = filters?.parentElement;
         if (!filters || !row) return undefined;
         const style = getComputedStyle(button);
+        const asked = [...button.querySelectorAll('span')].find(
+          (span) => span.children.length === 0 && span.textContent === 'Clear 2 completed',
+        );
+        // The shorthand resets the figures.
+        const figures = getComputedStyle(asked ?? button).fontVariantNumeric;
         const widthOf = (text: string, weight: string) => {
           const probe = document.createElement('span');
           probe.style.font = style.font;
           probe.style.fontWeight = weight;
+          probe.style.fontVariantNumeric = figures;
           probe.style.whiteSpace = 'nowrap';
           probe.style.position = 'absolute';
           probe.textContent = text;
@@ -170,17 +177,22 @@ describe('the real app downloads', () => {
           question: widthOf('Clear 2 completed', '600') + around,
         };
       });
-    // What the button draws: its width, and whether each of its two words is seen.
+    // What the button draws: its width, whether each of its two words is seen, and the figures
+    // of the question.
     const drawn = (button: Locator) =>
       button.evaluate((element) => {
-        const seen = (text: string) =>
-          [...element.querySelectorAll('span')]
-            .filter((span) => span.children.length === 0 && span.textContent === text)
-            .map((span) => getComputedStyle(span).visibility);
+        const spans = (text: string) =>
+          [...element.querySelectorAll('span')].filter(
+            (span) => span.children.length === 0 && span.textContent === text,
+          );
+        const seen = (text: string) => spans(text).map((span) => getComputedStyle(span).visibility);
         return {
           width: element.getBoundingClientRect().width,
           word: seen('Clear completed'),
           question: seen('Clear 2 completed'),
+          figures: spans('Clear 2 completed').map(
+            (span) => getComputedStyle(span).fontVariantNumeric,
+          ),
         };
       });
     // Below the width at which the column stops growing, the row follows the viewport.
@@ -197,25 +209,26 @@ describe('the real app downloads', () => {
 
     await clear.focus();
     const atRest = await clear.boundingBox();
-    // At rest the word is seen and the question is not, and the box is the question's own width.
     const rest = await drawn(clear);
-    expect({ word: rest.word, question: rest.question }).toEqual({
-      word: ['visible'],
-      question: ['hidden'],
-    });
-    expect(
-      Math.abs(rest.width - (narrow?.question ?? 0)),
-      JSON.stringify({ rest, narrow }),
-    ).toBeLessThanOrEqual(1);
     await page.keyboard.press('Enter');
     await question.waitFor();
     const asking = await question.boundingBox();
-    expect(asking, JSON.stringify({ atRest, asking, narrow })).toEqual(atRest);
     const asked = await drawn(question);
-    expect({ word: asked.word, question: asked.question }).toEqual({
+    // Each hold in turn, so that a line taken away fails at its own: the box at the press first;
+    // then the box at rest, the question's own width; at rest the word seen and the question not;
+    // while it asks, the other way round; and the question's figures, of one width.
+    const numbers = JSON.stringify({ atRest, asking, rest, asked, narrow });
+    expect(asking, numbers).toEqual(atRest);
+    expect(Math.abs(rest.width - (narrow?.question ?? 0)), numbers).toBeLessThanOrEqual(1);
+    expect({ word: rest.word, question: rest.question }, numbers).toEqual({
+      word: ['visible'],
+      question: ['hidden'],
+    });
+    expect({ word: asked.word, question: asked.question }, numbers).toEqual({
       word: ['hidden'],
       question: ['visible'],
     });
+    expect(rest.figures, numbers).toEqual(['tabular-nums']);
   });
 
   // The engine takes at most MAX_URLS_PER_REQUEST links in one request (#142): the page sends a

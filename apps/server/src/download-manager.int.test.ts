@@ -50,9 +50,10 @@ vi.mock('./throttle.ts', async (original) => {
 
 const MIB = 1024 * 1024;
 const body = randomBytes(4 * MIB + 7);
-// A download a spec keeps unfinished while it acts: the body takes about three seconds over its
-// eight connections, far past the turn a busy machine takes to pause or clear. At 64 KiB every
-// 5 ms it ended 80 ms after its first byte, and a pause that came late came after its last (#302).
+// A download a spec keeps unfinished while it acts: the body takes about six seconds, 1 MiB on each
+// of the four connections a body of 4 MiB is given, far past the turn a busy machine takes to pause
+// or clear. At 64 KiB every 5 ms it ended 80 ms after its first byte, and a pause that came late
+// came after its last (#302).
 const UNFINISHED = { chunkBytes: 16 * 1024, chunkDelayMs: 100, fileName: 'slow.bin' } as const;
 
 describe('DownloadManager', () => {

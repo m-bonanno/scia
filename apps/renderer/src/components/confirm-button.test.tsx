@@ -197,6 +197,8 @@ describe('ConfirmButton', () => {
     // The question is laid out beside the word from the start, hidden, so that the button is as
     // wide as it already; the E2E suite measures the box.
     expect(within(button).getByText('Clear 3 completed')).toHaveAttribute('aria-hidden', 'true');
+    // Numbers are drawn tabular: the box a count sets does not move when one figure replaces another.
+    expect(within(button).getByText('Clear 3 completed').parentElement).toHaveClass('tabular-nums');
 
     await userEvent.click(button);
     expect(onConfirm).not.toHaveBeenCalled();

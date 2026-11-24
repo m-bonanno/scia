@@ -53,6 +53,7 @@ What earlier reviews taught, each with the PR that taught it.
 - A body's "Not seen in the real app" is weighed against "What the E2E suite can hold is held there" (`testing.md`, "Proving the real app"): round 2 of #303 let "201 links pasted and downloaded" stand as unseen, and the product manager found that the suite could hold it with what it has. (#303)
 - A comparison is attacked at its boundary as well as at its ends: round 3 of #303 took `refused.length < all` to `true` and to `false`, which the specs of an add wholly taken and wholly refused caught, and not to `refused.length === 0`, which differs only on an add partly taken — the road the batches opened, with no spec. (#303)
 - A hand-on of the focus is tried from every shape of the tree the control leaves from, not read from React's order of ref cleanups: round 1 of #302 approved "Clear completed" handing the focus to the filters, true when its whole group left and false when "Start all" kept the group, which the frontend engineer found. (#302)
+- An unticked "seen failing" line for an E2E spec in the body is a finding, not a note: `testing.md` asks every E2E spec to be seen failing in CI, by "A hold seen failing in CI". Rounds 1 and 2 of #302 let "Not seen failing against the old code: the two E2E cases" stand. (#302)
 
 ## Output
 
