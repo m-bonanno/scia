@@ -1,6 +1,7 @@
 import { rm } from 'node:fs/promises';
-import { downloadedBytes, type Segment } from '@scia/core';
+import { downloadedBytes, PageFailure, type Segment } from '@scia/core';
 import { DownloadTask, type TaskOptions } from './download-task.ts';
+import { PageError } from './media-choice.ts';
 import { joinIntoMp4 } from './mp4-join.ts';
 import { DiskError, type RemoteSource, type RequestHeaders } from './remote-source.ts';
 import type { MarkSparse } from './sparse-file.ts';
@@ -122,7 +123,13 @@ export class PairTask {
     await this.#picture.run(signal);
     await this.#sound.run(signal);
     const { partPath } = this.#options;
-    await joinIntoMp4(pictureOf(partPath), soundOf(partPath), partPath, signal);
+    // A refusal of what the two files hold, whichever: fetched again, they would hold the same.
+    await joinIntoMp4(pictureOf(partPath), soundOf(partPath), partPath, signal).catch(
+      (error: unknown) => {
+        if (!(error instanceof PageError)) throw error;
+        throw new PageError(PageFailure.NotJoined, error.message, { cause: error });
+      },
+    );
     try {
       await rm(pictureOf(partPath), { force: true });
       await rm(soundOf(partPath), { force: true });

@@ -74,6 +74,9 @@ export const recordSchema = z.object({
   // load — a container a later version no longer takes — so that the page is read again for it,
   // never fetched into its file as a page.
   fromPage: z.boolean().catch(false),
+  // Scia refused to join the picture and sound its page offered apart (#241): every reading of
+  // the page after it chooses among one files and streams only. A state written before has none.
+  joinRefused: z.boolean().catch(false),
   // How far a stream's pieces are, kept for the row while it does not run. The pieces on disk are
   // the truth: what is there is not asked for again.
   timeline: timelineSchema.nullable().catch(null),

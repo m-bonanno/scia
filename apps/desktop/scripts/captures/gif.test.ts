@@ -3,7 +3,7 @@ import type { Picture } from './decode-png.ts';
 import { encodeGif, type Frame } from './gif.ts';
 
 interface Played {
-  readonly loops: number | undefined;
+  readonly plays: number;
   readonly frames: {
     readonly picture: Picture;
     readonly centiseconds: number;
@@ -68,14 +68,14 @@ function played(gif: Buffer): Played {
   expect(gif[10]! & 0x80).toBe(0);
   const canvas = new Uint8Array(width * height * 4);
   const frames: Played['frames'][number][] = [];
-  let loops: number | undefined;
+  let plays = 1;
   let control = { centiseconds: 0, transparent: -1 };
   let at = 13;
   for (;;) {
     const introducer = gif[at];
     if (introducer === 0x3b) {
       expect(at).toBe(gif.length - 1);
-      return { loops, frames };
+      return { plays, frames };
     }
     if (introducer === 0x21) {
       const label = gif[at + 1];
@@ -94,8 +94,15 @@ function played(gif: Buffer): Played {
           transparent: ((first[0] ?? 0) & 1) === 1 ? (first[3] ?? -1) : -1,
         };
       }
-      if (label === 0xff && first?.toString('latin1') === 'NETSCAPE2.0' && second !== undefined)
-        loops = second.readUInt16LE(1);
+      // NETSCAPE2.0's loop count, as Chromium plays it (WebKit and Firefox say they count so): how
+      // many times the frames play again after the first, 0 forever. A GIF without it plays once.
+      // It comes before the first image, where a reader looks for it.
+      if (label === 0xff && first?.toString('latin1') === 'NETSCAPE2.0' && second !== undefined) {
+        expect(frames).toHaveLength(0);
+        expect([second.length, second[0]]).toEqual([3, 1]);
+        const again = second.readUInt16LE(1);
+        plays = again === 0 ? Infinity : again + 1;
+      }
       continue;
     }
     expect(introducer).toBe(0x2c);
@@ -161,27 +168,53 @@ const corners = picture(7, 5, (x, y) =>
     : [(x * 37) & 0xff, (y * 51) & 0xff, (x * y * 13) & 0xff],
 );
 
+const ONCE = { plays: 1 };
+
 describe('encodeGif', () => {
-  it('plays every picture in turn, forever, each for its time', () => {
+  it('plays every picture in turn, each for its time, as many times as asked', () => {
     const gif = played(
-      encodeGif([
-        { picture: still, ms: 1200 },
-        { picture: moved, ms: 80 },
-        { picture: still, ms: 2500 },
-      ]),
+      encodeGif(
+        [
+          { picture: still, ms: 1200 },
+          { picture: moved, ms: 80 },
+          { picture: still, ms: 2500 },
+        ],
+        { plays: 3 },
+      ),
     );
-    expect(gif.loops).toBe(0);
+    expect(gif.plays).toBe(3);
     expect(gif.frames.map((frame) => frame.picture)).toEqual([still, moved, still]);
     expect(gif.frames.map((frame) => frame.centiseconds)).toEqual([120, 8, 250]);
   });
 
+  // A loop count of 0 would be forever: a GIF that plays once says nothing of playing again.
+  it.each([
+    ['once', 1],
+    ['twice', 2],
+    ['as many times as a GIF can say', 0x10000],
+  ])('plays %s when asked', (_, plays) => {
+    expect(played(encodeGif([{ picture: still, ms: 100 }], { plays })).plays).toBe(plays);
+  });
+
+  it.each([0, 1.5, 0x10001, Infinity])(
+    'refuses to play %d times, which a GIF cannot say',
+    (plays) => {
+      expect(() => encodeGif([{ picture: still, ms: 100 }], { plays })).toThrow(
+        `${String(plays)} plays, where a GIF plays from 1 to 65536 times`,
+      );
+    },
+  );
+
   it('writes of a frame only the region that changed, the pixels in it that did not transparent', () => {
     const gif = played(
-      encodeGif([
-        { picture: still, ms: 100 },
-        { picture: moved, ms: 100 },
-        { picture: corners, ms: 100 },
-      ]),
+      encodeGif(
+        [
+          { picture: still, ms: 100 },
+          { picture: moved, ms: 100 },
+          { picture: corners, ms: 100 },
+        ],
+        ONCE,
+      ),
     );
     expect(gif.frames.map((frame) => frame.region)).toEqual([
       [0, 0, 7, 5],
@@ -194,11 +227,14 @@ describe('encodeGif', () => {
 
   it('adds a picture that changed nothing to the time of the one before', () => {
     const gif = played(
-      encodeGif([
-        { picture: still, ms: 300 },
-        { picture: still, ms: 200 },
-        { picture: moved, ms: 100 },
-      ]),
+      encodeGif(
+        [
+          { picture: still, ms: 300 },
+          { picture: still, ms: 200 },
+          { picture: moved, ms: 100 },
+        ],
+        ONCE,
+      ),
     );
     expect(gif.frames.map((frame) => frame.picture)).toEqual([still, moved]);
     expect(gif.frames.map((frame) => frame.centiseconds)).toEqual([50, 10]);
@@ -211,7 +247,7 @@ describe('encodeGif', () => {
       picture: each,
       ms: 105,
     }));
-    expect(played(encodeGif(frames)).frames.map((frame) => frame.centiseconds)).toEqual([
+    expect(played(encodeGif(frames, ONCE)).frames.map((frame) => frame.centiseconds)).toEqual([
       11, 10, 11, 10,
     ]);
   });
@@ -224,17 +260,22 @@ describe('encodeGif', () => {
       const grey = seed % 250;
       return [grey, grey, grey];
     });
-    expect(played(encodeGif([{ picture: noise, ms: 100 }])).frames[0]?.picture).toEqual(noise);
+    expect(played(encodeGif([{ picture: noise, ms: 100 }], ONCE)).frames[0]?.picture).toEqual(
+      noise,
+    );
   });
 
   it('writes a picture of one colour and one of two', () => {
     const black = picture(3, 2, () => [0, 0, 0]);
     const dot = picture(3, 2, (x, y) => (x === 1 && y === 1 ? [255, 255, 255] : [0, 0, 0]));
     const gif = played(
-      encodeGif([
-        { picture: black, ms: 100 },
-        { picture: dot, ms: 100 },
-      ]),
+      encodeGif(
+        [
+          { picture: black, ms: 100 },
+          { picture: dot, ms: 100 },
+        ],
+        ONCE,
+      ),
     );
     expect(gif.frames.map((frame) => frame.picture)).toEqual([black, dot]);
   });
@@ -247,48 +288,57 @@ describe('encodeGif', () => {
       return pixel < 256 ? [pixel, 1, 2] : [0, 1, 2];
     });
     const gif = played(
-      encodeGif([
-        { picture: before, ms: 100 },
-        { picture: after, ms: 100 },
-      ]),
+      encodeGif(
+        [
+          { picture: before, ms: 100 },
+          { picture: after, ms: 100 },
+        ],
+        ONCE,
+      ),
     );
     expect(gif.frames.map((frame) => frame.picture)).toEqual([before, after]);
     expect(gif.frames.map((frame) => frame.transparent)).toEqual([false, false]);
   });
 
   it('writes a frame as long as a GIF can say', () => {
-    expect(played(encodeGif([{ picture: still, ms: 655_350 }])).frames[0]?.centiseconds).toBe(
+    expect(played(encodeGif([{ picture: still, ms: 655_350 }], ONCE)).frames[0]?.centiseconds).toBe(
       0xffff,
     );
   });
 
   it('refuses pictures of different sizes, and no picture at all', () => {
     expect(() =>
-      encodeGif([
-        { picture: still, ms: 100 },
-        { picture: picture(1, 1, () => [0, 0, 0]), ms: 100 },
-      ]),
+      encodeGif(
+        [
+          { picture: still, ms: 100 },
+          { picture: picture(1, 1, () => [0, 0, 0]), ms: 100 },
+        ],
+        ONCE,
+      ),
     ).toThrow('a picture of 1×1 among pictures of 7×5');
     expect(() =>
-      encodeGif([
-        { picture: still, ms: 100 },
-        { picture: picture(7, 4, () => [0, 0, 0]), ms: 100 },
-      ]),
+      encodeGif(
+        [
+          { picture: still, ms: 100 },
+          { picture: picture(7, 4, () => [0, 0, 0]), ms: 100 },
+        ],
+        ONCE,
+      ),
     ).toThrow('a picture of 7×4 among pictures of 7×5');
-    expect(() => encodeGif([])).toThrow('no picture to play');
+    expect(() => encodeGif([], ONCE)).toThrow('no picture to play');
   });
 
   it('refuses what a GIF cannot hold rather than change it', () => {
     const many = picture(17, 17, (x, y) => [x * 15, y * 15, 0]);
-    expect(() => encodeGif([{ picture: many, ms: 100 }])).toThrow(
+    expect(() => encodeGif([{ picture: many, ms: 100 }], ONCE)).toThrow(
       'a frame of 289 colours, where a GIF holds 256',
     );
     const seeThrough = { ...still, rgba: still.rgba.slice() };
     seeThrough.rgba[3] = 128;
-    expect(() => encodeGif([{ picture: seeThrough, ms: 100 }])).toThrow(
+    expect(() => encodeGif([{ picture: seeThrough, ms: 100 }], ONCE)).toThrow(
       'a pixel that is not opaque',
     );
-    expect(() => encodeGif([{ picture: still, ms: 655_360 }])).toThrow(
+    expect(() => encodeGif([{ picture: still, ms: 655_360 }], ONCE)).toThrow(
       'a frame of 655360 ms, where a GIF holds 655350',
     );
   });

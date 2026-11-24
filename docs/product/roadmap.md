@@ -16,7 +16,7 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 
 - [ ] The window really in use before Scia stays silent (#62): built ([ADR 0020](../adr/0020-the-window-in-use-asked-of-windows.md)), to be seen by hand (#13).
 - [x] The `--inspect` fuse off in the shipped app, and the installer's smoke test driving it by the page's debugging port (#115).
-- [ ] A video and its sound offered apart, joined into one mp4 (#99), piece 3 of the video of a page (#89): built ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)), to be seen on a site by the owner on the beta after the merge.
+- [ ] A video and its sound offered apart, joined into one mp4 (#99), piece 3 of the video of a page (#89), and a join refused falling back to one file or a stream (#241): built ([ADR 0021](../adr/0021-picture-and-sound-joined-into-one-mp4.md)), to be seen on a site by the owner on the beta after the merge.
 - [ ] A link that expires during a long download, unlocked again keeping the bytes (#180): built and held by specs ([ADR 0022](../adr/0022-a-direct-link-that-expires.md)), to be seen in the app.
 - [ ] A link that unlocks into several files, shown as a list to tick: built ([ADR 0025](../adr/0025-a-link-that-opens-into-several-files.md)), held by specs and by CI's E2E (#181, closed by its merge); what is left is to see it in the app and against the real service, whose answer to a folder nobody has seen, in the owner's sitting below (#7).
 - [x] #7's README and ADR point: AllDebrid's row in the README's Integrations table (since #275, its section of [integrations.md](./integrations.md), which the README points to), the roadmap, and the port a service plugs into, [ADR 0005](../adr/0005-a-service-resolves-a-link.md), with [ADR 0025](../adr/0025-a-link-that-opens-into-several-files.md) beside it (#180 and #181 landed).
@@ -107,7 +107,7 @@ None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisio
 | [Downloads behind a login, per site](./evidence.md#downloads-behind-a-login)                        | —         | no      | —           | —                                | no        |
 | [Video of a page: one file, yt-dlp shipped](./evidence.md#the-video-of-one-page)                    | #89, #97  | yes     | Script      | any site but archive.org         | yes       |
 | [Video of a page: an HLS stream](./evidence.md#the-video-of-one-page)                               | #98, #162 | yes     | Specs       | any stream in the app, on a site | yes       |
-| [Video of a page: picture and sound joined](./evidence.md#the-video-of-one-page)                    | #99       | yes     | Specs       | a site's pair                    | yes       |
+| [Video of a page: picture and sound joined](./evidence.md#the-video-of-one-page)                    | #99, #241 | yes     | Specs       | a site's pair                    | yes       |
 | [Video of a page: yt-dlp kept up to date](./evidence.md#the-video-of-one-page)                      | #100      | yes     | E2E, Script | a real release of yt-dlp         | yes       |
 | [A live stream recorded until stopped](./evidence.md#the-video-of-one-page)                         | #121      | refused | —           | —                                | no        |
 | [A stream that changes partway](./evidence.md#the-video-of-one-page)                                | #123      | refused | —           | —                                | no        |
