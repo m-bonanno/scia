@@ -5,8 +5,17 @@ import type { Page } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { decodePng } from '../scripts/captures/decode-png.ts';
 import { encodeGif, type Frame } from '../scripts/captures/gif.ts';
-import { allCompleted, drawnCompleted, paste, rowOf, until, useRun, type Run } from './scia.ts';
-import { captureTo, scrollsAround, viewportOf } from './under-notices.ts';
+import {
+  allCompleted,
+  drawnCompleted,
+  paste,
+  rowOf,
+  until,
+  useRun,
+  type Run,
+  type Scia,
+} from './scia.ts';
+import { captureTo, scrollsAround } from './under-notices.ts';
 
 const MIB = 1024 * 1024;
 // The loop's page: as wide as the README's column on GitHub, which then draws it at its size, and
@@ -106,6 +115,23 @@ function paced(shots: readonly Shot[]): Frame[] {
   });
 }
 
+// The window itself sized, not the page's viewport: the title bar is laid out by the window's own
+// width, and a viewport narrower than the window left Settings and the speed outside the loop.
+async function windowOf(scia: Scia, width: number, height: number): Promise<void> {
+  await scia.app.evaluate(
+    ({ BrowserWindow }, [w, h]) => {
+      BrowserWindow.getAllWindows()[0]?.setContentSize(w, h);
+    },
+    [width, height] as const,
+  );
+  await until(() =>
+    scia.page.evaluate(([w, h]) => window.innerWidth === w && window.innerHeight === h, [
+      width,
+      height,
+    ] as const),
+  );
+}
+
 // Nothing under the pointer, the variant asked for drawn, and nothing moving but bars filling.
 async function settled(page: Page, variant: 'dark' | 'light'): Promise<void> {
   await page.mouse.move(1, 1);
@@ -143,8 +169,12 @@ describe('Scia at work, the loop of the README', () => {
       await scia.app.evaluate(({ nativeTheme }, source) => {
         nativeTheme.themeSource = source;
       }, variant);
-      await viewportOf(page, WIDTH, HEIGHT);
+      await windowOf(scia, WIDTH, HEIGHT);
       await settled(page, variant);
+      // The whole title bar is in the loop, and nothing of the page lies beside it.
+      const settings = await page.getByRole('button', { name: 'Settings' }).boundingBox();
+      expect((settings?.x ?? WIDTH) + (settings?.width ?? 0)).toBeLessThanOrEqual(WIDTH);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(WIDTH);
 
       const film = await filmOf(page);
       let shots: Shot[];
