@@ -56,7 +56,7 @@ Checked after the tag, so not part of the gate: a beta updated to the stable (#8
 
 ### The owner's decisions
 
-Settled on 21, 23 and 24 November 2026 ([decisions.md](./decisions.md#24-november-2026)), #228 and #285 joining the gate on 23 November, #63 and #307 on 24 November. One is open, asked from the review of #338: whether the gate waits also for the decisions of 24 November still to build (#339). Two can come back with what is found: #328, if a cookie that yt-dlp's reader of one site sets passes a legal age verification (`v1.0.0` does not wait for it), and #269, if the paused bar does not read as intended in the light variants at the sitting.
+Settled on 21, 23 and 24 November 2026 ([decisions.md](./decisions.md#24-november-2026)), #228 and #285 joining the gate on 23 November, #63 and #307 on 24 November. Open: #339's two questions on the gate, asked from the review of #338 — whether it waits also for the decisions of 24 November still to build, and whether the lines ticked on other proof (#69 on CI's E2E suite, #151 on specs) stand beside the key's rule that an item needs the owner's _Hand_ or a _Script_. Two can come back with what is found: #328, if a cookie that yt-dlp's reader of one site sets passes a legal age verification (`v1.0.0` does not wait for it), and #269, if the paused bar does not read as intended in the light variants at the sitting.
 
 ## M0 — Foundations
 
