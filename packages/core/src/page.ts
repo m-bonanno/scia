@@ -11,7 +11,7 @@ export const PageFailure = {
   // sound apart in forms Scia does not join (docs/adr/0021), or a stream that changes partway
   // (#123).
   FormatUnsupported: 'PAGE_FORMAT_UNSUPPORTED',
-  // Its best quality was a picture and a sound offered apart, and Scia refused to join the two
+  // Its best version was a picture and a sound offered apart, and Scia refused to join the two
   // files it fetched: a layout it does not join, or boxes that do not hold together. The next
   // reading of the page chooses among one files and streams only (#241, docs/adr/0021).
   NotJoined: 'PAGE_NOT_JOINED',
