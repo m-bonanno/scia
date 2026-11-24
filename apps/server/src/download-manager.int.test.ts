@@ -887,6 +887,63 @@ describe('DownloadManager', () => {
     expect(left).toContain('slow.bin.scia');
   });
 
+  it('leaves a running, a waiting and a ready download as they are when it clears (#215)', async () => {
+    const finished = await host();
+    const slow = await host({ chunkDelayMs: 5, fileName: 'slow.bin' });
+    const downloads = await open();
+    downloads.updateSettings({ maxConcurrentDownloads: 1 });
+    const [done] = downloads.add({ urls: [finished.url] });
+    await until(() => statusOf(downloads, done!.id) === DownloadStatus.Completed);
+    const [running, waiting] = downloads.add({ urls: [slow.url, slow.url] });
+    const [ready] = await downloads.offer([new URL('ready.iso', finished.url).href]);
+    await until(() => downloads.find(running!.id).downloadedBytes > 0);
+
+    downloads.clearCompleted();
+
+    expect(
+      downloads.snapshot().downloads.map((download) => [download.id, download.status]),
+    ).toEqual([
+      [running!.id, DownloadStatus.Downloading],
+      [waiting!.id, DownloadStatus.Queued],
+      [ready!.id, DownloadStatus.Ready],
+    ]);
+  });
+
+  it('takes away only its own row when the finished ones were cleared while it deleted its file (#215)', async () => {
+    const finished = await host();
+    const slow = await host({ chunkDelayMs: 5, fileName: 'slow.bin' });
+    const store = new JsonStateStore(join(folder.path, 'data', 'state.json'));
+    const saved: string[][] = [];
+    const downloads = await open({
+      store: {
+        load: () => store.load(),
+        save: (state) => {
+          saved.push(state.downloads.map((download) => download.id));
+          return store.save(state);
+        },
+      },
+    });
+    const [first, second] = downloads.add({ urls: [finished.url, finished.url] });
+    const [paused] = downloads.add({ urls: [slow.url] });
+    await until(() => downloads.find(paused!.id).downloadedBytes > 0);
+    await downloads.pause(paused!.id);
+    await until(
+      () =>
+        statusOf(downloads, first!.id) === DownloadStatus.Completed &&
+        statusOf(downloads, second!.id) === DownloadStatus.Completed,
+    );
+
+    // The removal waits on the disk for its file; the clear lands meanwhile.
+    const removing = downloads.remove(first!.id, true);
+    downloads.clearCompleted();
+    await removing;
+
+    expect(downloads.snapshot().downloads.map((download) => download.id)).toEqual([paused!.id]);
+    await downloads.close();
+    expect(saved.at(-1)).toEqual([paused!.id]);
+    expect(await readdir(join(folder.path, 'downloads'))).toContain('slow.bin.scia');
+  });
+
   it('changes nothing, and saves nothing, when no download is finished', async () => {
     const { url } = await host({ status: 404 });
     const store = new JsonStateStore(join(folder.path, 'data', 'state.json'));

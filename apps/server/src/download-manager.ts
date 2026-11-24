@@ -730,7 +730,10 @@ export class DownloadManager {
         await rm(join(record.directory, record.fileName), { force: true });
       }
     }
-    this.#records.splice(this.#records.indexOf(record), 1);
+    // Read after the waits: "Clear completed", or a second removal, may have taken it meanwhile.
+    const at = this.#records.indexOf(record);
+    if (at === -1) return;
+    this.#records.splice(at, 1);
     this.#changed();
     this.#schedule();
   }
