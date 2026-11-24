@@ -5,7 +5,8 @@ import { DownloadStatus } from '@scia/core';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import { sparseFlagOf } from '@scia/server/testing/scratch.ts';
 import { describe, expect, it } from 'vitest';
-import { downloadsOf, paste, rowOf, until, useRun } from './scia.ts';
+import { allCompleted, downloadsOf, drawnCompleted, paste, rowOf, until, useRun } from './scia.ts';
+import { captureTo, viewportOf } from './under-notices.ts';
 
 describe('the real app downloads', () => {
   const run = useRun();
@@ -94,6 +95,96 @@ describe('the real app downloads', () => {
         .getByRole('button', { name: /^All/ })
         .evaluate((tab) => tab === document.activeElement),
     ).toBe(true);
+  });
+
+  it('asks in place: "Clear completed" keeps its box at the first press, where its question would not fit beside the filters (#215)', async () => {
+    const profile = await run.profile();
+    const one = run.keep(
+      await startRangeServer({ body: randomBytes(1024 * 1024), fileName: 'report.pdf' }),
+    );
+    const two = run.keep(
+      await startRangeServer({ body: randomBytes(1024 * 1024), fileName: 'photos.zip' }),
+    );
+    const scia = await run.launch(profile);
+    const { page } = scia;
+    await paste(page, one.url, two.url);
+    await until(() => allCompleted(page));
+    await until(async () => (await drawnCompleted(page)) === 2);
+    const clear = page.getByRole('button', { name: 'Clear completed' });
+    const question = page.getByRole('button', { name: 'Clear 2 completed' });
+
+    // The question, which nobody had seen, in both variants, the pointer away from it.
+    for (const variant of ['dark', 'light'] as const) {
+      await scia.app.evaluate(({ nativeTheme }, source) => {
+        nativeTheme.themeSource = source;
+      }, variant);
+      await clear.click();
+      await question.waitFor();
+      await page.mouse.move(1, 1);
+      await until(() =>
+        page.evaluate(
+          (scheme) =>
+            matchMedia(`(prefers-color-scheme: ${scheme})`).matches &&
+            document.getAnimations().length === 0,
+          variant,
+        ),
+      );
+      const name = `clear-completed-question${variant === 'dark' ? '' : '-light'}.png`;
+      await page.screenshot({ path: await captureTo(name) });
+      // The focus leaves it, and it is its word again.
+      await page.keyboard.press('Tab');
+      await clear.waitFor();
+    }
+
+    // A row with room for the word and not for the question: there a button that grew as it
+    // asked went to the next line, from under the pointer. Each is measured in the button's own
+    // font, whatever the button is made of — the question in its weight, semibold.
+    const measure = () =>
+      clear.evaluate((button) => {
+        const filters = document.querySelector('[role="group"][aria-label="Filter downloads"]');
+        const row = filters?.parentElement;
+        if (!filters || !row) return undefined;
+        const style = getComputedStyle(button);
+        const widthOf = (text: string, weight: string) => {
+          const probe = document.createElement('span');
+          probe.style.font = style.font;
+          probe.style.fontWeight = weight;
+          probe.style.whiteSpace = 'nowrap';
+          probe.style.position = 'absolute';
+          probe.textContent = text;
+          document.body.append(probe);
+          const width = probe.getBoundingClientRect().width;
+          probe.remove();
+          return width;
+        };
+        const around = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+        const before =
+          filters.getBoundingClientRect().width + parseFloat(getComputedStyle(row).columnGap);
+        return {
+          viewport: window.innerWidth,
+          row: row.getBoundingClientRect().width,
+          forWord: Math.ceil(before + widthOf('Clear completed', style.fontWeight) + around),
+          forQuestion: Math.floor(before + widthOf('Clear 2 completed', '600') + around),
+        };
+      });
+    // Below the width at which the column stops growing, the row follows the viewport.
+    await viewportOf(page, 700, 720);
+    const wide = await measure();
+    expect(wide).toBeDefined();
+    const target = Math.floor(((wide?.forWord ?? 0) + (wide?.forQuestion ?? 0)) / 2);
+    await viewportOf(page, 700 - ((wide?.row ?? 0) - target), 720);
+    const narrow = await measure();
+    expect(
+      narrow?.row === target && narrow.forWord <= narrow.row && narrow.row < narrow.forQuestion,
+      `the premise: ${JSON.stringify({ wide, target, narrow })}`,
+    ).toBe(true);
+
+    await clear.focus();
+    const atRest = await clear.boundingBox();
+    await page.keyboard.press('Enter');
+    await question.waitFor();
+    const asking = await question.boundingBox();
+    expect(asking, JSON.stringify({ atRest, asking, narrow })).toEqual(atRest);
   });
 
   it.runIf(process.platform === 'win32')(

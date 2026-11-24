@@ -35,7 +35,7 @@
 - ⚡ **Several connections at once** for any http or https link.
 - ⏯️ **Pause and resume**, also after Scia was closed and opened again.
 - 🚦 **A queue**: how many downloads at once, how many connections each, and one speed limit for all.
-- 🧹 **Clear completed**: every finished download off the list at once, its file left on the disk.
+- 🧹 **Clear completed**: every completed download off the list at once, its file left on the disk.
 
 ### Videos, services and albums
 

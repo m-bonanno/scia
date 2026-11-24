@@ -22,7 +22,11 @@ const EMPTY: Readonly<Record<Filter, { readonly title: string; readonly hint: st
     hint: 'Paste a link above, or press Ctrl+V anywhere in the window.',
   },
   active: { title: 'Nothing in progress', hint: 'Downloads you add show up here.' },
-  completed: { title: 'No completed files yet', hint: 'Completed files show up here.' },
+  // True before anything completed and after "Clear completed", whose files stay on the disk.
+  completed: {
+    title: 'No completed downloads',
+    hint: 'Downloads show up here once they complete.',
+  },
 };
 
 export function DownloadList({

@@ -624,9 +624,27 @@ describe('App', () => {
       }
     });
 
+    it('stands after "Start all", so that it stays put when "Start all" leaves', () => {
+      live.downloads = [aDownload({ id: 'r', status: DownloadStatus.Ready }), finished('a')];
+      render(<App />);
+
+      const startAll = screen.getByRole('button', { name: 'Start all' });
+      const clear = screen.getByRole('button', { name: 'Clear completed' });
+      expect(
+        startAll.compareDocumentPosition(clear) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+    });
+
     it('asks once more, with how many, and clears them all at the second press', async () => {
       const clear = vi.spyOn(api, 'clearCompleted').mockResolvedValue();
-      live.downloads = [finished('a'), finished('b'), finished('c')];
+      // Only the completed ones are counted.
+      live.downloads = [
+        finished('a'),
+        aDownload({ id: 'p', status: DownloadStatus.Paused }),
+        finished('b'),
+        aDownload({ id: 'q', status: DownloadStatus.Queued }),
+        finished('c'),
+      ];
       render(<App />);
       const button = screen.getByRole('button', { name: 'Clear completed' });
 
@@ -680,7 +698,44 @@ describe('App', () => {
       expect(screen.getByRole('button', { name: /^Completed/ })).toHaveFocus();
     });
 
-    it('moves no focus it did not hold', () => {
+    it('leaves a "Completed" view that says no download is completed, not that none ever was', async () => {
+      vi.spyOn(api, 'clearCompleted').mockResolvedValue();
+      live.downloads = [finished('a'), finished('b')];
+      const { rerender } = render(<App />);
+      await userEvent.click(screen.getByRole('button', { name: /^Completed/ }));
+
+      await userEvent.click(screen.getByRole('button', { name: 'Clear completed' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Clear 2 completed' }));
+      live.downloads = [];
+      rerender(<App />);
+
+      const main = screen.getByRole('main');
+      expect(main).toHaveTextContent('No completed downloads');
+      expect(main).toHaveTextContent('Downloads show up here once they complete.');
+    });
+
+    // "Start all" keeps the group in the page, and React reaches the filters before the button
+    // that leaves: the filters' handle must still be there when the button asks for it.
+    it('hands the focus to the filter in use when it leaves under it beside "Start all"', async () => {
+      vi.spyOn(api, 'clearCompleted').mockResolvedValue();
+      const ready = aDownload({ id: 'r', status: DownloadStatus.Ready });
+      live.downloads = [ready, finished('a'), finished('b')];
+      const { rerender } = render(<App />);
+      screen.getByRole('button', { name: 'Clear completed' }).focus();
+
+      await userEvent.keyboard('{Enter}');
+      await userEvent.keyboard('{Enter}');
+      live.downloads = [ready];
+      rerender(<App />);
+
+      expect(screen.queryByRole('button', { name: /^Clear/ })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Start all' })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^All/ })).toHaveFocus();
+    });
+
+    // What a person sees, not the guard: React puts back a focus moved during its commit while the
+    // element that held it is still in the page. The guard is held by the × below.
+    it('leaves the focus in the field when it was pressed without taking it', () => {
       vi.spyOn(api, 'clearCompleted').mockResolvedValue();
       live.downloads = [finished('a')];
       const { rerender } = render(<App />);

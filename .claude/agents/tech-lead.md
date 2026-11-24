@@ -49,6 +49,7 @@ What earlier reviews taught, each with the PR that taught it.
 - A finding cites the line of the file at the head under review, not the line of the diff's view: round 1 sent the author to `rasterise.mjs:700` and `png.ts:672`, in files of forty lines. (#86)
 - A guard of a key held down is tried where the focus goes after the first press, not only from one control to the next of its kind: Enter held on the last notice's × pressed the field and Settings' Close, which round 1 approved. And a spec that holds the pointer for seconds is run many times in a row with windows moving on the screen before it is called proven: two green runs hid one that failed 3 in 12 when the real cursor crossed the window. (#135)
 - An approval reads CI's checks on the head (`gh pr checks`) beside the gates run here: round 3 of #158 was approved on local gates while CI's Ubuntu and Windows jobs were already red on that head, for a spec that passed six times here. "A gate green here and red on one of CI's systems is red" holds only when CI is read — every required check; "Quarantine (report only)" is not one (ADR 0019).
+- A hand-on of the focus is tried from every shape of the tree the control leaves from, not read from React's order of ref cleanups: round 1 of #302 approved "Clear completed" handing the focus to the filters, true when its whole group left and false when "Start all" kept the group, which the frontend engineer found. (#302)
 
 ## Output
 

@@ -13,20 +13,28 @@ export interface ConfirmButtonHandle {
   focus(): void;
 }
 
-interface ConfirmButtonProps {
-  // What the button does, as for any icon button.
-  readonly label: string;
+interface Shared {
   // The word the button turns into while it waits for the second press. Undefined: there is
   // nothing to ask, and the first press does it.
   readonly confirmLabel: string | undefined;
-  // The second press throws something away: it says so in the colour of what cannot be undone.
-  readonly destructive?: boolean;
-  // An icon by default; a word beside other text buttons, named by that word, its children.
-  readonly shape?: 'icon' | 'word';
   readonly onConfirm: () => void;
   readonly children: ReactNode;
   readonly ref?: Ref<ConfirmButtonHandle>;
 }
+
+// An icon, named by its label; or a word beside other text buttons, named by that word, its
+// children, and as wide as its question, so that it asks in place.
+type ConfirmButtonProps = Shared &
+  (
+    | {
+        readonly shape?: 'icon';
+        readonly label: string;
+        // The second press throws something away: it says so in the colour of what cannot be
+        // undone.
+        readonly destructive?: boolean;
+      }
+    | { readonly shape: 'word' }
+  );
 
 // A button for what must not happen by a slip. The first press turns it, in place, into the
 // word of what it is about to do; the second does it. It goes back by itself after a moment,
@@ -39,15 +47,10 @@ interface ConfirmButtonProps {
 //   them, a moment ago: a click that says it is the second, on a button that saw no first,
 //   is the next press of someone clearing a list whose rows slide under the pointer;
 // - the repeats of Enter held down do nothing. Of Enter alone: a held Tab must walk on.
-export function ConfirmButton({
-  label,
-  confirmLabel,
-  destructive = false,
-  shape = 'icon',
-  onConfirm,
-  children,
-  ref,
-}: ConfirmButtonProps): ReactNode {
+export function ConfirmButton(props: ConfirmButtonProps): ReactNode {
+  const { confirmLabel, onConfirm, children, ref } = props;
+  const label = props.shape === 'word' ? undefined : props.label;
+  const destructive = props.shape !== 'word' && props.destructive === true;
   const [armed, setArmed] = useState(false);
   // Nothing left to ask — the download finished under an armed "Delete": the question goes.
   if (armed && confirmLabel === undefined) setArmed(false);
@@ -83,19 +86,19 @@ export function ConfirmButton({
     <button
       type="button"
       ref={element}
-      aria-label={asking || shape === 'word' ? undefined : label}
-      title={asking || shape === 'word' ? undefined : label}
+      aria-label={asking ? undefined : label}
+      title={asking ? undefined : label}
       className={
-        asking
-          ? cn(
-              'h-8 shrink-0 rounded-lg px-2.5 text-sm font-semibold',
-              destructive
-                ? 'bg-destructive text-destructive-foreground'
-                : 'bg-tonal text-foreground',
-              FOCUS_RING,
-            )
-          : shape === 'word'
-            ? TEXT_BUTTON
+        label === undefined
+          ? TEXT_BUTTON
+          : asking
+            ? cn(
+                'h-8 shrink-0 rounded-lg px-2.5 text-sm font-semibold',
+                destructive
+                  ? 'bg-destructive text-destructive-foreground'
+                  : 'bg-tonal text-foreground',
+                FOCUS_RING,
+              )
             : ICON_BUTTON
       }
       onKeyDown={press.onKeyDown}
@@ -113,7 +116,30 @@ export function ConfirmButton({
         setArmed(false);
       }}
     >
-      {asking ? confirmLabel : children}
+      {label === undefined ? (
+        // Both words in one cell, the one not said hidden: the box is the wider of the two from
+        // the start, and the question takes no room the word did not have.
+        <span className="grid justify-items-center">
+          <span
+            aria-hidden={asking || undefined}
+            className={cn('col-start-1 row-start-1', asking && 'invisible')}
+          >
+            {children}
+          </span>
+          {confirmLabel !== undefined && (
+            <span
+              aria-hidden={!asking || undefined}
+              className={cn('col-start-1 row-start-1 font-semibold', !asking && 'invisible')}
+            >
+              {confirmLabel}
+            </span>
+          )}
+        </span>
+      ) : asking ? (
+        confirmLabel
+      ) : (
+        children
+      )}
     </button>
   );
 }
