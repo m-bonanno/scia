@@ -95,8 +95,8 @@ function testsReached(outcome) {
   return outcome.ok || at(outcome.failed) >= at('test');
 }
 
-// An unhandled error or a leak fails the test gate with every test passed, and the report names
-// neither: Vitest prints them above its summary.
+// An unhandled error fails the test gate with every test passed, and the report does not name it:
+// Vitest prints it above its summary.
 function whyRed(outcome, failedFiles) {
   const named = failedFiles.map((file) => `\`${file}\``).join(', ');
   if (named) return `; failed: ${named}`;
