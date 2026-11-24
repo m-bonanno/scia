@@ -4,7 +4,7 @@ export interface StartedServer {
   readonly port: number;
   // Resolves with the exit code when the process ends, however it ends.
   readonly exited: Promise<number>;
-  // Asks the engine to stop and resolves once it has.
+  // Asks the engine to stop and resolves once it has, and what it wrote before its exit is read.
   stop(): Promise<void>;
 }
 

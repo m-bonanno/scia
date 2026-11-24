@@ -7,6 +7,11 @@ export interface ThemeStore {
   write(value: unknown): Promise<void>;
 }
 
+export interface ThemeLog {
+  info(message: string, details: object): void;
+  warn(message: string, details: object): void;
+}
+
 const isTheme = (value: unknown): value is Theme => THEMES.some((theme) => theme === value);
 
 // The theme the engine last said, kept by main for the next start: the window shows in it before
@@ -14,12 +19,14 @@ const isTheme = (value: unknown): value is Theme => THEMES.some((theme) => theme
 // store that cannot be read or written never stops anything — the window starts in the default.
 export class RememberedTheme {
   readonly #store: ThemeStore;
+  readonly #log: ThemeLog;
   #kept: Theme | undefined;
   #wanted: Theme | undefined;
   #writing: Promise<void> | undefined;
 
-  constructor(store: ThemeStore) {
+  constructor(store: ThemeStore, log: ThemeLog) {
     this.#store = store;
+    this.#log = log;
   }
 
   async read(): Promise<Theme> {
@@ -48,9 +55,12 @@ export class RememberedTheme {
         try {
           await this.#store.write({ theme });
           this.#kept = theme;
-        } catch {
+          this.#log.info('theme_kept', { theme });
+        } catch (error) {
           // Written again the next time the engine says it — or now, when it has said another.
+          // On Windows another program reading the file is enough to fail the rename (#280).
           this.#kept = undefined;
+          this.#log.warn('theme_not_kept', { theme, error: String(error) });
           if (this.#wanted === theme) return;
         }
       }

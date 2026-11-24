@@ -68,7 +68,11 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 - `v1.0.0` waits for the follow-ups of the code and of magnets (#146, #150).
 - `v1.0.0` waits for the page's logo and the app's icon to draw the mark in the same proportions (#88). Not the recommended option.
 - `v1.0.0` waits for the two specs in quarantine to be fixed and back in the gates (#43, #162).
-- #190: `SECURITY.md` with private vulnerability reporting turned on; Dependabot alerts on; a code of conduct; 3 to 5 issues labelled `good first issue`, written for a stranger. The repository settings are changed on the owner's word, given there.
+- #190: `SECURITY.md` with private vulnerability reporting turned on; Dependabot alerts on; a code of conduct; 3 to 5 issues labelled `good first issue`, written for a stranger. The repository settings are changed on the owner's word, given there. Changed on 22 November 2026: the `good first issue` point is dropped (#221).
+
+## 22 November 2026
+
+- #221: people outside the team contribute issues, and the team opens every pull request. #190's `good first issue` point is dropped; its security policy, Dependabot alerts and code of conduct stay.
 
 ## 23 November 2026
 
@@ -94,6 +98,14 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
   - **"AllDebrid is connected"** is notified every time AllDebrid connects while Scia's window is not the one in use: a code confirmed in the browser with Settings open too, not only a code left waiting when Settings closed.
   - **A code confirmed while Settings is closed whose key then fails** — refused, blocked, not kept — is said by a notification of its own, "AllDebrid could not be connected" with the reason, under the same rule as the notification of a connection.
 - #151, on the review of #297: the specs are enough. The two Windows integration specs of the store, run by CI's Windows job, hold a save while `state.json` is held open, and the gate line of `v1.0.0` is ticked on them. The real app with `state.json` held by another program stays under "Not seen" in evidence.md, and is not part of the owner's sitting.
+
+## 24 November 2026
+
+- #310, the README as the project's front window, its points chosen as multiple-choice questions:
+  - **The default labels** `good first issue` and `help wanted`: deleted, both. No issue or PR carried either.
+  - **The repository's settings** are changed on the owner's word, given there: the topics, the homepage set to the latest release, private vulnerability reporting and Dependabot alerts on (as #190 decided). The social preview is uploaded by hand in Settings: GitHub has no API for it.
+  - **The code of conduct's channel for reports**: the repository's private reporting, the one `SECURITY.md` names. No address is published. #190's files land with #310's pull request.
+  - **The loop of Scia at work** is recorded by CI's E2E run on Windows, as `docs/design/`'s captures are, and lands with #310's pull request. Changed the same day: it was to be recorded by hand on Windows later, in an issue of its own.
 
 ## Undated in the roadmap
 

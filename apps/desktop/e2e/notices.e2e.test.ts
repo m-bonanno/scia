@@ -6,7 +6,7 @@ import type { Locator, Page } from 'playwright-core';
 import { API_PREFIX, ApiErrorCode } from '@scia/contracts';
 import { describe, expect, it } from 'vitest';
 import { NOTICE_MS } from '../../renderer/src/features/notices/notice-limits.ts';
-import { allCompleted, paste, rowOf, until, useRun } from './scia.ts';
+import { allCompleted, drawnCompleted, paste, rowOf, until, useRun } from './scia.ts';
 import {
   bottomOf,
   captureTo,
@@ -29,6 +29,20 @@ async function isOnTop(notice: Locator): Promise<boolean> {
     const hit = document.elementFromPoint(box.x + box.width / 2, box.y + box.height / 2);
     return hit !== null && element.contains(hit);
   });
+}
+
+// The label of the button a press at a point would land on, else what is drawn there: said when a
+// spec's press is about to miss, rather than after the wait for what it should have done.
+async function pressedAt(page: Page, x: number, y: number): Promise<string | null> {
+  return page.evaluate(
+    ([px, py]) => {
+      const hit = document.elementFromPoint(px, py);
+      return (
+        hit?.closest('button')?.getAttribute('aria-label') ?? hit?.outerHTML.slice(0, 80) ?? null
+      );
+    },
+    [x, y] as const,
+  );
 }
 
 // Settings open, with its rows and its services drawn: before them it is short. The row's label
@@ -422,8 +436,10 @@ describe('the real app says what went wrong in a notice', () => {
       const links = Array.from({ length: 12 }, (_, n) => `${host.url}?copy=${String(n)}`);
       await paste(page, links.join(' '));
       await until(() => allCompleted(page));
+      // Drawn completed, every one: a row the page draws completed after the button was measured
+      // loses its bar, and the rows under it move up from under the press (#268).
+      await until(async () => (await drawnCompleted(page)) === 12);
       const rows = page.getByRole('main').getByRole('listitem');
-      await until(async () => (await rows.count()) === 12);
       const lastRow = rows.last();
       await page.route(`**${API_PREFIX}/downloads`, async (route) => {
         if (route.request().method() !== 'POST') return route.fallback();
@@ -444,6 +460,7 @@ describe('the real app says what went wrong in a notice', () => {
       expect(button !== null && beside !== null && button.x > beside.x + beside.width).toBe(true);
       const x = (button?.x ?? 0) + (button?.width ?? 0) / 2;
       const y = (button?.y ?? 0) + 10;
+      expect(await pressedAt(page, x, y)).toBe('Remove from list');
 
       if (press === 'click') await page.mouse.click(x, y);
       else await tap(page, x, y);
@@ -460,8 +477,8 @@ describe('the real app says what went wrong in a notice', () => {
     const links = Array.from({ length: 12 }, (_, n) => `${host.url}?copy=${String(n)}`);
     await paste(page, links.join(' '));
     await until(() => allCompleted(page));
+    await until(async () => (await drawnCompleted(page)) === 12);
     const rows = page.getByRole('main').getByRole('listitem');
-    await until(async () => (await rows.count()) === 12);
     const lastRow = rows.last();
     expect(await scrollsAround(lastRow)).toBe(true);
     await page.route(`**${API_PREFIX}/downloads`, async (route) => {

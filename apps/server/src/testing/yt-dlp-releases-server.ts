@@ -1,5 +1,6 @@
 import { createServer, type ServerResponse } from 'node:http';
 import { createHash, type KeyObject } from 'node:crypto';
+import { once } from 'node:events';
 import { signDetached, type SignOptions } from './openpgp-signer.ts';
 
 // A release as yt-dlp's project publishes one: its files by name, SHA2-256SUMS and its signature
@@ -26,6 +27,10 @@ export function signedRelease(
   };
 }
 
+const PIECE_BYTES = 64 * 1024;
+// The files of a release that are not builds.
+const SUMS = new Set(['SHA2-256SUMS', 'SHA2-256SUMS.sig']);
+
 export type Misbehaviour =
   // Every request answered 503, as GitHub in an outage.
   | 'busy'
@@ -44,6 +49,10 @@ export interface ReleasesServer {
   misbehave: Misbehaviour | undefined;
   // A build sent this slowly, by pieces of 64 KB: a download that something can stop midway.
   pieceDelayMs: number;
+  // Every build asked from now on is sent its first piece and then held, until the function this
+  // answers lets them go: a download caught midway however slowly the machine runs the spec, where
+  // a slow one could take the spec's turn to catch up with a build sent slowly.
+  holdBuilds(): () => void;
   close(): Promise<void>;
 }
 
@@ -52,22 +61,37 @@ export interface ReleasesServer {
 export async function startReleasesServer(): Promise<ReleasesServer> {
   const asked: string[] = [];
   const held = new Set<ServerResponse>();
+  let holding: Promise<undefined> | undefined;
   const state: Omit<ReleasesServer, 'close' | 'address'> = {
     asked,
     latest: undefined,
     releases: new Map(),
     misbehave: undefined,
     pieceDelayMs: 0,
+    holdBuilds: () => {
+      const { promise, resolve } = Promise.withResolvers<undefined>();
+      holding = promise;
+      return () => {
+        holding = undefined;
+        resolve(undefined);
+      };
+    },
   };
 
-  const send = async (response: ServerResponse, bytes: Buffer) => {
+  const send = async (response: ServerResponse, name: string, bytes: Buffer) => {
     response.writeHead(200, { 'content-length': bytes.length });
+    if (holding !== undefined && !SUMS.has(name)) {
+      response.write(bytes.subarray(0, PIECE_BYTES));
+      await Promise.race([holding, once(response, 'close')]);
+      if (!response.destroyed) response.end(bytes.subarray(PIECE_BYTES));
+      return;
+    }
     if (state.pieceDelayMs === 0) {
       response.end(bytes);
       return;
     }
-    for (let at = 0; at < bytes.length && !response.destroyed; at += 64 * 1024) {
-      response.write(bytes.subarray(at, at + 64 * 1024));
+    for (let at = 0; at < bytes.length && !response.destroyed; at += PIECE_BYTES) {
+      response.write(bytes.subarray(at, at + PIECE_BYTES));
       await new Promise((done) => setTimeout(done, state.pieceDelayMs));
     }
     response.end();
@@ -109,7 +133,7 @@ export async function startReleasesServer(): Promise<ReleasesServer> {
       response.writeHead(404).end();
       return;
     }
-    void send(response, bytes);
+    void send(response, asset?.[2] ?? '', bytes);
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const where = server.address();

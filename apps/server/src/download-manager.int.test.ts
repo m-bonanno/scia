@@ -5,12 +5,13 @@ import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { IntegrationId } from '@scia/contracts';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { DownloadManager, type ManagerDeps, PART_SUFFIX } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
 import { markerFor } from './origin-mark.ts';
 import { sparseMarkerFor } from './sparse-file.ts';
 import { JsonStateStore } from './state-store.ts';
+import type * as Throttles from './throttle.ts';
 import { neverAnswers } from './testing/never-answers.ts';
 import {
   type RangeServer,
@@ -24,6 +25,28 @@ import {
   sparseFlagOf,
   until,
 } from './testing/scratch.ts';
+
+// The waits the speed limit hands to the connections that ask while a spec watches it. The limit
+// is the engine's own, as it is everywhere in this file; a spec only reads what it hands out.
+const limit = vi.hoisted(() => ({ watching: false, waits: [] as number[] }));
+vi.mock('./throttle.ts', async (original) => {
+  const real = await original<typeof Throttles>();
+  class WatchedThrottle extends real.Throttle {
+    override allowance(expectedBytes: number | null = null): Throttles.Allowance {
+      const given = super.allowance(expectedBytes);
+      if (!limit.watching) return given;
+      return {
+        ...given,
+        next: () => {
+          const hold = given.next();
+          limit.waits.push(hold.ms);
+          return hold;
+        },
+      };
+    }
+  }
+  return { ...real, Throttle: WatchedThrottle };
+});
 
 const MIB = 1024 * 1024;
 const body = randomBytes(4 * MIB + 7);
@@ -584,6 +607,9 @@ describe('DownloadManager', () => {
     const film = await host({ body: randomBytes(8 * MIB), fileName: 'Film.mkv' });
     const cover = randomBytes(60_000);
     const image = await host({ body: cover, fileName: 'cover.jpg' });
+    onTestFinished(() => {
+      limit.watching = false;
+    });
     const downloads = await open();
     downloads.updateSettings({ speedLimitBytesPerSecond: 256 * 1024 });
     for (const reads of [1, 12]) {
@@ -593,13 +619,19 @@ describe('DownloadManager', () => {
       await until(() => downloads.find(paused!.id).downloadedBytes >= reads * 60_000);
       await downloads.pause(paused!.id);
 
-      const addedAt = Date.now();
+      limit.waits = [];
+      limit.watching = true;
       const [added] = downloads.add({ urls: [image.url] });
       await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+      limit.watching = false;
 
-      // It waits for the read under way when the pause came, a quarter of a second at most,
-      // and takes the quarter of a second its own bytes need — not a turn of the paused eight.
-      expect(Date.now() - addedAt, `paused after ${String(reads)} reads`).toBeLessThan(900);
+      // It waits for the read under way when the pause came, a quarter of a second at most — not
+      // a turn of the paused eight, two seconds. Read on the limit's own clock as it hands the
+      // waits out: the time the image took to arrive also counted the machine's load, and a loaded
+      // run read a quarter of a second as two (#165). Load only shortens a wait handed out later.
+      const waited = Math.round(limit.waits.reduce((sum, ms) => sum + ms, 0));
+      expect(limit.waits.length, `paused after ${String(reads)} reads`).toBeGreaterThan(0);
+      expect(waited, `paused after ${String(reads)} reads`).toBeLessThanOrEqual(250);
       await downloads.remove(paused!.id, true);
       await downloads.remove(added!.id, false);
     }
