@@ -1,6 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { MAX_URLS_PER_REQUEST } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import { sparseFlagOf } from '@scia/server/testing/scratch.ts';
@@ -37,6 +38,29 @@ describe('the real app downloads', () => {
     // Besides the probe of the first byte, the host was asked for more than one range.
     const ranges = host.ranges.filter((range) => range !== undefined && range !== 'bytes=0-0');
     expect(ranges.length).toBeGreaterThan(1);
+  });
+
+  // The engine takes at most MAX_URLS_PER_REQUEST links in one request (#142): the page sends a
+  // paste of more in batches, and "Download 201 files" adds 201 downloads.
+  it('adds every link of a paste larger than one request holds', async () => {
+    const profile = await run.profile();
+    const host = run.keep(
+      await startRangeServer({ body: randomBytes(64 * 1024), fileName: 'sample.bin' }),
+    );
+    const { page } = await run.launch(profile);
+    const links = Array.from(
+      { length: MAX_URLS_PER_REQUEST + 1 },
+      (_, n) => `${host.url}?copy=${String(n)}`,
+    );
+    const field = page.getByRole('textbox', { name: 'Links to download' });
+
+    await field.fill(links.join('\n'));
+    await page.getByRole('button', { name: `Download ${String(links.length)} files` }).click();
+
+    await until(async () => (await field.inputValue()) === '');
+    const added = (await downloadsOf(page)).map((download) => download.url);
+    expect([...added].sort()).toEqual([...links].sort());
+    expect(await field.getAttribute('aria-invalid')).toBeNull();
   });
 
   it.runIf(process.platform === 'win32')(
