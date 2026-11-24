@@ -106,6 +106,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
   - **The repository's settings** are changed on the owner's word, given there: the topics, the homepage set to the latest release, private vulnerability reporting and Dependabot alerts on (as #190 decided). The social preview is uploaded by hand in Settings: GitHub has no API for it.
   - **The code of conduct's channel for reports**: the repository's private reporting, the one `SECURITY.md` names. No address is published. #190's files land with #310's pull request.
   - **The loop of Scia at work** is recorded by CI's E2E run on Windows, as `docs/design/`'s captures are, and lands with #310's pull request. Changed the same day: it was to be recorded by hand on Windows later, in an issue of its own.
+- #313, on the review of #312, chosen as a multiple-choice question: **the README's loop** plays two or three times, then stops on its last frame, the three files completed — the motion ends, and what stays is Scia at work. #312 had made it play forever. Twice is the team's choice within it, in #316's pull request: a reader who arrives during the first play sees the second whole.
 
 ## Undated in the roadmap
 
