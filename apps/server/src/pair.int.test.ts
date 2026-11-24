@@ -339,6 +339,67 @@ describe('DownloadManager and a picture and a sound offered apart (docs/adr/0021
     ).toBe(0);
   });
 
+  it('fails a picture and sound cut short as not joined, keeps nothing, and fetches the one file at the retry (#241)', async () => {
+    const site = await host({ body: page, contentType: 'text/html' });
+    const picture = await host({ body: await fixture('picture.mp4') });
+    // The sound's last 100 bytes missing: boxes that say more than the file holds.
+    const whole = await fixture('sound.m4a');
+    const sound = await host({ body: whole.subarray(0, whole.byteLength - 100) });
+    const singleBytes = await fixture('picture.mp4');
+    const single = await host({ body: singleBytes });
+    const downloads = await open({
+      pageReader: reader(() => ({
+        title: 'Cut',
+        formats: [
+          format(single.url, { acodec: 'mp4a.40.2', height: 32 }),
+          pictureAt(picture.url),
+          soundAt(sound.url),
+        ],
+      })),
+    });
+
+    const [added] = downloads.add({ urls: [site.url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+    expect(downloads.find(added!.id).failure).toBe(PageFailure.NotJoined);
+    // Nothing of the pair, nor of what the join began.
+    expect(await readdir(downloadsFolder())).toEqual([]);
+
+    downloads.resume(added!.id);
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    expect(await readdir(downloadsFolder())).toEqual(['Cut.mp4']);
+    expect(Buffer.compare(await readFile(join(downloadsFolder(), 'Cut.mp4')), singleBytes)).toBe(0);
+  });
+
+  it('falls back to a one file of another container after a refused join, and names the download after it (#241)', async () => {
+    const { site, picture, sound } = await pairOf('picture.mp4', 'sound-fragmented.m4a');
+    // What a webm holds does not matter here: the engine fetches it as it stands.
+    const webmBytes = Buffer.from('a webm of the page, 32 lines, with its sound');
+    const webm = await host({ body: webmBytes });
+    const downloads = await open({
+      pageReader: reader(() => ({
+        title: 'Webm beside',
+        formats: [
+          format(webm.url, { ext: 'webm', vcodec: 'vp9', acodec: 'opus', height: 32 }),
+          pictureAt(picture.url),
+          soundAt(sound.url),
+        ],
+      })),
+    });
+
+    const [added] = downloads.add({ urls: [site.url] });
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+    expect(downloads.find(added!.id).failure).toBe(PageFailure.NotJoined);
+
+    downloads.resume(added!.id);
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+
+    const done = downloads.find(added!.id);
+    expect([done.fileName, done.media]).toEqual(['Webm beside.webm', { ext: 'webm', height: 32 }]);
+    expect(await readdir(downloadsFolder())).toEqual(['Webm beside.webm']);
+    expect(await readFile(join(downloadsFolder(), 'Webm beside.webm'))).toEqual(webmBytes);
+  });
+
   it('remembers a join it refused across a restart, and fetches the one file at the retry (#241)', async () => {
     const { site, picture, sound } = await pairOf('picture.mp4', 'sound-fragmented.m4a');
     const singleBytes = await fixture('picture.mp4');

@@ -270,7 +270,7 @@ describe('statusLine', () => {
     [PageFailure.Unreadable, 'Scia could not read the video on this page.'],
     [
       PageFailure.NotJoined,
-      'Scia could not join the picture and sound of this video’s best quality. Try again: Scia looks for another version on the page.',
+      'Scia could not join the picture and sound of the best version of this video. Try again: Scia looks for another version on the page.',
     ],
   ] as const)('says why the video of a page was not downloaded when it was %s', (failure, text) => {
     expect(statusLine(aDownload({ status: DownloadStatus.Failed, failure }))).toBe(text);

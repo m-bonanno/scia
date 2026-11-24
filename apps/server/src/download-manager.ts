@@ -1625,14 +1625,16 @@ export class DownloadManager {
   // A join refused is never tried again (#241): the next reading of the page chooses among one
   // files and streams only. What the pair fetched is of nothing now — gone from the disk, and from
   // the row, so that no byte of it is taken for the next file's. Marked first: a file that will not
-  // go fails the download for the disk, and the retry removes it and falls back all the same. What
-  // the join began in the part file is written over by whatever is fetched into it next.
+  // go fails the download for the disk, and the retry removes it and falls back all the same. Once
+  // they are gone the download holds no byte, and its name is no longer final: the next reading
+  // takes a file or a stream of any container, and names the download after it.
   async #refuseJoin(record: DownloadRecord): Promise<void> {
     record.joinRefused = true;
     record.segments = [];
     record.downloadedBytes = 0;
     record.totalBytes = null;
     await this.#removePair(record);
+    record.named = false;
   }
 
   // The picture and the sound of a pair, kept beside its part file.
