@@ -53,6 +53,7 @@ What earlier reviews taught, each with the PR that taught it.
 - A body's "Not seen in the real app" is weighed against "What the E2E suite can hold is held there" (`testing.md`, "Proving the real app"): round 2 of #303 let "201 links pasted and downloaded" stand as unseen, and the product manager found that the suite could hold it with what it has. (#303)
 - A comparison is attacked at its boundary as well as at its ends: round 3 of #303 took `refused.length < all` to `true` and to `false`, which the specs of an add wholly taken and wholly refused caught, and not to `refused.length === 0`, which differs only on an add partly taken — the road the batches opened, with no spec. (#303)
 - Mutants and probes run in a worktree of your own (`git worktree add --detach <dir> <head>`), never in the checkout under review: the other roles read and run their specs there, and a file you mutate makes their runs fail at random. Its setup is in `.claude/gotchas.md`, "Specs". (#135, #322, #144)
+- A release rule read from the preset is probed with every title form the repository asks for, `type(scope):` included: #338 wrote that a revert releases a patch from `revert: …` alone, and `revert(scope): …`, which commitlint accepts and `git-flow.md` asks for, releases nothing. (#338)
 
 ## Output
 

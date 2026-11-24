@@ -6,13 +6,13 @@ Run it with `/team-review <PR number>`.
 
 ## The team
 
-| Role              | Reviews when                                                                                                                                          | Definition                            |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Tech lead         | **always** — and owns `.github/`, `scripts/`, root tooling, `.claude/`, ADRs, runbooks                                                                | `.claude/agents/tech-lead.md`         |
-| Backend engineer  | the PR touches `packages/core`, `packages/contracts`, `apps/server`, `apps/desktop`                                                                   | `.claude/agents/backend-engineer.md`  |
-| Frontend engineer | the PR touches `apps/renderer`, `apps/extension`                                                                                                      | `.claude/agents/frontend-engineer.md` |
-| Product designer  | the PR touches anything a person sees or reads: `apps/renderer/src`, `apps/extension/static`, a string of the interface, `docs/design/`               | `.claude/agents/product-designer.md`  |
-| Product manager   | the PR releases something (`feat`, `fix`, `perf`, `hotfix`, any breaking change, a release into `main`), or it touches `docs/product/` or `README.md` | `.claude/agents/product-manager.md`   |
+| Role              | Reviews when                                                                                                                                                        | Definition                            |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Tech lead         | **always** — and owns `.github/`, `scripts/`, root tooling, `.claude/`, ADRs, runbooks                                                                              | `.claude/agents/tech-lead.md`         |
+| Backend engineer  | the PR touches `packages/core`, `packages/contracts`, `apps/server`, `apps/desktop`                                                                                 | `.claude/agents/backend-engineer.md`  |
+| Frontend engineer | the PR touches `apps/renderer`, `apps/extension`                                                                                                                    | `.claude/agents/frontend-engineer.md` |
+| Product designer  | the PR touches anything a person sees or reads: `apps/renderer/src`, `apps/extension/static`, a string of the interface, `docs/design/`                             | `.claude/agents/product-designer.md`  |
+| Product manager   | the PR releases something (its type in the table of [`release-flow.md`](./release-flow.md), or a release into `main`), or it touches `docs/product/` or `README.md` | `.claude/agents/product-manager.md`   |
 
 ### A small PR is the tech lead's alone
 

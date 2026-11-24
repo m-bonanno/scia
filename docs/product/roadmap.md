@@ -56,7 +56,7 @@ Checked after the tag, so not part of the gate: a beta updated to the stable (#8
 
 ### The owner's decisions
 
-None open: all were settled on 21, 23 and 24 November 2026 ([decisions.md](./decisions.md#24-november-2026)), #228 and #285 joining the gate on 23 November, #63 and #307 on 24 November. Two can come back with what is found: #328, if a cookie that yt-dlp's reader of one site sets passes a legal age verification (`v1.0.0` does not wait for it), and #269, if the paused bar does not read as intended in the light variants at the sitting.
+Settled on 21, 23 and 24 November 2026 ([decisions.md](./decisions.md#24-november-2026)), #228 and #285 joining the gate on 23 November, #63 and #307 on 24 November. One is open, asked from the review of #338: whether the gate waits also for the decisions of 24 November still to build (#339). Two can come back with what is found: #328, if a cookie that yt-dlp's reader of one site sets passes a legal age verification (`v1.0.0` does not wait for it), and #269, if the paused bar does not read as intended in the light variants at the sitting.
 
 ## M0 — Foundations
 
@@ -88,7 +88,7 @@ None open: all were settled on 21, 23 and 24 November 2026 ([decisions.md](./dec
 | [A click on a notification leads to the row](./evidence.md#the-notification-when-a-download-ends)                         | #57              | no    | —                                    | —                                                                           | no        |
 | [Clipboard watching (optional)](./evidence.md#links-taken-from-the-clipboard)                                             | #128, #134, #285 | yes   | E2E, Hand                            | a ready row through a service; a real site's title (#285); the packaged app | yes       |
 | [Themes of the interface](./evidence.md#themes)                                                                           | #52, #58         | yes   | E2E, Script                          | a Windows set to light; a hand on the menu                                  | yes       |
-| [The app's icon, from the mark](./evidence.md#the-icon-of-the-app)                                                        | #81, #85         | yes   | read from the system                 | the icon on screen                                                          | yes       |
+| [The app's icon, from the mark](./evidence.md#the-icon-of-the-app)                                                        | #81, #199        | yes   | read from the system                 | the icon on screen                                                          | yes       |
 | [The installer (NSIS), by hand](./evidence.md#the-installer-by-hand)                                                      | #70              | yes   | CI install                           | a download by hand through SmartScreen                                      | yes       |
 | [The installer installed and started in CI](./evidence.md#the-installer-in-ci)                                            | #92, #111        | yes   | CI install, every PR and release     | SmartScreen; a hand                                                         | yes       |
 | [The installer refuses an older version](./evidence.md#the-installer-refuses-an-older-version)                            | #172             | yes   | Specs (NSIS), CI smoke, Script, Hand | a person running an older release                                           | yes       |
