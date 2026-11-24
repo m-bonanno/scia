@@ -1627,7 +1627,8 @@ export class DownloadManager {
   // the row, so that no byte of it is taken for the next file's — and so is the part file, which a
   // run before the pair may have left (a one file that failed on its way) and the join may have
   // begun. Marked first: a file that will not go fails the download for the disk, keeping the
-  // name, and the retry removes it and falls back all the same. Once all are gone the download
+  // name, and the retry falls back all the same, removing the picture and the sound and writing
+  // over the part file. Once all are gone the download
   // holds no byte, and its name is no longer final: the next reading takes a file or a stream of
   // any container, and names the download after it.
   async #refuseJoin(record: DownloadRecord): Promise<void> {
