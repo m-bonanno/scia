@@ -50,6 +50,10 @@ vi.mock('./throttle.ts', async (original) => {
 
 const MIB = 1024 * 1024;
 const body = randomBytes(4 * MIB + 7);
+// A download a spec keeps unfinished while it acts: the body takes about three seconds over its
+// eight connections, far past the turn a busy machine takes to pause or clear. At 64 KiB every
+// 5 ms it ended 80 ms after its first byte, and a pause that came late came after its last (#302).
+const UNFINISHED = { chunkBytes: 16 * 1024, chunkDelayMs: 100, fileName: 'slow.bin' } as const;
 
 describe('DownloadManager', () => {
   const source = new HttpSource('scia-test');
@@ -841,7 +845,7 @@ describe('DownloadManager', () => {
 
   it('takes every finished download off the list in one change, keeps their files, and touches nothing else (#215)', async () => {
     const finished = await host();
-    const slow = await host({ chunkDelayMs: 5, fileName: 'slow.bin' });
+    const slow = await host(UNFINISHED);
     const gone = await host({ status: 404 });
     const store = new JsonStateStore(join(folder.path, 'data', 'state.json'));
     const saved: string[][] = [];
@@ -889,7 +893,7 @@ describe('DownloadManager', () => {
 
   it('leaves a running, a waiting and a ready download as they are when it clears (#215)', async () => {
     const finished = await host();
-    const slow = await host({ chunkDelayMs: 5, fileName: 'slow.bin' });
+    const slow = await host(UNFINISHED);
     const downloads = await open();
     downloads.updateSettings({ maxConcurrentDownloads: 1 });
     const [done] = downloads.add({ urls: [finished.url] });
@@ -911,7 +915,7 @@ describe('DownloadManager', () => {
 
   it('takes away only its own row when the finished ones were cleared while it deleted its file (#215)', async () => {
     const finished = await host();
-    const slow = await host({ chunkDelayMs: 5, fileName: 'slow.bin' });
+    const slow = await host(UNFINISHED);
     const store = new JsonStateStore(join(folder.path, 'data', 'state.json'));
     const saved: string[][] = [];
     const downloads = await open({

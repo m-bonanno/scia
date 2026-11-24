@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { DownloadStatus } from '@scia/core';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import { sparseFlagOf } from '@scia/server/testing/scratch.ts';
+import type { Locator } from 'playwright-core';
 import { describe, expect, it } from 'vitest';
 import { allCompleted, downloadsOf, drawnCompleted, paste, rowOf, until, useRun } from './scia.ts';
 import { captureTo, viewportOf } from './under-notices.ts';
@@ -165,6 +166,20 @@ describe('the real app downloads', () => {
           row: row.getBoundingClientRect().width,
           forWord: Math.ceil(before + widthOf('Clear completed', style.fontWeight) + around),
           forQuestion: Math.floor(before + widthOf('Clear 2 completed', '600') + around),
+          question: widthOf('Clear 2 completed', '600') + around,
+        };
+      });
+    // What the button draws: its width, and whether each of its two words is seen.
+    const drawn = (button: Locator) =>
+      button.evaluate((element) => {
+        const seen = (text: string) =>
+          [...element.querySelectorAll('span')]
+            .filter((span) => span.children.length === 0 && span.textContent === text)
+            .map((span) => getComputedStyle(span).visibility);
+        return {
+          width: element.getBoundingClientRect().width,
+          word: seen('Clear completed'),
+          question: seen('Clear 2 completed'),
         };
       });
     // Below the width at which the column stops growing, the row follows the viewport.
@@ -181,10 +196,25 @@ describe('the real app downloads', () => {
 
     await clear.focus();
     const atRest = await clear.boundingBox();
+    // At rest the word is seen and the question is not, and the box is the question's own width.
+    const rest = await drawn(clear);
+    expect({ word: rest.word, question: rest.question }).toEqual({
+      word: ['visible'],
+      question: ['hidden'],
+    });
+    expect(
+      Math.abs(rest.width - (narrow?.question ?? 0)),
+      JSON.stringify({ rest, narrow }),
+    ).toBeLessThanOrEqual(1);
     await page.keyboard.press('Enter');
     await question.waitFor();
     const asking = await question.boundingBox();
     expect(asking, JSON.stringify({ atRest, asking, narrow })).toEqual(atRest);
+    const asked = await drawn(question);
+    expect({ word: asked.word, question: asked.question }).toEqual({
+      word: ['hidden'],
+      question: ['visible'],
+    });
   });
 
   it.runIf(process.platform === 'win32')(

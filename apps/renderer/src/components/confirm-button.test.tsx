@@ -207,4 +207,34 @@ describe('ConfirmButton', () => {
     expect(onConfirm).toHaveBeenCalledOnce();
     expect(button).toHaveAccessibleName('Clear completed');
   });
+
+  it('asks in the colour of what cannot be undone when it throws something away, its tooltip gone while it asks', async () => {
+    render(
+      <ConfirmButton
+        label="Delete"
+        confirmLabel="Cancel and delete"
+        destructive
+        onConfirm={vi.fn()}
+      >
+        ×
+      </ConfirmButton>,
+    );
+    const button = screen.getByRole('button', { name: 'Delete' });
+    expect(button).toHaveAttribute('title', 'Delete');
+
+    await userEvent.click(button);
+
+    expect(button).toHaveAccessibleName('Cancel and delete');
+    expect(button).toHaveClass('bg-destructive');
+    expect(button).not.toHaveAttribute('title');
+  });
+
+  it('asks on the tonal ground when nothing is thrown away', async () => {
+    render(aButton(vi.fn()));
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }));
+
+    expect(screen.getByRole('button', { name: 'Run' })).toHaveClass('bg-tonal');
+    expect(screen.getByRole('button', { name: 'Run' })).not.toHaveClass('bg-destructive');
+  });
 });
