@@ -106,6 +106,8 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
   - **The repository's settings** are changed on the owner's word, given there: the topics, the homepage set to the latest release, private vulnerability reporting and Dependabot alerts on (as #190 decided). The social preview is uploaded by hand in Settings: GitHub has no API for it.
   - **The code of conduct's channel for reports**: the repository's private reporting, the one `SECURITY.md` names. No address is published. #190's files land with #310's pull request.
   - **The loop of Scia at work** is recorded by CI's E2E run on Windows, as `docs/design/`'s captures are, and lands with #310's pull request. Changed the same day: it was to be recorded by hand on Windows later, in an issue of its own.
+- #313, on the review of #312, chosen as a multiple-choice question: **a Beta report** from someone outside the team gets a word of its own in the roadmap's "Proven by", _Report_, linked to its issue — evidence of its own, apart from the owner's _Hand_ and from a _Script_.
+- #315: **the map of modules** leaves `apps/server/CLAUDE.md`, and nothing else of the file with it: a session rebuilds it from `apps/server/src`, and the file is loaded by every session that works under `apps/server`.
 
 ## Undated in the roadmap
 

@@ -2,7 +2,7 @@
 
 What was seen of each item of the [roadmap](./roadmap.md), how, and what was not. One section per item; the roadmap's tables link here. A line is moved here as the roadmap had it, so that a claim keeps its words. The owner's decisions behind each item are in [decisions.md](./decisions.md).
 
-"Seen in the real app" means the built Electron app on Windows, driven by a script unless the line says a hand. "Held by specs" means no run of the app has met it. A Beta report — an issue opened with its form — is read into the item it tried, as a line that names the beta, the system and the issue, and what it saw in its own words; it stands beside what the owner's hand is to see, never in its place.
+"Seen in the real app" means the built Electron app on Windows, driven by a script unless the line says a hand. "Held by specs" means no run of the app has met it. A Beta report — an issue opened with its form — is read into the item it tried, as a line that names the beta, the system and the issue, and what it saw in its own words. It proves the item as _Report_ in the roadmap's **Proven by**, the word linked to its issue: evidence of its own, apart from a _Script_, and beside what the owner's hand is to see, never in its place.
 
 ## M0 — Foundations
 
