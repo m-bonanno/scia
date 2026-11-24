@@ -12,7 +12,7 @@
 <p align="center">
   <a href="https://github.com/m-bonanno/scia/releases"><b>Download</b></a> ·
   <a href="docs/product/roadmap.md">Roadmap</a> ·
-  <a href="https://github.com/m-bonanno/scia/issues/new/choose">Report a bug</a> ·
+  <a href="https://github.com/m-bonanno/scia/issues/new?template=bug.yml">Report a bug</a> ·
   <a href="#support">Support</a>
 </p>
 
@@ -24,28 +24,26 @@
 </p>
 
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: light)" srcset="docs/design/scia-at-work-light.png">
-    <img alt="Scia at work: a link pasted, its connections opening, and the file arriving until it is done" src="docs/design/scia-at-work.png">
-  </picture>
+  <img alt="Scia at work: three links pasted at once, each file arriving over several connections until all three are done" src="docs/design/scia-at-work.gif#gh-dark-mode-only">
+  <img alt="Scia at work: three links pasted at once, each file arriving over several connections until all three are done" src="docs/design/scia-at-work-light.gif#gh-light-mode-only">
 </p>
 
 ## What it does
 
-**Downloads that hold**
+### Downloads that hold
 
 - ⚡ **Several connections at once** for any http or https link.
 - ⏯️ **Pause and resume**, also after Scia was closed and opened again.
 - 🚦 **A queue**: how many downloads at once, how many connections each, and one speed limit for all.
 
-**Videos, services and albums**
+### Videos, services and albums
 
 - 🎬 **The video a page plays**, read by yt-dlp: one file, an HLS stream, or a picture and its sound joined into one mp4.
 - 🔗 **AllDebrid**, connected with a code or a key: file hosts' links and folders, magnets, and the magnets of your account.
 - 🖼️ **Bunkr albums**, every file into a folder named after the album.
-- 📋 **Files and videos you copy**, if you turn it on, wait in the list as "Ready": a video's page under its title.
+- 📋 **Links to files and videos you copy**, once "Take links from the clipboard" is on in Settings, wait in the list as "Ready": a video's page under its title.
 
-**At home on Windows**
+### Home on Windows
 
 - 🖥️ **The system tray**: close the window, and the downloads go on.
 - 🔔 **Notifications** when a download completes or fails while you are in another window.
@@ -54,7 +52,7 @@
 - 🔄 **Updates itself** from this repository's releases, without stopping a download.
 
 > [!NOTE]
-> All of it is built and held by tests, and much of it is still to be seen by a person before the first stable release. That holds for the installed app, and for the real services and sites Scia reaches: a download through AllDebrid to its end, the real Bunkr, and a real site's stream, picture and sound, and title. None of it has been tried on Linux, and the browser extension that hands Scia links is neither tried in a browser nor published. What was seen of each feature, and how: [`docs/product/evidence.md`](docs/product/evidence.md). What is left and what comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
+> All of it is built and held by tests, and much of it is still to be seen by a person before the first stable release. That holds for the installed app, and for the real services and sites Scia reaches: a download through AllDebrid to its end, the real Bunkr, and a real site's video: its stream, its picture and sound joined, its title. None of it has been tried on Linux, and the browser extension that hands Scia links is neither tried in a browser nor published. What was seen of each feature, and how: [`docs/product/evidence.md`](docs/product/evidence.md). What is left and what comes next: [`docs/product/roadmap.md`](docs/product/roadmap.md).
 
 ## Get it
 
@@ -83,8 +81,8 @@ npm run dist    # build the installer for this system
 
 Scia downloads from the hosts of the links you give it, and from the servers those lead to for the files themselves. Beyond them, it reaches only these:
 
-- **AllDebrid**, once you connect it in Settings. Its key is kept where the system protects it, and the files of the links you give it come from its servers. Connecting with a code asks it for a code, with no key, then every five seconds whether you confirmed it on its site. With no service connected, Scia asks it only for its public list of file hosts, with no key and nothing of your links.
-- **yt-dlp**, shipped with Scia, reads a video's page on its site, and whatever that site's reader asks in turn. Scia downloads the video from the servers its answer names. With the clipboard on, a video's page you copy is read for its title at once, also when you never start it.
+- **AllDebrid**, once you connect it in Settings. Its key is kept where the system protects it. Of your links, it is sent only file hosts' links and folders, protectors' and shorteners' links, and magnets, and their files come from its servers. Connecting with a code asks it for a code, with no key, then every five seconds whether you confirmed it on its site. Otherwise, with no service connected, Scia asks it only for its public list of file hosts, with no key and nothing of your links.
+- **yt-dlp**, shipped with Scia, reads a video's page on its site, and whatever that site's reader asks in turn. Scia downloads the video from the servers its answer names. With the clipboard on, a video's page you copy is read for its title at once, even if you never start it.
 - **Bunkr**, read by a reader of Scia's own: its pages, its API, and the file servers it names.
 - **GitHub**, for Scia's updates and yt-dlp's.
 

@@ -8,7 +8,7 @@ Everyone here follows the [code of conduct](./CODE_OF_CONDUCT.md). A security pr
 
 The help Scia needs most is not code:
 
-- **Try a beta and say what you saw.** Much of Scia is held by tests and still to be seen by a person, against real services and sites, and nothing of it on Linux ([`docs/product/evidence.md`](./docs/product/evidence.md)). Your run is the evidence it lacks: open a [**Beta report**](https://github.com/m-bonanno/scia/issues/new?template=beta.yml).
+- **Try a beta and say what you saw.** Much of Scia is held by tests and still to be seen by a person, against real services and sites ([`docs/product/evidence.md`](./docs/product/evidence.md)). The betas are built for Windows only. Your run is the evidence it lacks: open a [**Beta report**](https://github.com/m-bonanno/scia/issues/new?template=beta.yml).
 - **Report a bug**, with what you saw and how to see it again.
 - **Propose a feature**, starting from what you need rather than how to build it.
 - **Say which site or service Scia should reach**, with a proposal: what it is, and what you would do with it.
