@@ -15,6 +15,7 @@ import {
   type BundleFailure,
   type MagnetFailure,
   isServiceFailure,
+  renameWhenFree,
   ServiceFailure,
   UnlockFailure,
 } from '@scia/core';
@@ -602,7 +603,7 @@ export class Integrations implements LinkResolver, MagnetService {
     try {
       await mkdir(dirname(file), { recursive: true });
       await writeFile(`${file}.tmp`, JSON.stringify({ domains }));
-      await rename(`${file}.tmp`, file);
+      await renameWhenFree(() => rename(`${file}.tmp`, file), sleep);
     } catch (error) {
       this.#deps.logger.warn('service_hosts_not_kept', { error: describeFailure(error) });
     }

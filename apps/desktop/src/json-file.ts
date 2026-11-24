@@ -1,5 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
+import { renameWhenFree } from '@scia/core';
 import type { ThemeStore } from './engine/remembered-theme.ts';
 import type { NoticeStore } from './engine/shown-notices.ts';
 
@@ -21,10 +23,12 @@ export class JsonFile implements NoticeStore, ThemeStore {
     }
   }
 
+  // Written beside, then renamed into place: a crash leaves the old file or the new one. A rename
+  // refused while another program holds the file is tried again a while, as the engine's are.
   async write(value: unknown): Promise<void> {
     await mkdir(dirname(this.#path), { recursive: true });
     const temporary = `${this.#path}.tmp`;
     await writeFile(temporary, JSON.stringify(value));
-    await rename(temporary, this.#path);
+    await renameWhenFree(() => rename(temporary, this.#path), sleep);
   }
 }

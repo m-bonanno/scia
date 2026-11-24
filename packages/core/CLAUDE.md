@@ -2,7 +2,7 @@
 
 Loaded when working under `packages/core/`. **Extends** the root `CLAUDE.md`.
 
-The domain: how a file is split into segments and split again while it downloads, what the queue starts next, how fast a transfer is and how it is held under a limit, what a file may be called on Windows and Linux, what kind of file it is. **Pure TypeScript.**
+The domain: how a file is split into segments and split again while it downloads, what the queue starts next, how fast a transfer is and how it is held under a limit, what a file may be called on Windows and Linux, what kind of file it is, how long a rename waits for a file another program holds. **Pure TypeScript.**
 
 - **No IO, no frameworks, no runtime.** No `node:*`, no `electron`, no `zod`, no `fetch`, no `URL`, no DOM. ESLint enforces it. The same code runs in the engine, in the page and in the extension's service worker.
 - **No clock.** A function that needs the time takes it as an argument (`SpeedMeter.record(bytes, atMs)`). `new Date()` and `Date.now()` are lint errors here.
@@ -11,3 +11,4 @@ The domain: how a file is split into segments and split again while it downloads
 - **Every exported function has a spec** that reads as the rule it implements, edge cases included (the empty file, the size that does not divide, the reserved device name).
 - **A name from a host that decides something is read as the system will read it.** `fileKindOfName` takes the last extension, whatever stands before it, and a list that is a safety rule — what counts as a program — is drawn from the system (`PATHEXT`, what its shell runs), not from memory.
 - A concept used by two apps belongs here; a concept used by one stays in that app until a second caller exists.
+- **A rule that waits takes its IO and its wait as arguments.** `renameWhenFree` (#307) decides which refusals of a rename heal by waiting — `EPERM`, `EACCES`, `EBUSY`, what Windows answers while another program holds the file — how long between tries and how many; the engine and main each hand it their `rename` and their `sleep`, and its spec a clock of its own.

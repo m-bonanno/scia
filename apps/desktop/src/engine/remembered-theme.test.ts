@@ -130,7 +130,9 @@ describe('RememberedTheme', () => {
     expect(lines).toEqual([['info', 'theme_kept', { theme: Theme.Ice }]]);
   });
 
-  it('says in the log a write that failed, with its theme and why', async () => {
+  // The error's message names the profile's whole path, the person's account with it (#307): its
+  // code says why.
+  it('says in the log a write that failed, with its theme and the system’s code of why', async () => {
     const disk = slowStore();
     const { log, lines } = recording();
     const theme = new RememberedTheme(disk.store, log);
@@ -140,10 +142,43 @@ describe('RememberedTheme', () => {
     disk.started[0]?.fail();
     await kept;
 
-    expect(lines).toEqual([
-      ['warn', 'theme_not_kept', { theme: Theme.Ice, error: 'Error: EPERM' }],
-    ]);
+    expect(lines).toEqual([['warn', 'theme_not_kept', { theme: Theme.Ice, code: 'EPERM' }]]);
   });
+
+  it('keeps a theme whose write landed when its line in the log fails, and does not write it again', async () => {
+    const writes: unknown[] = [];
+    let lineFails = true;
+    const theme = new RememberedTheme(
+      {
+        read: async () => undefined,
+        write: async (value) => {
+          writes.push(value);
+        },
+      },
+      {
+        info: () => {
+          if (!lineFails) return;
+          lineFails = false;
+          throw new Error('the log could not be written');
+        },
+        warn: () => undefined,
+      },
+    );
+
+    await theme.keep(Theme.Ice).catch(() => undefined);
+    await theme.keep(Theme.Ice);
+
+    expect(writes).toEqual([{ theme: Theme.Ice }]);
+  });
+
+  // What Node throws when Windows refuses the rename onto a file another program holds.
+  const refusedRename = () =>
+    Object.assign(
+      new Error(
+        "EPERM: operation not permitted, rename 'C:\\Users\\ada\\AppData\\Roaming\\Scia\\theme.json.tmp' -> 'C:\\Users\\ada\\AppData\\Roaming\\Scia\\theme.json'",
+      ),
+      { code: 'EPERM', syscall: 'rename' },
+    );
 
   // A store whose writes end when the spec says, in any order: the engine said brick, then ice,
   // then road-trip, while the first write was still on its way (#262; .claude/gotchas.md, #53).
@@ -167,7 +202,7 @@ describe('RememberedTheme', () => {
             },
             fail: () => {
               inFlight -= 1;
-              reject(new Error('EPERM'));
+              reject(refusedRename());
             },
           });
         });
@@ -185,7 +220,8 @@ describe('RememberedTheme', () => {
 
   it('writes one at a time, and leaves the theme said last on disk, whatever lands first', async () => {
     const disk = slowStore();
-    const theme = new RememberedTheme(disk.store, silent);
+    const { log, lines } = recording();
+    const theme = new RememberedTheme(disk.store, log);
 
     const kept = [theme.keep(Theme.Brick), theme.keep(Theme.Ice), theme.keep(Theme.RoadTrip)];
     await settle();
@@ -201,6 +237,11 @@ describe('RememberedTheme', () => {
       { theme: Theme.RoadTrip },
     ]);
     expect(disk.landed()).toEqual({ theme: Theme.RoadTrip });
+    // Each line names the theme its write carried, not the one asked while it was on its way.
+    expect(lines).toEqual([
+      ['info', 'theme_kept', { theme: Theme.Brick }],
+      ['info', 'theme_kept', { theme: Theme.RoadTrip }],
+    ]);
   });
 
   it('writes again a theme whose write failed while another was asked', async () => {

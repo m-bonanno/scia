@@ -190,7 +190,7 @@ async function boot(): Promise<void> {
     tooltip: async () => trayTooltip(await activity().catch(() => undefined)),
     log,
   });
-  const notices = new ShownNotices(new JsonFile(layout.noticesPath));
+  const notices = new ShownNotices(new JsonFile(layout.noticesPath), log);
 
   // The window goes at once; then Scia stays in the tray while it has downloads to finish, and
   // quits otherwise (engine/close-policy.ts).

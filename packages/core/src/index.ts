@@ -3,6 +3,7 @@ export * from './bundle.ts';
 export * from './download.ts';
 export * from './file-kind.ts';
 export * from './file-name.ts';
+export * from './held-file.ts';
 export * from './pace.ts';
 export * from './page.ts';
 export * from './queue.ts';

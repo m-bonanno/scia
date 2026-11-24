@@ -4,14 +4,14 @@
 
 **Scia** is a download manager for Windows, with Linux to follow (untried and unpackaged until after the first stable release): any link, fetched over several connections at once, resumable, with a minimal interface. A browser extension hands it links and the media of a page. Debrid services (AllDebrid first) and adaptive streams come next — see [`docs/product/roadmap.md`](./docs/product/roadmap.md).
 
-| Piece         | Path                 | Stack                                                                                 |
-| ------------- | -------------------- | ------------------------------------------------------------------------------------- |
-| Desktop shell | `apps/desktop`       | Electron main + sandboxed preload, electron-builder (NSIS, AppImage, deb)             |
-| Engine        | `apps/server`        | Hono under `/api/v1` on `127.0.0.1`, plain Node, runs in an Electron `utilityProcess` |
-| Renderer      | `apps/renderer`      | React 19 + Vite + Tailwind v4, served by the engine                                   |
-| Extension     | `apps/extension`     | Manifest V3 (Chromium), esbuild                                                       |
-| Domain        | `packages/core`      | Pure TypeScript — segments, queue, speed, file names, file kinds. No IO               |
-| Contracts     | `packages/contracts` | Zod schemas and constants shared by engine, renderer, shell and extension             |
+| Piece         | Path                 | Stack                                                                                         |
+| ------------- | -------------------- | --------------------------------------------------------------------------------------------- |
+| Desktop shell | `apps/desktop`       | Electron main + sandboxed preload, electron-builder (NSIS, AppImage, deb)                     |
+| Engine        | `apps/server`        | Hono under `/api/v1` on `127.0.0.1`, plain Node, runs in an Electron `utilityProcess`         |
+| Renderer      | `apps/renderer`      | React 19 + Vite + Tailwind v4, served by the engine                                           |
+| Extension     | `apps/extension`     | Manifest V3 (Chromium), esbuild                                                               |
+| Domain        | `packages/core`      | Pure TypeScript — segments, queue, speed, file names, file kinds, a held file's rename. No IO |
+| Contracts     | `packages/contracts` | Zod schemas and constants shared by engine, renderer, shell and extension                     |
 
 Versions live in the `package.json` files — read those, not this file. Why Electron and a local engine: [ADR 0001](./docs/adr/0001-electron-and-a-local-engine.md).
 

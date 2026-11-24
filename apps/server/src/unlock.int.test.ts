@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto';
-import { readdir, readFile, writeFile } from 'node:fs/promises';
+import { open as openFile, readdir, readFile, writeFile } from 'node:fs/promises';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { type IntegrationAccount, IntegrationId } from '@scia/contracts';
@@ -717,6 +717,25 @@ describe('a link that goes through a service', () => {
     await integrations.disconnect(IntegrationId.AllDebrid);
     expect(existsSync(hostsFile())).toBe(false);
   });
+
+  // Windows refuses a rename onto a file another process has open; Linux allows it.
+  it.runIf(process.platform === 'win32')(
+    'keeps the list read while another program holds its file for a moment, as an antivirus does on Windows (#307)',
+    async () => {
+      mkdirSync(join(folder.path, 'data'), { recursive: true });
+      await writeFile(hostsFile(), JSON.stringify({ domains: ['before.example'] }));
+      const integrations = await connected(await serviceWith({ links: {} }));
+      const held = await openFile(hostsFile(), 'r');
+      setTimeout(() => void held.close(), 300);
+
+      expect(await integrations.serviceFor(LINK, new AbortController().signal)).toBe('alldebrid');
+
+      expect(logged.filter((line) => line.includes('service_hosts_not_kept'))).toEqual([]);
+      expect(JSON.parse(await readFile(hostsFile(), 'utf8'))).toEqual({
+        domains: ['hoster.example'],
+      });
+    },
+  );
 
   it('goes by the hosts of the account connected now, not by a reading started under the key before', async () => {
     const other = 'other-key-000000000000000';
