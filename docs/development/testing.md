@@ -38,6 +38,7 @@ A new job of the gates becomes a required check of `develop` and `main` only onc
 - It runs the whole of `gates.yml` — every job, the installer's smoke test included — `runs` times side by side, at most four at a time — sixteen jobs of the twenty a free account runs at once, so that a PR still finds room — each run in its own concurrency group; one that fails stops none of the others.
 - **Ten green runs of one commit are a burn-in.** A run that fails is a failed burn-in: its log goes into an issue, the job is mended, and the burn-in starts again from zero on the mended commit — never a run again until ten pass.
 - A burn-in uses free runners shared with every PR: it is started when nothing waits on them, and not again for a job already burned in, unless that job changed how it runs.
+- A run of Burn-in that shows an E2E spec's holds failing is not a burn-in: "A hold seen failing in CI", below.
 
 ## Writing a spec
 
@@ -65,9 +66,23 @@ A new job of the gates becomes a required check of `develop` and `main` only onc
 - **An answer the engine cannot be made to give is given in its place, on the page's road only** (`page.route`): the notices' spec answers four adds with four refusals, the fourth once the focus is placed. It is the one stand-in for the engine; what the engine itself does is proven against the engine.
 - **What a row does not say is read from the engine**, as the page reads it (`downloadsOf`): the bytes that arrived, the status of every download. `allCompleted` is false for an empty list.
 - **Every wait is for a state** (`until`, on `performance.now()`), with bounds set for a cold start on a CI runner. A bound on a time is set against what the app does without the thing held, and counted from where the thing begins — the speed limit's spec is owed eight seconds from the host's first range, waits for more than six, and the file arrives in milliseconds without the limit, also when AllDebrid's public list never answers; at twice the limit it would take four.
-- Each spec was seen failing with the line it holds taken away; a new one is too (`.claude/gotchas.md`, "Specs").
+- Each spec was seen failing with the line it holds taken away; a new one is too (`.claude/gotchas.md`, "Specs"), in CI: "A hold seen failing in CI", below.
 
 Run locally, its windows open on the screen, and a first close into the tray shows the system's notification, every profile being new. What it does not reach, and stays with a person or with a harness: the system's notifications and the tray as they are drawn, a hand on the mouse or the keys, a page's `visibilityState` — playwright-core keeps the page `visible` when the window is minimised or hidden; a harness that starts Electron itself and reads the page over DevTools sees it (#138) — the packaged app (the installer's smoke test, below), Linux.
+
+### A hold seen failing in CI
+
+The E2E suite runs in CI alone, so an E2E spec's holds are seen failing there, on a branch that lives until the last of its runs is read (#312, #317):
+
+1. **A branch from the head under review**, named `test/<issue>-holds-seen-failing`, `<issue>` the number in the name of the PR's own branch: the branch is that issue's work, as [`git-flow.md`](./git-flow.md) asks of every branch, and no issue is opened for it. #312's carried the PR's number instead (`test/312-holds-seen-failing`).
+2. **A commit on it**: the spec as the head under review has it, and a variant of it for each hold — a copy of the spec beside it in `apps/desktop/e2e/`, under a name of its own that ends in `.e2e.test.ts` (the `e2e` project collects no other file), with the one line the hold answers put back as it was before, and nothing else changed. A line of the app, or of the E2E tooling every spec shares, cannot be put back for one variant alone: each such line gets a commit of its own on the same branch, made once the run before it is read, the variants taken out — a commit that changes that one line from the head under review, and nothing else.
+3. **A run of each commit, by Burn-in**, which runs the gates on the branch it is given, with no PR and nothing released: `gh workflow run burn-in.yml --ref test/<issue>-holds-seen-failing -f runs=1`, once for each commit, started when nothing waits on the runners, as a burn-in is.
+4. **Each run's log read**, `E2E (Windows)`'s. In the variants' run, the spec passes and each variant fails at its own hold and nowhere else; in the run of a line of the app or of the shared tooling, the spec fails at the hold that line answers and nowhere else. Each failure with the numbers its hold printed, and no "Unhandled Rejection". The PR body gives each run's number and each failure, with its numbers.
+5. **The branch deleted** once the last run's log is read (`git push origin --delete test/<issue>-holds-seen-failing`). It is never merged, and no PR is opened from it.
+
+- **When**: for the holds of an E2E spec, on a PR of the team. The other layers run on this computer, and their holds are seen failing here. A variant, or a line of the app, whose run fails beside its hold, or not at it, proves nothing of it: it is mended, and the run made again on the mended commit. The spec itself failing in the variants' run is a failure of the spec, handled as "No retries" says (above).
+- **Not a burn-in**: the workflow only carries the runs. They are meant to be red, count toward no job's ten green runs, and their failures are the evidence the PR body gives, not a failed burn-in: no issue is filed for them.
+- **A network guard**: none is needed when nothing put back on the branch can reach past the runner — every line put back is one CI has already run, on an earlier head of the PR or on `develop`, and none touches where a run points: an address, a host `launchScia` names, a link fetched as it stands. Unlike a mutation run on this computer (`.claude/gotchas.md`, "Specs"), a run of Burn-in has no guard loaded into its processes, so a line that would need one is not put back this way: such a line is held by a spec of another layer too, one that asks nothing of the network (the address a `site` gives, read back), and that spec is seen failing on this computer, behind the guard.
 
 ## The installer's smoke test
 

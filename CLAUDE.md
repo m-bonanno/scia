@@ -137,7 +137,7 @@ docs/
 
 ## What Claude should always do
 
-1. **Propose the branch name (with issue number) before starting**, and work only on that branch.
+1. **Propose the branch name (with issue number) before starting**, and work only on that branch. The one other branch a session makes is the throwaway that shows an E2E spec's holds failing in CI ([`testing.md`](./docs/development/testing.md), "A hold seen failing in CI").
 2. **Test first**, in every layer the change touches; prove runtime changes against the real runtime.
 3. **Respect the local canon** of the area you are in (the sub-files above).
 4. **Have the team review every PR but a release's back-merge** (`/team-review`) and merge a work branch into `develop` only on the team's approval with CI green, and as the "Merging" table of `review-flow.md` says; never merge into `main` without the owner's word.

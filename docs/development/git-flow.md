@@ -3,7 +3,7 @@
 `main` ← `develop` ← `<type>/<issue>-<kebab-description>`.
 
 - `main` is what was released. `develop` is the default branch, where work lands.
-- A branch is cut from `develop` for one issue: `feat/12-tray-icon`, `fix/31-resume-after-sleep`. Types are those of `commitlint.config.js`.
+- A branch is cut from `develop` for one issue: `feat/12-tray-icon`, `fix/31-resume-after-sleep`. Types are those of `commitlint.config.js`. A branch that only shows an E2E spec's holds failing in CI is cut from the head under review instead, takes the issue number of the PR's own branch (`test/<issue>-holds-seen-failing`), is never merged or opened as a PR, and is deleted once the last of its runs is read ([`testing.md`](./testing.md), "A hold seen failing in CI").
 - **Nobody commits or pushes to `main` or `develop`.** `.husky/pre-commit` and `.husky/pre-push` refuse it (`protected-branch-guard.sh`). Automation that legitimately must sets `HUSKY=0`.
 - Commits follow Conventional Commits with a lower-case subject; `.husky/commit-msg` runs commitlint.
 - When `develop` moves ahead, merge it into the branch. No rebase of pushed work, no force-push.
