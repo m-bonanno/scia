@@ -1106,6 +1106,7 @@ export class DownloadManager {
       unlockedUrl: null,
       video: null,
       fromPage: false,
+      joinRefused: false,
       timeline: null,
       nameKept: false,
       createdAt: new Date(this.#now()).toISOString(),
@@ -1598,7 +1599,16 @@ export class DownloadManager {
     });
     running.task = task;
     this.#changed();
-    await task.run(signal);
+    try {
+      await task.run(signal);
+    } catch (error) {
+      if (error instanceof PageError && error.failure === PageFailure.NotJoined) {
+        // Its progress is of nothing: neither a checkpoint nor the end of the run keeps it.
+        running.task = undefined;
+        await this.#refuseJoin(record);
+      }
+      throw error;
+    }
     this.#keepProgress(record, task);
     // The mp4's own size: its movie is made anew, beside the bytes of both.
     record.totalBytes = await stat(partPathOf(record)).then(
@@ -1610,6 +1620,27 @@ export class DownloadManager {
     record.downloadedBytes = record.totalBytes;
     record.segments = [];
     await this.#finish(record);
+  }
+
+  // A join refused is never tried again (#241): the next reading of the page chooses among one
+  // files and streams only. What the pair fetched is of nothing now — gone from the disk, and from
+  // the row, so that no byte of it is taken for the next file's — and so is the part file, which a
+  // run before the pair may have left (a one file that failed on its way) and the join may have
+  // begun. Marked first: a file that will not go fails the download for the disk, keeping the
+  // name, and the retry falls back all the same, removing the picture and the sound and writing
+  // over the part file. Once all are gone the download
+  // holds no byte, and its name is no longer final: the next reading takes a file or a stream of
+  // any container, and names the download after it.
+  async #refuseJoin(record: DownloadRecord): Promise<void> {
+    record.joinRefused = true;
+    record.segments = [];
+    record.downloadedBytes = 0;
+    record.totalBytes = null;
+    await this.#removePair(record);
+    await rm(partPathOf(record), { force: true }).catch((error: unknown) => {
+      throw new DiskError('The part file could not be removed.', { cause: error });
+    });
+    record.named = false;
   }
 
   // The picture and the sound of a pair, kept beside its part file.
@@ -1704,7 +1735,11 @@ export class DownloadManager {
   }
 
   async #locateVideo(record: DownloadRecord, signal: AbortSignal): Promise<Located> {
-    const chosen = record.video?.source ?? (await this.#readPage(record, signal));
+    // A pair kept from before its join was refused — a pause or a stop landed during the
+    // refusal — is never fetched again: the page is read for a file or a stream (#241).
+    const kept = record.video?.source;
+    const usable = kept?.kind === 'pair' && record.joinRefused ? undefined : kept;
+    const chosen = usable ?? (await this.#readPage(record, signal));
     if (chosen === undefined) {
       throw new PageError(PageFailure.Unreadable, 'The page no longer says what video it plays.');
     }
@@ -1746,7 +1781,9 @@ export class DownloadManager {
       this.#readTitles();
     }
     if (found === undefined) return undefined;
-    const chosen = chooseMedia(found.formats, record.named ? containerOf(record) : undefined);
+    const chosen = chooseMedia(found.formats, record.named ? containerOf(record) : undefined, {
+      joins: !record.joinRefused,
+    });
     const source: VideoSource = {
       url: chosen.url,
       headers: { ...chosen.headers },

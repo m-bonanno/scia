@@ -142,8 +142,13 @@ function bestOf(
 // (docs/adr/0021). Between equals the later one the site lists, which its reader orders from
 // worst to best. Throws a PageError that says why there is none.
 // `container`, when given, is the only one taken: a download that already holds bytes of an mp4
-// goes on as an mp4, or not at all.
-export function chooseMedia(formats: readonly PageFormat[], container?: string): ChosenMedia {
+// goes on as an mp4, or not at all. `joins` false takes no pair: a download whose join Scia
+// refused chooses among one files and streams only (#241).
+export function chooseMedia(
+  formats: readonly PageFormat[],
+  container?: string,
+  { joins = true }: { readonly joins?: boolean } = {},
+): ChosenMedia {
   const best = bestOf(
     formats.filter(
       (format) =>
@@ -153,7 +158,7 @@ export function chooseMedia(formats: readonly PageFormat[], container?: string):
     rank,
   );
   const picture =
-    container === undefined || container === 'mp4'
+    joins && (container === undefined || container === 'mp4')
       ? bestOf(formats.filter(isPicture), pictureRank)
       : undefined;
   const sound = picture === undefined ? undefined : bestOf(formats.filter(isSound), soundRank);
