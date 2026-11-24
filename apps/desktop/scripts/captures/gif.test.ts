@@ -239,6 +239,29 @@ describe('encodeGif', () => {
     expect(gif.frames.map((frame) => frame.picture)).toEqual([black, dot]);
   });
 
+  // A transparent entry would be the 257th: the frame is written whole, with no transparency.
+  it('writes a later frame of 256 changed colours without transparency', () => {
+    const before = picture(17, 16, (x, y) => (y * 17 + x < 256 ? [0, 0, 0] : [0, 1, 2]));
+    const after = picture(17, 16, (x, y) => {
+      const pixel = y * 17 + x;
+      return pixel < 256 ? [pixel, 1, 2] : [0, 1, 2];
+    });
+    const gif = played(
+      encodeGif([
+        { picture: before, ms: 100 },
+        { picture: after, ms: 100 },
+      ]),
+    );
+    expect(gif.frames.map((frame) => frame.picture)).toEqual([before, after]);
+    expect(gif.frames.map((frame) => frame.transparent)).toEqual([false, false]);
+  });
+
+  it('writes a frame as long as a GIF can say', () => {
+    expect(played(encodeGif([{ picture: still, ms: 655_350 }])).frames[0]?.centiseconds).toBe(
+      0xffff,
+    );
+  });
+
   it('refuses pictures of different sizes, and no picture at all', () => {
     expect(() =>
       encodeGif([
