@@ -1,7 +1,7 @@
 import type { Download } from '@scia/contracts';
 import { DownloadStatus } from '@scia/core';
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 import { aDownload } from '@/test/a-download.ts';
 import { SegmentBar } from './segment-bar.tsx';
 
@@ -135,6 +135,9 @@ describe('SegmentBar', () => {
   // A piece of a stream can last no time, and two such pieces start at the same moment.
   it('draws no stretch for a piece of a stream that lasts no time', () => {
     const error = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    onTestFinished(() => {
+      error.mockRestore();
+    });
 
     const { container } = render(
       <SegmentBar
@@ -158,7 +161,6 @@ describe('SegmentBar', () => {
       { left: 50, width: 25 },
     ]);
     expect(error).not.toHaveBeenCalled();
-    error.mockRestore();
   });
 
   // A paused bar has a tone of its own, held against the accent by the contrast spec (#58).

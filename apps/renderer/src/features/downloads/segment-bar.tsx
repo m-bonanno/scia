@@ -52,6 +52,8 @@ export function SegmentBar({ download }: { readonly download: Download }): React
       aria-valuenow={Math.floor((measure.done / total) * 100)}
     >
       {measure.segments
+        // A piece of a stream that lasts no time fills nothing, and two of them, starting at the same
+        // moment, would share a key.
         .filter((segment) => segment.end > segment.start)
         .map((segment) => (
           <div

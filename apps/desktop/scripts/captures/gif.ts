@@ -24,8 +24,8 @@ const TRAILER = Buffer.from([0x3b]);
 // The logical screen has no colour table of its own (each frame carries one) and 8 bits a colour.
 const SCREEN_FLAGS = 0x70;
 // NETSCAPE2.0's loop count is how many times the frames play again after the first, in 16 bits,
-// and 0 is forever: Chromium, Firefox and Safari count so (WebKit r230712 came round to it). A GIF
-// without the extension plays once.
+// and 0 is forever; a GIF without the extension plays once. Chromium plays a GIF so (seen in #322);
+// WebKit's r230712 and Firefox's tests say they count so (read, not run).
 const NETSCAPE = Buffer.concat([
   Buffer.from([0x21, 0xff, 0x0b]),
   Buffer.from('NETSCAPE2.0', 'latin1'),

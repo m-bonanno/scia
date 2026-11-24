@@ -94,9 +94,11 @@ function played(gif: Buffer): Played {
           transparent: ((first[0] ?? 0) & 1) === 1 ? (first[3] ?? -1) : -1,
         };
       }
-      // NETSCAPE2.0's loop count, as Chromium, Firefox and Safari count it: how many times the
-      // frames play again after the first, 0 forever. A GIF without it plays once.
+      // NETSCAPE2.0's loop count, as Chromium plays it (WebKit and Firefox say they count so): how
+      // many times the frames play again after the first, 0 forever. A GIF without it plays once.
+      // It comes before the first image, where a reader looks for it.
       if (label === 0xff && first?.toString('latin1') === 'NETSCAPE2.0' && second !== undefined) {
+        expect(frames).toHaveLength(0);
         expect([second.length, second[0]]).toEqual([3, 1]);
         const again = second.readUInt16LE(1);
         plays = again === 0 ? Infinity : again + 1;
