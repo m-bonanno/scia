@@ -6,13 +6,15 @@ An item is done only when it was seen working in the real app: the built Electro
 
 What was seen of each item, how, and what was not: [evidence.md](./evidence.md). The owner's decisions, by date: [decisions.md](./decisions.md).
 
-In the tables, **Proven by** names the strongest proof: _Specs_ (unit, integration, feature); _E2E_ (the suite on the built app, in CI); _CI install_ (the installer installed silently on a runner); _Script_ (the real app on Windows, driven by a script); _Hand_ (the owner). Beside them, _Report_: a Beta report from someone outside the team that saw the item work, the word linked to its issue — evidence of its own, apart from a _Script_ and from the owner's _Hand_, ranked against none of them, and never in the place of what the owner's hand is to see. **Not seen** is the main gap; the full list is in the evidence.
+In the tables, **Proven by** names the strongest proof: _Specs_ (unit, integration, feature); _E2E_ (the suite on the built app, in CI); _CI install_ (the installer installed silently on a runner); _Script_ (the real app on Windows, driven by a script); _Hand_ (the owner). Beside them, _Report_: a Beta report from someone outside the team that saw the item work, the word linked to its issue — evidence of its own, never in the place of what the owner's hand is to see. **A _Report_ alone does not make an item done**: an item needs the owner's _Hand_ or a _Script_ to be ticked. **A _Script_ is the stronger proof of the two**: it runs again on the app built from the repository. **A report that answers "No" for an item already ticked opens a bug** with the report's evidence, and the item stays ticked until the bug confirms it is broken (the owner, 24 November 2026, #327). **Not seen** is the main gap; the full list is in the evidence.
 
 ## The gate of v1.0.0
 
 The first stable release, `v1.0.0`, ships for Windows only, from a public repository. It is tagged when the three lists below are ticked.
 
 ### Build
+
+What a line leaves "to be seen" is a line of #334, the owner's sitting ("The owner's hands", below).
 
 - [ ] The window really in use before Scia stays silent (#62): built ([ADR 0020](../adr/0020-the-window-in-use-asked-of-windows.md)), to be seen by hand (#13).
 - [x] The `--inspect` fuse off in the shipped app, and the installer's smoke test driving it by the page's debugging port (#115).
@@ -22,6 +24,8 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 - [x] #7's README and ADR point: AllDebrid's row in the README's Integrations table (since #275, its section of [integrations.md](./integrations.md), which the README points to), the roadmap, and the port a service plugs into, [ADR 0005](../adr/0005-a-service-resolves-a-link.md), with [ADR 0025](../adr/0025-a-link-that-opens-into-several-files.md) beside it (#180 and #181 landed).
 - [x] A key sealed just before the app was killed, read back (#69): built ([ADR 0023](../adr/0023-a-key-said-kept-once-it-can-be-read-back.md)), and proven by the E2E suite in CI — the built app killed right after a connection on three new profiles, each key read back.
 - [x] A save of `state.json` not lost while another process has the file open (#151): built (#229), and held by specs on Windows, run by CI's Windows job — `state.json` held open for a moment while a save renames onto it, the save landing, and held throughout, the save given up and logged and the next one landing ([evidence](./evidence.md#a-save-of-statejson-while-another-process-holds-it)). Ticked on them by the owner's decision that the specs are enough (23 November 2026, on the review of #297; [decisions.md](./decisions.md#23-november-2026)): the real app with `state.json` held by another program stays not seen, and is not part of the owner's sitting.
+- [ ] One write of `state.json` for the state changes that come together (#63; `v1.0.0` waits for it, the owner, 24 November 2026): to build.
+- [ ] Main's json files, and the engine's files that rename into place the same way, saved while another program has them open, as `state.json` is (#307; `v1.0.0` waits for it, the owner, 24 November 2026): to build.
 - [ ] The follow-ups the owner settled on 21 November 2026: the tray's four decisions (#256: built; the window at once held by CI's E2E suite, an installer's close by the installer's smoke test, the end of a session by the E2E suite only for a message after which nothing ends Scia; a real shutdown or sign-out, and what a person sees, to be seen by hand in #13), the folder's button (#276, from #40: "Change…" in words, the path cut at its start; built, held by specs and read in the built app by CI's E2E, which took the captures of Settings; to be seen by a person with the hand in the folder dialog, #40), a paused bar's tone (#260: built, held by specs and read in the built app by CI's E2E, which took its capture; to be seen by a person, in #58), the key's placeholder (#66: built, held by specs and by CI's E2E in both variants; to be seen in the app, with its capture, in #156), the clipboard's first read (#134, #277: built, held by specs and by CI's E2E with the clipboard answered in main; the system's own clipboard to be tried by a person, below), room under notices (#143), the popover's note (#159, #257: built, held by specs; to be seen in a packaged build, with its two captures, in the owner's sitting, #156), a code confirmed after Settings closed, with the notifications of a connection and of a code that connected nothing (#286: built, held by specs and by CI's E2E suite, which read main's asks for the notifications in its log; the notifications as the system draws them to be seen by a person, in #146), a magnet of one file and the field's placeholder (#150, #283: built, held by specs and by CI's E2E, which took again the captures that show the field with AllDebrid connected; to be seen in the app by a person, in #156).
 - [x] The page's logo and the app's icon drawing the mark in the same proportions (#88): one drawing, the icon's, in `@scia/contracts/mark`, held by specs; the captures CI takes retaken, the others with #156.
 - [x] The specs in quarantine fixed and back in the gates: the speed limit's (#43, #232) and HLS's (#162).
@@ -33,13 +37,13 @@ The first stable release, `v1.0.0`, ships for Windows only, from a public reposi
 
 ### The owner's hands
 
-One sitting, from one checklist, on a beta built as a release candidate:
+One sitting, from one checklist — #334, where each line names the issue it comes from and is ticked with what was seen — on a beta built as a release candidate:
 
 - [ ] AllDebrid with the owner's real key: a hoster link downloaded to the end, the connection by a code, a pasted magnet and the account's magnets, a file host's folder opened into its files, a protector's link, and a shortener's link to one file (#7, #137, #138, #181).
 - [ ] The real clipboard: links, a magnet and a file host's folder copied, and the start of the reading — a picture on it, a link on it while another program holds it open (#128, #139, #181, #277).
 - [ ] The tray by hand: the icon, its click, its menu, its tooltip, a notification looked at and clicked; the window as Scia starts; a shutdown, and an installer run, during a download (#13).
 - [ ] The installer downloaded by hand through SmartScreen, and run over a previous version with the app started afterwards (#70).
-- [ ] The icon on screen: taskbar, tray, Start menu, desktop, Alt+Tab (#85, #199).
+- [ ] The icon on screen: taskbar, tray, Start menu, desktop, Alt+Tab (#199).
 - [ ] Windows set to light: the page, the window and its buttons (#58).
 - [ ] The mark on a real `.exe` and a document (#33).
 - [ ] A hand in the folder dialog (#40) and on the speed menu (#43).
@@ -52,7 +56,7 @@ Checked after the tag, so not part of the gate: a beta updated to the stable (#8
 
 ### The owner's decisions
 
-None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisions.md#23-november-2026)), #228 and #285 joining the gate on 23 November.
+Settled on 21, 23 and 24 November 2026 ([decisions.md](./decisions.md#24-november-2026)), #228 and #285 joining the gate on 23 November, #63 and #307 on 24 November. Open: #339's two questions on the gate, asked from the review of #338 — whether it waits also for the decisions of 24 November still to build, and whether the lines ticked on other proof (#69 on CI's E2E suite, #151 on specs) stand beside the key's rule that an item needs the owner's _Hand_ or a _Script_. Two can come back with what is found: #328, if a cookie that yt-dlp's reader of one site sets passes a legal age verification (`v1.0.0` does not wait for it), and #269, if the paused bar does not read as intended in the light variants at the sitting.
 
 ## M0 — Foundations
 
@@ -84,7 +88,7 @@ None open: all were settled on 21 and 23 November 2026 ([decisions.md](./decisio
 | [A click on a notification leads to the row](./evidence.md#the-notification-when-a-download-ends)                         | #57              | no    | —                                    | —                                                                           | no        |
 | [Clipboard watching (optional)](./evidence.md#links-taken-from-the-clipboard)                                             | #128, #134, #285 | yes   | E2E, Hand                            | a ready row through a service; a real site's title (#285); the packaged app | yes       |
 | [Themes of the interface](./evidence.md#themes)                                                                           | #52, #58         | yes   | E2E, Script                          | a Windows set to light; a hand on the menu                                  | yes       |
-| [The app's icon, from the mark](./evidence.md#the-icon-of-the-app)                                                        | #81, #85         | yes   | read from the system                 | the icon on screen                                                          | yes       |
+| [The app's icon, from the mark](./evidence.md#the-icon-of-the-app)                                                        | #81, #199        | yes   | read from the system                 | the icon on screen                                                          | yes       |
 | [The installer (NSIS), by hand](./evidence.md#the-installer-by-hand)                                                      | #70              | yes   | CI install                           | a download by hand through SmartScreen                                      | yes       |
 | [The installer installed and started in CI](./evidence.md#the-installer-in-ci)                                            | #92, #111        | yes   | CI install, every PR and release     | SmartScreen; a hand                                                         | yes       |
 | [The installer refuses an older version](./evidence.md#the-installer-refuses-an-older-version)                            | #172             | yes   | Specs (NSIS), CI smoke, Script, Hand | a person running an older release                                           | yes       |
@@ -155,17 +159,16 @@ In this order ([decisions.md](./decisions.md#21-november-2026)):
 3. Linux: the packages built and tried on a clean machine, the tray on a desktop that draws one and on one that does not. The Linux job of the Release workflow is off until then (#28; [evidence](./evidence.md#linux)).
 4. The design of Scia's own reader of sites (#102), before any decision to build it.
 
+macOS comes after Linux, a milestone of its own (#299; the owner, 23 and 24 November 2026): how Scia is built, signed or not, and updated there is an ADR's, and the Apple Developer account is decided when its work starts, with that ADR — no cost before. Once it ships, the interface stops naming one platform's keys: the empty list says "press Ctrl+V" (`apps/renderer/src/features/downloads/download-list.tsx`).
+
 After `v1.0.0` too, not ordered: live streams (#121), streams that change partway (#123), a file that could not be marked said on its row (#34), the folder (#39) and the speed limit (#42) of one download, a second failure notified (#55), a notification's click leading to the row (#57), the rest of M3 and M4.
 
 | Item                                                                             | Issue | Built | Proven by | Not seen | In v1.0.0 |
 | -------------------------------------------------------------------------------- | ----- | ----- | --------- | -------- | --------- |
 | [Linux: AppImage and deb, the tray](./evidence.md#linux)                         | #13   | no    | —         | —        | no        |
 | [Other languages (i18n), Italian first, after M4](./evidence.md#other-languages) | —     | no    | —         | —        | no        |
+| macOS, after Linux                                                               | #299  | no    | —         | —        | no        |
 
 ## Specs in quarantine
 
 Held by no gate until their issue is fixed ([ADR 0019](../adr/0019-specs-in-quarantine.md), #195). None today: the two put there by #195 are back in the gates (#43, #162).
-
-## Not planned
-
-- macOS. If it is ever shipped, the interface stops naming one platform's keys: the empty list says "press Ctrl+V" (`apps/renderer/src/features/downloads/download-list.tsx`).

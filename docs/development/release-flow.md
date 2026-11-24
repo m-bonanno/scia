@@ -9,14 +9,20 @@
 | `develop` | `vX.Y.Z-beta.N` (a GitHub pre-release) | The tag, its notes, the Windows installer and what the updater reads |
 | `main`    | `vX.Y.Z` (a GitHub release)            | The same                                                             |
 
-Which commit moves which number (`.releaserc.json`, the Angular preset):
+Which commit moves which number (`.releaserc.json`, the Angular preset). This table is the one list of what each type releases; `CLAUDE.md` and [`git-flow.md`](./git-flow.md) point here (#114):
 
-| Commit                                                             | Release |
-| ------------------------------------------------------------------ | ------- |
-| `fix:`, `perf:`, `hotfix:`                                         | patch   |
-| `feat:`                                                            | minor   |
-| A `BREAKING CHANGE:` footer, or `type!:`                           | major   |
-| `chore:`, `docs:`, `ci:`, `test:`, `refactor:`, `style:`, `build:` | none    |
+| Commit                                                                         | Release |
+| ------------------------------------------------------------------------------ | ------- |
+| `fix:`, `perf:`, `hotfix:`                                                     | patch   |
+| `revert:`, with no scope, whose body says `This reverts commit <sha>.`         | patch   |
+| `feat:`                                                                        | minor   |
+| A `BREAKING CHANGE:` footer                                                    | major   |
+| `chore:`, `docs:`, `ci:`, `test:`, `refactor:`, `style:`, `build:`, `release:` | none    |
+
+- **A revert releases a patch only with its title and its line.** The preset reads a commit as a revert when its title starts `revert:` — with no scope — and its body says `This reverts commit <sha>.`, whatever the change it takes back. A `revert(scope):` title is not read as one, line or not, though commitlint accepts it and "A pull request" in [`git-flow.md`](./git-flow.md) asks for a scope where there is one: a revert's title takes none. A `revert:` title over any other body is a type with no rule, and releases nothing. A squash's body carries that line beside `Closes #N` ([`review-flow.md`](./review-flow.md), "Merging").
+- **A `type!:` title releases nothing today**: commitlint accepts `feat!:`, but the preset's header has no `!` and its one breaking keyword is the `BREAKING CHANGE:` footer, so such a title is read as no type at all (#251). A breaking change is written with the footer.
+
+Both were read from `@semantic-release/commit-analyzer` 13.0.1, with this repository's `.releaserc.json`, on 24 November 2026: `revert: …` with the line, a patch; without it, nothing; `revert(engine): …` with the line, nothing; `feat!: …`, nothing; `feat: …` with the footer, a major; `release: …`, nothing.
 
 This is why PR titles are checked: a squash merge makes the title the commit, and the commit makes the version.
 
