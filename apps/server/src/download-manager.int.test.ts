@@ -790,6 +790,9 @@ describe('DownloadManager', () => {
     const store = new JsonStateStore(join(folder.path, 'data', 'state.json'));
     const watched: { id?: string } = {};
     let claimedMost = 0;
+    let claimsRead = 0;
+    let saves = 0;
+    let writes = 0;
     const wrong: string[] = [];
     // Read when the store makes the state text, which is what lands in the file: every byte it
     // claims is in the part file by then. Never by polling the file (.claude/gotchas.md, Specs).
@@ -808,6 +811,7 @@ describe('DownloadManager', () => {
           claimed += downloaded;
         }
         claimedMost = Math.max(claimedMost, claimed);
+        claimsRead += 1;
       } finally {
         closeSync(part);
       }
@@ -816,25 +820,42 @@ describe('DownloadManager', () => {
       checkpointMs: 5,
       store: {
         load: () => store.load(),
-        save: (state) =>
-          store.save({
+        save: (state) => {
+          saves += 1;
+          return store.save({
             ...state,
             toJSON: () => {
+              writes += 1;
               readBack(state);
               return state;
             },
-          } as unknown as PersistedState),
+          } as unknown as PersistedState);
+        },
       },
     });
     const [added] = downloads.add({ urls: [slow.url] });
     watched.id = added!.id;
-    // A hundred downloads that fail at once: their changes come while the state is being written.
-    downloads.add({ urls: Array.from({ length: 100 }, () => gone.url) });
+    await until(() => claimedMost > 0);
+
+    // Once the state claims bytes, a hundred downloads that fail, a few at a time: their changes
+    // come faster than the writes, and each write's claims are read meanwhile.
+    const before = { saves, writes, claimsRead };
+    const failing = downloads.add({ urls: Array.from({ length: 100 }, () => gone.url) });
+    await until(() =>
+      failing.every((download) => statusOf(downloads, download.id) === DownloadStatus.Failed),
+    );
+    const during = {
+      saves: saves - before.saves,
+      writes: writes - before.writes,
+      claimsRead: claimsRead - before.claimsRead,
+    };
 
     await until(() => claimedMost >= 256 * 1024);
     await downloads.pause(added!.id);
     await downloads.close();
 
+    expect(during.saves).toBeGreaterThan(during.writes);
+    expect(during.claimsRead).toBeGreaterThan(0);
     expect(wrong).toEqual([]);
   });
 

@@ -188,9 +188,11 @@ The first eight were each seen failing with the line they hold taken away, on th
 - Specs on every system:
   - a hundred saves that come while the first write is on its way, not yet landed, make one more write: the latest state, as it is when that write starts;
   - a write that fails fails the save it carried, the two saves that came meanwhile share the next write and fail with it, and a save after the obstacle is gone lands;
-  - a download with checkpoints every 5 ms, from a host that does not end, while a hundred others fail at once: as the store makes each state text, the bytes it claims are read back from the part file and match the host's, until it has claimed 256 KiB and is paused.
+  - a download with checkpoints every 5 ms, from a host that does not end. Once its state claims bytes, a hundred others are added and fail, a few at a time. Over that stretch the saves asked for outnumber the writes made: 204 to 205 saves, 12 to 14 writes in three runs. As the store makes each state text, the bytes it claims are read back from the part file and match the host's. It runs until 256 KiB are claimed, then is paused.
 
-  Each was seen failing on macOS. The first two failed on `develop`'s store, and on a store that frees the waiting slot only once a write has landed. The third failed with the state made to claim its segments whole.
+  Each was seen failing on macOS:
+  - The first two failed on `develop`'s store, and on a store that frees the waiting slot only once a write has landed.
+  - The third failed on `develop`'s store, with 203 saves and 203 writes over its stretch, and with the state made to claim its segments whole.
 
 - A spec on Windows, run by CI's Windows job: `state.json` held while a write waits, fifty saves meanwhile, then one more write once it is free, which lands the latest state. Not seen failing on Windows. Lifted to run on macOS against `develop`'s store, it made 52 writes where it expects 3.
 - A probe that hosts the engine under Node on macOS (not committed): 1,600 downloads added at once to a host that answers 404, all failed, then the engine closed. The heap is V8's `heapUsed`, sampled every 10 ms under Node 24's default limit, and the time runs from the add to the last failure. Before the change it made 3,204 writes, peaked at 2,623 MB and took 5.9 s. After it, the 3,203 saves asked for made 223 writes, peaked at 72 MB and took 1.0 s.
