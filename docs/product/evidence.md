@@ -213,6 +213,7 @@ Now the record keeps only what a task's sync covered.
 
 - **What a task remembers.** It keeps `covered()`: what its progress was when the newest sync that has ended began. The newest begun wins, whichever ends last.
   - Once one of its syncs has failed, none moves it again: a lost write is said once, and a later sync can land over it.
+  - Its run then fails as the disk, never complete, and a retry fetches again from what was covered.
   - A part file that is gone resets it with the segments.
 - **At a checkpoint**, the manager syncs each running task, then keeps what that sync covered. It keeps nothing for a download that took a new task during the sync, as a link asked for again does (#180).
 - **A run that ends early** syncs its part file before it lets it go.
@@ -228,6 +229,7 @@ Now the record keeps only what a task's sync covered.
   - A stopped run and a failed one each sync on their part file's own handle, while it is open. The stopped run's covered is what it fetched.
   - A run whose syncs all fail covers nothing new, as a file and as a picture with its sound.
   - Once a sync has failed, a later one that lands moves nothing.
+  - In the engine, a download whose first sync of the part file is refused and whose others land fails `DISK` with 0 bytes kept. At a retry it completes, byte for byte. Red without that failure: the download completed, and round 3's head showed it completed with 0 bytes.
   - When an older sync ends after the newer one at the end of the run, what is covered is the newer one's.
   - A part file that is gone covers nothing of what the record remembered, also when the run then fails for room before it makes a new one.
   - In the engine, a download none of whose part file's syncs land keeps nothing of what it fetched: at the checkpoints, at the pause, and in the state read after the quit.
@@ -236,6 +238,7 @@ Now the record keeps only what a task's sync covered.
     - without the rule of the newest sync;
     - without the stop after a failed sync;
     - without the reset of a part file gone;
+    - with a sync that records what it covered when `datasync` rejects;
     - with a pair's covered made its live progress;
     - with the end of a run keeping live progress.
 - **A download that completes while a checkpoint syncs, and while its file is marked and renamed** (both slowed): it keeps all its bytes, in the engine and in the state. Red with the first fix of #349, which kept a progress read before the sync: the completed row said 0 bytes.

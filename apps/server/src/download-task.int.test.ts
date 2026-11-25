@@ -276,6 +276,32 @@ describe('DownloadTask against a real HTTP host', () => {
     expect(pair.covered().downloadedBytes).toBe(0);
   });
 
+  it('fails as the disk a run one of whose syncs failed, though it fetched every byte and its last sync landed (#347)', async () => {
+    let refused = false;
+    const probe = await open(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const datasync = Reflect.get(handles, 'datasync');
+    const once = vi.spyOn(handles, 'datasync').mockImplementation(function (this: FileHandle) {
+      if (refused) return datasync.call(this);
+      refused = true;
+      return Promise.reject(Object.assign(new Error('EIO'), { code: 'EIO' }));
+    });
+    onTestFinished(() => {
+      once.mockRestore();
+    });
+    const { url } = await host({ chunkBytes: 16 * 1024, chunkDelayMs: 20 });
+    const whole = task(url);
+    const running = whole.run(new AbortController().signal);
+    await until(() => whole.progress().downloadedBytes > 64 * 1024);
+    await expect(whole.sync()).rejects.toThrow('EIO');
+
+    await expect(running).rejects.toThrow(DiskError);
+
+    expect(whole.progress().downloadedBytes).toBe(body.length);
+    expect(whole.covered().downloadedBytes).toBe(0);
+  });
+
   it('covers nothing more once a sync has failed, though a later one says it landed (#347)', async () => {
     // A write the system could not put on the disk is said once, to the sync that met it: a later
     // sync can succeed over what was lost.

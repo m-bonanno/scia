@@ -142,6 +142,8 @@ export class DownloadTask {
   // Resolves with every byte on disk; rejects with the abort's reason, a RemoteError or a
   // DiskError, and progress() then says what was fetched and covered() what was kept. A run that
   // ends early is synced as one that ends whole; a sync that fails then leaves covered() as it was.
+  // A run one of whose syncs failed never resolves: a write may be lost, and a retry fetches again
+  // from what was covered.
   async run(signal: AbortSignal): Promise<void> {
     const file = await this.#openPart();
     this.#file = file;
@@ -154,6 +156,7 @@ export class DownloadTask {
       }
       await onDisk(() => this.#sync(file));
       synced = true;
+      if (this.#syncFailed) throw new DiskError('A write to the part file may have been lost.');
     } finally {
       // Before the file is let go: a checkpoint that syncs meanwhile must not find nothing to sync.
       if (!synced) await this.#sync(file).catch(() => undefined);

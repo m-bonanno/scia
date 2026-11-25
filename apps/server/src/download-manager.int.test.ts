@@ -944,6 +944,40 @@ describe('DownloadManager', () => {
     expect(wrong).toEqual([]);
   });
 
+  it('fails as the disk a download one of whose syncs failed, and completes it whole at a retry (#347)', async () => {
+    const { url } = await host({ chunkBytes: 16 * 1024, chunkDelayMs: 20, fileName: 'once.bin' });
+    const partPath = inDownloads(`once.bin${PART_SUFFIX}`);
+    // The first sync of the part file refused, as a write the system lost is said once; the rest
+    // land. The state's own file is told apart by what it is on the disk.
+    const probe = await openFile(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const datasync = Reflect.get(handles, 'datasync');
+    let refusedOnce = false;
+    const once = vi.spyOn(handles, 'datasync').mockImplementation(function (this: FileHandle) {
+      const part = existsSync(partPath) ? statSync(partPath).ino : undefined;
+      if (!refusedOnce && part !== undefined && fstatSync(this.fd).ino === part) {
+        refusedOnce = true;
+        return Promise.reject(Object.assign(new Error('EIO'), { code: 'EIO' }));
+      }
+      return datasync.call(this);
+    });
+    onTestFinished(() => {
+      once.mockRestore();
+    });
+    const downloads = await open({ checkpointMs: 5 });
+    const [added] = downloads.add({ urls: [url] });
+
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+    const failed = downloads.find(added!.id);
+    expect(refusedOnce).toBe(true);
+    expect([failed.failure, failed.downloadedBytes]).toEqual([DownloadFailure.Disk, 0]);
+
+    downloads.resume(added!.id);
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+    expect(Buffer.compare(await readFile(inDownloads('once.bin')), body)).toBe(0);
+  });
+
   it('keeps in the state none of what it fetched when no sync of the part file lands (#347)', async () => {
     const slow = await host(UNFINISHED);
     const partPath = inDownloads(`slow.bin${PART_SUFFIX}`);
