@@ -181,21 +181,24 @@ The first eight were each seen failing with the line they hold taken away, on th
 
 ### One write of `state.json` for the changes that come together
 
-#63. Every change in the list made the whole state text and queued a write of its own. Hundreds of downloads changing at once — a playlist (#8) — held a copy of the state for each change, and a `state.json` held by another program had one write waiting for each. `JsonStateStore` now keeps one write on its way. The saves that come meanwhile wait for one write of the latest state, made text as that write starts.
+#63. Every change in the list made the whole state text and queued a write of its own. Hundreds of downloads changing at once — many links pasted together (#303), a playlist once #8 is built — held a copy of the state for each change, and a `state.json` held by another program had one write waiting for each. `JsonStateStore` now keeps one write on its way. The saves that come meanwhile wait for one write of the latest state, made text as that write starts.
 
 **Seen**:
 
 - Specs on every system:
-  - a hundred saves that come while a write is on its way make one write, of the latest state as it is when that write starts;
-  - a write that fails fails every save it was to carry, and the next save writes again;
-  - while a download runs with checkpoints every 5 ms and a hundred others fail at once, the bytes each `state.json` claims are read back from the part file and match the host's.
+  - a hundred saves that come while the first write is on its way, not yet landed, make one more write: the latest state, as it is when that write starts;
+  - a write that fails fails the save it carried, the two saves that came meanwhile share the next write and fail with it, and a save after the obstacle is gone lands;
+  - a download with checkpoints every 5 ms, from a host that does not end, while a hundred others fail at once: as the store makes each state text, the bytes it claims are read back from the part file and match the host's, until it has claimed 256 KiB and is paused.
 
-  Each was seen failing: the first two on `develop`'s store, and the third with the state made to claim its segments whole.
+  Each was seen failing on macOS. The first two failed on `develop`'s store, and on a store that frees the waiting slot only once a write has landed. The third failed with the state made to claim its segments whole.
 
-- A spec on Windows, run by CI's Windows job: `state.json` held while a write waits, fifty saves meanwhile, then one more write once it is free, which lands the latest state.
-- A probe that hosts the engine under Node on macOS (not committed): 1,600 downloads added at once to a host that answers 404, all failed, then the engine closed. Before the change it made 3,204 writes, peaked at 2,623 MB of heap and took 5.9 s. After it, the 3,203 saves asked for made 223 writes, peaked at 72 MB and took 1.0 s.
+- A spec on Windows, run by CI's Windows job: `state.json` held while a write waits, fifty saves meanwhile, then one more write once it is free, which lands the latest state. Not seen failing on Windows. Lifted to run on macOS against `develop`'s store, it made 52 writes where it expects 3.
+- A probe that hosts the engine under Node on macOS (not committed): 1,600 downloads added at once to a host that answers 404, all failed, then the engine closed. The heap is V8's `heapUsed`, sampled every 10 ms under Node 24's default limit, and the time runs from the add to the last failure. Before the change it made 3,204 writes, peaked at 2,623 MB and took 5.9 s. After it, the 3,203 saves asked for made 223 writes, peaked at 72 MB and took 1.0 s.
 
-**Not seen**: many downloads changing at once in the real app on Windows. The gate line of `v1.0.0` is ticked on what holds it, by the owner's decision (25 November 2026, #63): it is not part of the owner's sitting.
+**Not seen**:
+
+- Many downloads changing at once in the real app on Windows. The gate line of `v1.0.0` is ticked on what holds it, by the owner's decision (25 November 2026, #63): it is not part of the owner's sitting.
+- A quit while `state.json` stays held. Worked out from the code, it waits for the write on its way and one more, about 2 s each, against main's 5 s before it stops the engine. It was not measured.
 
 ### Zero-filling on NTFS
 

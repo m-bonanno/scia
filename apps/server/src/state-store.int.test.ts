@@ -93,8 +93,13 @@ describe('JsonStateStore against a real folder', () => {
     const path = join(folder.path, 'state.json');
     const store = new JsonStateStore(path);
     const writes = { count: 0 };
-    const first = store.save(counted(0, writes));
-    await until(() => writes.count === 1);
+    let landed = false;
+    const first = store.save(counted(0, writes)).then(() => {
+      landed = true;
+    });
+    // One turn: the first write has started, and is on its way to the disk.
+    await Promise.resolve();
+    expect([writes.count, landed]).toEqual([1, false]);
 
     const meanwhile = Array.from({ length: 100 }, (_, index) =>
       store.save(counted(index + 1, writes)),
@@ -109,20 +114,27 @@ describe('JsonStateStore against a real folder', () => {
     expect(await markOn(path)).toBe(102);
   });
 
-  it('fails every save a failed write was to carry, and writes again at the next save (#63)', async () => {
+  it('fails the saves each failed write was to carry, and writes again at the next save (#63)', async () => {
     // A file where the folder of the state should be: no write can make it.
     const blocked = join(folder.path, 'data');
     await writeFile(blocked, '');
     const path = join(blocked, 'state.json');
     const store = new JsonStateStore(path);
     const writes = { count: 0 };
+    let settled = false;
     const outcomeOf = (saving: Promise<void>) =>
       saving.then(
         () => 'landed',
         () => 'failed',
       );
-    const first = outcomeOf(store.save(counted(1, writes)));
-    await until(() => writes.count === 1);
+    const first = outcomeOf(store.save(counted(1, writes))).then((outcome) => {
+      settled = true;
+      return outcome;
+    });
+    // One turn: the first write has started, and has not failed yet.
+    await Promise.resolve();
+    expect([writes.count, settled]).toEqual([1, false]);
+    // Both wait for the one write after the first.
     const meanwhile = [
       outcomeOf(store.save(counted(2, writes))),
       outcomeOf(store.save(counted(3, writes))),
@@ -144,8 +156,13 @@ describe('JsonStateStore against a real folder', () => {
       const writes = { count: 0 };
       await store.save(counted(0, writes));
       const held = await open(path, 'r');
-      const first = store.save(counted(1, writes));
+      let landed = false;
+      const first = store.save(counted(1, writes)).then(() => {
+        landed = true;
+      });
       await until(() => writes.count === 2);
+      // Its rename refused while the file is held: the write waits, on its way.
+      expect(landed).toBe(false);
 
       const meanwhile = Array.from({ length: 50 }, (_, index) =>
         store.save(counted(index + 2, writes)),

@@ -1,16 +1,16 @@
 import { randomBytes } from 'node:crypto';
 import { getEventListeners } from 'node:events';
-import { existsSync } from 'node:fs';
+import { closeSync, existsSync, openSync, readSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { IntegrationId } from '@scia/contracts';
-import { DownloadFailure, DownloadStatus, type Segment } from '@scia/core';
+import { DownloadFailure, DownloadStatus } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { DownloadManager, type ManagerDeps, PART_SUFFIX } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
 import { markerFor } from './origin-mark.ts';
 import { sparseMarkerFor } from './sparse-file.ts';
-import { JsonStateStore } from './state-store.ts';
+import { JsonStateStore, type PersistedState } from './state-store.ts';
 import type * as Throttles from './throttle.ts';
 import { neverAnswers } from './testing/never-answers.ts';
 import {
@@ -783,36 +783,59 @@ describe('DownloadManager', () => {
   });
 
   it('never has the state claim a byte the part file does not hold, while changes come faster than its writes (#63)', async () => {
-    const { url } = await host({ chunkBytes: 16 * 1024, chunkDelayMs: 5, fileName: 'claimed.bin' });
+    // A host that does not end while the spec reads: the download is paused once it has claims.
+    const slow = await host(UNFINISHED);
     const gone = await host({ status: 404 });
-    const statePath = join(folder.path, 'data', 'state.json');
-    const partPath = inDownloads(`claimed.bin${PART_SUFFIX}`);
-    const downloads = await open({ checkpointMs: 5 });
-    const [added] = downloads.add({ urls: [url] });
+    const partPath = inDownloads(`slow.bin${PART_SUFFIX}`);
+    const store = new JsonStateStore(join(folder.path, 'data', 'state.json'));
+    const watched: { id?: string } = {};
+    let claimedMost = 0;
+    const wrong: string[] = [];
+    // Read when the store makes the state text, which is what lands in the file: every byte it
+    // claims is in the part file by then. Never by polling the file (.claude/gotchas.md, Specs).
+    const readBack = (state: PersistedState) => {
+      const record = state.downloads.find((download) => download.id === watched.id);
+      if (record === undefined || record.segments.length === 0 || !existsSync(partPath)) return;
+      const part = openSync(partPath, 'r');
+      try {
+        let claimed = 0;
+        for (const { start, downloaded } of record.segments) {
+          const bytes = Buffer.alloc(downloaded);
+          readSync(part, bytes, 0, downloaded, start);
+          if (!bytes.equals(body.subarray(start, start + downloaded))) {
+            wrong.push(`${String(start)}+${String(downloaded)}`);
+          }
+          claimed += downloaded;
+        }
+        claimedMost = Math.max(claimedMost, claimed);
+      } finally {
+        closeSync(part);
+      }
+    };
+    const downloads = await open({
+      checkpointMs: 5,
+      store: {
+        load: () => store.load(),
+        save: (state) =>
+          store.save({
+            ...state,
+            toJSON: () => {
+              readBack(state);
+              return state;
+            },
+          } as unknown as PersistedState),
+      },
+    });
+    const [added] = downloads.add({ urls: [slow.url] });
+    watched.id = added!.id;
     // A hundred downloads that fail at once: their changes come while the state is being written.
     downloads.add({ urls: Array.from({ length: 100 }, () => gone.url) });
 
-    let compared = 0;
-    while (statusOf(downloads, added!.id) !== DownloadStatus.Completed) {
-      // The state first, then the part file: a byte the state claims was on disk before it.
-      const state = await readFile(statePath, 'utf8').then(
-        (text) => JSON.parse(text) as { downloads: { id: string; segments: Segment[] }[] },
-        () => undefined,
-      );
-      const segments = state?.downloads.find((download) => download.id === added!.id)?.segments;
-      const part = await readFile(partPath).catch(() => undefined);
-      if (segments !== undefined && part !== undefined) {
-        for (const { start, downloaded } of segments) {
-          const claimed = part.subarray(start, start + downloaded);
-          expect(Buffer.compare(claimed, body.subarray(start, start + downloaded))).toBe(0);
-          compared += downloaded;
-        }
-      }
-      await new Promise((resolve) => setTimeout(resolve, 2));
-    }
+    await until(() => claimedMost >= 256 * 1024);
+    await downloads.pause(added!.id);
+    await downloads.close();
 
-    expect(compared).toBeGreaterThan(0);
-    expect(Buffer.compare(await readFile(inDownloads('claimed.bin')), body)).toBe(0);
+    expect(wrong).toEqual([]);
   });
 
   it('pauses, keeps the bytes, and resumes to the same file', async () => {
