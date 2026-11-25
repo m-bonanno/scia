@@ -237,16 +237,20 @@ describe('YtDlpUpdates against a host that publishes releases as yt-dlp does', (
       await first.close();
       const state = join(updatesFolder(), 'state.json');
       const held = await openFile(state, 'r');
-      logged = [];
-
-      const second = await open({ now: () => secondAt });
-      second.start(downloads);
-      // Held until the state's write has begun — its `.tmp` beside the file, read from the folder,
-      // never by opening either — and 300 ms more: the case itself, well inside the two seconds
-      // the write waits.
-      await until(async () => (await readdir(updatesFolder())).includes('state.json.tmp'));
-      await sleep(300);
-      await held.close();
+      // Let go in a `finally`: a handle left open when the wait gives up would have Windows refuse
+      // the folder's removal after the spec, beside the real failure.
+      try {
+        logged = [];
+        const second = await open({ now: () => secondAt });
+        second.start(downloads);
+        // Held until the state's write has begun — its `.tmp` beside the file, read from the
+        // folder, never by opening either — and 300 ms more: the case itself, well inside the two
+        // seconds the write waits.
+        await until(async () => (await readdir(updatesFolder())).includes('state.json.tmp'));
+        await sleep(300);
+      } finally {
+        await held.close();
+      }
       await until(() => events().some((event) => event.startsWith('yt_dlp_check')));
 
       expect(events()).not.toContain('yt_dlp_check_failed');

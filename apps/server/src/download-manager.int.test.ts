@@ -809,12 +809,18 @@ describe('DownloadManager', () => {
     let claimsRead = 0;
     let saves = 0;
     let writes = 0;
+    // The saves a write carried: a save no write carried was taken into a later one.
+    const carried = new Set<number>();
     const wrong: string[] = [];
     // Read when the store makes the state text, which is what lands in the file: every byte it
     // claims is in the part file by then. Never by polling the file (.claude/gotchas.md, Specs).
     const readBack = (state: PersistedState) => {
       const record = state.downloads.find((download) => download.id === watched.id);
-      if (record === undefined || record.segments.length === 0 || !existsSync(partPath)) return;
+      if (record === undefined || record.segments.length === 0) return;
+      if (!existsSync(partPath)) {
+        if (record.segments.some(({ downloaded }) => downloaded > 0)) wrong.push('no part file');
+        return;
+      }
       const part = openSync(partPath, 'r');
       try {
         let claimed = 0;
@@ -838,10 +844,12 @@ describe('DownloadManager', () => {
         load: () => store.load(),
         save: (state) => {
           saves += 1;
+          const save = saves;
           return store.save({
             ...state,
             toJSON: () => {
               writes += 1;
+              carried.add(save);
               readBack(state);
               return state;
             },
@@ -853,25 +861,35 @@ describe('DownloadManager', () => {
     watched.id = added!.id;
     await until(() => claimedMost > 0);
 
-    // Once the state claims bytes, a hundred downloads that fail, a few at a time: their changes
-    // come faster than the writes, and each write's claims are read meanwhile.
-    const before = { saves, writes, claimsRead };
-    const failing = downloads.add({ urls: Array.from({ length: 100 }, () => gone.url) });
-    await until(() =>
-      failing.every((download) => statusOf(downloads, download.id) === DownloadStatus.Failed),
-    );
-    const during = {
-      saves: saves - before.saves,
-      writes: writes - before.writes,
-      claimsRead: claimsRead - before.claimsRead,
-    };
+    // Once the state claims bytes, a hundred downloads that fail, ten at a time, each ten once a
+    // write has begun since the ten before: their changes come faster than the writes, and each
+    // write's claims are read meanwhile, however long one write lasts against the failures — on
+    // Windows one write that synced the state outlasted all hundred, and no claim was read among
+    // them (#348). The ten writes still end before the slow host does, in about six seconds: a
+    // write slowed by 500 ms holds, one slowed by 550 ms lets the download complete first.
+    const first = saves + 1;
+    const claimsBefore = claimsRead;
+    const failing: string[] = [];
+    for (let ten = 0; ten < 10; ten += 1) {
+      const begun = writes;
+      const these = downloads.add({ urls: Array.from({ length: 10 }, () => gone.url) });
+      failing.push(...these.map(({ id }) => id));
+      await until(() => writes > begun);
+    }
+    await until(() => failing.every((id) => statusOf(downloads, id) === DownloadStatus.Failed));
+    const last = saves;
+    const claimsAmong = claimsRead - claimsBefore;
 
     await until(() => claimedMost >= 256 * 1024);
     await downloads.pause(added!.id);
     await downloads.close();
 
-    expect(during.saves).toBeGreaterThan(during.writes);
-    expect(during.claimsRead).toBeGreaterThan(0);
+    // Counted once every write has landed: a store a write behind each save carries them all in
+    // the end, however far behind its writes fall while the saves come.
+    const stretch = last - first + 1;
+    const carriedOfStretch = [...carried].filter((save) => save >= first && save <= last).length;
+    expect(carriedOfStretch).toBeLessThan(stretch);
+    expect(claimsAmong).toBeGreaterThan(0);
     expect(wrong).toEqual([]);
   });
 
