@@ -22,15 +22,25 @@ export function createJsonLogger(
 export function describeFailure(error: unknown): object {
   if (!(error instanceof Error)) return { message: String(error) };
   const { code, syscall, killed, signal } = error as Partial<SystemFailure>;
-  const cause = error.cause === undefined ? {} : { cause: describeFailure(error.cause) };
-  if (syscall !== undefined) return { name: error.name, code, syscall, ...cause };
-  if (killed !== undefined) return { name: error.name, code, killed, signal, ...cause };
+  // A spawn's call names the program it could not start: `spawn <its whole path>`.
+  if (syscall !== undefined) return { name: error.name, code, syscall: syscall.split(' ')[0] };
+  if (killed !== undefined) return { name: error.name, code, killed, signal };
   return {
     name: error.name,
     message: error.message,
     ...(code === undefined ? {} : { code }),
-    ...cause,
+    ...(error.cause === undefined ? {} : { cause: describeFailure(error.cause) }),
   };
+}
+
+// The one line the engine writes when it cannot start, before any logger exists: main copies it
+// into its log like any other.
+export function startFailedLine(error: unknown): string {
+  return JSON.stringify({
+    level: 'error',
+    event: 'engine_start_failed',
+    error: describeFailure(error),
+  });
 }
 
 // Node's errors of a system call carry `syscall`; those of a program run, `killed` and `signal`.

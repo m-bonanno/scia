@@ -1,8 +1,7 @@
+import { startFailedLine } from './logger.ts';
 import { main } from './main.ts';
 
 main().catch((error: unknown) => {
-  console.error(
-    JSON.stringify({ level: 'error', event: 'engine_start_failed', error: String(error) }),
-  );
+  console.error(startFailedLine(error));
   process.exit(1);
 });
