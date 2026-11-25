@@ -103,10 +103,15 @@ export class DownloadTask {
   #wholeBytes = 0;
   readonly #claimed = new Set<number>();
   #file: FileHandle | undefined;
+  #covered: TaskProgress;
+  #syncsBegun = 0;
+  #coveredBy = 0;
+  #syncFailed = false;
 
   constructor(options: TaskOptions) {
     this.#options = options;
     this.#segments = [...options.segments];
+    this.#covered = this.progress();
   }
 
   get #ranged(): boolean {
@@ -128,27 +133,60 @@ export class DownloadTask {
     };
   }
 
+  // What the newest sync that has ended found on the disk: what progress() said as it began. The
+  // state keeps this, never progress(), which counts bytes a power cut can take back (#347).
+  covered(): TaskProgress {
+    return this.#covered;
+  }
+
   // Resolves with every byte on disk; rejects with the abort's reason, a RemoteError or a
-  // DiskError, and progress() then says what was kept.
+  // DiskError, and progress() then says what was fetched and covered() what was kept. A run that
+  // ends early is synced as one that ends whole; a sync that fails then leaves covered() as it was.
+  // A run one of whose syncs failed never resolves: a write may be lost, and a retry fetches again
+  // from what was covered.
   async run(signal: AbortSignal): Promise<void> {
     const file = await this.#openPart();
     this.#file = file;
+    let synced = false;
     try {
       if (this.#ranged) {
         await this.#runConnections(file, signal);
       } else {
         await this.#runWhole(file, signal);
       }
-      await onDisk(() => file.datasync());
+      await onDisk(() => this.#sync(file));
+      synced = true;
+      if (this.#syncFailed) throw new DiskError('A write to the part file may have been lost.');
     } finally {
+      // Before the file is let go: a checkpoint that syncs meanwhile must not find nothing to sync.
+      if (!synced) await this.#sync(file).catch(() => undefined);
       this.#file = undefined;
       await file.close();
     }
   }
 
-  // What progress() says is on disk is on disk after this, power cut included.
+  // covered() says, after this, what progress() said before it.
   async sync(): Promise<void> {
-    await this.#file?.datasync();
+    const file = this.#file;
+    if (file !== undefined) await this.#sync(file);
+  }
+
+  // The newest sync begun is the one covered() keeps, whichever ends last. Once one has failed,
+  // none moves it again: the system says a write it could not keep once, to the sync that met it,
+  // and a later sync can land over what was lost.
+  async #sync(file: FileHandle): Promise<void> {
+    const begun = (this.#syncsBegun += 1);
+    const before = this.progress();
+    try {
+      await file.datasync();
+    } catch (error) {
+      this.#syncFailed = true;
+      throw error;
+    }
+    if (!this.#syncFailed && begun > this.#coveredBy) {
+      this.#coveredBy = begun;
+      this.#covered = before;
+    }
   }
 
   async #openPart(): Promise<FileHandle> {
@@ -195,8 +233,10 @@ export class DownloadTask {
     } catch (error) {
       if (!isMissing(error)) throw error;
     }
-    // The part file is gone, and with it what the segments remember.
+    // The part file is gone, and with it what the segments remember, and what was covered: a run
+    // that fails before it makes a new one keeps nothing of the old.
     this.#segments = this.#segments.map((segment) => ({ ...segment, downloaded: 0 }));
+    this.#covered = this.progress();
     return undefined;
   }
 

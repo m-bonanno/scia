@@ -202,6 +202,54 @@ The first eight were each seen failing with the line they hold taken away, on th
 - Many downloads changing at once in the real app on Windows. The gate line of `v1.0.0` is ticked on what holds it, by the owner's decision (25 November 2026, #63): it is not part of the owner's sitting.
 - A quit while `state.json` stays held. Worked out from the code, it waits for the write on its way and one more, about 2 s each, against main's 5 s before it stops the engine. It was not measured.
 
+### `state.json` and a power cut
+
+#347, found on the review of #346. A power cut keeps only what was synced, and the state could claim more by two roads:
+
+- **A checkpoint read a download's progress after it synced the part file.** The connections write on during the sync, so the read counted bytes the sync had not covered.
+- **A run that ended early closed its part file without a sync, and its progress was kept.** That is a pause, a failure or a quit.
+
+Now the record keeps only what a task's sync covered.
+
+- **What a task remembers.** It keeps `covered()`: what its progress was when the newest sync that has ended began. The newest begun wins, whichever ends last.
+  - Once one of its syncs has failed, none moves it again: a lost write is said once, and a later sync can land over it.
+  - Its run then fails as the disk, never complete, and a retry fetches again from what was covered.
+  - A part file that is gone resets it with the segments.
+- **At a checkpoint**, the manager syncs each running task, then keeps what that sync covered. It keeps nothing for a download that took a new task during the sync, as a link asked for again does (#180).
+- **A run that ends early** syncs its part file before it lets it go.
+- **`state.json` itself** is synced before it is renamed into place: a rename of bytes never synced could leave it empty after a power cut, and the list would start empty.
+
+**Seen**: specs on every system, each seen failing on macOS.
+
+- **A slowed sync, at a checkpoint and at a pause.**
+  - Every sync is made 150 ms slower while the connections write on.
+  - As the store makes each state text, the bytes it claims are read back from the part file as it was when the newest sync that has ended began. This runs at every checkpoint, then at a pause and the quit.
+  - Red on `develop`'s engine, with the live progress kept, and with a sync that records what came after it.
+- **A run that ends early.**
+  - A stopped run and a failed one each sync on their part file's own handle, while it is open. The stopped run's covered is what it fetched.
+  - A run whose syncs all fail covers nothing new, as a file and as a picture with its sound.
+  - Once a sync has failed, a later one that lands moves nothing.
+  - In the engine, a download whose first sync of the part file is refused and whose others land fails `DISK` with 0 bytes kept. At a retry it completes, byte for byte. Red without that failure: the download completed, and round 3's head showed it completed with 0 bytes.
+  - When an older sync ends after the newer one at the end of the run, what is covered is the newer one's.
+  - A part file that is gone covers nothing of what the record remembered, also when the run then fails for room before it makes a new one.
+  - In the engine, a download none of whose part file's syncs land keeps nothing of what it fetched: at the checkpoints, at the pause, and in the state read after the quit.
+  - Red:
+    - on `develop`'s task;
+    - without the rule of the newest sync;
+    - without the stop after a failed sync;
+    - without the reset of a part file gone;
+    - with a sync that records what it covered when `datasync` rejects;
+    - with a pair's covered made its live progress;
+    - with the end of a run keeping live progress.
+- **A download that completes while a checkpoint syncs, and while its file is marked and renamed** (both slowed): it keeps all its bytes, in the engine and in the state. Red with the first fix of #349, which kept a progress read before the sync: the completed row said 0 bytes.
+- **A link asked for again, as another file, during a checkpoint's sync** (#180's road): no state claims the old file's bytes in the new one's part file. Red without the checkpoint's check of the task.
+- **`state.json`** is synced on the disk before the rename puts it in place. Red on `develop`'s store.
+
+**Not seen**:
+
+- A real power cut. The gate line of `v1.0.0` is ticked on its specs, by the owner's decision (25 November 2026, #347): it is not part of the owner's sitting.
+- How long a pause, a removal or a quit now waits for its sync on a slow disk: the row stays running until it lands. A USB disk (#265) is where to see it.
+
 ### Zero-filling on NTFS
 
 #182; ADR 0001, "to be measured before M1 closes". Measured on 23 November 2026, on Windows 11 (10.0.26200), an i7-12700KF with 64 GB of memory, Node 26.13.1, Defender's real-time protection on, by two throwaway scripts (not committed):

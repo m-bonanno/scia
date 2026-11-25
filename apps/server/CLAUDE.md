@@ -7,7 +7,17 @@ The engine downloads. It is a plain Node process: Electron forks it as a `utilit
 ## Rules
 
 - **Ports where there is a seam.** `RemoteSource` (probe + open a range) is what HLS and any future source implement; `LinkResolver` is the step before it, which a debrid service plugs into; `StateStore` is what a database would replace. Do not add a port without a second implementation or a test that needs the seam.
-- **The part file is the truth about bytes; `state.json` never claims more than the disk holds.** A checkpoint syncs the file first, then writes the state. A crash re-downloads a little; it never corrupts.
+- **The part file is the truth about bytes; `state.json` never claims more than the disk holds.** The record keeps a task's `covered()`, never its `progress()` (#347):
+  - **What `covered()` is:** what `progress()` said when the newest sync that has ended began. The newest begun wins, whichever ends last.
+  - **When it stops moving:** once one sync of the task has failed, no later sync moves it. A write the system could not keep is said once, to the sync that met it, and a later sync can land over what was lost.
+  - **What the run does then:** it never completes. It fails `DISK`, keeping what was covered, and a retry fetches again from there.
+  - **When it is reset:** when the part file is gone, it is reset with the segments.
+  - **Who syncs:** a checkpoint syncs each running task, then keeps what that sync covered. A run that ends early (a pause, a failure, a quit) syncs its part file before it lets it go, as one that ends whole does.
+  - **A new task:** a download that took one during a checkpoint's sync, as when a link is asked for again (#180), maybe for another file, keeps nothing of the old task from that checkpoint.
+  - **`state.json` itself** is synced before it is renamed into place.
+
+  A crash or a power cut re-downloads a little; it never corrupts.
+
 - **`state.json` is written once for the changes that come together** (`JsonStateStore.save`, #63): one write at a time, and the saves that come while it is on its way wait for one write of the latest state, made text as that write starts, never at the save. A save resolves when a write that carries its state lands, and rejects when that write fails: a checkpoint's progress, or the state at quit, is in the file once its save resolves. Hundreds of downloads changing at once — many links pasted together (#303), a playlist once #8 is built — keep neither a copy of the state each nor a write each, and a file another program holds has one state waiting behind it. A spec counts the writes; another reads, as the store makes each state text, the bytes it claims back from the part file.
 - **A ranged part file is made sparse, and its room is looked at, not reserved** ([ADR 0026](../../docs/adr/0026-a-part-file-made-sparse.md), #182). On NTFS a file whose size is set ahead of its bytes is filled with zeros up to a write far into it, while that write waits and holds one of Node's disk threads: 32 s with nothing written, for a 32 GiB file on an NVMe SSD.
   - Before its size is set — a new one while it is empty — the part file is made sparse (`sparseMarkerFor`): on Windows by the system's `fsutil sparse setflag`, by its full path under `SystemRoot`, with an environment built from nothing, ended after `SPARSE_LIMIT_MS`; elsewhere nothing is asked, a size set by `truncate` being a hole already. A refusal is logged (`part_file_not_sparse`, with the id) and the download goes on with the file dense: it never fails for it.

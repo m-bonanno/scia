@@ -96,8 +96,18 @@ export class PairTask {
   }
 
   progress(): { readonly segments: Segment[]; readonly downloadedBytes: number } {
-    const picture = this.#picture.progress();
-    const sound = this.#sound.progress();
+    return this.#both(this.#picture.progress(), this.#sound.progress());
+  }
+
+  // What the two files' newest syncs found on the disk (DownloadTask.covered, #347).
+  covered(): { readonly segments: Segment[]; readonly downloadedBytes: number } {
+    return this.#both(this.#picture.covered(), this.#sound.covered());
+  }
+
+  #both(
+    picture: { readonly segments: Segment[]; readonly downloadedBytes: number },
+    sound: { readonly segments: Segment[]; readonly downloadedBytes: number },
+  ): { readonly segments: Segment[]; readonly downloadedBytes: number } {
     const split = this.#options.picture.totalBytes;
     const segments =
       split === null || this.#options.sound.totalBytes === null
@@ -112,8 +122,8 @@ export class PairTask {
     };
   }
 
-  // What progress() says is on disk is on disk after this: the file being fetched is synced, and
-  // the one fetched before it was synced at its end.
+  // covered() says, after this, what progress() said before it: the file being fetched is synced,
+  // and the one fetched before it was synced at its end.
   async sync(): Promise<void> {
     await this.#picture.sync();
     await this.#sound.sync();

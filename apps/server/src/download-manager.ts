@@ -230,6 +230,14 @@ function progressOf(task: DownloadTask | HlsTask | PairTask | undefined): Progre
   return { ...task.progress(), timeline: null };
 }
 
+// What the state keeps of a task: what its newest sync found on the disk (#347). A stream's pieces
+// are each synced before its timeline counts them; its byte count also holds the piece on its way,
+// which a resume never skips, its pieces read again from their folder.
+function coveredOf(task: DownloadTask | HlsTask | PairTask): Progress | undefined {
+  if (task instanceof HlsTask) return progressOf(task);
+  return { ...task.covered(), timeline: null };
+}
+
 // What is left to fetch: of a file's size, or — for a stream, whose size is not known — what the
 // pieces already fetched say of the rest, at the same bytes per second of video.
 function bytesLeft(
@@ -1293,20 +1301,25 @@ export class DownloadManager {
     }
   }
 
-  // The state file never claims a byte the disk does not hold: sync first, then write.
+  // The state file never claims a byte the disk does not hold: a download's task is synced, then
+  // what that sync covered is kept, then written (#347).
   async #checkpointNow(): Promise<void> {
     if (this.#checkpointing) return;
     this.#checkpointing = true;
     try {
       for (const [id, running] of this.#running) {
         const record = this.#records.find((candidate) => candidate.id === id);
-        if (running.task === undefined || record === undefined) continue;
+        const task = running.task;
+        if (task === undefined || record === undefined) continue;
         try {
-          await running.task.sync();
+          await task.sync();
         } catch {
           continue;
         }
-        this.#keepProgress(record, running.task);
+        // A link asked for again meanwhile (#180) gave a new task, maybe of another file: what the
+        // old one covered is no part of it. A run that ended kept the same covered() itself.
+        if (this.#running.get(id) !== running || running.task !== task) continue;
+        this.#keepProgress(record, task);
       }
       await this.#save();
     } finally {
@@ -1314,8 +1327,12 @@ export class DownloadManager {
     }
   }
 
+  // Only what a sync covered: a run's own progress counts bytes a power cut can take back (#347).
   #keepProgress(record: DownloadRecord, task: DownloadTask | HlsTask | PairTask): void {
-    const progress = progressOf(task);
+    this.#keep(record, coveredOf(task));
+  }
+
+  #keep(record: DownloadRecord, progress: Progress | undefined): void {
     if (progress === undefined) return;
     record.segments = progress.segments;
     record.downloadedBytes = progress.downloadedBytes;

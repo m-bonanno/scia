@@ -1,6 +1,7 @@
-import { open, readFile, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { type FileHandle, open, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { JsonStateStore, type PersistedState } from './state-store.ts';
 import { scratchFolder, until } from './testing/scratch.ts';
 
@@ -112,6 +113,29 @@ describe('JsonStateStore against a real folder', () => {
 
     expect(writes.count).toBe(2);
     expect(await markOn(path)).toBe(102);
+  });
+
+  it('syncs the state to the disk before it renames it into place (#347)', async () => {
+    // A power cut after a rename whose bytes were never synced leaves an empty file: set aside as
+    // `.unreadable`, the list would start empty.
+    const path = join(folder.path, 'state.json');
+    const synced: string[] = [];
+    const probe = await open(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const datasync = Reflect.get(handles, 'datasync');
+    const syncs = vi.spyOn(handles, 'datasync').mockImplementation(function (this: FileHandle) {
+      synced.push(existsSync(path) ? 'after the rename' : 'before the rename');
+      return datasync.call(this);
+    });
+    onTestFinished(() => {
+      syncs.mockRestore();
+    });
+
+    await new JsonStateStore(path).save(counted(1, { count: 0 }));
+
+    expect(synced).toEqual(['before the rename']);
+    expect(await markOn(path)).toBe(1);
   });
 
   it('fails the saves each failed write was to carry, and writes again at the next save (#63)', async () => {

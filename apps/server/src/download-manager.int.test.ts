@@ -1,12 +1,28 @@
 import { randomBytes } from 'node:crypto';
 import { getEventListeners } from 'node:events';
-import { closeSync, existsSync, openSync, readSync } from 'node:fs';
-import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+  statSync,
+} from 'node:fs';
+import {
+  type FileHandle,
+  mkdir,
+  open as openFile,
+  readdir,
+  readFile,
+  writeFile,
+} from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { IntegrationId } from '@scia/contracts';
 import { DownloadFailure, DownloadStatus } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { DownloadManager, type ManagerDeps, PART_SUFFIX } from './download-manager.ts';
+import { DownloadTask } from './download-task.ts';
 import { HttpSource } from './http-source.ts';
 import { markerFor } from './origin-mark.ts';
 import { sparseMarkerFor } from './sparse-file.ts';
@@ -857,6 +873,193 @@ describe('DownloadManager', () => {
     expect(during.saves).toBeGreaterThan(during.writes);
     expect(during.claimsRead).toBeGreaterThan(0);
     expect(wrong).toEqual([]);
+  });
+
+  it('has the state claim only bytes a sync covered, at a checkpoint and at a pause (#347)', async () => {
+    const slow = await host(UNFINISHED);
+    const partPath = inDownloads(`slow.bin${PART_SUFFIX}`);
+    // The part file as it was when the newest sync that has ended began: what a power cut keeps.
+    let covered: Buffer | undefined;
+    let coveredFrom = -1;
+    let syncsBegun = 0;
+    const probe = await openFile(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const datasync = Reflect.get(handles, 'datasync');
+    const syncs = vi.spyOn(handles, 'datasync').mockImplementation(async function (
+      this: FileHandle,
+    ) {
+      const begun = (syncsBegun += 1);
+      const before = existsSync(partPath) ? readFileSync(partPath) : undefined;
+      // A slow disk: the connections write on while the sync runs.
+      await new Promise((resolve) => setTimeout(resolve, 150));
+      await datasync.call(this);
+      if (begun > coveredFrom) {
+        covered = before;
+        coveredFrom = begun;
+      }
+    });
+    onTestFinished(() => {
+      syncs.mockRestore();
+    });
+    const store = new JsonStateStore(join(folder.path, 'data', 'state.json'));
+    const watched: { id?: string } = {};
+    let claimedMost = 0;
+    const wrong: string[] = [];
+    // Read as the store makes each state text, against what the last sync covered.
+    const readBack = (state: PersistedState) => {
+      const record = state.downloads.find((download) => download.id === watched.id);
+      if (record === undefined) return;
+      let claimed = 0;
+      for (const { start, downloaded } of record.segments) {
+        const kept = covered?.subarray(start, start + downloaded);
+        if (downloaded > 0 && !kept?.equals(body.subarray(start, start + downloaded))) {
+          wrong.push(`${String(start)}+${String(downloaded)}`);
+        }
+        claimed += downloaded;
+      }
+      claimedMost = Math.max(claimedMost, claimed);
+    };
+    const downloads = await open({
+      checkpointMs: 5,
+      store: {
+        load: () => store.load(),
+        save: (state) =>
+          store.save({
+            ...state,
+            toJSON: () => {
+              readBack(state);
+              return state;
+            },
+          } as unknown as PersistedState),
+      },
+    });
+    const [added] = downloads.add({ urls: [slow.url] });
+    watched.id = added!.id;
+
+    await until(() => claimedMost >= 256 * 1024);
+    await downloads.pause(added!.id);
+    await downloads.close();
+
+    expect(wrong).toEqual([]);
+  });
+
+  it('fails as the disk a download one of whose syncs failed, and completes it whole at a retry (#347)', async () => {
+    const { url } = await host({ chunkBytes: 16 * 1024, chunkDelayMs: 20, fileName: 'once.bin' });
+    const partPath = inDownloads(`once.bin${PART_SUFFIX}`);
+    // The first sync of the part file refused, as a write the system lost is said once; the rest
+    // land. The state's own file is told apart by what it is on the disk.
+    const probe = await openFile(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const datasync = Reflect.get(handles, 'datasync');
+    let refusedOnce = false;
+    const once = vi.spyOn(handles, 'datasync').mockImplementation(function (this: FileHandle) {
+      const part = existsSync(partPath) ? statSync(partPath).ino : undefined;
+      if (!refusedOnce && part !== undefined && fstatSync(this.fd).ino === part) {
+        refusedOnce = true;
+        return Promise.reject(Object.assign(new Error('EIO'), { code: 'EIO' }));
+      }
+      return datasync.call(this);
+    });
+    onTestFinished(() => {
+      once.mockRestore();
+    });
+    const downloads = await open({ checkpointMs: 5 });
+    const [added] = downloads.add({ urls: [url] });
+
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Failed);
+    const failed = downloads.find(added!.id);
+    expect(refusedOnce).toBe(true);
+    expect([failed.failure, failed.downloadedBytes]).toEqual([DownloadFailure.Disk, 0]);
+
+    downloads.resume(added!.id);
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+    expect(Buffer.compare(await readFile(inDownloads('once.bin')), body)).toBe(0);
+  });
+
+  it('keeps in the state none of what it fetched when no sync of the part file lands (#347)', async () => {
+    const slow = await host(UNFINISHED);
+    const partPath = inDownloads(`slow.bin${PART_SUFFIX}`);
+    // Every sync of the part file refused, from its first: at the checkpoints and at the pause.
+    // The state's own file still syncs, told apart by what it is on the disk.
+    const probe = await openFile(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const datasync = Reflect.get(handles, 'datasync');
+    const refused = vi.spyOn(handles, 'datasync').mockImplementation(function (this: FileHandle) {
+      const part = existsSync(partPath) ? statSync(partPath).ino : undefined;
+      if (part !== undefined && fstatSync(this.fd).ino === part) {
+        return Promise.reject(Object.assign(new Error('EIO'), { code: 'EIO' }));
+      }
+      return datasync.call(this);
+    });
+    onTestFinished(() => {
+      refused.mockRestore();
+    });
+    const downloads = await open({ checkpointMs: 5 });
+    const [added] = downloads.add({ urls: [slow.url] });
+    await until(() => downloads.find(added!.id).downloadedBytes > 128 * 1024);
+
+    await downloads.pause(added!.id);
+    expect(downloads.find(added!.id).downloadedBytes).toBe(0);
+    await downloads.close();
+
+    // Read once, after the close, which waits for the last write (.claude/gotchas.md, Specs).
+    const saved = JSON.parse(await readFile(join(folder.path, 'data', 'state.json'), 'utf8')) as {
+      downloads: { downloadedBytes: number; segments: { downloaded: number }[] }[];
+    };
+    expect(
+      saved.downloads.map(({ downloadedBytes, segments }) => [
+        downloadedBytes,
+        segments.reduce((sum, segment) => sum + segment.downloaded, 0),
+      ]),
+    ).toEqual([[0, 0]]);
+  });
+
+  it('keeps every byte of a download that completes while a checkpoint syncs, and while its file is put in place (#347)', async () => {
+    // Only the checkpoint's sync is slow: the download completes while one is on its way.
+    let syncing = 0;
+    const sync = Reflect.get(DownloadTask.prototype, 'sync');
+    const slowed = vi.spyOn(DownloadTask.prototype, 'sync').mockImplementation(async function (
+      this: DownloadTask,
+    ) {
+      syncing += 1;
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        await sync.call(this);
+      } finally {
+        syncing -= 1;
+      }
+    });
+    onTestFinished(() => {
+      slowed.mockRestore();
+    });
+    const { url } = await host({ chunkDelayMs: 5 });
+    const downloads = await open({
+      checkpointMs: 5,
+      // The mark and the rename that end a run, as long as Windows' stream and an antivirus may
+      // make them: a checkpoint's sync ends while the file is put in place.
+      markDownloaded: () => new Promise((resolve) => setTimeout(resolve, 250)),
+    });
+    const [added] = downloads.add({ urls: [url] });
+
+    await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);
+    await until(() => syncing === 0);
+
+    const completed = downloads.find(added!.id);
+    expect([completed.downloadedBytes, completed.totalBytes]).toEqual([body.length, body.length]);
+    await downloads.close();
+    // Read once, after the close, which waits for the last write (.claude/gotchas.md, Specs).
+    const saved = JSON.parse(await readFile(join(folder.path, 'data', 'state.json'), 'utf8')) as {
+      downloads: { downloadedBytes: number; segments: { downloaded: number }[] }[];
+    };
+    expect(
+      saved.downloads.map(({ downloadedBytes, segments }) => [
+        downloadedBytes,
+        segments.reduce((sum, segment) => sum + segment.downloaded, 0),
+      ]),
+    ).toEqual([[body.length, body.length]]);
   });
 
   it('pauses, keeps the bytes, and resumes to the same file', async () => {
