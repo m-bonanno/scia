@@ -211,7 +211,9 @@ The first eight were each seen failing with the line they hold taken away, on th
 
 Now the record keeps only what a task's sync covered.
 
-- **What a task remembers.** It keeps `covered()`: what its progress was when its newest sync began. The newest begun wins, whichever ends last, and a sync that fails leaves it as it was.
+- **What a task remembers.** It keeps `covered()`: what its progress was when the newest sync that has ended began. The newest begun wins, whichever ends last.
+  - Once one of its syncs has failed, none moves it again: a lost write is said once, and a later sync can land over it.
+  - A part file that is gone resets it with the segments.
 - **At a checkpoint**, the manager syncs each running task, then keeps what that sync covered. It keeps nothing for a download that took a new task during the sync, as a link asked for again does (#180).
 - **A run that ends early** syncs its part file before it lets it go.
 - **`state.json` itself** is synced before it is renamed into place: a rename of bytes never synced could leave it empty after a power cut, and the list would start empty.
@@ -223,10 +225,19 @@ Now the record keeps only what a task's sync covered.
   - As the store makes each state text, the bytes it claims are read back from the part file as it was when the newest sync that has ended began. This runs at every checkpoint, then at a pause and the quit.
   - Red on `develop`'s engine, with the live progress kept, and with a sync that records what came after it.
 - **A run that ends early.**
-  - A stopped run and a failed one each sync on their part file's own handle, while it is open, and what they covered is what they fetched.
-  - A run whose syncs all fail covers nothing new.
+  - A stopped run and a failed one each sync on their part file's own handle, while it is open. The stopped run's covered is what it fetched.
+  - A run whose syncs all fail covers nothing new, as a file and as a picture with its sound.
+  - Once a sync has failed, a later one that lands moves nothing.
   - When an older sync ends after the newer one at the end of the run, what is covered is the newer one's.
-  - Red on `develop`'s task, and without the rule of the newest sync.
+  - A part file that is gone covers nothing of what the record remembered, also when the run then fails for room before it makes a new one.
+  - In the engine, a download none of whose part file's syncs land keeps nothing of what it fetched: at the checkpoints, at the pause, and in the state read after the quit.
+  - Red:
+    - on `develop`'s task;
+    - without the rule of the newest sync;
+    - without the stop after a failed sync;
+    - without the reset of a part file gone;
+    - with a pair's covered made its live progress;
+    - with the end of a run keeping live progress.
 - **A download that completes while a checkpoint syncs, and while its file is marked and renamed** (both slowed): it keeps all its bytes, in the engine and in the state. Red with the first fix of #349, which kept a progress read before the sync: the completed row said 0 bytes.
 - **A link asked for again, as another file, during a checkpoint's sync** (#180's road): no state claims the old file's bytes in the new one's part file. Red without the checkpoint's check of the task.
 - **`state.json`** is synced on the disk before the rename puts it in place. Red on `develop`'s store.

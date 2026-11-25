@@ -13,6 +13,7 @@ import { join } from 'node:path';
 import { DownloadFailure, isComplete, planSegments, type Segment } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { DownloadTask, type TaskOptions } from './download-task.ts';
+import { PairTask } from './pair-task.ts';
 import { HttpSource } from './http-source.ts';
 import { DiskError, RemoteError } from './remote-source.ts';
 import { sparseMarkerFor } from './sparse-file.ts';
@@ -186,6 +187,121 @@ describe('DownloadTask against a real HTTP host', () => {
     await expect(running).rejects.toThrow();
 
     // Nothing was synced: what it fetched is not what it kept.
+    expect(stopped.progress().downloadedBytes).toBeGreaterThan(0);
+    expect(stopped.covered().downloadedBytes).toBe(0);
+  });
+
+  // The refusal of every sync, for the specs of what is covered without one.
+  async function refuseEverySync(): Promise<void> {
+    const probe = await open(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const refused = vi
+      .spyOn(handles, 'datasync')
+      .mockRejectedValue(Object.assign(new Error('EIO'), { code: 'EIO' }));
+    onTestFinished(() => {
+      refused.mockRestore();
+    });
+  }
+
+  it('covers nothing of a part file that is gone, when the run then fails for room (#347)', async () => {
+    const { url } = await host();
+    // Bytes the record remembers, of a part file removed while the download was paused.
+    const remembered = planSegments(body.length, 4, MIB).map((segment) => ({
+      ...segment,
+      downloaded: 256 * 1024,
+    }));
+    const resumed = task(url, { segments: remembered, freeBytes: () => Promise.resolve(0) });
+
+    await expect(resumed.run(new AbortController().signal)).rejects.toThrow(DiskError);
+
+    expect(existsSync(partPath)).toBe(false);
+    expect(resumed.progress().downloadedBytes).toBe(0);
+    expect(resumed.covered().downloadedBytes).toBe(0);
+  });
+
+  it('covers none of the segments it was given when their part file is gone and no sync lands (#347)', async () => {
+    await refuseEverySync();
+    const { url } = await host({ chunkBytes: 16 * 1024, chunkDelayMs: 100 });
+    // Kept by an earlier run, half of each segment; their part file is gone since.
+    const kept = planSegments(body.length, 4, MIB).map((segment) => ({
+      ...segment,
+      downloaded: Math.floor((segment.end - segment.start) / 2),
+    }));
+    const keptBytes = kept.reduce((sum, segment) => sum + segment.downloaded, 0);
+    const stopped = task(url, { segments: kept });
+    const pause = new AbortController();
+    const running = stopped.run(pause.signal);
+    await until(() => {
+      const fetched = stopped.progress().downloadedBytes;
+      return fetched > 64 * 1024 && fetched < keptBytes;
+    });
+
+    pause.abort();
+    await expect(running).rejects.toThrow();
+
+    expect(stopped.covered().downloadedBytes).toBe(0);
+  });
+
+  it('covers, as a picture and its sound, only what their files synced (#347)', async () => {
+    await refuseEverySync();
+    const picture = await startRangeServer({ body, chunkBytes: 16 * 1024, chunkDelayMs: 100 });
+    const sound = await startRangeServer({
+      body: body.subarray(0, MIB),
+      chunkBytes: 16 * 1024,
+      chunkDelayMs: 100,
+    });
+    onTestFinished(async () => {
+      await picture.close();
+      await sound.close();
+    });
+    const pair = new PairTask({
+      source,
+      picture: { url: picture.url, headers: {}, totalBytes: body.length, resumable: true },
+      sound: { url: sound.url, headers: {}, totalBytes: MIB, resumable: true },
+      partPath,
+      connections: 4,
+      segments: planSegments(body.length + MIB, 4, MIB),
+      onBytes: () => undefined,
+      retryDelayMs: () => 1,
+    });
+    const pause = new AbortController();
+    const running = pair.run(pause.signal);
+    await until(() => pair.progress().downloadedBytes > 64 * 1024);
+
+    pause.abort();
+    await expect(running).rejects.toThrow();
+
+    expect(pair.progress().downloadedBytes).toBeGreaterThan(0);
+    expect(pair.covered().downloadedBytes).toBe(0);
+  });
+
+  it('covers nothing more once a sync has failed, though a later one says it landed (#347)', async () => {
+    // A write the system could not put on the disk is said once, to the sync that met it: a later
+    // sync can succeed over what was lost.
+    let refused = false;
+    const probe = await open(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const datasync = Reflect.get(handles, 'datasync');
+    const once = vi.spyOn(handles, 'datasync').mockImplementation(function (this: FileHandle) {
+      if (refused) return datasync.call(this);
+      refused = true;
+      return Promise.reject(Object.assign(new Error('EIO'), { code: 'EIO' }));
+    });
+    onTestFinished(() => {
+      once.mockRestore();
+    });
+    const { url } = await host({ chunkBytes: 16 * 1024, chunkDelayMs: 100 });
+    const stopped = task(url);
+    const pause = new AbortController();
+    const running = stopped.run(pause.signal);
+    await until(() => stopped.progress().downloadedBytes > 64 * 1024);
+    await expect(stopped.sync()).rejects.toThrow('EIO');
+
+    pause.abort();
+    await expect(running).rejects.toThrow();
+
     expect(stopped.progress().downloadedBytes).toBeGreaterThan(0);
     expect(stopped.covered().downloadedBytes).toBe(0);
   });

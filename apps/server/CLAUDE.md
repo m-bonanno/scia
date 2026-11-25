@@ -8,7 +8,9 @@ The engine downloads. It is a plain Node process: Electron forks it as a `utilit
 
 - **Ports where there is a seam.** `RemoteSource` (probe + open a range) is what HLS and any future source implement; `LinkResolver` is the step before it, which a debrid service plugs into; `StateStore` is what a database would replace. Do not add a port without a second implementation or a test that needs the seam.
 - **The part file is the truth about bytes; `state.json` never claims more than the disk holds.** The record keeps a task's `covered()`, never its `progress()` (#347):
-  - **What `covered()` is:** what `progress()` said when the task's newest sync began. The newest begun wins, whichever sync ends last. A failed sync leaves it as it was.
+  - **What `covered()` is:** what `progress()` said when the newest sync that has ended began. The newest begun wins, whichever ends last.
+  - **When it stops moving:** once one sync of the task has failed, no later sync moves it. A write the system could not keep is said once, to the sync that met it, and a later sync can land over what was lost.
+  - **When it is reset:** when the part file is gone, it is reset with the segments.
   - **Who syncs:** a checkpoint syncs each running task, then keeps what that sync covered. A run that ends early (a pause, a failure, a quit) syncs its part file before it lets it go, as one that ends whole does.
   - **A new task:** a download that took one during a checkpoint's sync, as when a link is asked for again (#180), maybe for another file, keeps nothing of the old task from that checkpoint.
   - **`state.json` itself** is synced before it is renamed into place.

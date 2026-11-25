@@ -1,6 +1,14 @@
 import { randomBytes } from 'node:crypto';
 import { getEventListeners } from 'node:events';
-import { closeSync, existsSync, openSync, readFileSync, readSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  openSync,
+  readFileSync,
+  readSync,
+  statSync,
+} from 'node:fs';
 import {
   type FileHandle,
   mkdir,
@@ -934,6 +942,45 @@ describe('DownloadManager', () => {
     await downloads.close();
 
     expect(wrong).toEqual([]);
+  });
+
+  it('keeps in the state none of what it fetched when no sync of the part file lands (#347)', async () => {
+    const slow = await host(UNFINISHED);
+    const partPath = inDownloads(`slow.bin${PART_SUFFIX}`);
+    // Every sync of the part file refused, from its first: at the checkpoints and at the pause.
+    // The state's own file still syncs, told apart by what it is on the disk.
+    const probe = await openFile(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const datasync = Reflect.get(handles, 'datasync');
+    const refused = vi.spyOn(handles, 'datasync').mockImplementation(function (this: FileHandle) {
+      const part = existsSync(partPath) ? statSync(partPath).ino : undefined;
+      if (part !== undefined && fstatSync(this.fd).ino === part) {
+        return Promise.reject(Object.assign(new Error('EIO'), { code: 'EIO' }));
+      }
+      return datasync.call(this);
+    });
+    onTestFinished(() => {
+      refused.mockRestore();
+    });
+    const downloads = await open({ checkpointMs: 5 });
+    const [added] = downloads.add({ urls: [slow.url] });
+    await until(() => downloads.find(added!.id).downloadedBytes > 128 * 1024);
+
+    await downloads.pause(added!.id);
+    expect(downloads.find(added!.id).downloadedBytes).toBe(0);
+    await downloads.close();
+
+    // Read once, after the close, which waits for the last write (.claude/gotchas.md, Specs).
+    const saved = JSON.parse(await readFile(join(folder.path, 'data', 'state.json'), 'utf8')) as {
+      downloads: { downloadedBytes: number; segments: { downloaded: number }[] }[];
+    };
+    expect(
+      saved.downloads.map(({ downloadedBytes, segments }) => [
+        downloadedBytes,
+        segments.reduce((sum, segment) => sum + segment.downloaded, 0),
+      ]),
+    ).toEqual([[0, 0]]);
   });
 
   it('keeps every byte of a download that completes while a checkpoint syncs, and while its file is put in place (#347)', async () => {

@@ -231,7 +231,8 @@ function progressOf(task: DownloadTask | HlsTask | PairTask | undefined): Progre
 }
 
 // What the state keeps of a task: what its newest sync found on the disk (#347). A stream's pieces
-// are each synced before they count, so its progress is what it kept.
+// are each synced before its timeline counts them; its byte count also holds the piece on its way,
+// which a resume never skips, its pieces read again from their folder.
 function coveredOf(task: DownloadTask | HlsTask | PairTask): Progress | undefined {
   if (task instanceof HlsTask) return progressOf(task);
   return { ...task.covered(), timeline: null };
