@@ -21,15 +21,21 @@ describe('describeFailure', () => {
     await folder.remove();
   });
 
-  // The engine's own entry, run by Node as main runs it, with an environment built from nothing.
+  // The engine's own entry, run by Node as main runs it, with an environment built from nothing,
+  // and ended well inside the spec's time should it ever start instead of failing.
   function entryRun(env: Record<string, string>): Promise<{ code: unknown; stderr: string }> {
     const entry = fileURLToPath(new URL('./entry.ts', import.meta.url));
     const system =
       process.env.SystemRoot === undefined ? {} : { SystemRoot: process.env.SystemRoot };
     return new Promise((done) => {
-      execFile(process.execPath, [entry], { env: { ...system, ...env } }, (error, _out, stderr) => {
-        done({ code: error === null ? 0 : error.code, stderr });
-      });
+      execFile(
+        process.execPath,
+        [entry],
+        { env: { ...system, ...env }, timeout: 10_000 },
+        (error, _out, stderr) => {
+          done({ code: error === null ? 0 : error.code, stderr });
+        },
+      );
     });
   }
 
