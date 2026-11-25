@@ -731,12 +731,17 @@ describe('a link that goes through a service', () => {
       // Held until the list's write has begun — its `.tmp` beside the file, read from the folder,
       // never by opening either — and 300 ms more: the case itself, well inside the two seconds
       // the write waits.
+      // Let go in a `finally`: a handle left open when the wait gives up would have Windows refuse
+      // the folder's removal after the spec, beside the real failure.
       const released = (async () => {
-        await until(async () =>
-          (await readdir(join(folder.path, 'data'))).includes('alldebrid-hosts.json.tmp'),
-        );
-        await sleep(300);
-        await held.close();
+        try {
+          await until(async () =>
+            (await readdir(join(folder.path, 'data'))).includes('alldebrid-hosts.json.tmp'),
+          );
+          await sleep(300);
+        } finally {
+          await held.close();
+        }
       })();
 
       const [service] = await Promise.all([
