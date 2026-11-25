@@ -4,7 +4,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises';
 import { join, sep } from 'node:path';
 import { IntegrationId } from '@scia/contracts';
-import { DownloadFailure, DownloadStatus } from '@scia/core';
+import { DownloadFailure, DownloadStatus, type Segment } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { DownloadManager, type ManagerDeps, PART_SUFFIX } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
@@ -780,6 +780,39 @@ describe('DownloadManager', () => {
     expect(statusOf(downloads, second!.id)).toBe(DownloadStatus.Queued);
     await until(() => statusOf(downloads, second!.id) === DownloadStatus.Completed);
     expect(statusOf(downloads, first!.id)).toBe(DownloadStatus.Completed);
+  });
+
+  it('never has the state claim a byte the part file does not hold, while changes come faster than its writes (#63)', async () => {
+    const { url } = await host({ chunkBytes: 16 * 1024, chunkDelayMs: 5, fileName: 'claimed.bin' });
+    const gone = await host({ status: 404 });
+    const statePath = join(folder.path, 'data', 'state.json');
+    const partPath = inDownloads(`claimed.bin${PART_SUFFIX}`);
+    const downloads = await open({ checkpointMs: 5 });
+    const [added] = downloads.add({ urls: [url] });
+    // A hundred downloads that fail at once: their changes come while the state is being written.
+    downloads.add({ urls: Array.from({ length: 100 }, () => gone.url) });
+
+    let compared = 0;
+    while (statusOf(downloads, added!.id) !== DownloadStatus.Completed) {
+      // The state first, then the part file: a byte the state claims was on disk before it.
+      const state = await readFile(statePath, 'utf8').then(
+        (text) => JSON.parse(text) as { downloads: { id: string; segments: Segment[] }[] },
+        () => undefined,
+      );
+      const segments = state?.downloads.find((download) => download.id === added!.id)?.segments;
+      const part = await readFile(partPath).catch(() => undefined);
+      if (segments !== undefined && part !== undefined) {
+        for (const { start, downloaded } of segments) {
+          const claimed = part.subarray(start, start + downloaded);
+          expect(Buffer.compare(claimed, body.subarray(start, start + downloaded))).toBe(0);
+          compared += downloaded;
+        }
+      }
+      await new Promise((resolve) => setTimeout(resolve, 2));
+    }
+
+    expect(compared).toBeGreaterThan(0);
+    expect(Buffer.compare(await readFile(inDownloads('claimed.bin')), body)).toBe(0);
   });
 
   it('pauses, keeps the bytes, and resumes to the same file', async () => {

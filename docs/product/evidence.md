@@ -179,6 +179,24 @@ The first eight were each seen failing with the line they hold taken away, on th
 
 **Not seen**: an antivirus or the indexer holding a file in the real app. The gate line of `v1.0.0` is ticked on what holds it, as #151's was on specs, by the owner's decision (25 November 2026, #339): the real app with a file held is not part of the owner's sitting.
 
+### One write of `state.json` for the changes that come together
+
+#63. Every change in the list made the whole state text and queued a write of its own. Hundreds of downloads changing at once — a playlist (#8) — held a copy of the state for each change, and a `state.json` held by another program had one write waiting for each. `JsonStateStore` now keeps one write on its way. The saves that come meanwhile wait for one write of the latest state, made text as that write starts.
+
+**Seen**:
+
+- Specs on every system:
+  - a hundred saves that come while a write is on its way make one write, of the latest state as it is when that write starts;
+  - a write that fails fails every save it was to carry, and the next save writes again;
+  - while a download runs with checkpoints every 5 ms and a hundred others fail at once, the bytes each `state.json` claims are read back from the part file and match the host's.
+
+  Each was seen failing: the first two on `develop`'s store, and the third with the state made to claim its segments whole.
+
+- A spec on Windows, run by CI's Windows job: `state.json` held while a write waits, fifty saves meanwhile, then one more write once it is free, which lands the latest state.
+- A probe that hosts the engine under Node on macOS (not committed): 1,600 downloads added at once to a host that answers 404, all failed, then the engine closed. Before the change it made 3,204 writes, peaked at 2,623 MB of heap and took 5.9 s. After it, the 3,203 saves asked for made 223 writes, peaked at 72 MB and took 1.0 s.
+
+**Not seen**: many downloads changing at once in the real app on Windows. The gate line of `v1.0.0` is ticked on what holds it, by the owner's decision (25 November 2026, #63): it is not part of the owner's sitting.
+
 ### Zero-filling on NTFS
 
 #182; ADR 0001, "to be measured before M1 closes". Measured on 23 November 2026, on Windows 11 (10.0.26200), an i7-12700KF with 64 GB of memory, Node 26.13.1, Defender's real-time protection on, by two throwaway scripts (not committed):
