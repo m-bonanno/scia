@@ -1,9 +1,17 @@
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { readFile, stat, statfs, truncate, writeFile } from 'node:fs/promises';
+import {
+  type FileHandle,
+  open,
+  readFile,
+  stat,
+  statfs,
+  truncate,
+  writeFile,
+} from 'node:fs/promises';
 import { join } from 'node:path';
 import { DownloadFailure, isComplete, planSegments, type Segment } from '@scia/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { DownloadTask, type TaskOptions } from './download-task.ts';
 import { HttpSource } from './http-source.ts';
 import { DiskError, RemoteError } from './remote-source.ts';
@@ -121,6 +129,38 @@ describe('DownloadTask against a real HTTP host', () => {
     await task(url).run(new AbortController().signal);
 
     expect(Buffer.compare(await readFile(partPath), body)).toBe(0);
+  });
+
+  it('syncs its part file before it closes it, when it is stopped and when it fails (#347)', async () => {
+    // What a stopped or failed run says it has is kept in the state: it is on the disk first.
+    // Read on the file's own handle, still open when it is synced (`close` is no method of the
+    // prototype, to watch; a sync after it would fail).
+    const events: string[] = [];
+    const probe = await open(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const datasync = Reflect.get(handles, 'datasync');
+    const syncs = vi.spyOn(handles, 'datasync').mockImplementation(function (this: FileHandle) {
+      events.push(this.fd >= 0 ? 'sync' : 'sync after close');
+      return datasync.call(this);
+    });
+    onTestFinished(() => {
+      syncs.mockRestore();
+    });
+
+    const { url } = await host({ chunkDelayMs: 5 });
+    const stopped = task(url);
+    const pause = new AbortController();
+    const running = stopped.run(pause.signal);
+    await until(() => stopped.progress().downloadedBytes > MIB);
+    pause.abort();
+    await expect(running).rejects.toThrow();
+    expect(events.splice(0)).toEqual(['sync']);
+
+    await server?.close();
+    const cutting = await host({ drops: 1000, dropAfterBytes: 0 });
+    await expect(task(cutting.url).run(new AbortController().signal)).rejects.toThrow(RemoteError);
+    expect(events.splice(0)).toEqual(['sync']);
   });
 
   it('gives up on a host that keeps cutting, and says the network failed', async () => {

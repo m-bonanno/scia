@@ -1293,20 +1293,26 @@ export class DownloadManager {
     }
   }
 
-  // The state file never claims a byte the disk does not hold: sync first, then write.
+  // The state file never claims a byte the disk does not hold: what a download has is read, then
+  // synced, then kept, then written. Read after the sync, it would count what the connections
+  // wrote while it ran (#347).
   async #checkpointNow(): Promise<void> {
     if (this.#checkpointing) return;
     this.#checkpointing = true;
     try {
       for (const [id, running] of this.#running) {
         const record = this.#records.find((candidate) => candidate.id === id);
-        if (running.task === undefined || record === undefined) continue;
+        const task = running.task;
+        if (task === undefined || record === undefined) continue;
+        const progress = progressOf(task);
         try {
-          await running.task.sync();
+          await task.sync();
         } catch {
           continue;
         }
-        this.#keepProgress(record, running.task);
+        // A run that ended, or took a new task, meanwhile has kept a newer progress of its own.
+        if (this.#running.get(id) !== running || running.task !== task) continue;
+        this.#keep(record, progress);
       }
       await this.#save();
     } finally {
@@ -1315,7 +1321,10 @@ export class DownloadManager {
   }
 
   #keepProgress(record: DownloadRecord, task: DownloadTask | HlsTask | PairTask): void {
-    const progress = progressOf(task);
+    this.#keep(record, progressOf(task));
+  }
+
+  #keep(record: DownloadRecord, progress: Progress | undefined): void {
     if (progress === undefined) return;
     record.segments = progress.segments;
     record.downloadedBytes = progress.downloadedBytes;

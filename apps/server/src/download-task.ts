@@ -129,10 +129,13 @@ export class DownloadTask {
   }
 
   // Resolves with every byte on disk; rejects with the abort's reason, a RemoteError or a
-  // DiskError, and progress() then says what was kept.
+  // DiskError, and progress() then says what was kept. A run that ends early is synced as one that
+  // ends whole: what it says it has is kept in the state, which must not outlive a power cut that
+  // took those bytes (#347).
   async run(signal: AbortSignal): Promise<void> {
     const file = await this.#openPart();
     this.#file = file;
+    let synced = false;
     try {
       if (this.#ranged) {
         await this.#runConnections(file, signal);
@@ -140,7 +143,10 @@ export class DownloadTask {
         await this.#runWhole(file, signal);
       }
       await onDisk(() => file.datasync());
+      synced = true;
     } finally {
+      // Before the file is let go: a checkpoint that syncs meanwhile must not find nothing to sync.
+      if (!synced) await file.datasync().catch(() => undefined);
       this.#file = undefined;
       await file.close();
     }

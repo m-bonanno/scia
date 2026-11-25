@@ -202,6 +202,29 @@ The first eight were each seen failing with the line they hold taken away, on th
 - Many downloads changing at once in the real app on Windows. The gate line of `v1.0.0` is ticked on what holds it, by the owner's decision (25 November 2026, #63): it is not part of the owner's sitting.
 - A quit while `state.json` stays held. Worked out from the code, it waits for the write on its way and one more, about 2 s each, against main's 5 s before it stops the engine. It was not measured.
 
+### `state.json` and a power cut
+
+#347, found on the review of #346. A power cut keeps only what was synced, and the state could claim more by two roads:
+
+- **A checkpoint read a download's progress after it synced the part file.** The connections write on during the sync, so the read counted bytes the sync had not covered.
+- **A run that ended early closed its part file without a sync, and its progress was kept.** That is a pause, a failure or a quit.
+
+Now a checkpoint reads first, then syncs, then keeps what it read, and keeps nothing for a run that ended or took a new task during its sync. A run that ends early syncs its part file before it lets it go.
+
+**Seen**: specs on every system.
+
+- **A slowed sync, at a checkpoint and at a pause.** Every sync is made 150 ms slower while the connections write on. As the store makes each state text, the bytes it claims are read back from the part file as it was when the newest sync that has ended began. This runs at every checkpoint, then at a pause and the quit.
+- **A run that ends early.** A stopped run and a failed one each sync their part file on its own handle, while it is still open.
+- **A download that completes during a checkpoint's sync.** Only the checkpoint's sync is slowed, by 300 ms. The download keeps all its bytes, in the engine and in the state.
+
+Each was seen failing on macOS:
+
+- the first on `develop`'s engine, on a checkpoint that reads after its sync, on a run that ends early without a sync, and on a run that lets the part file go before its sync;
+- the second on `develop`'s task;
+- the third without the checkpoint's check of the run: the completed download kept 0 bytes.
+
+**Not seen**: a real power cut. The gate line of `v1.0.0` is ticked on its specs, by the owner's decision (25 November 2026, #347): it is not part of the owner's sitting. The half of the checkpoint's check that names a new task — taken when a service's link expires and another is asked for (#180) — is held by no spec: the road needs a link that expires during a checkpoint's sync.
+
 ### Zero-filling on NTFS
 
 #182; ADR 0001, "to be measured before M1 closes". Measured on 23 November 2026, on Windows 11 (10.0.26200), an i7-12700KF with 64 GB of memory, Node 26.13.1, Defender's real-time protection on, by two throwaway scripts (not committed):

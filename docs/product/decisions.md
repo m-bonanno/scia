@@ -161,6 +161,11 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
   - **A site's own gate that Scia's own reader meets** — a family filter, a "mature content" switch — is of the "18 or older" disclaimer's kind when a click anyone can make passes it: the reader makes it, the click of the adult who uses Scia. One that asks for a login the person does not have, or for an age verification, is an access control, and the reader stops there and says so. "Respect the hosts" says it.
   - **#307's line is ticked on what holds it**, as #151's was: specs on Windows and CI's E2E suite on the built app. A file held by an antivirus or the indexer in the real app stays not seen, and does not join the owner's sitting (#334).
 - #63, chosen as a multiple-choice question once it was built: **its gate line is ticked on what holds it**. That is specs on every system and on Windows, and a probe that hosts the engine under Node, as #151's and #307's were ticked on theirs. Many downloads changing at once in the real app on Windows stays not seen, and does not join the owner's sitting (#334). The roadmap's key names it among the owner's exceptions to #327's rule.
+- #347, found by the backend engineer on the review of #346 (#63): a power cut could leave `state.json` claiming bytes written but not synced. Two answers, each chosen as a multiple-choice question:
+  - **`v1.0.0` waits for it.**
+  - Once it was built, **its gate line is ticked on its specs**, as #63's, #151's and #307's were. A real power cut is not part of the owner's sitting (#334).
+
+  The roadmap's key names it among the owner's exceptions.
 
 ## Undated in the roadmap
 
