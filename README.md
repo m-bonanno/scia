@@ -57,7 +57,7 @@
 
 ## Get it
 
-**There is no stable release yet.** Scia is in pre-release: take the newest `v1.0.0-beta.N` on the [Releases page](https://github.com/m-bonanno/scia/releases) that carries a Windows installer, `Scia-Setup-<version>.exe`. A release shows its notes first, and its installer a few minutes later, once the installer has been installed and tried on a test machine. One whose installer failed that try keeps its notes and no installer, and the next release mends it.
+**There is no stable release yet.** Scia is in pre-release: the latest `v1.0.0-beta.N` on the [Releases page](https://github.com/m-bonanno/scia/releases) carries its notes and a Windows installer, `Scia-Setup-<version>.exe`.
 
 > [!WARNING]
 > The installer is not signed, so Windows warns before running it. Download it only from this repository's Releases page, and run it only if you trust it.
