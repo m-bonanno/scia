@@ -35,9 +35,9 @@ One list, for the author before opening the PR, for the tech lead in the first r
 npm run gates
 ```
 
-It runs `check:adr` (no two ADRs of one number: [`git-flow.md`](./git-flow.md), "Work in parallel"), `format:check`, `lint`, `typecheck`, `test` (with a reporter of dots) and `build`, in that order, and stops at the first that fails, naming it (`scripts/gates.mjs`). Each can still be run alone while working. `SCIA_TEST_WORKERS=<n>` runs the tests on fewer workers: on the owner's machine the gates run with `SCIA_TEST_WORKERS=2`, one run at a time ([`git-flow.md`](./git-flow.md), "Work in parallel").
+It runs `check:adr` (no two ADRs of one number: [`git-flow.md`](./git-flow.md), "Work in parallel"), `format:check`, `lint`, `typecheck`, `test` (with a reporter of dots) and `build`, in that order, and stops at the first that fails, naming it (`scripts/gates.mjs`). Its last line is the one the test plan of the PR body carries, pasted as it was printed — the head, the workers, the time of the whole run and the test gate's counts as Vitest's summary words them ([`testing.md`](./testing.md), "The numbers in a PR body"; the owner, 24 November 2026, #342). Each can still be run alone while working. `SCIA_TEST_WORKERS=<n>` runs the tests on fewer workers: on the owner's machine the gates run with `SCIA_TEST_WORKERS=2`, one run at a time ([`git-flow.md`](./git-flow.md), "Work in parallel").
 
-With untracked files of other work in the tree, check the format of tracked files only: `git ls-files | xargs npx prettier --check --ignore-unknown`.
+With untracked files of other work in the tree, check the format of tracked files only while working: `git ls-files | xargs npx prettier --check --ignore-unknown`. The run whose line the body carries is made without them — moved out, or in a worktree of its own ([`testing.md`](./testing.md), "The numbers in a PR body").
 
 A PR that touches the app's runtime — `apps/desktop`, `apps/server`, `apps/renderer`, `packages/` — is also held by the E2E suite, which runs in CI's `E2E (Windows)` job, not on the owner's machine: it starts Electron, whose windows take the screen ([`testing.md`](./testing.md), #218). Read that job on the PR.
 

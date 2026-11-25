@@ -55,7 +55,7 @@ The owner may ask someone outside the team for a pull request, on an accepted is
    npm run gates
    ```
 
-   It runs the ADR numbers check, format check, lint, typecheck, tests and build, and stops at the first that fails.
+   It runs the ADR numbers check, format check, lint, typecheck, tests and build, and stops at the first that fails. Its last line goes into the test plan of your PR body, as it was printed.
 
 4. Open the PR into `develop`. Its title is a conventional commit too; its body follows the template and says **`Closes #N`**, with the number of the issue. A PR that closes no issue fails the `Linked issue` check.
 

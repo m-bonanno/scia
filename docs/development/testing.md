@@ -10,6 +10,15 @@
 
 **The E2E suite and the smoke test start Electron, and run in CI only** (#171, #218): the owner works on this machine, and the app's windows take the screen. `npm run test:e2e` and `test:smoke` refuse to start outside CI unless `SCIA_E2E_LOCAL=1` is set by hand, and a bare `vitest run` does not list either project (they exist only when `SCIA_E2E=1`, which those two scripts set). An agent never sets `SCIA_E2E_LOCAL`.
 
+## The numbers in a PR body
+
+`npm run gates` ends with one line written for the test plan of a PR body, and the body carries it as it was printed (the owner, 24 November 2026, #342): wrong numbers of a run, counted or copied from its output by hand, were among the most frequent blocking findings of that day's reviews.
+
+- **What it says**: the head the run began on (`git rev-parse --short HEAD`), the workers (`SCIA_TEST_WORKERS=<n>`, or the words "Vitest's own count of workers" when it is not set to a positive whole number), the time of the whole run, and the test gate's counts in the words of Vitest's summary — `Test Files` and `Tests`, each failed, passed, skipped and todo where there are any, of the total.
+- **Where the counts come from**: Vitest's JSON report, which the test gate writes to `node_modules/.cache/scia-gates/vitest.json` beside its dots, and which the script deletes before each run, so that no earlier run's report gives a line its counts. The report calls a file only passed or failed; a file none of whose tests runs is counted skipped, as Vitest's summary counts it (`scripts/gates.mjs`).
+- **A red run**: a red test gate gives the same counts, failed ones first, and the failing files by name — or, when it is red with no test failed, for an unhandled error, which the report does not name, the words "no test failed: Vitest's errors are printed above"; a gate red before the tests gives none.
+- **A tree with changes not committed** is not the head: the line says so beside the head, and goes into no body. An untracked file counts, since Prettier, ESLint and Vitest all read it. The gates are run again once the change is committed; files of other work are moved out of the tree first, or the run is made in a worktree of its own.
+
 ## Where CI runs them
 
 The pipeline is [ADR 0008](../adr/0008-the-delivery-pipeline.md). The gates are one workflow, `.github/workflows/gates.yml`: run on every PR; called by `release.yml`, on the commit a merge into `develop` or `main` makes, before it is tagged — the smoke test left out, as the release smokes its own installer; and called by `burn-in.yml`, several times on one commit ("Burn-in", below):
