@@ -167,12 +167,17 @@ export type PersistedState = z.infer<typeof stateSchema>;
 export interface StateStore {
   // Undefined on a first start.
   load(): Promise<PersistedState | undefined>;
+  // Settles once a write that carries the state has landed or failed. The state is read when that
+  // write starts: whatever changed in it by then is written too.
   save(state: PersistedState): Promise<void>;
 }
 
 export class JsonStateStore implements StateStore {
   readonly #path: string;
   #saving: Promise<void> = Promise.resolve();
+  // The write that every save since the last one started waits for, and the latest such save.
+  #next: Promise<void> | undefined;
+  #latest: PersistedState | undefined;
 
   constructor(path: string) {
     this.#path = path;
@@ -196,16 +201,29 @@ export class JsonStateStore implements StateStore {
   }
 
   // One write at a time, each a whole file renamed into place: a crash leaves the old state or
-  // the new one, never half of either.
+  // the new one, never half of either. The saves that come while a write is on its way wait for
+  // one write of the latest state, made text as it starts (#63): a thousand changes at once keep
+  // neither a copy of the state each nor a write each, and a file held by another program has one
+  // state waiting behind it, not one for every change.
   save(state: PersistedState): Promise<void> {
+    this.#latest = state;
+    if (this.#next === undefined) {
+      const write = () => this.#write();
+      this.#saving = this.#saving.then(write, write);
+      this.#next = this.#saving;
+    }
+    return this.#next;
+  }
+
+  async #write(): Promise<void> {
+    const state = this.#latest;
+    // A save from here on waits for the write after this one, even if this one fails.
+    this.#next = undefined;
+    this.#latest = undefined;
     const text = JSON.stringify(state);
-    const write = async () => {
-      await mkdir(dirname(this.#path), { recursive: true });
-      const temporary = `${this.#path}.tmp`;
-      await writeFile(temporary, text);
-      await renameWhenFree(() => rename(temporary, this.#path), sleep);
-    };
-    this.#saving = this.#saving.then(write, write);
-    return this.#saving;
+    await mkdir(dirname(this.#path), { recursive: true });
+    const temporary = `${this.#path}.tmp`;
+    await writeFile(temporary, text);
+    await renameWhenFree(() => rename(temporary, this.#path), sleep);
   }
 }
