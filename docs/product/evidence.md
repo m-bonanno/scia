@@ -177,7 +177,7 @@ The first eight were each seen failing with the line they hold taken away, on th
 - CI's E2E suite on the built app (`lifecycle.e2e.test.ts`): `theme.json` held by the spec's own process while main writes a theme chosen in Settings, and `notices.json` while main writes the first hide's notice, each held until main's `.tmp` stood beside the file and 300 ms more, each write landing (`theme_kept`, `notices_kept`) with nothing given up. With `json-file.ts`'s single rename put back, both failed at that hold and nowhere else, main logging `theme_not_kept { theme: 'ice', code: 'EPERM' }` and `notices_not_kept { notice: 'hidden-to-tray', code: 'EPERM' }` (Burn-in run 45478998552). With main handing the notices a log that says nothing, the notice's spec failed at its wait for main's line, and nothing else did (Burn-in run 45480995423): the spec holds `main.ts`'s wiring too.
 - The rule itself is held by unit specs on a clock of their own, on every system.
 
-**Not seen**: an antivirus or the indexer holding a file in the real app. The gate line of `v1.0.0` stays unticked: whether it is ticked on what holds it, as #151's was on specs, or that joins the owner's sitting, is #339's question to the owner.
+**Not seen**: an antivirus or the indexer holding a file in the real app. The gate line of `v1.0.0` is ticked on what holds it, as #151's was on specs, by the owner's decision (25 November 2026, #339): the real app with a file held is not part of the owner's sitting.
 
 ### Zero-filling on NTFS
 
