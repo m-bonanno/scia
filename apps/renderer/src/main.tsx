@@ -1,3 +1,5 @@
+// First, before any module that builds a schema: zod is configured for the page's policy.
+import './lib/zod-jitless.ts';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { App } from './app/app.tsx';

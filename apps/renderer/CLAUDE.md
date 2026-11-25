@@ -56,5 +56,6 @@ Anyone who downloads files: they paste a link and want to forget about it. The w
 
 - `features/<name>/` for a screen's parts, `lib/` for what several features share, `components/` for generic controls.
 - The live list comes from `lib/live.ts` (server-sent events into `useSyncExternalStore`); commands go through `lib/api.ts`, which checks every answer with the contract's Zod schema.
+- **Zod runs without compiling in the page** (`lib/zod-jitless.ts`, `main.tsx`'s first import; #61). The page's Content-Security-Policy refuses eval, and zod asks for it with `new Function("")` as it builds its first schema of an object: caught, but the browser says it in the console at every load. So the config comes before any module that builds a schema. The policy is never loosened for it.
 - No `node:*`, no import of engine code (types are fine). The renderer is a web page.
 - Component specs use Testing Library and query by role and name, as a person would find the control.
