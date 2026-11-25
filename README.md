@@ -63,7 +63,7 @@
 > The installer is not signed, so Windows warns before running it. Download it only from this repository's Releases page, and run it only if you trust it.
 
 - **Installed a pre-release?** Turn on "Beta versions" in Settings to keep getting updates. It is off by default, and until the first stable release there is nothing else to take.
-- **Windows only, for now.** Linux is to follow: until after the first stable release it is untried, and no package of it is built.
+- **Windows only, for now.** Linux is to follow, then macOS: until after the first stable release Linux is untried, and no package of it is built.
 - **Going back.** From `v1.0.0-beta.26` on, an installer older than the Scia installed refuses to run over it; one released before has no such check. Uninstall Scia first: your downloads and settings stay.
 
 ### Build from source
