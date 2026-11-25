@@ -936,7 +936,7 @@ describe('DownloadManager', () => {
     expect(wrong).toEqual([]);
   });
 
-  it('keeps the progress a run ended with, not an older one a checkpoint read before its sync (#347)', async () => {
+  it('keeps every byte of a download that completes while a checkpoint syncs, and while its file is put in place (#347)', async () => {
     // Only the checkpoint's sync is slow: the download completes while one is on its way.
     let syncing = 0;
     const sync = Reflect.get(DownloadTask.prototype, 'sync');
@@ -955,7 +955,12 @@ describe('DownloadManager', () => {
       slowed.mockRestore();
     });
     const { url } = await host({ chunkDelayMs: 5 });
-    const downloads = await open({ checkpointMs: 5 });
+    const downloads = await open({
+      checkpointMs: 5,
+      // The mark and the rename that end a run, as long as Windows' stream and an antivirus may
+      // make them: a checkpoint's sync ends while the file is put in place.
+      markDownloaded: () => new Promise((resolve) => setTimeout(resolve, 250)),
+    });
     const [added] = downloads.add({ urls: [url] });
 
     await until(() => statusOf(downloads, added!.id) === DownloadStatus.Completed);

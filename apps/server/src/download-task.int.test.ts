@@ -148,19 +148,82 @@ describe('DownloadTask against a real HTTP host', () => {
       syncs.mockRestore();
     });
 
-    const { url } = await host({ chunkDelayMs: 5 });
+    // A host that does not end before the pause: 16 KiB every 100 ms on each of four connections.
+    const { url } = await host({ chunkBytes: 16 * 1024, chunkDelayMs: 100 });
     const stopped = task(url);
     const pause = new AbortController();
     const running = stopped.run(pause.signal);
-    await until(() => stopped.progress().downloadedBytes > MIB);
+    await until(() => stopped.progress().downloadedBytes > 128 * 1024);
     pause.abort();
     await expect(running).rejects.toThrow();
     expect(events.splice(0)).toEqual(['sync']);
+    // What it fetched is what its sync covered.
+    expect(stopped.covered()).toEqual(stopped.progress());
 
     await server?.close();
     const cutting = await host({ drops: 1000, dropAfterBytes: 0 });
     await expect(task(cutting.url).run(new AbortController().signal)).rejects.toThrow(RemoteError);
     expect(events.splice(0)).toEqual(['sync']);
+  });
+
+  it('keeps covering only what its last sync found when the sync at its end fails (#347)', async () => {
+    const probe = await open(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const refused = vi
+      .spyOn(handles, 'datasync')
+      .mockRejectedValue(Object.assign(new Error('EIO'), { code: 'EIO' }));
+    onTestFinished(() => {
+      refused.mockRestore();
+    });
+    const { url } = await host({ chunkBytes: 16 * 1024, chunkDelayMs: 100 });
+    const stopped = task(url);
+    const pause = new AbortController();
+    const running = stopped.run(pause.signal);
+    await until(() => stopped.progress().downloadedBytes > 128 * 1024);
+
+    pause.abort();
+    await expect(running).rejects.toThrow();
+
+    // Nothing was synced: what it fetched is not what it kept.
+    expect(stopped.progress().downloadedBytes).toBeGreaterThan(0);
+    expect(stopped.covered().downloadedBytes).toBe(0);
+  });
+
+  it('keeps what its newest sync covered when an older one ends after it (#347)', async () => {
+    // The first sync lands, then is slow to say so; the one at the end of the run, begun later,
+    // ends first.
+    let first = true;
+    const probe = await open(join(folder.path, 'probe'), 'w');
+    await probe.close();
+    const handles = Object.getPrototypeOf(probe) as FileHandle;
+    const datasync = Reflect.get(handles, 'datasync');
+    const syncs = vi.spyOn(handles, 'datasync').mockImplementation(async function (
+      this: FileHandle,
+    ) {
+      const slow = first;
+      first = false;
+      await datasync.call(this);
+      if (slow) await new Promise((resolve) => setTimeout(resolve, 500));
+    });
+    onTestFinished(() => {
+      syncs.mockRestore();
+    });
+    const { url } = await host({ chunkBytes: 16 * 1024, chunkDelayMs: 100 });
+    const stopped = task(url);
+    const pause = new AbortController();
+    const running = stopped.run(pause.signal);
+    await until(() => stopped.progress().downloadedBytes > 64 * 1024);
+    const older = stopped.sync();
+    const atOlder = stopped.progress().downloadedBytes;
+    await until(() => stopped.progress().downloadedBytes > atOlder);
+
+    pause.abort();
+    await expect(running).rejects.toThrow();
+    await older;
+
+    expect(stopped.covered()).toEqual(stopped.progress());
+    expect(stopped.covered().downloadedBytes).toBeGreaterThan(atOlder);
   });
 
   it('gives up on a host that keeps cutting, and says the network failed', async () => {

@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import {
@@ -223,7 +223,15 @@ export class JsonStateStore implements StateStore {
     const text = JSON.stringify(state);
     await mkdir(dirname(this.#path), { recursive: true });
     const temporary = `${this.#path}.tmp`;
-    await writeFile(temporary, text);
+    // On the disk before it takes the name: a power cut after a rename of bytes never synced leaves
+    // an empty state, set aside as unreadable, and the list empty (#347).
+    const file = await open(temporary, 'w');
+    try {
+      await file.writeFile(text);
+      await file.datasync();
+    } finally {
+      await file.close();
+    }
     await renameWhenFree(() => rename(temporary, this.#path), sleep);
   }
 }

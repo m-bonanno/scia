@@ -209,21 +209,32 @@ The first eight were each seen failing with the line they hold taken away, on th
 - **A checkpoint read a download's progress after it synced the part file.** The connections write on during the sync, so the read counted bytes the sync had not covered.
 - **A run that ended early closed its part file without a sync, and its progress was kept.** That is a pause, a failure or a quit.
 
-Now a checkpoint reads first, then syncs, then keeps what it read, and keeps nothing for a run that ended or took a new task during its sync. A run that ends early syncs its part file before it lets it go.
+Now the record keeps only what a task's sync covered.
 
-**Seen**: specs on every system.
+- **What a task remembers.** It keeps `covered()`: what its progress was when its newest sync began. The newest begun wins, whichever ends last, and a sync that fails leaves it as it was.
+- **At a checkpoint**, the manager syncs each running task, then keeps what that sync covered. It keeps nothing for a download that took a new task during the sync, as a link asked for again does (#180).
+- **A run that ends early** syncs its part file before it lets it go.
+- **`state.json` itself** is synced before it is renamed into place: a rename of bytes never synced could leave it empty after a power cut, and the list would start empty.
 
-- **A slowed sync, at a checkpoint and at a pause.** Every sync is made 150 ms slower while the connections write on. As the store makes each state text, the bytes it claims are read back from the part file as it was when the newest sync that has ended began. This runs at every checkpoint, then at a pause and the quit.
-- **A run that ends early.** A stopped run and a failed one each sync their part file on its own handle, while it is still open.
-- **A download that completes during a checkpoint's sync.** Only the checkpoint's sync is slowed, by 300 ms. The download keeps all its bytes, in the engine and in the state.
+**Seen**: specs on every system, each seen failing on macOS.
 
-Each was seen failing on macOS:
+- **A slowed sync, at a checkpoint and at a pause.**
+  - Every sync is made 150 ms slower while the connections write on.
+  - As the store makes each state text, the bytes it claims are read back from the part file as it was when the newest sync that has ended began. This runs at every checkpoint, then at a pause and the quit.
+  - Red on `develop`'s engine, with the live progress kept, and with a sync that records what came after it.
+- **A run that ends early.**
+  - A stopped run and a failed one each sync on their part file's own handle, while it is open, and what they covered is what they fetched.
+  - A run whose syncs all fail covers nothing new.
+  - When an older sync ends after the newer one at the end of the run, what is covered is the newer one's.
+  - Red on `develop`'s task, and without the rule of the newest sync.
+- **A download that completes while a checkpoint syncs, and while its file is marked and renamed** (both slowed): it keeps all its bytes, in the engine and in the state. Red with the first fix of #349, which kept a progress read before the sync: the completed row said 0 bytes.
+- **A link asked for again, as another file, during a checkpoint's sync** (#180's road): no state claims the old file's bytes in the new one's part file. Red without the checkpoint's check of the task.
+- **`state.json`** is synced on the disk before the rename puts it in place. Red on `develop`'s store.
 
-- the first on `develop`'s engine, on a checkpoint that reads after its sync, on a run that ends early without a sync, and on a run that lets the part file go before its sync;
-- the second on `develop`'s task;
-- the third without the checkpoint's check of the run: the completed download kept 0 bytes.
+**Not seen**:
 
-**Not seen**: a real power cut. The gate line of `v1.0.0` is ticked on its specs, by the owner's decision (25 November 2026, #347): it is not part of the owner's sitting. The half of the checkpoint's check that names a new task — taken when a service's link expires and another is asked for (#180) — is held by no spec: the road needs a link that expires during a checkpoint's sync.
+- A real power cut. The gate line of `v1.0.0` is ticked on its specs, by the owner's decision (25 November 2026, #347): it is not part of the owner's sitting.
+- How long a pause, a removal or a quit now waits for its sync on a slow disk: the row stays running until it lands. A USB disk (#265) is where to see it.
 
 ### Zero-filling on NTFS
 

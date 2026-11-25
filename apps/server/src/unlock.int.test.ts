@@ -1,18 +1,19 @@
 import { randomBytes } from 'node:crypto';
 import { open as openFile, readdir, readFile, writeFile } from 'node:fs/promises';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { type IntegrationAccount, IntegrationId } from '@scia/contracts';
 import { DownloadFailure, DownloadStatus, ServiceFailure, UnlockFailure } from '@scia/core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { AllDebrid } from './alldebrid.ts';
-import { DownloadManager } from './download-manager.ts';
+import { DownloadManager, PART_SUFFIX } from './download-manager.ts';
+import { DownloadTask } from './download-task.ts';
 import { HttpSource } from './http-source.ts';
 import { Integrations } from './integrations.ts';
 import { MemoryVault } from './key-vault.ts';
 import type { Logger } from './logger.ts';
-import { JsonStateStore } from './state-store.ts';
+import { JsonStateStore, type PersistedState } from './state-store.ts';
 import {
   type AllDebridServer,
   type AllDebridServerOptions,
@@ -1118,6 +1119,83 @@ describe('a link that goes through a service', () => {
 
       expect(failed.failureStatus).toBe(410);
       expect(unlocks(alldebrid)).toHaveLength(2);
+    });
+
+    it('keeps nothing of the old link a checkpoint synced while another file was given (#347)', async () => {
+      // The checkpoint's sync is slow: the link is asked for again, as another file, while one is
+      // on its way.
+      let syncing = 0;
+      const sync = Reflect.get(DownloadTask.prototype, 'sync');
+      const slowed = vi.spyOn(DownloadTask.prototype, 'sync').mockImplementation(async function (
+        this: DownloadTask,
+      ) {
+        syncing += 1;
+        try {
+          await new Promise((resolve) => setTimeout(resolve, 400));
+          await sync.call(this);
+        } finally {
+          syncing -= 1;
+        }
+      });
+      onTestFinished(() => {
+        slowed.mockRestore();
+      });
+      const other = randomBytes(2 * MIB + 3);
+      const first = await fileHost({ ...slow, etag: '"a"' });
+      const second = await fileHost({ ...slow, body: other, etag: '"b"' });
+      const alldebrid = await serviceWith({ links: inTurn(first, second) });
+      const store = new JsonStateStore(statePath());
+      const partPath = inDownloads(`Film.mkv${PART_SUFFIX}`);
+      const wrong: string[] = [];
+      // As the store makes each state text: what it claims of the second file is the second file's.
+      const readBack = (state: PersistedState) => {
+        for (const record of state.downloads) {
+          if (record.validator !== '"b"' || !existsSync(partPath)) continue;
+          const part = readFileSync(partPath);
+          for (const { start, end, downloaded } of record.segments) {
+            if (end > other.length) {
+              wrong.push(`beyond ${String(start)}-${String(end)}`);
+            } else if (
+              downloaded > 0 &&
+              !part
+                .subarray(start, start + downloaded)
+                .equals(other.subarray(start, start + downloaded))
+            ) {
+              wrong.push(`${String(start)}+${String(downloaded)}`);
+            }
+          }
+        }
+      };
+      manager = await DownloadManager.open({
+        source,
+        store: {
+          load: () => store.load(),
+          save: (state) =>
+            store.save({
+              ...state,
+              toJSON: () => {
+                readBack(state);
+                return state;
+              },
+            } as unknown as PersistedState),
+        },
+        defaultDirectory: join(folder.path, 'downloads'),
+        logger,
+        retryDelayMs: () => 1,
+        checkpointMs: 5,
+        resolver: await connected(alldebrid),
+      });
+      const downloads = manager;
+      const [added] = downloads.add({ urls: [LINK] });
+      await until(() => first.sentOn(nth(1)) > MIB && syncing > 0);
+
+      first.expireLinks(410);
+      const done = await finished(downloads, added!.id, DownloadStatus.Completed);
+      await until(() => syncing === 0);
+
+      expect(Buffer.compare(await readFile(inDownloads('Film.mkv')), other)).toBe(0);
+      expect(done.via).toBe('alldebrid');
+      expect(wrong).toEqual([]);
     });
 
     it('asks no more once a link given again after a pause started from the first byte', async () => {
