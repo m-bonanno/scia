@@ -863,8 +863,10 @@ describe('DownloadManager', () => {
 
     // Once the state claims bytes, a hundred downloads that fail, ten at a time, each ten once a
     // write has begun since the ten before: their changes come faster than the writes, and each
-    // write's claims are read meanwhile, however long a write takes — on Windows one write that
-    // synced the state outlasted all hundred, and no claim was read among them (#348).
+    // write's claims are read meanwhile, however long one write lasts against the failures — on
+    // Windows one write that synced the state outlasted all hundred, and no claim was read among
+    // them (#348). The ten writes still end before the slow host does, in about six seconds: a
+    // write slowed by 500 ms holds, one slowed by 550 ms lets the download complete first.
     const first = saves + 1;
     const claimsBefore = claimsRead;
     const failing: string[] = [];

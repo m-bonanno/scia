@@ -730,9 +730,9 @@ describe('a link that goes through a service', () => {
       const held = await openFile(hostsFile(), 'r');
       // Held until the list's write has begun — its `.tmp` beside the file, read from the folder,
       // never by opening either — and 300 ms more: the case itself, well inside the two seconds
-      // the write waits.
-      // Let go in a `finally`: a handle left open when the wait gives up would have Windows refuse
-      // the folder's removal after the spec, beside the real failure.
+      // the write waits. Let go whatever happens, and waited for before the spec ends, also when the
+      // reading fails first: a handle still open would have Windows refuse the folder's removal,
+      // beside the real failure.
       const released = (async () => {
         try {
           await until(async () =>
@@ -747,7 +747,7 @@ describe('a link that goes through a service', () => {
       const [service] = await Promise.all([
         integrations.serviceFor(LINK, new AbortController().signal),
         released,
-      ]);
+      ]).finally(() => released.catch(() => undefined));
 
       expect(service).toBe('alldebrid');
       expect(logged.filter((line) => line.includes('service_hosts_not_kept'))).toEqual([]);
