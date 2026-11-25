@@ -1203,7 +1203,9 @@ export class DownloadManager {
       this.#busy = busy;
       for (const listener of this.#busyListeners) listener(busy);
     }
-    void this.#save();
+    // Once the engine stops, its last save writes what changed: a write begun after it would land
+    // after the engine, and the folder, are gone (#359).
+    if (!this.#closed) void this.#save();
   }
 
   async #save(): Promise<void> {
@@ -1321,7 +1323,8 @@ export class DownloadManager {
         if (this.#running.get(id) !== running || running.task !== task) continue;
         this.#keepProgress(record, task);
       }
-      await this.#save();
+      // A sync that ended after the engine stopped: the stop's last save wrote the state (#359).
+      if (!this.#closed) await this.#save();
     } finally {
       this.#checkpointing = false;
     }

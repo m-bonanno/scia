@@ -798,6 +798,76 @@ describe('DownloadManager', () => {
     expect(statusOf(downloads, first!.id)).toBe(DownloadStatus.Completed);
   });
 
+  it('starts no write of its state once it has stopped: its last save wrote it (#359)', async () => {
+    const store = new JsonStateStore(join(folder.path, 'data', 'state.json'));
+    let saves = 0;
+    const downloads = await open({
+      store: {
+        load: () => store.load(),
+        save: (state) => {
+          saves += 1;
+          return store.save(state);
+        },
+      },
+    });
+    await downloads.close();
+    manager = undefined;
+    const savedAtTheStop = saves;
+
+    // A change that reaches an engine that has stopped — a copy offered as it quits — would start
+    // a write nobody waits for, landing after the engine, and its folder, are gone.
+    downloads.add({ urls: ['http://127.0.0.1:9/after-the-stop.bin'] });
+
+    expect(saves).toBe(savedAtTheStop);
+  });
+
+  it('starts no write of its state from a checkpoint whose sync ends after the engine stopped (#359)', async () => {
+    // The checkpoint's sync is held until the engine has stopped.
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let syncsAsked = 0;
+    let syncsEnded = 0;
+    const sync = Reflect.get(DownloadTask.prototype, 'sync');
+    const slowed = vi.spyOn(DownloadTask.prototype, 'sync').mockImplementation(async function (
+      this: DownloadTask,
+    ) {
+      syncsAsked += 1;
+      await held;
+      await sync.call(this);
+      syncsEnded += 1;
+    });
+    onTestFinished(() => {
+      release();
+      slowed.mockRestore();
+    });
+    const slow = await host(UNFINISHED);
+    const store = new JsonStateStore(join(folder.path, 'data', 'state.json'));
+    let saves = 0;
+    const downloads = await open({
+      checkpointMs: 5,
+      store: {
+        load: () => store.load(),
+        save: (state) => {
+          saves += 1;
+          return store.save(state);
+        },
+      },
+    });
+    downloads.add({ urls: [slow.url] });
+    await until(() => syncsAsked > 0);
+
+    await downloads.close();
+    manager = undefined;
+    const savedAtTheStop = saves;
+    release();
+    await until(() => syncsEnded > 0);
+    await new Promise((settle) => setImmediate(settle));
+
+    expect(saves).toBe(savedAtTheStop);
+  });
+
   it('never has the state claim a byte the part file does not hold, while changes come faster than its writes (#63)', async () => {
     // A host that does not end while the spec reads: the download is paused once it has claims.
     const slow = await host(UNFINISHED);
@@ -1104,9 +1174,12 @@ describe('DownloadManager', () => {
     const [added] = first.add({ urls: [url] });
     await until(() => first.find(added!.id).downloadedBytes > MIB);
     await first.close();
+    const keptAtTheStop = first.find(added!.id).downloadedBytes;
 
     const second = await open();
 
+    // The stop's last save comes after the runs ended: the next start finds what they kept (#359).
+    expect(second.find(added!.id).downloadedBytes).toBe(keptAtTheStop);
     await until(() => statusOf(second, added!.id) === DownloadStatus.Completed);
     expect(Buffer.compare(await readFile(inDownloads('sample.bin')), body)).toBe(0);
   });
