@@ -167,6 +167,8 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 
   The roadmap's key names it among the owner's exceptions.
 
+- #332, CodeQL's burn-in read and its three checks made required, chosen as a multiple-choice question: `CodeQL`, `Analyze (actions)` and `Analyze (javascript-typescript)` had run 59 times, all green, on pull requests and pushes, a PR of docs alone included. They were added to the protection of `develop` and `main` the same day, as the owner had decided on 24 November 2026, and read back through the API: nine required checks on each branch, admins held to them.
+
 ## Undated in the roadmap
 
 The roadmap gave these without a date; the issue holds it.
