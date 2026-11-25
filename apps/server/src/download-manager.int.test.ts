@@ -1174,9 +1174,12 @@ describe('DownloadManager', () => {
     const [added] = first.add({ urls: [url] });
     await until(() => first.find(added!.id).downloadedBytes > MIB);
     await first.close();
+    const keptAtTheStop = first.find(added!.id).downloadedBytes;
 
     const second = await open();
 
+    // The stop's last save comes after the runs ended: the next start finds what they kept (#359).
+    expect(second.find(added!.id).downloadedBytes).toBe(keptAtTheStop);
     await until(() => statusOf(second, added!.id) === DownloadStatus.Completed);
     expect(Buffer.compare(await readFile(inDownloads('sample.bin')), body)).toBe(0);
   });
