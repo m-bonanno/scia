@@ -7,11 +7,11 @@
       "channel": "beta"
     }
   ],
+  "preset": "conventionalcommits",
   "plugins": [
     [
       "@semantic-release/commit-analyzer",
       {
-        "preset": "angular",
         "releaseRules": [{ "type": "hotfix", "release": "patch" }]
       }
     ],
