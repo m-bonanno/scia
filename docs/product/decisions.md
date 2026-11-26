@@ -185,7 +185,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 
 - #379, proposal 6 of the owner's retrospective of the flow, approved: **a finding inside a PR's scope that takes 10 lines or fewer is fixed in the PR**; any other goes into one rolling `follow-up` issue per area, as a checkbox with its source, and a batch PR closes an area's issue once it holds about five points ([`review-flow.md`](../development/review-flow.md), "Rules").
 
-- #380, proposal 7 of the owner's retrospective of the flow, approved: **the tech lead reads CI's run on the head in the first round too**, instead of running the gates on the owner's machine, extending #187 ([`review-flow.md`](../development/review-flow.md), "Rules"). CI's jobs chosen by a PR's paths, and a workflow for the runs that show a hold failing, come in a later PR of #380.
+- #396, split from #380 (proposal 7 of the owner's retrospective of the flow, approved) on the owner's word "B: dividi gli issue": **the tech lead reads CI's run on the head in the first round too**, instead of running the gates on the owner's machine, extending #187 ([`review-flow.md`](../development/review-flow.md), "Rules"). #380 keeps CI's jobs chosen by a PR's paths, and a workflow for the runs that show a hold failing. The same word split #379's one-time gathering of the open follow-ups into #395, done after #379's rule is merged.
 
 ## Undated in the roadmap
 
