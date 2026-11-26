@@ -13,7 +13,10 @@ function specFilesOf(...config) {
   );
   expect(listed.status, listed.stderr).toBe(0);
   return JSON.parse(listed.stdout)
-    .map(({ file, projectName }) => `${projectName} ${path.relative(root, file)}`)
+    .map(
+      ({ file, projectName }) =>
+        `${projectName} ${path.relative(root, file).split(path.sep).join('/')}`,
+    )
     .sort();
 }
 

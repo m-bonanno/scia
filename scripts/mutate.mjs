@@ -31,9 +31,11 @@ export function changesOf(diff) {
       inHeader = true;
       continue;
     }
-    // A line of a hunk starts with its sign: an added line that reads `++ b/…` is no header.
-    if (inHeader && line.startsWith('+++ b/')) {
-      file = line.slice('+++ b/'.length);
+    // A line of a hunk starts with its sign: an added line that reads `++ b/…` is no header. Git
+    // ends a name that holds a space with a tab, and quotes one it cannot print as it is (`è`, a
+    // quote): that file is left out rather than read under another file's name.
+    if (inHeader && line.startsWith('+++ ')) {
+      file = line.startsWith('+++ b/') ? line.slice('+++ b/'.length).replace(/\t$/, '') : undefined;
       continue;
     }
     const hunk = HUNK.exec(line);
@@ -43,7 +45,7 @@ export function changesOf(diff) {
     const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
     // A hunk that only takes lines away leaves nothing to mutate; so does every hunk of a deleted
     // file, whose header names `/dev/null`.
-    if (count === 0) continue;
+    if (count === 0 || file === undefined) continue;
     changes.set(file, [...(changes.get(file) ?? []), [start, start + count - 1]]);
   }
   return [...changes].map(([name, lines]) => ({ file: name, lines }));

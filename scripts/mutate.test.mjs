@@ -120,6 +120,36 @@ describe('changesOf', () => {
     ]);
   });
 
+  it('reads a name git ends with a tab, and leaves out one it quotes rather than misread it', () => {
+    const changes = changesOf(
+      diff(
+        'diff --git a/scripts/a.mjs b/scripts/a.mjs',
+        '--- a/scripts/a.mjs',
+        '+++ b/scripts/a.mjs',
+        '@@ -1 +1 @@',
+        '-x',
+        '+y',
+        'diff --git a/scripts/b c.mjs b/scripts/b c.mjs',
+        '--- a/scripts/b c.mjs\t',
+        '+++ b/scripts/b c.mjs\t',
+        '@@ -2 +2 @@',
+        '-x',
+        '+y',
+        'diff --git "a/scripts/\\303\\250.mjs" "b/scripts/\\303\\250.mjs"',
+        '--- "a/scripts/\\303\\250.mjs"',
+        '+++ "b/scripts/\\303\\250.mjs"',
+        '@@ -3 +3 @@',
+        '-x',
+        '+y',
+      ),
+    );
+
+    expect(changes).toEqual([
+      { file: 'scripts/a.mjs', lines: [[1, 1]] },
+      { file: 'scripts/b c.mjs', lines: [[2, 2]] },
+    ]);
+  });
+
   it('reads nothing from an empty diff', () => {
     expect(changesOf('')).toEqual([]);
   });

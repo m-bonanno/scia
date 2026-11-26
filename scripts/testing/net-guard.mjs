@@ -2,26 +2,22 @@ import net from 'node:net';
 
 // The network guard of a mutation run (.claude/gotchas.md, "Specs"): a mutant that points a run at
 // a real host meets this instead (#228). Every connection to a host that is not this computer is
-// refused before a name is looked up, in each process that loads it — Vitest's own and its workers
-// (vitest.stryker.config.ts), and what a spec starts (`NODE_OPTIONS`). Two roads: Node's own `fetch`,
-// which a patch of the socket does not see (#259), and the socket, under `http`, `https`, `tls` and
-// `net` alike.
+// refused before a name is looked up, in each Node process that loads it — the workers of
+// vitest.stryker.config.ts and what a spec starts, through `NODE_OPTIONS`. Two roads: Node's own
+// `fetch`, which a patch of the socket does not see (#259), and the socket, under `http`, `https`,
+// `tls` and `net` alike. A program that is not Node is refused by that config's environment.
 
-const GUARDED = Symbol.for('scia.net-guard');
-
+// This computer is `localhost` and its loopback addresses, never a name that only reads like one:
+// `127.example.invalid` and `scia.localhost` are looked up, and answered by whoever owns them.
 function isLocal(host) {
   // A socket given no host connects to this computer.
   if (host === undefined || host === null || host === '') return true;
   const name = String(host)
     .toLowerCase()
     .replace(/^\[|\]$/g, '');
-  return (
-    name === 'localhost' ||
-    name.endsWith('.localhost') ||
-    name === '::1' ||
-    name.startsWith('127.') ||
-    name.startsWith('::ffff:127.')
-  );
+  if (net.isIPv4(name)) return name.startsWith('127.');
+  if (net.isIPv6(name)) return name === '::1' || /^::ffff:127\./.test(name);
+  return name === 'localhost';
 }
 
 function refusal(host) {
@@ -51,26 +47,18 @@ function hostOfConnect(args) {
   return typeof second === 'string' ? second : undefined;
 }
 
-function guard() {
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = function guardedFetch(input, init) {
-    const host = hostOfUrl(input);
-    if (!isLocal(host)) return Promise.reject(refusal(host));
-    return realFetch.call(this, input, init);
-  };
+const realFetch = globalThis.fetch;
+globalThis.fetch = function guardedFetch(input, init) {
+  const host = hostOfUrl(input);
+  if (!isLocal(host)) return Promise.reject(refusal(host));
+  return realFetch.call(this, input, init);
+};
 
-  const realConnect = net.Socket.prototype.connect;
-  net.Socket.prototype.connect = function guardedConnect(...args) {
-    const host = hostOfConnect(args);
-    if (isLocal(host)) return realConnect.apply(this, args);
-    // As a connection that failed: the error comes after the caller has its socket.
-    process.nextTick(() => this.destroy(refusal(host)));
-    return this;
-  };
-}
-
-// Loaded twice — by `NODE_OPTIONS` and by a setup file — it guards once.
-if (globalThis[GUARDED] !== true) {
-  guard();
-  globalThis[GUARDED] = true;
-}
+const realConnect = net.Socket.prototype.connect;
+net.Socket.prototype.connect = function guardedConnect(...args) {
+  const host = hostOfConnect(args);
+  if (isLocal(host)) return realConnect.apply(this, args);
+  // As a connection that failed: the error comes after the caller has its socket.
+  process.nextTick(() => this.destroy(refusal(host)));
+  return this;
+};

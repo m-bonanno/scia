@@ -32,19 +32,34 @@ function workspacesOfThisCopy(): Plugin {
 }
 
 // Vitest starts each worker with `test.env`, threads and forks alike, and a spec's own processes
-// inherit it: `NODE_OPTIONS` loads the guard into every process a spec runs in.
+// inherit it. `NODE_OPTIONS` loads the guard into every Node process. A program that is not Node
+// reads none of it — `gh`, `git`, `curl` — and a mutant can start one (#386): its requests go to a
+// proxy at a port of this computer nothing listens on (1, which takes root to open), and git speaks
+// to no host at all.
 const guard = pathToFileURL(join(here, 'scripts/testing/net-guard.mjs')).href;
+const REFUSING_PROXY = 'http://127.0.0.1:1';
+const THIS_COMPUTER = 'localhost,127.0.0.1,::1';
 const guarded = {
   env: {
     NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${guard}`]
       .filter((option) => option !== undefined && option !== '')
       .join(' '),
+    ...Object.fromEntries(
+      ['http_proxy', 'https_proxy', 'all_proxy'].flatMap((name) => [
+        [name, REFUSING_PROXY],
+        [name.toUpperCase(), REFUSING_PROXY],
+      ]),
+    ),
+    no_proxy: THIS_COMPUTER,
+    NO_PROXY: THIS_COMPUTER,
+    GIT_ALLOW_PROTOCOL: 'file',
   },
 };
 
-// An inline project inherits this file's plugins and `test`. A project that is a file of its own
-// does not, and is given them here, its own name and options kept: extended by its path instead, it
-// was named after its place in the list, and `--project unit-renderer` found none of its specs.
+// An inline project inherits this file's plugins and `test`; every project's workers take the
+// root's `test.env`. A project that is a file of its own is given the plugin here, its own name and
+// options kept: extended by its path instead, it was named after its place in the list, and
+// `--project unit-renderer` found none of its specs.
 const projects = await Promise.all(
   (root.test?.projects ?? []).map(async (project) => {
     if (typeof project !== 'string') return project;
@@ -55,7 +70,6 @@ const projects = await Promise.all(
       extends: false,
       root: join(here, dirname(project)),
       plugins: [workspacesOfThisCopy()],
-      test: guarded,
     });
   }),
 );

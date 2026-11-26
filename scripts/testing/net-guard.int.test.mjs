@@ -29,10 +29,16 @@ it("refuses every road to a host outside this computer under a mutation run's co
     file.assertionResults.map(({ title, status }) => [title, status]),
   );
   expect(outcomes).toEqual([
-    ["refuses Node's fetch", 'passed'],
+    ["refuses Node's fetch, given a text, a URL or a Request", 'passed'],
     ['refuses http and https', 'passed'],
     ['refuses a socket, whichever way it is given its host', 'passed'],
-    ['refuses in a process a spec starts', 'passed'],
-    ['lets a host on this computer answer', 'passed'],
+    [
+      'refuses a name or an address that only reads like this computer, before any lookup',
+      'passed',
+    ],
+    ['refuses in a Node process a spec starts', 'passed'],
+    ['refuses a program that is not Node: one that reads a proxy, and git', 'passed'],
+    ['lets a pipe on this computer answer', 'passed'],
+    ['lets a host on this computer answer, Node and a program that is not', 'passed'],
   ]);
 });

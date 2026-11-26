@@ -20,6 +20,8 @@ const ignoredByGit = readFileSync(new URL('.gitignore', import.meta.url), 'utf8'
 export default {
   testRunner: 'vitest',
   vitest: { configFile: 'vitest.stryker.config.ts' },
+  plugins: ['@stryker-mutator/*', './scripts/testing/stryker-main-blocks.mjs'],
+  ignorers: ['main-blocks'],
   // The source files: `npm run mutate` narrows them to the lines a branch changed.
   mutate: [
     'packages/*/src/**/*.ts',
