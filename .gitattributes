@@ -18,3 +18,7 @@
 
 # Signed bytes: a release of yt-dlp as its project published it (apps/server/src/testing).
 SHA2-256SUMS* binary
+
+# Written mostly at their ends: both sides of a conflict are kept (docs/development/git-flow.md).
+.claude/gotchas.md merge=union
+docs/product/decisions.md merge=union
