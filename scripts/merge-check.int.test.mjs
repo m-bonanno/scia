@@ -11,6 +11,8 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const GOTCHAS = '.claude/gotchas.md';
 const DECISIONS = 'docs/product/decisions.md';
 const CODE = 'scripts/tool.mjs';
+const LOG =
+  '# Decisions\n\n## 25 November 2026\n\n- #1: one.\n- #2: two.\n\n## Undated\n\n- Undated.\n';
 
 let box;
 let repo;
@@ -59,6 +61,7 @@ beforeEach(() => {
   git('init', '-q', '-b', 'develop');
   copyFileSync(path.join(root, '.gitattributes'), path.join(repo, '.gitattributes'));
   write(GOTCHAS, '# Gotchas\n\n## Tooling\n\n- → First.\n- → Second.\n\n## Specs\n\n- → Third.\n');
+  write(DECISIONS, LOG);
   write(CODE, 'export const a = 1;\nexport const b = 1;\n');
   commit('base');
   git('checkout', '-q', '-b', 'feature');
@@ -79,54 +82,62 @@ function onBothSides(feature, develop) {
 }
 
 describe('checkMerge', () => {
-  it(`merges two branches that both append to ${GOTCHAS} without a conflict, and keeps the verdict`, () => {
+  it(`merges two branches that both add an entry to ${DECISIONS} without a conflict, and keeps the verdict`, () => {
     onBothSides(
       () => {
-        edit(GOTCHAS, '- → Second.\n', '- → Second.\n- → The branch’s own.\n');
+        edit(DECISIONS, '- #2: two.\n', '- #2: two.\n- #3: the branch’s.\n');
         edit(CODE, 'a = 1', 'a = 2');
       },
-      () => edit(GOTCHAS, '- → Second.\n', '- → Second.\n- → Develop’s own.\n'),
+      () => edit(DECISIONS, '- #2: two.\n', '- #2: two.\n- #4: develop’s.\n'),
     );
 
     expect(mergeDevelop()).toBe(true);
-    expect(read(GOTCHAS)).toContain(
-      '- → First.\n- → Second.\n- → The branch’s own.\n- → Develop’s own.\n\n## Specs',
+    expect(read(DECISIONS)).toContain(
+      '- #2: two.\n- #3: the branch’s.\n- #4: develop’s.\n\n## Undated',
     );
     expect(checkMerge(repo)).toMatchObject({ outcome: 'carries' });
   });
 
   it(`merges two branches that both open the same day in ${DECISIONS} under one heading`, () => {
-    write(
-      DECISIONS,
-      '# Decisions\n\n## 25 November 2026\n\n- #1: one.\n\n## Undated\n\n- Undated.\n',
-    );
-    commit('the log');
-    git('checkout', '-q', 'develop');
-    git('merge', '-q', '--ff-only', 'feature');
-    git('checkout', '-q', 'feature');
     const day = (entry) => () =>
       edit(DECISIONS, '## Undated\n', `## 26 November 2026\n\n- ${entry}\n\n## Undated\n`);
-    onBothSides(day('#2: the branch’s.'), day('#3: develop’s.'));
+    onBothSides(day('#3: the branch’s.'), day('#4: develop’s.'));
 
     expect(mergeDevelop()).toBe(true);
     expect(read(DECISIONS)).toBe(
-      '# Decisions\n\n## 25 November 2026\n\n- #1: one.\n\n## 26 November 2026\n\n' +
-        '- #2: the branch’s.\n- #3: develop’s.\n\n## Undated\n\n- Undated.\n',
+      '# Decisions\n\n## 25 November 2026\n\n- #1: one.\n- #2: two.\n\n## 26 November 2026\n\n' +
+        '- #3: the branch’s.\n- #4: develop’s.\n\n## Undated\n\n- Undated.\n',
     );
-    // The day's heading is develop's now, no longer the branch's: the tech lead reads the merge.
+    // The day's heading is develop's now, no longer the branch's.
     expect(checkMerge(repo)).toMatchObject({ outcome: 'changed' });
   });
 
-  it("sends to the tech lead a merge that changes the branch's own diff: an entry extended where develop appended", () => {
+  it(`answers changed when ${DECISIONS}' driver leaves an entry twice: a note added where develop appended`, () => {
     onBothSides(
-      () => edit(GOTCHAS, '- → Second.\n', '- → Second. #375 again.\n'),
-      () => edit(GOTCHAS, '- → Second.\n', '- → Second.\n- → Develop’s own.\n'),
+      () => edit(DECISIONS, '- #2: two.\n', '- #2: two. Changed on 27 November 2026 (#5).\n'),
+      () => edit(DECISIONS, '- #2: two.\n', '- #2: two.\n- #4: develop’s.\n'),
     );
 
     expect(mergeDevelop()).toBe(true);
-    // The union driver keeps both sides: the entry as it was stays beside the entry extended.
-    expect(read(GOTCHAS)).toContain('- → Second. #375 again.\n- → Second.\n');
+    expect(read(DECISIONS)).toContain('- #2: two. Changed on 27 November 2026 (#5).\n- #2: two.\n');
     expect(checkMerge(repo)).toMatchObject({ outcome: 'changed' });
+  });
+
+  it(`leaves ${GOTCHAS} to conflict, and sends the conflict resolved by hand to the tech lead`, () => {
+    onBothSides(
+      () => edit(GOTCHAS, '- → Second.\n', '- → Second.\n- → The branch’s own.\n'),
+      () => edit(GOTCHAS, '- → Second.\n', '- → Second.\n- → Develop’s own.\n'),
+    );
+
+    expect(mergeDevelop()).toBe(false);
+    write(
+      GOTCHAS,
+      '# Gotchas\n\n## Tooling\n\n- → First.\n- → Second.\n- → The branch’s own.\n- → Develop’s own.\n\n## Specs\n\n- → Third.\n',
+    );
+    git('add', '-A');
+    git('commit', '-q', '--no-edit');
+
+    expect(checkMerge(repo)).toMatchObject({ outcome: 'by-hand' });
   });
 
   it("sends to the tech lead a conflict resolved by hand, even one that keeps the branch's own diff", () => {
@@ -163,17 +174,17 @@ describe('checkMerge', () => {
     commit('before the union driver');
     git('checkout', '-q', '-B', 'feature', 'develop');
     onBothSides(
-      () => edit(GOTCHAS, '- → Second.\n', '- → Second.\n- → The branch’s own.\n'),
+      () => edit(DECISIONS, '- #2: two.\n', '- #2: two.\n- #3: the branch’s.\n'),
       () => {
         write('.gitattributes', withUnion);
-        edit(GOTCHAS, '- → Second.\n', '- → Second.\n- → Develop’s own.\n');
+        edit(DECISIONS, '- #2: two.\n', '- #2: two.\n- #4: develop’s.\n');
       },
     );
 
     expect(mergeDevelop()).toBe(false);
     write(
-      GOTCHAS,
-      '# Gotchas\n\n## Tooling\n\n- → First.\n- → Second.\n- → The branch’s own.\n- → Develop’s own.\n\n## Specs\n\n- → Third.\n',
+      DECISIONS,
+      LOG.replace('- #2: two.\n', '- #2: two.\n- #3: the branch’s.\n- #4: develop’s.\n'),
     );
     git('add', '-A');
     git('commit', '-q', '--no-edit');
@@ -200,8 +211,8 @@ describe('checkMerge', () => {
 
   it("reads the diffs as git writes them, whatever the person's colours or diff tool", () => {
     onBothSides(
-      () => edit(GOTCHAS, '- → Second.\n', '- → Second. #375 again.\n'),
-      () => edit(GOTCHAS, '- → Second.\n', '- → Second.\n- → Develop’s own.\n'),
+      () => edit(DECISIONS, '- #2: two.\n', '- #2: two. Changed on 27 November 2026 (#5).\n'),
+      () => edit(DECISIONS, '- #2: two.\n', '- #2: two.\n- #4: develop’s.\n'),
     );
     mergeDevelop();
     writeFileSync(
