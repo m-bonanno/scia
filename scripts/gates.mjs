@@ -4,8 +4,8 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { workerCapOf } from '../vitest.workers.ts';
 
-// Where the test gate leaves Vitest's JSON report, from the root: the counts of the line for a PR
-// body are read there, never counted from what the dot reporter prints.
+// Where the test gate leaves Vitest's JSON report, from the root: the counts of the gates' line are
+// read there, never counted from what the dot reporter prints.
 export const TEST_REPORT = 'node_modules/.cache/scia-gates/vitest.json';
 
 // The gates of docs/development/review-flow.md, in their order: the first that fails ends the run,
