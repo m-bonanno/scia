@@ -40,7 +40,7 @@ const isRuntime = (file) =>
 // Where a slip loses a download or its state, opens the app, or breaks a release: heavy at any size.
 const HEAVY = [
   {
-    what: 'download and state code',
+    what: 'code of the engine, the domain or the contracts',
     holds: under('apps/server/src/', 'packages/core/src/', 'packages/contracts/src/'),
   },
   { what: "the desktop's main or preload", holds: under('apps/desktop/src/') },
@@ -148,13 +148,13 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
       stdio: ['ignore', 'pipe', 'pipe'],
     }).trim();
   try {
-    const number = positionals[0] ?? gh('pr', 'view', '--json', 'number', '--jq', '.number');
-    const pr = JSON.parse(gh('pr', 'view', number, '--json', 'title,baseRefName'));
+    // `gh pr view` takes a number, a URL or a branch; the REST path takes the number alone.
+    const pr = JSON.parse(gh('pr', 'view', ...positionals, '--json', 'number,title,baseRefName'));
     // The REST listing, unlike `gh pr view --json files`, goes past a hundred files.
     const files = gh(
       'api',
       '--paginate',
-      `repos/{owner}/{repo}/pulls/${number}/files`,
+      `repos/{owner}/{repo}/pulls/${pr.number}/files`,
       '--jq',
       '.[] | {path: .filename, previous: .previous_filename, additions, deletions}',
     )

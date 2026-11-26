@@ -7,10 +7,10 @@ const rolesOf = (review) => review.roles.map(({ role }) => role);
 describe('reviewOf', () => {
   it('makes heavy, at any size, download and state code, the desktop, the manifest, the release config and the workflows', () => {
     const heavy = {
-      'apps/server/src/download-task.ts': 'download and state code',
-      'apps/server/src/state-store.ts': 'download and state code',
-      'packages/core/src/segments.ts': 'download and state code',
-      'packages/contracts/src/settings.ts': 'download and state code',
+      'apps/server/src/download-task.ts': 'code of the engine, the domain or the contracts',
+      'apps/server/src/state-store.ts': 'code of the engine, the domain or the contracts',
+      'packages/core/src/segments.ts': 'code of the engine, the domain or the contracts',
+      'packages/contracts/src/settings.ts': 'code of the engine, the domain or the contracts',
       'apps/desktop/src/main.ts': "the desktop's main or preload",
       'apps/desktop/src/preload.cts': "the desktop's main or preload",
       'apps/extension/static/manifest.json': "the extension's manifest",
@@ -83,6 +83,18 @@ describe('reviewOf', () => {
         'standard',
       );
     }
+  });
+
+  it('reads a spec or a doc under apps/ as no runtime path for a chore of the tooling', () => {
+    const files = [
+      'scripts/gates.mjs',
+      'apps/renderer/src/app/app.test.tsx',
+      'apps/renderer/CLAUDE.md',
+    ];
+
+    expect(reviewOf({ title: 'chore: x', files: files.map((path) => file(path)) }).tier).toBe(
+      'light',
+    );
   });
 
   it('keeps a chore that touches a runtime path, or the lockfile, out of the light tier', () => {

@@ -11,7 +11,7 @@ Everything no specialist owns: `.github/`, `scripts/`, root tooling and configs,
 
 ## What you check
 
-1. **The PR is what it says**: title type matches what the change is to a user (`release-flow.md`); body follows the template — an error of it that is not a claim of proof is noted, not blocking (`review-flow.md`, "What is blocking"); `Closes #N`; scope is one thing.
+1. **The PR is what it says**: title type matches what the change is to a user (`release-flow.md`); body follows the template — an error of it that is not a claim of proof is noted, not blocking (`review-flow.md`, "What is blocking"); `Closes #N`; scope is one thing; every point of the linked issue is delivered or declared out of scope ("What is blocking", 6).
 2. **Boundaries** (`eslint.config.js` and the sub-`CLAUDE.md` files): the domain stays pure, engines never import Electron, the renderer and the extension never import Node or engine code, the bridge stays tiny.
 3. **Security**: nothing from a host or from the page reaches a path, a URL opened by the shell, or a command, unchecked; tokens and scopes as ADR 0002; no secret in the repository or in a log.
 4. **Tests are the right layer and came first**: rules in unit specs, adapters against the real thing, the API through `app.request()`, runtime changes with real-runtime evidence in the PR body. A spec that cannot fail is not a spec.
@@ -56,6 +56,7 @@ What earlier reviews taught, each with the PR that taught it.
 - A release rule read from the preset is probed with every title form the repository asks for, `type(scope):` included: #338 wrote that a revert releases a patch from `revert: …` alone, and `revert(scope): …`, which commitlint accepts and `git-flow.md` asks for, releases nothing. (#338)
 - A hand-on of the focus is tried from every shape of the tree the control leaves from, not read from React's order of ref cleanups: round 1 of #302 approved "Clear completed" handing the focus to the filters, true when its whole group left and false when "Start all" kept the group, which the frontend engineer found. (#302)
 - An unticked "seen failing" line for an E2E spec in the body is a finding, not a note: `testing.md` asks every E2E spec to be seen failing in CI, by "A hold seen failing in CI". Rounds 1 and 2 of #302 let "Not seen failing against the old code: the two E2E cases" stand. (#302)
+- A script that decides how a PR is reviewed is run as `develop` has it, never from the branch under review: `/team-review` ran `npm run review:roles` from the PR's checkout, and #393's own script called itself light, the tech lead alone, where `develop`'s rules also called the product manager. (#393)
 - A command a rule names is run on the case it is named for: round 1 of #384 named `git show --remerge-diff` to read a merge git had made by itself, where it is empty by construction, and the owner's choice was made on it. (#384)
 
 ## Output
