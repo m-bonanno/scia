@@ -107,8 +107,12 @@ describe('the network guard of a mutation run', () => {
     const curl = await printedBy('curl', ['-sS', '--max-time', '3', `http://${RESERVED}/`]);
     const git = await printedBy('git', ['ls-remote', `http://${RESERVED}/scia.git`]);
 
-    expect(curl.printed).toMatch(/127\.0\.0\.1 port 1\b/);
-    expect(git.printed).toMatch(/transport 'http' not allowed/);
+    // Code 7 is curl's "could not connect": to the proxy, when the reserved host is not named.
+    expect({ code: curl.code, named: curl.printed.includes(RESERVED) }, curl.printed).toEqual({
+      code: 7,
+      named: false,
+    });
+    expect(git.printed, git.printed).toMatch(/transport 'http' not allowed/);
   });
 
   it('lets a pipe on this computer answer', async () => {
