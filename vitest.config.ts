@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import { workerCap } from './vitest.workers.ts';
 
-const slowerLayers = ['**/*.int.test.ts', '**/*.feature.test.ts'];
+const slowerLayers = ['**/*.int.test.ts', '**/*.int.test.mjs', '**/*.feature.test.ts'];
 
 // A spec found flaky carries `[flaky #N]` in its name, N its issue (docs/development/testing.md,
 // "No retries"): the gates pass it over, and `npm run test:quarantine` runs only those (#186). The
@@ -42,6 +42,7 @@ export default defineConfig({
             'apps/server/src/**/*.int.test.ts',
             'apps/desktop/src/**/*.int.test.ts',
             'apps/desktop/build/**/*.int.test.ts',
+            'scripts/**/*.int.test.mjs',
           ],
           // Real hosts, real processes and real disks wait on a busy machine: what a spec asserts of
           // time it bounds itself, so this room hides no slowness it tests for (#165, #184).

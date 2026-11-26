@@ -2,7 +2,7 @@
   A PR closes an issue: open one first (CONTRIBUTING.md). The Linked issue check fails a body that closes none.
   English only. Delete Notes / Out of scope if empty; never delete What / Why / How / References / Test plan.
   No AI attribution anywhere.
-  Write the body to .claude/pr-bodies/<branch>.md and pass it with --body-file.
+  The team writes the body to .claude/pr-bodies/<branch>.md and opens the PR with npm run pr:open -- "<title>".
 -->
 
 ## What
@@ -34,7 +34,7 @@ _What this PR deliberately does not do._
 
 ## Test plan
 
-- [ ] The gates, all of them (`docs/development/review-flow.md`) — green: _the last line `npm run gates` printed, pasted as it is_
+- [ ] The gates, all of them (`docs/development/review-flow.md`), green before opening; CI's line on the head is in the summary of [its runs](https://github.com/m-bonanno/scia/actions/workflows/gates.yml?query=branch:<branch>)
 - [ ] E2E specs _(shell, boot, quit, a download in the real app)_: _which spec holds it, seen failing with its line taken away_
 - [ ] Real-runtime evidence _(what the E2E suite cannot reach: what the system draws, packaging, a long run)_: _what ran, what the log says_
 - [ ] Keyboard-only path checked _(UI changes)_

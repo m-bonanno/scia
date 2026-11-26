@@ -151,7 +151,7 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 - #331: "Respect the hosts" in `CLAUDE.md` says the rulings of 24 November in general words: a site's "18 or older" disclaimer allowed and a legal age verification never evaded (#325), the requests of Scia's own readers those the site's own page makes (#274), a challenge never solved by them, and what a reader of yt-dlp does by itself at a read, beyond what Scia tells yt-dlp, being yt-dlp's business (#333) — a legal age verification aside, which #328 is to settle. Written by #337.
 - #333: **what yt-dlp's readers do at a read, a challenge solved included, is yt-dlp's business**, as for everyone who uses yt-dlp; Scia itself solves nothing. The rule of Scia's own reader of Bunkr stays: a challenge, Cloudflare's too, is never solved, and the link fails `ALBUM_REFUSED` ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md)). Asked whether solving one would bring trouble, the owner answered yes: a challenge exists to tell a program from a person, so solving it is the evasion the principle forbids, and it would take a headless browser or a solving service — a new dependency and an ADR — and an arms race with the site. Nothing changes in the code. The principle says it within the limits #331's line gives.
 - #328: `v1.0.0` **does not wait** for what yt-dlp's reader of one site does with its four cookies. The issue stays open, with `needs-owner`.
-- #342, chosen as a multiple-choice question, after wrong numbers of a run in PR bodies were among the most frequent blocking findings of the day's reviews: **the gates print, at their end, the line for the PR body**, which the body carries as it was printed ([`testing.md`](../development/testing.md), "The numbers in a PR body").
+- #342, chosen as a multiple-choice question, after wrong numbers of a run in PR bodies were among the most frequent blocking findings of the day's reviews: **the gates print, at their end, the line for the PR body**, which the body carries as it was printed ([`testing.md`](../development/testing.md), "The numbers in a PR body"). Changed on 26 November 2026: the line goes to the summary of CI's run, which the body links (#373).
 
 ## 25 November 2026
 
@@ -170,6 +170,10 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 - #332, CodeQL's burn-in read and its three checks made required, chosen as multiple-choice questions:
   - **Required.** `Analyze (actions)` and `Analyze (javascript-typescript)` had run 59 times each, on pull requests and pushes, and `CodeQL` 46 times, on pull requests only, all green, a PR of docs alone included. They were added to the protection of `develop` and `main` the same day, as the owner had decided on 24 November 2026, and read back through the API: nine required checks on each branch, admins held to them.
   - **A PR from a fork**, on which GitHub's default setup runs none of them (found on the review of #352): the owner takes the three off `develop`'s protection by hand for its merge, and puts them back right after.
+
+## 26 November 2026
+
+- #373, proposal 1 of the owner's retrospective of the flow, approved: **only a claim of proof in a PR body blocks a review** — something seen failing, what a spec holds, a run's or a sweep's result, a number measured; any other error of the body is mended by the author and named in the verdict, with no new round ([`review-flow.md`](../development/review-flow.md), "What is blocking"). **The gates' line goes to the summary of CI's run, which the body links**, in place of the line #342 had the body carry ([`testing.md`](../development/testing.md), "The gates' line"). A script opens the team's PRs: their title through commitlint, their labels and assignee set ([`git-flow.md`](../development/git-flow.md), "A pull request").
 
 ## Undated in the roadmap
 

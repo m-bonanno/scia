@@ -1,7 +1,16 @@
 import { EventEmitter } from 'node:events';
 import path from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { GATES, TEST_REPORT, bodyLineOf, npmRun, runGates, testCountsOf } from './gates.mjs';
+import {
+  GATES,
+  TEST_REPORT,
+  commitOf,
+  gatesLineOf,
+  npmRun,
+  publish,
+  runGates,
+  testCountsOf,
+} from './gates.mjs';
 
 const root = path.join(path.sep, 'scia');
 
@@ -112,12 +121,12 @@ describe('testCountsOf', () => {
   });
 });
 
-describe('bodyLineOf', () => {
+describe('gatesLineOf', () => {
   const run = { head: 'd0bfecb', dirty: false, workers: '2', seconds: 97 };
   const green = countsOf({ files: [0, 134, 2, 0, 136], tests: [0, 1982, 82, 0, 2064] });
 
   it("gives a green run its head, workers, time and counts, in the words of Vitest's summary", () => {
-    expect(bodyLineOf({ ...run, outcome: { ok: true, failed: undefined }, counts: green })).toBe(
+    expect(gatesLineOf({ ...run, outcome: { ok: true, failed: undefined }, counts: green })).toBe(
       '`npm run gates` green on `d0bfecb`, SCIA_TEST_WORKERS=2, 97 s — ' +
         'Test Files 134 passed | 2 skipped (136); Tests 1982 passed | 82 skipped (2064)',
     );
@@ -130,7 +139,7 @@ describe('bodyLineOf', () => {
       failedFiles: ['scripts/gates.test.mjs', 'apps/server/src/broken.test.ts'],
     });
 
-    expect(bodyLineOf({ ...run, outcome: { ok: false, failed: 'test' }, counts })).toBe(
+    expect(gatesLineOf({ ...run, outcome: { ok: false, failed: 'test' }, counts })).toBe(
       '`npm run gates` red at `test` on `d0bfecb`, SCIA_TEST_WORKERS=2, 97 s — ' +
         'Test Files 2 failed | 132 passed | 2 skipped (136); Tests 3 failed | 1979 passed | 82 skipped (2064); ' +
         'failed: `scripts/gates.test.mjs`, `apps/server/src/broken.test.ts`',
@@ -138,7 +147,7 @@ describe('bodyLineOf', () => {
   });
 
   it('says no test failed when the test gate is red for an error outside the tests', () => {
-    expect(bodyLineOf({ ...run, outcome: { ok: false, failed: 'test' }, counts: green })).toBe(
+    expect(gatesLineOf({ ...run, outcome: { ok: false, failed: 'test' }, counts: green })).toBe(
       '`npm run gates` red at `test` on `d0bfecb`, SCIA_TEST_WORKERS=2, 97 s — ' +
         'Test Files 134 passed | 2 skipped (136); Tests 1982 passed | 82 skipped (2064); ' +
         "no test failed: Vitest's errors are printed above",
@@ -146,27 +155,27 @@ describe('bodyLineOf', () => {
   });
 
   it('keeps the counts of the tests when a gate after them is red', () => {
-    expect(bodyLineOf({ ...run, outcome: { ok: false, failed: 'build' }, counts: green })).toBe(
+    expect(gatesLineOf({ ...run, outcome: { ok: false, failed: 'build' }, counts: green })).toBe(
       '`npm run gates` red at `build` on `d0bfecb`, SCIA_TEST_WORKERS=2, 97 s — ' +
         'Test Files 134 passed | 2 skipped (136); Tests 1982 passed | 82 skipped (2064)',
     );
   });
 
   it('gives no counts when a gate before the tests is red', () => {
-    expect(bodyLineOf({ ...run, outcome: { ok: false, failed: 'lint' }, counts: undefined })).toBe(
+    expect(gatesLineOf({ ...run, outcome: { ok: false, failed: 'lint' }, counts: undefined })).toBe(
       '`npm run gates` red at `lint` on `d0bfecb`, SCIA_TEST_WORKERS=2, 97 s',
     );
   });
 
   it('says so when the tests ran and Vitest wrote no report', () => {
-    expect(bodyLineOf({ ...run, outcome: { ok: false, failed: 'test' }, counts: undefined })).toBe(
+    expect(gatesLineOf({ ...run, outcome: { ok: false, failed: 'test' }, counts: undefined })).toBe(
       '`npm run gates` red at `test` on `d0bfecb`, SCIA_TEST_WORKERS=2, 97 s — Vitest wrote no report of its counts',
     );
   });
 
   it('names the changes not committed beside the head, as the run was not of the head alone', () => {
     expect(
-      bodyLineOf({ ...run, dirty: true, outcome: { ok: true, failed: undefined }, counts: green }),
+      gatesLineOf({ ...run, dirty: true, outcome: { ok: true, failed: undefined }, counts: green }),
     ).toMatch(
       /^`npm run gates` green on `d0bfecb` with changes not committed, SCIA_TEST_WORKERS=2, /,
     );
@@ -175,10 +184,70 @@ describe('bodyLineOf', () => {
   it('leaves the workers to Vitest when SCIA_TEST_WORKERS is not a positive whole number', () => {
     for (const workers of [undefined, '', '0', '-1', '1.5', 'abc']) {
       expect(
-        bodyLineOf({ ...run, workers, outcome: { ok: true, failed: undefined }, counts: green }),
+        gatesLineOf({ ...run, workers, outcome: { ok: true, failed: undefined }, counts: green }),
         String(workers),
       ).toMatch(/^`npm run gates` green on `d0bfecb`, Vitest's own count of workers, 97 s — /);
     }
+  });
+
+  it("names a pull request's head and the merge of it into its base, which is what CI tested", () => {
+    expect(
+      gatesLineOf({
+        ...run,
+        head: 'f00ba12',
+        mergedAs: 'd0bfecb',
+        outcome: { ok: true, failed: undefined },
+        counts: green,
+      }),
+    ).toMatch(/^`npm run gates` green on `f00ba12` merged into its base as `d0bfecb`, /);
+  });
+});
+
+describe('commitOf', () => {
+  it('takes the head a pull request names, cut to the length git gives the commit tested', () => {
+    const prHead = 'f00ba12c0ffee5e1f00ba12c0ffee5e1f00ba12c';
+
+    expect(commitOf({ tested: 'd0bfecb', prHead })).toEqual({
+      head: 'f00ba12',
+      mergedAs: 'd0bfecb',
+    });
+    expect(commitOf({ tested: 'd0bfecb9', prHead })).toEqual({
+      head: 'f00ba12c',
+      mergedAs: 'd0bfecb9',
+    });
+  });
+
+  it("takes the commit tested alone where no pull request names a head: a session's run, a release's", () => {
+    for (const prHead of [undefined, '']) {
+      expect(commitOf({ tested: 'd0bfecb', prHead }), String(prHead)).toEqual({
+        head: 'd0bfecb',
+        mergedAs: undefined,
+      });
+    }
+  });
+});
+
+describe('publish', () => {
+  const line = '`npm run gates` green on `d0bfecb`, SCIA_TEST_WORKERS=2, 97 s';
+
+  it("prints the line, and writes it to the summary of CI's run when there is one", () => {
+    const log = vi.fn();
+    const append = vi.fn();
+
+    publish(line, { env: { GITHUB_STEP_SUMMARY: '/runner/summary.md' }, append, log });
+
+    expect(log).toHaveBeenCalledWith(`\n${line}`);
+    expect(append).toHaveBeenCalledWith('/runner/summary.md', `${line}\n`);
+  });
+
+  it('writes no summary outside CI', () => {
+    const log = vi.fn();
+    const append = vi.fn();
+
+    publish(line, { env: {}, append, log });
+
+    expect(log).toHaveBeenCalledWith(`\n${line}`);
+    expect(append).not.toHaveBeenCalled();
   });
 });
 

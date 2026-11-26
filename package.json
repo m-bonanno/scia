@@ -34,6 +34,7 @@
     "release": "semantic-release",
     "test:quarantine": "node scripts/quarantine.mjs",
     "gates": "node scripts/gates.mjs",
+    "pr:open": "node scripts/open-pr.mjs",
     "check:adr": "node scripts/adr-numbers.mjs"
   },
   "lint-staged": {

@@ -35,9 +35,9 @@ One list, for the author before opening the PR, for the tech lead in the first r
 npm run gates
 ```
 
-It runs `check:adr` (no two ADRs of one number: [`git-flow.md`](./git-flow.md), "Work in parallel"), `format:check`, `lint`, `typecheck`, `test` (with a reporter of dots) and `build`, in that order, and stops at the first that fails, naming it (`scripts/gates.mjs`). Its last line is the one the test plan of the PR body carries, pasted as it was printed — the head, the workers, the time of the whole run and the test gate's counts as Vitest's summary words them ([`testing.md`](./testing.md), "The numbers in a PR body"; the owner, 24 November 2026, #342). Each can still be run alone while working. `SCIA_TEST_WORKERS=<n>` runs the tests on fewer workers: on the owner's machine the gates run with `SCIA_TEST_WORKERS=2`, one run at a time ([`git-flow.md`](./git-flow.md), "Work in parallel").
+It runs `check:adr` (no two ADRs of one number: [`git-flow.md`](./git-flow.md), "Work in parallel"), `format:check`, `lint`, `typecheck`, `test` (with a reporter of dots) and `build`, in that order, and stops at the first that fails, naming it (`scripts/gates.mjs`). Its last line says what the run was, and CI writes it to the summary of its run, which the PR body links ([`testing.md`](./testing.md), "The gates' line"). Each can still be run alone while working. `SCIA_TEST_WORKERS=<n>` runs the tests on fewer workers: on the owner's machine the gates run with `SCIA_TEST_WORKERS=2`, one run at a time ([`git-flow.md`](./git-flow.md), "Work in parallel").
 
-With untracked files of other work in the tree, check the format of tracked files only while working: `git ls-files | xargs npx prettier --check --ignore-unknown`. The run whose line the body carries is made without them — moved out, or in a worktree of its own ([`testing.md`](./testing.md), "The numbers in a PR body").
+With untracked files of other work in the tree, check the format of tracked files only while working: `git ls-files | xargs npx prettier --check --ignore-unknown`; the run before the PR is made without them ([`testing.md`](./testing.md), "The gates' line").
 
 A PR that touches the app's runtime — `apps/desktop`, `apps/server`, `apps/renderer`, `packages/` — is also held by the E2E suite, which runs in CI's `E2E (Windows)` job, not on the owner's machine: it starts Electron, whose windows take the screen ([`testing.md`](./testing.md), #218). Read that job on the PR.
 
@@ -51,10 +51,12 @@ This is the one definition; role files and `CLAUDE.md` point here. A finding is 
 2. a bug;
 3. a security hole;
 4. a red gate;
-5. a claim in the PR body that is not true;
+5. a claim of proof in the PR body that is not true: something seen failing, what a spec holds, a run's or a sweep's result, a number measured;
 6. a point of the linked issue neither delivered nor declared out of scope in the PR body.
 
 Everything else is non-blocking: a suggestion, a question, something to track. Blocking is a fact, never a taste.
+
+**Any other error of the PR body is mended, not reviewed again** (the owner, 26 November 2026, #373): a section of the template missing, a line of "How" the diff no longer matches, a rule about the body not followed. The role notes it ("What a review looks like"), the author mends the body before the verdict, and the verdict names what was mended; no round starts for it. The body reaches no history: the squash's is `Closes #N` ("Merging").
 
 A red check on a spec the PR does not touch, with no cause in its diff, is not a round of review: it is handled as [`testing.md`](./testing.md), "No retries", says, and the verdict holds for the head once its required checks are green. #173 spent its third round on the speed limit's spec (#43).
 
@@ -86,10 +88,11 @@ Posted at the end of every round, as its last comment — before the fixes of a 
 - Backend: approve (round 1)
 - …
 
+Body mended: <what, in a few words>
 Follow-ups: #N
 ```
 
-The last line is `Follow-ups: none` when an approving verdict leaves nothing to track, and is left out of a verdict that asks for changes.
+`Body mended:` is left out when no role noted the body. The last line is `Follow-ups: none` when an approving verdict leaves nothing to track, and is left out of a verdict that asks for changes.
 
 ## Merging
 
@@ -132,6 +135,7 @@ Each role answers in this shape, posted on the PR under its own header (`## Tech
 ### Non-blocking
 
 - Suggestions, questions, things to track in an issue.
+- Body: an error of the PR body that is not a claim of proof, for the author to mend ("What is blocking").
 
 ### Checked
 
