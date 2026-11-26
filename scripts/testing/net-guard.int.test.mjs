@@ -45,6 +45,7 @@ it("refuses every road to a host outside this computer under a mutation run's co
       'passed',
     ],
     ['refuses in a Node process a spec starts', 'passed'],
+    ["hands every program the run's proxy, in both cases the variables are read in", 'passed'],
     [
       'refuses a program that is not Node: one that reads a proxy, over http and https, and git',
       'passed',

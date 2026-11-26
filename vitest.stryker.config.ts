@@ -35,18 +35,30 @@ function workspacesOfThisCopy(): Plugin {
 // inherit it. `NODE_OPTIONS` loads the guard into every Node process. A program that is not Node
 // reads none of it — `gh`, `git`, `curl` — and a mutant can start one (#386): its requests go to a
 // proxy at a port of this computer nothing listens on (1, which takes root to open), and git speaks
-// to no host at all. Curl, git and Go all read the proxy's variables in lower case, and curl reads
-// `http_proxy` in no other; each variable is held by a case of the probe.
+// to no host at all. Every proxy variable is set, in both cases: Go reads the upper case first,
+// curl the lower (and `http_proxy` in no other), so a proxy of the shell that starts the run would
+// otherwise choose for one of them. The probe reads them back.
 const guard = pathToFileURL(join(here, 'scripts/testing/net-guard.mjs')).href;
 const REFUSING_PROXY = 'http://127.0.0.1:1';
+const THIS_COMPUTER = 'localhost,127.0.0.1,::1';
+const inBothCases = (variables: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(variables).flatMap(([name, value]) => [
+      [name, value],
+      [name.toUpperCase(), value],
+    ]),
+  );
 const guarded = {
   env: {
     NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${guard}`]
       .filter((option) => option !== undefined && option !== '')
       .join(' '),
-    http_proxy: REFUSING_PROXY,
-    https_proxy: REFUSING_PROXY,
-    no_proxy: 'localhost,127.0.0.1,::1',
+    ...inBothCases({
+      http_proxy: REFUSING_PROXY,
+      https_proxy: REFUSING_PROXY,
+      all_proxy: '',
+      no_proxy: THIS_COMPUTER,
+    }),
     GIT_ALLOW_PROTOCOL: 'file',
   },
 };

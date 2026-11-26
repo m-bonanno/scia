@@ -104,6 +104,27 @@ describe('the network guard of a mutation run', () => {
     expect(node.printed).toMatch(REFUSED);
   });
 
+  // Whatever proxy the shell that started the run names, in either case, the run's own is the one
+  // every program is handed: the refusing one, nothing for any other scheme, none for this computer.
+  it("hands every program the run's proxy, in both cases the variables are read in", () => {
+    const names = ['http_proxy', 'https_proxy', 'all_proxy', 'no_proxy'].flatMap((name) => [
+      name,
+      name.toUpperCase(),
+    ]);
+    const handed = Object.fromEntries(names.map((name) => [name, process.env[name]]));
+
+    expect(handed).toEqual({
+      http_proxy: 'http://127.0.0.1:1',
+      HTTP_PROXY: 'http://127.0.0.1:1',
+      https_proxy: 'http://127.0.0.1:1',
+      HTTPS_PROXY: 'http://127.0.0.1:1',
+      all_proxy: '',
+      ALL_PROXY: '',
+      no_proxy: 'localhost,127.0.0.1,::1',
+      NO_PROXY: 'localhost,127.0.0.1,::1',
+    });
+  });
+
   it('refuses a program that is not Node: one that reads a proxy, over http and https, and git', async () => {
     const git = await printedBy('git', ['ls-remote', `http://${RESERVED}/scia.git`]);
 
