@@ -339,8 +339,11 @@ else if (
   // does, started by one that ends at once so that taskkill's tree misses it; elsewhere nothing a
   // process does stops a removal, and a folder that cannot be written stands in for it. What it
   // writes beside its file says how to let go: the holder to end, or the folder to give back.
-  // `first-to-go` is removed by the first removal tried: a spec sees that it has been tried.
-  const unpacked = join(process.env.TEMP ?? '', '_MEI1');
+  // `first-to-go` is removed by the first removal tried: a spec sees that it has been tried. What
+  // is held is two levels down, where yt-dlp's build keeps its runtime (`_MEI…/python3xx.dll`).
+  const unpacked = join(process.env.TEMP ?? '', '_MEI1', 'lib');
+  mkdirSync(unpacked, { recursive: true });
+  writeFileSync(join(unpacked, 'python3.dll'), 'unpacked');
   writeFileSync(join(process.env.TEMP ?? '', 'first-to-go'), '');
   const held = `${given}.held`;
   if (process.platform === 'win32') {
@@ -355,5 +358,7 @@ else if (
     chmodSync(unpacked, 0o555);
     writeWhole(held, JSON.stringify({ folder: unpacked }));
   }
-  hang();
+  // `?answers`: it reads the page, and its folder stays held once it has ended by itself.
+  if (url.includes('?answers')) process.stdout.write(JSON.stringify(video));
+  else hang();
 } else fail('[Example] v1: something no rule knows');

@@ -402,6 +402,7 @@ describe('the title of a video’s page added ready (#285)', () => {
         prefix: [FAKE_YT_DLP, join(folder.path, 'given.json')],
         timeoutMs: 10_000,
         tempDir: join(folder.path, 'temp'),
+        runPrefix: 'scia-yt-dlp-spec-',
         logger: silentLogger,
       });
       const downloads = await open({ pageReader: reader });
@@ -430,6 +431,7 @@ describe('the title of a video’s page added ready (#285)', () => {
         prefix: [FAKE_YT_DLP, givenFile],
         timeoutMs: 60_000,
         tempDir,
+        runPrefix: 'scia-yt-dlp-spec-',
         logger: silentLogger,
       });
       const downloads = await open({ pageReader: reader });

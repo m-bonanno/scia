@@ -184,20 +184,24 @@ export interface YtDlpOptions {
   readonly timeoutMs: number;
   // A title that has not come by then is given up: TITLE_LIMIT_MS unless told.
   readonly titleTimeoutMs?: number;
-  // This engine's own folder for its runs (`runsFolderOf`), where each gets one for its temporary
-  // files, removed when it ends: the builds of yt-dlp unpack themselves there — 30 MB — and leave
-  // it behind when they are stopped. What is in it as the engine starts, runs before left.
+  // Where each run gets a folder of its own for its temporary files, removed when it ends: the
+  // builds of yt-dlp unpack themselves there — 30 MB — and leave it behind when they are stopped.
   readonly tempDir: string;
+  // What this engine's runs' folders are named with (`runPrefixOf`): those left as it starts were
+  // left by its runs before.
+  readonly runPrefix: string;
   readonly mostOutputBytes?: number;
   readonly logger: Logger;
 }
 
-// The folder of a profile's runs, in the system's temporary one, which every Scia on the computer
-// shares: what one engine clears as it starts is never another's read. Named by a hash of the
-// profile's folder, whose path names the person's account.
-export function runsFolderOf(tempDir: string, dataDir: string): string {
+// The name a profile's runs' folders begin with, in the system's temporary folder, which every
+// Scia on the computer shares: what one engine clears as it starts is never another's read. A hash
+// of the profile's folder, whose path names the person's account. Each folder is still made by
+// `mkdtemp`, whole and unforeseeable, never in a folder of a known name: on Linux every user shares
+// the temporary folder, and another could make that folder first, or a link in its place (#174).
+export function runPrefixOf(dataDir: string): string {
   const profile = createHash('sha256').update(dataDir).digest('hex').slice(0, 16);
-  return join(tempDir, `scia-yt-dlp-${profile}`);
+  return `scia-yt-dlp-${profile}-`;
 }
 
 // yt-dlp's whole environment, built from nothing: the engine's own holds the API's token, which
@@ -262,10 +266,11 @@ function endTree(child: ChildProcess): void {
 const OUTPUT_GRACE_MS = 1000;
 
 // Windows may hold the files of a process that has just closed a moment longer: a run's folder is
-// tried again a while, whole each time. Never by `rm`'s own retries, which it makes again at every
-// level of the tree, and which multiply: a folder held for good took over a minute to give up
-// (#174), and one held deeper, minutes.
-const REMOVAL_TRIES = 10;
+// tried again a while, whole each time — a second and a half in all, well inside the five seconds
+// main gives the engine to stop at a quit (`STOP_LIMIT_MS`), which waits for its reads. Never by
+// `rm`'s own retries, which it makes again at every level of the tree, and which multiply: a
+// folder held for good took over a minute to give up (#174), and one held deeper, minutes.
+const REMOVAL_TRIES = 6;
 const REMOVAL_BACKOFF_MS = 100;
 
 async function removeRun(folder: string): Promise<void> {
@@ -288,13 +293,15 @@ export class YtDlp implements PageReader {
     this.#options = options;
   }
 
-  // The reader as the engine starts it: what runs before left in its folder is removed first, at
-  // a time no read runs from it. One that cannot be removed — a process no tree reached still
-  // running from it (#174) — is left for a later start, never a reason not to start.
+  // The reader as the engine starts it: the folders its runs before left are removed first, at a
+  // time no read runs from them. One that cannot be removed — a process no tree reached still
+  // running from it (#174) — is left for a later start, never a reason not to start. A link of
+  // that name is removed, never followed: `rm` does not.
   static async open(options: YtDlpOptions): Promise<YtDlp> {
-    const { tempDir, logger } = options;
+    const { tempDir, runPrefix, logger } = options;
     // A folder not there yet holds nothing; one that cannot be read is said by the first read.
-    for (const entry of await readdir(tempDir).catch(() => [])) {
+    const entries = await readdir(tempDir).catch(() => []);
+    for (const entry of entries.filter((name) => name.startsWith(runPrefix))) {
       try {
         await rm(join(tempDir, entry), { recursive: true, force: true });
       } catch (error) {
@@ -381,7 +388,7 @@ export class YtDlp implements PageReader {
   async #inFolderOfItsOwn(url: string, signal: AbortSignal, ask: Ask): Promise<Run> {
     signal.throwIfAborted();
     await mkdir(this.#options.tempDir, { recursive: true });
-    const temp = await mkdtemp(join(this.#options.tempDir, 'run-'));
+    const temp = await mkdtemp(join(this.#options.tempDir, this.#options.runPrefix));
     try {
       return await this.#run(url, temp, signal, ask);
     } finally {

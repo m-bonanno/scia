@@ -16,7 +16,7 @@ import { signingKeyOf } from './openpgp.ts';
 import type { PageReader } from './page-reader.ts';
 import { parentPort } from './parent-port.ts';
 import { JsonStateStore } from './state-store.ts';
-import { runsFolderOf, YtDlp } from './yt-dlp.ts';
+import { runPrefixOf, YtDlp } from './yt-dlp.ts';
 import { YtDlpReleases } from './yt-dlp-releases.ts';
 import { YT_DLP_SIGNING_KEY } from './yt-dlp-signing-key.ts';
 import { openYtDlpUpdates, type YtDlpUpdates } from './yt-dlp-updates.ts';
@@ -80,7 +80,8 @@ export async function pageReaderOf(
   const pageReader = await YtDlp.open({
     command: () => updates?.command() ?? shipped,
     timeoutMs: PAGE_READ_LIMIT_MS,
-    tempDir: runsFolderOf(config.tempDir, config.dataDir),
+    tempDir: config.tempDir,
+    runPrefix: runPrefixOf(config.dataDir),
     logger,
   });
   return updates === undefined ? { pageReader } : { pageReader, updates };
