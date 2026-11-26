@@ -18,25 +18,30 @@ const inText = (pattern, message) => [
 ];
 
 const RAW_COLOUR =
-  'A raw colour: use a token of src/themes.css, named for Tailwind in src/styles.css (apps/renderer/CLAUDE.md, "Tokens, never raw colours").';
+  'A raw colour: use a token of src/themes.css, named for Tailwind in src/styles.css (apps/renderer/CLAUDE.md, "Tokens, never raw colours"). An id or an issue number spelled in hex digits (`#add`, `#138`) reads as one too.';
+
+// A class or a value stands alone in its text when no letter, digit or `-` touches it: Tailwind's
+// `_` (its space inside an arbitrary value) and `!` (its important mark) do not.
+const ALONE_BEFORE = String.raw`(?<![\da-z-])`;
+const ALONE_AFTER = String.raw`(?![\da-z-])`;
 
 const RENDERER_SYNTAX = [
   ...inText(
-    String.raw`/(?:^|[\s"'(\[:,=])#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})(?=$|[\s"')\],;\/])/i`,
+    `/${ALONE_BEFORE}#(?:[0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})${ALONE_AFTER}/i`,
     RAW_COLOUR,
   ),
   ...inText(String.raw`/\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix)\(/`, RAW_COLOUR),
-  // Tailwind's own palette: a class the page's tokens did not name.
+  // Tailwind's own palette, each utility that takes one: a class the page's tokens did not name.
   ...inText(
-    String.raw`/(?:^|[\s"':])!?(?:bg|text|border(?:-[xytrbse])?|outline|ring|fill|stroke|from|via|to|decoration|accent|caret|shadow|divide|placeholder)-(?:white|black|(?:slate|gray|zinc|neutral|stone|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\d{2,3})(?![\w-])/`,
+    `/${ALONE_BEFORE}(?:bg|text|border(?:-[xytrblse])?|outline|ring(?:-offset)?|inset-ring|shadow|inset-shadow|text-shadow|drop-shadow|fill|stroke|from|via|to|decoration|accent|caret|divide|placeholder)-(?:white|black|(?:slate|gray|zinc|neutral|stone|mauve|olive|mist|taupe|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\\d{2,3})${ALONE_AFTER}/`,
     RAW_COLOUR,
   ),
   ...inText(
-    String.raw`/(?:^|[\s"':])dark:/`,
+    `/${ALONE_BEFORE}dark:/`,
     'No `dark:` variant: a colour that changes is a token, defined by every theme in its dark and in its light variant (apps/renderer/CLAUDE.md, "Tokens, never raw colours").',
   ),
   {
-    selector: "MemberExpression[property.name='toFixed']",
+    selector: "MemberExpression:matches([property.name='toFixed'], [property.value='toFixed'])",
     message:
       'Never `toFixed`: a number goes through lib/format.ts, in the one LOCALE of @scia/contracts/locale (apps/renderer/CLAUDE.md, "Numbers are tabular-nums").',
   },

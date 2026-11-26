@@ -1,6 +1,6 @@
 # Gotchas — specs
 
-For a change to a spec of any layer, a `testing/` folder or `apps/desktop/e2e/`, and for a mutation run or a probe. Lint holds fixed sleeps and hard-coded `\` separators (`eslint.config.js`). Read with the general entries of [`.claude/gotchas.md`](../gotchas.md); each entry's story is in the issues it names.
+For a change to a spec of any layer, a `testing/` folder or `apps/desktop/e2e/`, and for a mutation run or a probe. Lint holds fixed sleeps and hard-coded `\` separators in the specs themselves, `*.test.{ts,tsx,mjs}`, not in the helpers this file is also read for (`eslint.config.js`). Read with the general entries of [`.claude/gotchas.md`](../gotchas.md); each entry's story is in the issues it names.
 
 - → A status region that is always there is found at once, before its answer: a spec that read its text from `findByRole('status')` failed one run in three (#138). Wait for the text (`vi.waitFor` on `toHaveTextContent`), not for the region.
 - → playwright-core keeps a page `visible` under its Electron driver, also minimised or hidden (#138). Before blaming the runtime, run it without the driver — Electron started by itself, the page read over DevTools — and say in the PR what the driver cannot show.

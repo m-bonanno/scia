@@ -20,6 +20,7 @@ async function flagsOf(filePath, code) {
 }
 
 const COMPONENT = 'apps/renderer/src/features/downloads/example.tsx';
+const PAGE_MODULE = 'apps/renderer/src/components/example.ts';
 const RENDERER_SPEC = 'apps/renderer/src/features/downloads/example.test.tsx';
 const CORE = 'packages/core/src/example.ts';
 const CORE_SPEC = 'packages/core/src/example.test.ts';
@@ -30,6 +31,9 @@ const E2E_HELPER = 'apps/desktop/e2e/example.ts';
 const SCRIPT = 'scripts/example.mjs';
 const SCRIPT_SPEC = 'scripts/example.test.mjs';
 
+// The page's code: a component, and a module such as components/button-styles.ts.
+const PAGE = [COMPONENT, PAGE_MODULE];
+
 const RAW_COLOUR = expect.stringMatching(/^A raw colour/);
 const DARK = expect.stringMatching(/^No `dark:` variant/);
 const TO_FIXED = expect.stringMatching(/^Never `toFixed`/);
@@ -38,35 +42,155 @@ const SLEEP = expect.stringMatching(/^A fixed sleep/);
 const TEMP_FOLDER = expect.stringMatching(/^A folder of a fixed name/);
 const WALL_CLOCK = expect.stringMatching(/^Take the time as an argument/);
 
+const asText = (text) => `export const a = '${text}';`;
+
 describe('raw colours in the renderer (apps/renderer/CLAUDE.md)', () => {
   it.each([
-    ["export const a = 'bg-[#1e1e1e]';"],
-    ["export const a = { color: '#fff' };"],
-    ["export const a = '#00000080';"],
-    ["export const a = 'rgb(0 0 0)';"],
-    ["export const a = 'rgba(0, 0, 0, 0.5)';"],
-    ['export const a = (hue: number) => `hsl(${String(hue)} 50% 50%)`;'],
-    ["export const a = 'oklch(0.7 0.1 200)';"],
-    ["export const a = 'text-white';"],
-    ["export const a = 'hover:bg-red-500';"],
-    ["export const a = 'border-zinc-200 bg-surface';"],
-    ['export const A = () => <div className="text-black" />;'],
-  ])('flags %s', async (code) => {
-    expect(await flagsOf(COMPONENT, code)).toEqual([RAW_COLOUR]);
+    ['#fff'],
+    ['#fff8'],
+    ['#1e1e1e'],
+    ['#00000080'],
+    ['#FFF'],
+    ['bg-[#1e1e1e]'],
+    ['shadow-[0_0_0_1px_#fff]'],
+    ['color: #fff;'],
+  ])('flags a hex: %s', async (text) => {
+    for (const path of PAGE) expect(await flagsOf(path, asText(text))).toEqual([RAW_COLOUR]);
   });
 
   it.each([
-    ["export const a = 'bg-surface text-muted-foreground';"],
-    ["export const a = 'text-accent-foreground outline-ring';"],
-    ["export const a = 'bg-transparent';"],
-    ["export const a = '#main';"],
-    ['export const A = () => <div className="bg-background text-foreground" />;'],
-  ])('leaves a token alone: %s', async (code) => {
-    expect(await flagsOf(COMPONENT, code)).toEqual([]);
+    ['rgb(0 0 0)'],
+    ['rgba(0, 0, 0, 0.5)'],
+    ['hsl(0 0% 0%)'],
+    ['hsla(0, 0%, 0%, 0.5)'],
+    ['hwb(0 0% 0%)'],
+    ['lab(50% 0 0)'],
+    ['lch(50% 0 0)'],
+    ['oklab(0.5 0 0)'],
+    ['oklch(0.7 0.1 200)'],
+    ['color(srgb 0 0 0)'],
+    ['color-mix(in srgb, var(--accent), transparent)'],
+  ])('flags a colour function: %s', async (text) => {
+    for (const path of PAGE) expect(await flagsOf(path, asText(text))).toEqual([RAW_COLOUR]);
+  });
+
+  it.each([
+    ['bg'],
+    ['text'],
+    ['border'],
+    ['border-x'],
+    ['border-y'],
+    ['border-t'],
+    ['border-r'],
+    ['border-b'],
+    ['border-l'],
+    ['border-s'],
+    ['border-e'],
+    ['outline'],
+    ['ring'],
+    ['ring-offset'],
+    ['inset-ring'],
+    ['shadow'],
+    ['inset-shadow'],
+    ['text-shadow'],
+    ['drop-shadow'],
+    ['fill'],
+    ['stroke'],
+    ['from'],
+    ['via'],
+    ['to'],
+    ['decoration'],
+    ['accent'],
+    ['caret'],
+    ['divide'],
+    ['placeholder'],
+  ])('flags each utility of Tailwind that takes its palette: %s-red-500', async (utility) => {
+    for (const path of PAGE) {
+      expect(await flagsOf(path, asText(`${utility}-red-500`))).toEqual([RAW_COLOUR]);
+    }
+  });
+
+  it.each([
+    ['slate'],
+    ['gray'],
+    ['zinc'],
+    ['neutral'],
+    ['stone'],
+    ['mauve'],
+    ['olive'],
+    ['mist'],
+    ['taupe'],
+    ['red'],
+    ['orange'],
+    ['amber'],
+    ['yellow'],
+    ['lime'],
+    ['green'],
+    ['emerald'],
+    ['teal'],
+    ['cyan'],
+    ['sky'],
+    ['blue'],
+    ['indigo'],
+    ['violet'],
+    ['purple'],
+    ['fuchsia'],
+    ['pink'],
+    ['rose'],
+  ])('flags each palette of Tailwind: bg-%s-500', async (palette) => {
+    for (const path of PAGE) {
+      expect(await flagsOf(path, asText(`bg-${palette}-500`))).toEqual([RAW_COLOUR]);
+    }
+  });
+
+  it.each([
+    ['text-white'],
+    ['bg-black'],
+    ['bg-red-50'],
+    ['bg-red-950'],
+    ['hover:bg-red-500'],
+    ['!bg-red-500'],
+    ['bg-red-500!'],
+    ['bg-red-500/50'],
+    ['border-zinc-200 bg-surface'],
+  ])('flags a class of the palette wherever it stands: %s', async (text) => {
+    for (const path of PAGE) expect(await flagsOf(path, asText(text))).toEqual([RAW_COLOUR]);
+  });
+
+  it('flags a raw colour in a template and in JSX', async () => {
+    expect(
+      await flagsOf(COMPONENT, 'export const a = (hue: number) => `hsl(${String(hue)} 50% 50%)`;'),
+    ).toEqual([RAW_COLOUR]);
+    expect(
+      await flagsOf(COMPONENT, 'export const A = () => <div className="text-black" />;'),
+    ).toEqual([RAW_COLOUR]);
+  });
+
+  it('flags an id or an issue number spelled in hex digits: the trade of a rule that reads text', async () => {
+    expect(await flagsOf(COMPONENT, asText('#add'))).toEqual([RAW_COLOUR]);
+    expect(await flagsOf(COMPONENT, asText('(#138)'))).toEqual([RAW_COLOUR]);
+  });
+
+  it.each([
+    ['bg-surface text-muted-foreground'],
+    ['text-accent-foreground outline-ring'],
+    ['bg-surface-hover'],
+    ['bg-transparent'],
+    ['text-whitesmoke'],
+    ['collab(2)'],
+    ['#main'],
+    ['#fade-in'],
+    ['#abcde'],
+    ['#1234567'],
+    ['note#fff'],
+    ['1#fff'],
+    ['x-#fff'],
+  ])('leaves a token, and a hex that does not stand alone, alone: %s', async (text) => {
+    for (const path of PAGE) expect(await flagsOf(path, asText(text))).toEqual([]);
   });
 
   it('leaves the renderer’s specs to their own words, an issue number among them', async () => {
-    expect(await flagsOf(RENDERER_SPEC, "export const name = 'keeps the bar (#138)';")).toEqual([]);
+    expect(await flagsOf(RENDERER_SPEC, asText('keeps the bar (#138)'))).toEqual([]);
   });
 });
 
@@ -77,21 +201,25 @@ describe('the `dark:` variant in the renderer (apps/renderer/CLAUDE.md)', () => 
     ["export const a = 'hover:dark:text-foreground';"],
     ['export const a = (on: boolean) => `${on ? "x" : ""} dark:text-foreground`;'],
   ])('flags %s', async (code) => {
-    expect(await flagsOf(COMPONENT, code)).toEqual([DARK]);
+    for (const path of PAGE) expect(await flagsOf(path, code)).toEqual([DARK]);
   });
 
-  it('leaves the word alone', async () => {
-    expect(await flagsOf(COMPONENT, "export const a = 'the dark variant';")).toEqual([]);
-  });
+  it.each([["export const a = 'the dark variant';"], ["export const a = 'theme-dark:x';"]])(
+    'leaves the word alone: %s',
+    async (code) => {
+      for (const path of PAGE) expect(await flagsOf(path, code)).toEqual([]);
+    },
+  );
 });
 
 describe('`toFixed` in the renderer (apps/renderer/CLAUDE.md)', () => {
   it.each([
     ['export const a = (n: number) => n.toFixed(1);'],
     ['export const a = (n?: number) => n?.toFixed(1);'],
+    ["export const a = (n: number) => n['toFixed'](1);"],
     ['export const a = (ns: number[]) => ns.map((n) => n.toFixed(0)).join(", ");'],
   ])('flags %s', async (code) => {
-    expect(await flagsOf(COMPONENT, code)).toEqual([TO_FIXED]);
+    for (const path of PAGE) expect(await flagsOf(path, code)).toEqual([TO_FIXED]);
   });
 
   it('leaves the engine and the renderer’s specs alone', async () => {
@@ -141,11 +269,24 @@ describe('a fixed sleep in a spec (docs/development/testing.md)', () => {
   it.each([
     ['await new Promise((resolve) => setTimeout(resolve, 50));'],
     ['await new Promise((resolve) => {\n  setTimeout(resolve, 50);\n});'],
+    ['await new Promise(function (resolve) {\n  setTimeout(resolve, 50);\n});'],
+    [
+      'let done;\nawait new Promise((resolve) => {\n  done = resolve;\n  setTimeout(resolve, 50);\n});',
+    ],
+    ['await new Promise((resolve) => {\n  const timer = setTimeout(resolve, 50);\n});'],
+    ['await new Promise((resolve) => {\n  return setTimeout(resolve, 50);\n});'],
+    ['await new Promise<void>((resolve) => void setTimeout(resolve, 50));'],
     ['export const slow = () => new Promise((resolve) => setTimeout(() => resolve(1), 50));'],
+    [
+      'await new Promise<void>((resolve) => {\n  setTimeout(() => {\n    resolve();\n  }, 50);\n});',
+    ],
     ['export const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));'],
     ["import { setTimeout as sleep } from 'node:timers/promises';\nawait sleep(50);"],
     ["import { setTimeout } from 'timers/promises';\nawait setTimeout(50);"],
     ["import * as timers from 'node:timers/promises';\nawait timers.setTimeout(50);"],
+    ["import timers from 'node:timers/promises';\nawait timers.setTimeout(50);"],
+    ["import { scheduler } from 'node:timers/promises';\nawait scheduler.wait(50);"],
+    ["import * as timers from 'node:timers/promises';\nawait timers.scheduler.wait(50);"],
     ["import { setTimeout as sleep } from 'node:timers/promises';\nexport const pause = sleep;"],
     ["import * as timers from 'node:timers/promises';\nexport const pause = timers.setTimeout;"],
   ])('flags %s', async (code) => {
@@ -166,16 +307,54 @@ describe('a fixed sleep in a spec (docs/development/testing.md)', () => {
     expect(await flagsOf(ENGINE_SPEC, code)).toEqual([SLEEP, SLEEP]);
   });
 
-  it('flags it in a spec of the domain and of a script', async () => {
+  it('flags a sleep handed to a call, whatever that call is given first', async () => {
+    const code =
+      "import { setTimeout as sleep } from 'node:timers/promises';\ndeclare const later: (ms: number, wait: unknown) => void;\nlater(0, sleep);";
+
+    expect(await flagsOf(ENGINE_SPEC, code)).toEqual([SLEEP]);
+  });
+
+  it('flags it in a spec of the domain, of the renderer and of a script', async () => {
     const code = 'await new Promise((resolve) => setTimeout(resolve, 50));';
 
     expect(await flagsOf(CORE_SPEC, code)).toEqual([SLEEP]);
+    expect(await flagsOf(RENDERER_SPEC, code)).toEqual([SLEEP]);
     expect(await flagsOf(SCRIPT_SPEC, code)).toEqual([SLEEP]);
   });
 
   it.each([
+    [
+      "declare const child: { on(event: 'exit', listener: () => void): void; kill(): void };\nawait new Promise<void>((resolve) => {\n  child.on('exit', resolve);\n  setTimeout(() => child.kill(), 5000);\n});",
+    ],
+    [
+      "declare const socket: { once(event: 'connect', listener: () => void): void };\nawait new Promise<void>((resolve, reject) => {\n  socket.once('connect', resolve);\n  setTimeout(() => reject(new Error('no connect')), 2000);\n});",
+    ],
+    [
+      "export const late = new Promise((_, reject) => setTimeout(() => reject(new Error('late')), 50));",
+    ],
+    ['declare const done: () => void;\nawait new Promise(() => setTimeout(done, 50));'],
+    [
+      "declare const child: { on(event: 'exit', listener: () => void): void; kill(): void };\nawait new Promise<void>((resolve) => {\n  child.on('exit', () => resolve());\n  setTimeout(() => child.kill(), 5000);\n});",
+    ],
+    [
+      'declare const waiting: Array<() => void>;\nawait new Promise<void>((resolve) => setTimeout(() => waiting.push(resolve), 50));',
+    ],
+    [
+      'declare const poll: (done: () => void, ms: number) => void;\nawait new Promise<void>((resolve) => poll(resolve, 50));',
+    ],
+  ])('leaves a deadline on a wait for a state alone: %s', async (code) => {
+    expect(await flagsOf(ENGINE_SPEC, code)).toEqual([]);
+  });
+
+  it.each([
     ['await new Promise((resolve) => setTimeout(resolve, 0));'],
+    ['await new Promise((resolve) => setTimeout(resolve));'],
     ["import { setTimeout as sleep } from 'node:timers/promises';\nawait sleep(0);"],
+    ["import { setTimeout as sleep } from 'node:timers/promises';\nawait sleep();"],
+    ["import { scheduler } from 'node:timers/promises';\nawait scheduler.wait(0);"],
+    ["import { scheduler } from 'node:timers/promises';\nawait scheduler.yield();"],
+    ["import * as timers from 'node:timers/promises';\nawait timers.scheduler.yield();"],
+    ["import { scheduler } from 'node:timers/promises';\nexport const next = scheduler.yield;"],
     ["import { setImmediate } from 'node:timers/promises';\nawait setImmediate();"],
     ["import * as timers from 'node:timers/promises';\nawait timers.setImmediate();"],
     ['await new Promise((resolve) => setImmediate(resolve));'],
@@ -247,6 +426,9 @@ describe('a folder of a fixed name in the system’s temporary folder (#371)', (
     ],
     [
       "import fs from 'node:fs';\nimport { tmpdir } from 'node:os';\nimport { join } from 'node:path';\nexport const f = fs.mkdtempSync(join(tmpdir(), 'scia-'));",
+    ],
+    [
+      "import fsp from 'node:fs/promises';\nimport { tmpdir } from 'node:os';\nimport { join } from 'node:path';\nexport const f = await fsp.mkdtemp(join(tmpdir(), 'scia-'));",
     ],
     ["import { tmpdir } from 'node:os';\nexport const f = tmpdir();"],
   ])('leaves a folder made whole by `mkdtemp` alone: %s', async (code) => {
