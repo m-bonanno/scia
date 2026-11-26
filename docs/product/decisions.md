@@ -171,6 +171,10 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
   - **Required.** `Analyze (actions)` and `Analyze (javascript-typescript)` had run 59 times each, on pull requests and pushes, and `CodeQL` 46 times, on pull requests only, all green, a PR of docs alone included. They were added to the protection of `develop` and `main` the same day, as the owner had decided on 24 November 2026, and read back through the API: nine required checks on each branch, admins held to them.
   - **A PR from a fork**, on which GitHub's default setup runs none of them (found on the review of #352): the owner takes the three off `develop`'s protection by hand for its merge, and puts them back right after.
 
+## 26 November 2026
+
+- #373, proposal 1 of the owner's retrospective of the flow, approved: **only a claim of proof in a PR body blocks a review** — something seen failing, what a spec holds, a run's or a sweep's result, a number measured; any other error of the body is mended by the author and named in the verdict, with no new round ([`review-flow.md`](../development/review-flow.md), "What is blocking"). **The gates' line goes to the summary of CI's run, which the body links**, in place of the line #342 had the body carry ([`testing.md`](../development/testing.md), "The gates' line"). A script opens the team's PRs: their title through commitlint, their labels and assignee set ([`git-flow.md`](../development/git-flow.md), "A pull request").
+
 ## Undated in the roadmap
 
 The roadmap gave these without a date; the issue holds it.

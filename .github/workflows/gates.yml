@@ -47,19 +47,13 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci
-      # Parallel branches each take the next ADR number, and git merges two names (#183).
-      - name: ADR numbers
-        run: npm run check:adr
-      - name: Format
-        run: npm run format:check
-      - name: Lint
-        run: npm run lint
-      - name: Typecheck
-        run: npm run typecheck
-      - name: Test
-        run: npm test
-      - name: Build
-        run: npm run build
+      # The gates as a session runs them (scripts/gates.mjs), their line written to the summary of
+      # the run, which a PR body links (docs/development/testing.md, "The gates' line").
+      - name: Gates
+        run: npm run gates
+        env:
+          # A PR's run tests its head merged into its base: the line names the head too.
+          SCIA_GATES_HEAD: ${{ github.event.pull_request.head.sha }}
 
   # Scia ships for Windows: its timers, paths and processes are Windows'. Format, lint and types
   # say the same on both systems and run once, above.

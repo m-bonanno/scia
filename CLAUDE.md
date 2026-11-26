@@ -46,14 +46,14 @@ Runbooks in [`docs/development/`](./docs/development/): [`git-flow.md`](./docs/d
 
 **Failing test first, then the minimum code to pass, then refactor.**
 
-| Layer           | Tool                     | Scope                                                                                                                                      | Lives in                                                        |
-| --------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------- |
-| **Unit**        | Vitest                   | Pure logic: the domain, desktop engines, extension logic, React components                                                                 | `*.test.ts(x)` next to the code                                 |
-| **Integration** | Vitest                   | Adapters against the real thing: the downloader against a real HTTP host on a real disk, main's ear on the engine against a real HTTP host | `apps/server/**/*.int.test.ts`, `apps/desktop/**/*.int.test.ts` |
-| **Feature**     | Vitest                   | The engine's API through `app.request()`: tokens, scopes, status codes                                                                     | `apps/server/**/*.feature.test.ts`                              |
-| **E2E**         | Vitest + playwright-core | The built app as a person uses it: start, paste, Settings, the tray, quit, resume after a restart, against local hosts and services        | `apps/desktop/e2e/*.e2e.test.ts`                                |
-| **Smoke**       | Vitest + playwright-core | The installer: installed silently, started, a download, quit, its log read, uninstalled — on a CI runner only                              | `apps/desktop/e2e/installer.smoke.test.ts`                      |
-| **Runtime**     | the real Electron app    | What E2E cannot reach: what the system draws, a hand, a long run                                                                           | a throwaway harness, its result in the PR body                  |
+| Layer           | Tool                     | Scope                                                                                                                                                                                           | Lives in                                                                                  |
+| --------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| **Unit**        | Vitest                   | Pure logic: the domain, desktop engines, extension logic, React components                                                                                                                      | `*.test.ts(x)` next to the code                                                           |
+| **Integration** | Vitest                   | Adapters against the real thing: the downloader against a real HTTP host on a real disk, main's ear on the engine against a real HTTP host; the repository's scripts against the tools they run | `apps/server/**/*.int.test.ts`, `apps/desktop/**/*.int.test.ts`, `scripts/*.int.test.mjs` |
+| **Feature**     | Vitest                   | The engine's API through `app.request()`: tokens, scopes, status codes                                                                                                                          | `apps/server/**/*.feature.test.ts`                                                        |
+| **E2E**         | Vitest + playwright-core | The built app as a person uses it: start, paste, Settings, the tray, quit, resume after a restart, against local hosts and services                                                             | `apps/desktop/e2e/*.e2e.test.ts`                                                          |
+| **Smoke**       | Vitest + playwright-core | The installer: installed silently, started, a download, quit, its log read, uninstalled — on a CI runner only                                                                                   | `apps/desktop/e2e/installer.smoke.test.ts`                                                |
+| **Runtime**     | the real Electron app    | What E2E cannot reach: what the system draws, a hand, a long run                                                                                                                                | a throwaway harness, its result in the PR body                                            |
 
 **Unit tests do not prove a runtime works.** Anything that opens a socket, writes a file, spawns a process or packages an artefact is proven against the real thing. "The suite is green" is not "it works". A runtime change carries an E2E spec where the suite can hold it, and the evidence of a manual run for what it cannot, as [`testing.md`](./docs/development/testing.md) describes.
 
@@ -92,7 +92,7 @@ Full detail: [`docs/development/git-flow.md`](./docs/development/git-flow.md).
 - **Never commit or push to `main` or `develop`.** The husky `pre-commit`/`pre-push` hooks refuse it.
 - **Conventional commits**, lower-case subject (commitlint), on commits **and** PR titles.
 - **A work branch is squash-merged** into `develop`. `develop` → `main`, and `main` back into `develop` after it, are **merge commits**.
-- **`Closes #N`** in every PR body but those two, written from [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md) to `.claude/pr-bodies/<branch>.md` and passed with `--body-file`.
+- **`Closes #N`** in every PR body but those two, written from [`.github/PULL_REQUEST_TEMPLATE.md`](./.github/PULL_REQUEST_TEMPLATE.md) to `.claude/pr-bodies/<branch>.md`; `npm run pr:open -- "<title>"` opens the PR with it, labelled and assigned.
 - **No AI attribution — ever.** No "Generated with Claude Code", no `Co-Authored-By: Claude`, no AI mention in commits, PR bodies, code or docs.
 
 ## The team — review and merge
