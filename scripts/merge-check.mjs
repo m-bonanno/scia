@@ -14,9 +14,19 @@ function gitIn(cwd) {
 
 // The branch's own change, without the lines of develop around it: an entry appended next to
 // develop's own appended entry keeps its id, where three lines of context would change it.
-function ownChangeId(git, ...range) {
-  const diff = git(['diff', '--no-ext-diff', '--no-color', '-U0', ...range]);
+function ownChangeId(git, range, file) {
+  const diff = git(['diff', '--no-ext-diff', '--no-color', '-U0', ...range, '--', file]);
   return git(['patch-id', '--stable'], diff).split(' ')[0] ?? '';
+}
+
+// The files whose own change the merge changed: where a line can be left twice.
+function filesChanged(git, before, after) {
+  const names = (range) =>
+    git(['diff', '--no-ext-diff', '--name-only', ...range])
+      .split('\n')
+      .filter(Boolean);
+  const files = [...new Set([...names(before), ...names(after)])];
+  return files.filter((file) => ownChangeId(git, before, file) !== ownChangeId(git, after, file));
 }
 
 // The merge git makes by itself, under the attributes the merge was made with: undefined when it
@@ -42,21 +52,24 @@ export function checkMerge(cwd, merge = 'HEAD') {
 
   const tree = git(['rev-parse', `${commit}^{tree}`]);
   const byHand = automaticTree(cwd, head, develop) !== tree;
-  const same = ownChangeId(git, `${develop}...${head}`) === ownChangeId(git, develop, commit);
-  const outcome = byHand ? 'by-hand' : same ? 'carries' : 'changed';
-  return { outcome, merge: commit, head, develop };
+  const files = filesChanged(git, [`${develop}...${head}`], [develop, commit]);
+  const outcome = byHand ? 'by-hand' : files.length === 0 ? 'carries' : 'changed';
+  return { outcome, merge: commit, head, develop, files };
 }
 
 const short = (sha) => sha.slice(0, 7);
 
-export function messageOf({ outcome, merge, head, develop }) {
+export function messageOf({ outcome, merge, head, develop, files }) {
   const rule = '(docs/development/review-flow.md, "Rules")';
+  const after = `after an approval, the tech lead does ${rule}.`;
   if (outcome === 'carries') {
     return `${short(merge)} brought in ${short(develop)} and changed nothing of the branch's own diff: the verdict on ${short(head)} holds for ${short(merge)}, and CI on it decides ${rule}.`;
   }
-  const read = `Read it with \`git show --remerge-diff ${short(merge)}\`; after an approval, the tech lead does ${rule}.`;
-  if (outcome === 'changed') return `${short(merge)} changed the branch's own diff. ${read}`;
-  return `${short(merge)} is not the merge git makes by itself: a conflict resolved by hand, or a merge edited. ${read}`;
+  if (outcome === 'changed') {
+    const paths = files.join(' ');
+    return `${short(merge)} changed the branch's own diff in ${paths}. Read what the merge brought there for a line left twice, \`git diff ${short(head)} ${short(merge)} -- ${paths}\`; ${after}`;
+  }
+  return `${short(merge)} is not the merge git makes by itself: a conflict resolved by hand, or a merge edited. Read the hand's work, \`git show --remerge-diff ${short(merge)}\`; ${after}`;
 }
 
 export function exitCodeOf({ outcome }) {

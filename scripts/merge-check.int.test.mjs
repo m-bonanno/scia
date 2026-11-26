@@ -120,7 +120,12 @@ describe('checkMerge', () => {
 
     expect(mergeDevelop()).toBe(true);
     expect(read(DECISIONS)).toContain('- #2: two. Changed on 27 November 2026 (#5).\n- #2: two.\n');
-    expect(checkMerge(repo)).toMatchObject({ outcome: 'changed' });
+    const result = checkMerge(repo);
+    expect(result).toMatchObject({ outcome: 'changed', files: [DECISIONS] });
+    // The read the script names shows the line left twice.
+    expect(git('diff', result.head, result.merge, '--', ...result.files)).toContain(
+      '\n+- #2: two.\n',
+    );
   });
 
   it(`leaves ${GOTCHAS} to conflict, and sends the conflict resolved by hand to the tech lead`, () => {
@@ -151,7 +156,10 @@ describe('checkMerge', () => {
     git('add', CODE);
     git('commit', '-q', '--no-edit');
 
-    expect(checkMerge(repo)).toMatchObject({ outcome: 'by-hand' });
+    const result = checkMerge(repo);
+    expect(result).toMatchObject({ outcome: 'by-hand' });
+    // The read the script names shows the hand's work.
+    expect(git('show', '--remerge-diff', '--format=', result.merge)).toContain('<<<<<<<');
   });
 
   it('sends to the tech lead a merge edited after git made it, even by spaces a diff’s id does not see', () => {
@@ -206,6 +214,7 @@ describe('checkMerge', () => {
       merge: git('rev-parse', 'HEAD'),
       head,
       develop,
+      files: [],
     });
   });
 
@@ -221,6 +230,16 @@ describe('checkMerge', () => {
     );
 
     expect(checkMerge(repo)).toMatchObject({ outcome: 'changed' });
+  });
+
+  it('reads a branch whose diff passes the megabyte a child process gives by default', () => {
+    onBothSides(
+      () => write('docs/design/large.txt', `${'a line of a large file\n'.repeat(100_000)}`),
+      () => edit(DECISIONS, '- #2: two.\n', '- #2: two.\n- #4: develop’s.\n'),
+    );
+    mergeDevelop();
+
+    expect(checkMerge(repo)).toMatchObject({ outcome: 'carries' });
   });
 
   it('refuses a merge of more than two commits', () => {
