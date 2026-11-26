@@ -35,23 +35,18 @@ function workspacesOfThisCopy(): Plugin {
 // inherit it. `NODE_OPTIONS` loads the guard into every Node process. A program that is not Node
 // reads none of it — `gh`, `git`, `curl` — and a mutant can start one (#386): its requests go to a
 // proxy at a port of this computer nothing listens on (1, which takes root to open), and git speaks
-// to no host at all.
+// to no host at all. Curl, git and Go all read the proxy's variables in lower case, and curl reads
+// `http_proxy` in no other; each variable is held by a case of the probe.
 const guard = pathToFileURL(join(here, 'scripts/testing/net-guard.mjs')).href;
 const REFUSING_PROXY = 'http://127.0.0.1:1';
-const THIS_COMPUTER = 'localhost,127.0.0.1,::1';
 const guarded = {
   env: {
     NODE_OPTIONS: [process.env.NODE_OPTIONS, `--import=${guard}`]
       .filter((option) => option !== undefined && option !== '')
       .join(' '),
-    ...Object.fromEntries(
-      ['http_proxy', 'https_proxy', 'all_proxy'].flatMap((name) => [
-        [name, REFUSING_PROXY],
-        [name.toUpperCase(), REFUSING_PROXY],
-      ]),
-    ),
-    no_proxy: THIS_COMPUTER,
-    NO_PROXY: THIS_COMPUTER,
+    http_proxy: REFUSING_PROXY,
+    https_proxy: REFUSING_PROXY,
+    no_proxy: 'localhost,127.0.0.1,::1',
     GIT_ALLOW_PROTOCOL: 'file',
   },
 };

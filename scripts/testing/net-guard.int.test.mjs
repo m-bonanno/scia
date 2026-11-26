@@ -34,7 +34,10 @@ it("refuses every road to a host outside this computer under a mutation run's co
     .map(({ title, failureMessages }) => `${title}: ${failureMessages.join(' | ')}`)
     .join('\n');
   expect(outcomes, failures).toEqual([
-    ["refuses Node's fetch, given a text, a URL or a Request", 'passed'],
+    [
+      "refuses Node's fetch, given a text, a URL, a Request or anything it reads as a text",
+      'passed',
+    ],
     ['refuses http and https', 'passed'],
     ['refuses a socket, whichever way it is given its host', 'passed'],
     [
@@ -42,7 +45,10 @@ it("refuses every road to a host outside this computer under a mutation run's co
       'passed',
     ],
     ['refuses in a Node process a spec starts', 'passed'],
-    ['refuses a program that is not Node: one that reads a proxy, and git', 'passed'],
+    [
+      'refuses a program that is not Node: one that reads a proxy, over http and https, and git',
+      'passed',
+    ],
     ['lets a pipe on this computer answer', 'passed'],
     ['lets a host on this computer answer, Node and a program that is not', 'passed'],
   ]);

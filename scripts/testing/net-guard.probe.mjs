@@ -63,10 +63,11 @@ const lookupOfNoOne = (host, _options, callback) => {
 };
 
 describe('the network guard of a mutation run', () => {
-  it("refuses Node's fetch, given a text, a URL or a Request", async () => {
+  it("refuses Node's fetch, given a text, a URL, a Request or anything it reads as a text", async () => {
     expect(await fetched(`http://${RESERVED}/`)).toMatch(REFUSED);
     expect(await fetched(new URL(`http://${RESERVED}/`))).toMatch(REFUSED);
     expect(await fetched(new Request(`http://${RESERVED}/`))).toMatch(REFUSED);
+    expect(await fetched({ toString: () => `http://${RESERVED}/` })).toMatch(REFUSED);
   });
 
   it('refuses http and https', async () => {
@@ -103,16 +104,18 @@ describe('the network guard of a mutation run', () => {
     expect(node.printed).toMatch(REFUSED);
   });
 
-  it('refuses a program that is not Node: one that reads a proxy, and git', async () => {
-    const curl = await printedBy('curl', ['-sS', '--max-time', '3', `http://${RESERVED}/`]);
+  it('refuses a program that is not Node: one that reads a proxy, over http and https, and git', async () => {
     const git = await printedBy('git', ['ls-remote', `http://${RESERVED}/scia.git`]);
 
     // Code 7 is curl's "could not connect": to the proxy, which every curl names — the one of
     // this computer by itself, Ubuntu's after the host it was asked for ("via 127.0.0.1").
-    expect(
-      { code: curl.code, viaThisComputer: curl.printed.includes('127.0.0.1') },
-      curl.printed,
-    ).toEqual({ code: 7, viaThisComputer: true });
+    for (const scheme of ['http', 'https']) {
+      const curl = await printedBy('curl', ['-sS', '--max-time', '3', `${scheme}://${RESERVED}/`]);
+      expect(
+        { scheme, code: curl.code, viaThisComputer: curl.printed.includes('127.0.0.1') },
+        curl.printed,
+      ).toEqual({ scheme, code: 7, viaThisComputer: true });
+    }
     expect(git.printed, git.printed).toMatch(/transport 'http' not allowed/);
   });
 

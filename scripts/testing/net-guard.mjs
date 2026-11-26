@@ -3,9 +3,10 @@ import net from 'node:net';
 // The network guard of a mutation run (.claude/gotchas.md, "Specs"): a mutant that points a run at
 // a real host meets this instead (#228). Every connection to a host that is not this computer is
 // refused before a name is looked up, in each Node process that loads it — the workers of
-// vitest.stryker.config.ts and what a spec starts, through `NODE_OPTIONS`. Two roads: Node's own
-// `fetch`, which a patch of the socket does not see (#259), and the socket, under `http`, `https`,
-// `tls` and `net` alike. A program that is not Node is refused by that config's environment.
+// vitest.stryker.config.ts and what a spec starts, through `NODE_OPTIONS`. Two roads, each refused
+// on its own (#259): Node's own `fetch`, before it opens anything, and the socket, under `http`,
+// `https`, `tls` and `net` alike. A program that is not Node is refused by that config's
+// environment.
 
 // This computer is `localhost` and its loopback addresses, never a name that only reads like one:
 // `127.example.invalid` and `scia.localhost` are looked up, and answered by whoever owns them.
@@ -24,12 +25,12 @@ function refusal(host) {
   return Object.assign(new Error(`net-guard refused ${String(host)}`), { code: 'NET_GUARD' });
 }
 
+// What fetch reads its input as: a Request's address, or the text of anything else.
 function hostOfUrl(input) {
-  const raw = input instanceof URL ? input.href : typeof input === 'string' ? input : input?.url;
   try {
-    return new URL(raw).hostname;
+    return new URL(input instanceof Request ? input.url : String(input)).hostname;
   } catch {
-    // Not an address at all: fetch says so itself.
+    // Not an address at all: fetch refuses it itself.
     return undefined;
   }
 }
