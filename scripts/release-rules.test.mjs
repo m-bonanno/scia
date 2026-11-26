@@ -50,6 +50,11 @@ const RELEASES = [
   ['feat!: read a new state\n\nCloses #1', 'major'],
   ['fix(engine)!: keep the part file elsewhere\n\nCloses #1', 'major'],
   ['refactor!: name the settings anew\n\nCloses #1', 'major'],
+  ['hotfix!: keep the part file elsewhere\n\nCloses #1', 'major'],
+  [
+    'hotfix: keep the part file\n\nCloses #1\n\nBREAKING CHANGE: the part file is kept elsewhere.',
+    'major',
+  ],
   ...['chore', 'docs', 'ci', 'test', 'refactor', 'style', 'build'].map((type) => [
     `${type}: tidy the engine\n\nCloses #1`,
     null,
@@ -67,16 +72,20 @@ describe('the release a squash merge makes', () => {
 });
 
 describe('the release notes', () => {
-  it('list a breaking change by its footer, or by its title when the ! stands alone', async () => {
+  it('list a breaking change once: by its footer, or by its title when the ! stands alone', async () => {
     const notes = await notesOf([
       'feat!: read a new state\n\nCloses #1',
       'fix: keep the part file\n\nCloses #2\n\nBREAKING CHANGE: the part file is kept elsewhere.',
+      'feat!: drop the old settings\n\nCloses #3\n\nBREAKING CHANGE: the settings of 1.x are not read.',
     ]);
 
     expect(notes).toContain(
-      '### ⚠ BREAKING CHANGES\n\n* read a new state\n* the part file is kept elsewhere.\n',
+      '### ⚠ BREAKING CHANGES\n\n' +
+        '* read a new state\n' +
+        '* the part file is kept elsewhere.\n' +
+        '* the settings of 1.x are not read.\n\n### ',
     );
-    expect(notes).toMatch(/### Features\n\n\* read a new state /);
+    expect(notes).toMatch(/### Features\n\n\* drop the old settings .*\n\* read a new state /);
     expect(notes).toMatch(/### Bug Fixes\n\n\* keep the part file /);
   });
 });

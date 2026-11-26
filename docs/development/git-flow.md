@@ -11,7 +11,7 @@
 
 ## A pull request
 
-1. Title: `type(scope): description`, lower-case — `type(scope)!: description` for a breaking change, which releases a major ([`release-flow.md`](./release-flow.md)).
+1. Title: `type(scope): description`, lower-case — `type(scope)!: description` for a breaking change ([`release-flow.md`](./release-flow.md)).
 2. Body from `.github/PULL_REQUEST_TEMPLATE.md`, in English, written to `.claude/pr-bodies/<branch>.md` and passed with `gh pr create --body-file`.
 3. `Closes #N` in the body, naming the issue the PR is for — each of them, on a branch that related fixes share: the `Linked issue` check fails a PR whose body closes no issue of this repository (`scripts/linked-issue.mjs`).
 4. Before opening it, run the gates locally: the list is in [`review-flow.md`](./review-flow.md#the-gates).
