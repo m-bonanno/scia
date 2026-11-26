@@ -658,6 +658,7 @@ describe('DownloadManager and a link that is a page', () => {
       prefix: [FAKE_YT_DLP, givenFile],
       timeoutMs: 60_000,
       tempDir: join(folder.path, 'temp'),
+      logger: silentLogger,
     });
     const downloads = await open({ pageReader: reader });
 

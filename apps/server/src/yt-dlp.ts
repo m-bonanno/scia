@@ -1,9 +1,11 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { AUDIO_CONTAINERS, type AudioContainer, PageFailure, titleOfVideo } from '@scia/core';
 import { mediaSchema } from '@scia/contracts';
 import { z } from 'zod';
+import { describeFailure, type Logger } from './logger.ts';
 import { PageError, type PageFormat } from './media-choice.ts';
 import type { PageMedia, PageReader } from './page-reader.ts';
 
@@ -181,10 +183,20 @@ export interface YtDlpOptions {
   readonly timeoutMs: number;
   // A title that has not come by then is given up: TITLE_LIMIT_MS unless told.
   readonly titleTimeoutMs?: number;
-  // Where each run gets a folder of its own for its temporary files, removed when it ends: the
-  // builds of yt-dlp unpack themselves there — 30 MB — and leave it behind when they are stopped.
+  // This engine's own folder for its runs (`runsFolderOf`), where each gets one for its temporary
+  // files, removed when it ends: the builds of yt-dlp unpack themselves there — 30 MB — and leave
+  // it behind when they are stopped. What is in it as the engine starts, runs before left.
   readonly tempDir: string;
   readonly mostOutputBytes?: number;
+  readonly logger: Logger;
+}
+
+// The folder of a profile's runs, in the system's temporary one, which every Scia on the computer
+// shares: what one engine clears as it starts is never another's read. Named by a hash of the
+// profile's folder, whose path names the person's account.
+export function runsFolderOf(tempDir: string, dataDir: string): string {
+  const profile = createHash('sha256').update(dataDir).digest('hex').slice(0, 16);
+  return join(tempDir, `scia-yt-dlp-${profile}`);
 }
 
 // yt-dlp's whole environment, built from nothing: the engine's own holds the API's token, which
@@ -254,6 +266,22 @@ export class YtDlp implements PageReader {
 
   constructor(options: YtDlpOptions) {
     this.#options = options;
+  }
+
+  // The reader as the engine starts it: what runs before left in its folder is removed first, at
+  // a time no read runs from it. One that cannot be removed — a process no tree reached still
+  // running from it (#174) — is left for a later start, never a reason not to start.
+  static async open(options: YtDlpOptions): Promise<YtDlp> {
+    const { tempDir, logger } = options;
+    // A folder not there yet holds nothing; one that cannot be read is said by the first read.
+    for (const entry of await readdir(tempDir).catch(() => [])) {
+      try {
+        await rm(join(tempDir, entry), { recursive: true, force: true });
+      } catch (error) {
+        logger.warn('yt_dlp_run_not_removed', { entry, error: describeFailure(error) });
+      }
+    }
+    return new YtDlp(options);
   }
 
   async read(url: string, signal: AbortSignal): Promise<PageMedia | undefined> {
@@ -333,12 +361,18 @@ export class YtDlp implements PageReader {
   async #inFolderOfItsOwn(url: string, signal: AbortSignal, ask: Ask): Promise<Run> {
     signal.throwIfAborted();
     await mkdir(this.#options.tempDir, { recursive: true });
-    const temp = await mkdtemp(join(this.#options.tempDir, 'scia-yt-dlp-'));
+    const temp = await mkdtemp(join(this.#options.tempDir, 'run-'));
     try {
       return await this.#run(url, temp, signal, ask);
     } finally {
-      // After the process has closed, whatever ended it: Windows may hold its files a moment.
-      await rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      // After the process has closed, whatever ended it: Windows may hold its files a moment. A
+      // process no tree reached may still run from it (#174): the read keeps what became of it,
+      // and the folder is left to the next start.
+      try {
+        await rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      } catch (error) {
+        this.#options.logger.warn('yt_dlp_run_not_removed', { error: describeFailure(error) });
+      }
     }
   }
 

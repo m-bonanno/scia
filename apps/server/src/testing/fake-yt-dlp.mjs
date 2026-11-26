@@ -3,7 +3,7 @@
 // its process id — since the adapter hands it no environment of the spec's. Like yt-dlp's builds,
 // it unpacks itself into its TEMP first, and leaves that there when it is stopped.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const [given, ...args] = process.argv.slice(2);
@@ -333,4 +333,24 @@ else if (
   // `/first-gone`: the first process ends by itself and leaves the second reading.
   if (url.includes('/first-gone')) second.unref();
   else hang();
+} else if (url.includes('/holds-its-folder')) {
+  // What yt-dlp's second process may do when no tree reaches it (#174): outlive the stop, and
+  // keep the folder it unpacked into from being removed. On Windows a process working in a folder
+  // does, started by one that ends at once so that taskkill's tree misses it; elsewhere nothing a
+  // process does stops a removal, and a folder that cannot be written stands in for it. The spec
+  // gives it back by what is written beside its file.
+  const unpacked = join(process.env.TEMP ?? '', '_MEI1');
+  if (process.platform === 'win32') {
+    const code = `const { spawn } = require('node:child_process');
+      const held = spawn(process.execPath, ['-e', 'setTimeout(() => undefined, 30_000)'], { cwd: ${JSON.stringify(unpacked)}, detached: true, stdio: 'ignore' });
+      held.unref();
+      const { existsSync, renameSync, rmSync, writeFileSync } = require('node:fs');
+      const writeWhole = ${String(writeWhole)};
+      writeWhole(process.argv[1], JSON.stringify({ pid: held.pid }));`;
+    spawn(process.execPath, ['-e', code, `${given}.held`], { stdio: 'ignore', detached: true });
+  } else {
+    chmodSync(unpacked, 0o555);
+    writeWhole(`${given}.held`, JSON.stringify({ folder: unpacked }));
+  }
+  hang();
 } else fail('[Example] v1: something no rule knows');

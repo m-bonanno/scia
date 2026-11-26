@@ -1,4 +1,5 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { chmod, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,6 +11,15 @@ export const silentLogger: Logger = {
   warn: () => undefined,
   error: () => undefined,
 };
+
+// Keeps every line logged, each as the JSON object a line of the engine's log is.
+export function recordingLogger(): Logger & { readonly lines: string[] } {
+  const lines: string[] = [];
+  const log = (level: string) => (event: string, details?: object) => {
+    lines.push(JSON.stringify({ level, event, ...details }));
+  };
+  return { lines, info: log('info'), warn: log('warn'), error: log('error') };
+}
 
 export async function scratchFolder(): Promise<{ path: string; remove(): Promise<void> }> {
   const path = await mkdtemp(join(tmpdir(), 'scia-test-'));
@@ -31,6 +41,26 @@ export async function refusingFiles(folder: string): Promise<() => Promise<void>
   }
   await chmod(folder, 0o500);
   return () => chmod(folder, 0o700);
+}
+
+// Keeps a folder from being removed, as a program still running from it does; the function it
+// answers lets it go. On Windows a process working in the folder holds it; elsewhere nothing a
+// process does stops a removal, and a folder that cannot be written stands in for it.
+export async function holdingFolder(folder: string): Promise<() => Promise<void>> {
+  if (process.platform === 'win32') {
+    const holder = spawn(process.execPath, ['-e', 'setTimeout(() => undefined, 30_000)'], {
+      cwd: folder,
+      stdio: 'ignore',
+    });
+    await once(holder, 'spawn');
+    return async () => {
+      const exited = once(holder, 'exit');
+      if (holder.exitCode === null && holder.signalCode === null) holder.kill();
+      await exited;
+    };
+  }
+  await chmod(folder, 0o555);
+  return () => chmod(folder, 0o755);
 }
 
 // What Windows' fsutil says of a file's sparse flag, in the system's words: a spec tells one

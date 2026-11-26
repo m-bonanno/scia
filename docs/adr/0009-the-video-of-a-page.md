@@ -36,6 +36,7 @@ The work comes in four pieces, each its own PR:
    - it loads no plugin, from beside it or from the person's folders (`--no-plugin-dirs`).
 
    It is started with an environment of its own, built from nothing: `SystemRoot`, and a temporary folder of its own inside the system's (which main names), made for that run and removed once the process has closed, however it ended — its build unpacks 30 MB there each time and leaves it behind when it is stopped. Never the engine's environment, which holds the API's token. The address comes last, after `--`, so an address that begins with a dash is not an option.
+   - _Amended by #174, 26 November 2026:_ a run's folder that cannot be removed — a process of yt-dlp's that no tree reached still running from it — no longer changes what became of the read: it is logged and left, and removed at the engine's next start, before any read. The runs' folders are in a folder of the engine's own inside the system's, named by a hash of the profile's folder, so that what one engine clears at its start is never another Scia's read.
 
 3a. **What yt-dlp says, and what follows.** Only its `ERROR:` lines are read; its warnings name formats it passed over, not why it stopped.
 
