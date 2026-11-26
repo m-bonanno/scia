@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { extractLinks, extractMagnets, magnetUri } from './links.ts';
 
+// A text a site or a paste hands over (#383). Read again from each mark of the run, it takes
+// seconds; read once, a few milliseconds.
+const LONG_RUN = 100_000;
+const BOUND_MS = 1000;
+
 describe('extractLinks', () => {
   it('finds every address in a pasted text, once each', () => {
     const text = `Here are the files:
@@ -18,9 +23,24 @@ describe('extractLinks', () => {
     ]);
   });
 
+  it('leaves out each mark that can end a sentence around a link', () => {
+    for (const mark of ['.', ',', ';', ':', '!', '?', ')', ']', '}']) {
+      expect(extractLinks(`see https://example.com/a.zip${mark}`), mark).toEqual([
+        'https://example.com/a.zip',
+      ]);
+    }
+  });
+
   it('finds nothing in what is not a link', () => {
     expect(extractLinks('ftp://example.com/a.zip, file:///c:/x, hello')).toEqual([]);
     expect(extractLinks('')).toEqual([]);
+  });
+
+  it('reads a long run of punctuation inside a link once, not again from each of its marks', () => {
+    const link = `https://example.com/${'!'.repeat(LONG_RUN)}x`;
+    const started = Date.now();
+    expect(extractLinks(link)).toEqual([link]);
+    expect(Date.now() - started).toBeLessThan(BOUND_MS);
   });
 });
 
@@ -41,6 +61,13 @@ describe('extractMagnets', () => {
 
   it('leaves the magnets out of the links, and the links out of the magnets', () => {
     expect(extractLinks(`magnet:?xt=urn:btih:${HASH}`)).toEqual([]);
+  });
+
+  it('reads a long run of punctuation inside a magnet once, and refuses it as longer than a magnet', () => {
+    const magnet = `magnet:?xt=urn:btih:${HASH}&dn=${'!'.repeat(LONG_RUN)}x`;
+    const started = Date.now();
+    expect(extractMagnets(magnet)).toEqual([]);
+    expect(Date.now() - started).toBeLessThan(BOUND_MS);
   });
 
   it("takes no tracker of a magnet for a link: it is the magnet's, not a file", () => {

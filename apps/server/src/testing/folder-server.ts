@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { createServer } from 'node:http';
-import { join, normalize } from 'node:path';
+import { resolve, sep } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 export interface FolderServerOptions {
@@ -22,20 +22,34 @@ export interface FolderServer {
 // A real HTTP host that serves a folder, and a Range of a file when asked one: the HLS specs fetch
 // their pieces from it, over a socket.
 export async function startFolderServer(options: FolderServerOptions): Promise<FolderServer> {
+  const root = resolve(options.root);
   const asked: string[] = [];
   const failing = new Set(options.failOnce ?? []);
   const server = createServer((request, response) => {
     void (async () => {
-      const path = decodeURIComponent((request.url ?? '/').split('?')[0] ?? '/');
+      let path: string;
+      try {
+        path = decodeURIComponent((request.url ?? '/').split('?')[0] ?? '/');
+      } catch {
+        response.writeHead(400).end();
+        return;
+      }
       asked.push(path);
       if (failing.delete(path)) {
         response.writeHead(503).end();
         return;
       }
       if (options.delayMs !== undefined) await sleep(options.delayMs);
+      // A request may name a whole address (`GET http://host/../../x`), whose `..` no leading
+      // slash stops.
+      const file = resolve(root, path.replace(/^[/\\]+/, ''));
+      if (!file.startsWith(`${root}${sep}`)) {
+        response.writeHead(403).end();
+        return;
+      }
       let body: Buffer;
       try {
-        body = await readFile(join(options.root, normalize(path).replace(/^([/\\])+/, '')));
+        body = await readFile(file);
       } catch {
         response.writeHead(404).end();
         return;

@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { HlsRefusal, ivOfSegment, parsePlaylist } from './hls.ts';
 
+// A playlist a site serves (#383). Read again from each character of the run, it takes seconds;
+// read once, a few milliseconds.
+const LONG_RUN = 100_000;
+const BOUND_MS = 1000;
+
 const vod = [
   '#EXTM3U',
   '#EXT-X-VERSION:3',
@@ -156,6 +161,21 @@ describe('parsePlaylist', () => {
     });
   });
 
+  it('reads an attribute by its whole name, also after a comma and a space', () => {
+    const playlist = parsePlaylist(
+      [
+        '#EXTM3U',
+        '#EXT-X-STREAM-INF:BANDWIDTH=800000,AVERAGE-BANDWIDTH=1,X2BANDWIDTH=2, RESOLUTION=640x360',
+        'low/index.m3u8',
+      ].join('\n'),
+    );
+
+    expect(playlist).toEqual({
+      kind: 'master',
+      variants: [{ uri: 'low/index.m3u8', bandwidth: 800000, height: 360 }],
+    });
+  });
+
   it('refuses a piece whose length no stream has: below zero, not a number, longer than a day', () => {
     for (const length of ['-1', '1e300', 'NaN', '90000']) {
       expect(
@@ -192,6 +212,18 @@ describe('parsePlaylist', () => {
         '#EXTM3U\n#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI="data:x"\n#EXTINF:1,\na.ts\n#EXT-X-ENDLIST',
       ),
     ).toThrow(HlsRefusal.Protected);
+  });
+
+  it('reads a long attribute name that never gets its value once, whatever characters it holds', () => {
+    for (const character of ['-', '7', 'Z']) {
+      const started = Date.now();
+      expect(parsePlaylist(`#EXTM3U\n#EXT-X-KEY:${character.repeat(LONG_RUN)}`)).toEqual({
+        kind: 'media',
+        ends: false,
+        segments: [],
+      });
+      expect(Date.now() - started, character).toBeLessThan(BOUND_MS);
+    }
   });
 });
 
