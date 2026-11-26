@@ -1,7 +1,7 @@
 import { realpathSync } from 'node:fs';
 import { dirname, join, relative, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { defineConfig, type Plugin } from 'vitest/config';
+import { defineConfig, mergeConfig, type Plugin, type UserWorkspaceConfig } from 'vitest/config';
 import root from './vitest.config.ts';
 
 // The specs of a mutation run (stryker.config.mjs, `npm run mutate`, #381): the projects of
@@ -42,12 +42,22 @@ const guarded = {
   },
 };
 
-// An inline project inherits this file's plugins and `test`; a project that is a file of its own
-// does not, and extends it instead.
-const projects = (root.test?.projects ?? []).map((project) =>
-  typeof project === 'string'
-    ? { extends: project, root: dirname(project), plugins: [workspacesOfThisCopy()], test: guarded }
-    : project,
+// An inline project inherits this file's plugins and `test`. A project that is a file of its own
+// does not, and is given them here, its own name and options kept: extended by its path instead, it
+// was named after its place in the list, and `--project unit-renderer` found none of its specs.
+const projects = await Promise.all(
+  (root.test?.projects ?? []).map(async (project) => {
+    if (typeof project !== 'string') return project;
+    const own = (await import(pathToFileURL(join(here, project)).href)) as {
+      default: UserWorkspaceConfig;
+    };
+    return mergeConfig(own.default, {
+      extends: false,
+      root: join(here, dirname(project)),
+      plugins: [workspacesOfThisCopy()],
+      test: guarded,
+    });
+  }),
 );
 
 export default defineConfig({
