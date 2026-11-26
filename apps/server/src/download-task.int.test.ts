@@ -346,6 +346,7 @@ describe('DownloadTask against a real HTTP host', () => {
       const slow = first;
       first = false;
       await datasync.call(this);
+      // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: a sync slow to end
       if (slow) await new Promise((resolve) => setTimeout(resolve, 500));
     });
     onTestFinished(() => {

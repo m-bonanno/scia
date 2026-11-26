@@ -247,6 +247,7 @@ describe('YtDlpUpdates against a host that publishes releases as yt-dlp does', (
         // folder, never by opening either — and 300 ms more: the case itself, well inside the two
         // seconds the write waits.
         await until(async () => (await readdir(updatesFolder())).includes('state.json.tmp'));
+        // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: the file held a while
         await sleep(300);
       } finally {
         await held.close();

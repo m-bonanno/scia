@@ -219,6 +219,7 @@ describe('KeyVault', () => {
       read: store.files.read,
       remove: store.files.remove,
       write: async (name, data) => {
+        // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: a slow write
         await new Promise((resolve) => setTimeout(resolve, 40));
         await write(name, data);
       },

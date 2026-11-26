@@ -267,6 +267,7 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
   }, 120_000);
 
   afterAll(async () => {
+    // eslint-disable-next-line no-restricted-syntax -- a registry key: a spec for Windows only
     await run('reg', ['delete', `HKCU\\${key}`, '/f']).catch(() => undefined);
     await folder.remove();
   });
@@ -410,6 +411,7 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
     const install = () =>
       exitCodeOf(run(join(folder.path, 'installing.exe'), ['/S'], { timeout: 30_000 }));
     const setInstalled = (version: string) =>
+      // eslint-disable-next-line no-restricted-syntax -- a registry key: a spec for Windows only
       run('reg', ['add', `HKCU\\${key}`, '/v', 'DisplayVersion', '/d', version, '/f']);
 
     it('ends a silent install over a newer version with 1638, having installed nothing', async () => {
@@ -427,6 +429,7 @@ describe.runIf(process.platform === 'win32')('the installer, before it installs'
     });
 
     it('installs where no Scia is installed', async () => {
+      // eslint-disable-next-line no-restricted-syntax -- a registry key: a spec for Windows only
       await run('reg', ['delete', `HKCU\\${key}`, '/f']).catch(() => undefined);
 
       expect(await install()).toBe(0);

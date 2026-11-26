@@ -738,6 +738,7 @@ describe('a link that goes through a service', () => {
           await until(async () =>
             (await readdir(join(folder.path, 'data'))).includes('alldebrid-hosts.json.tmp'),
           );
+          // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: the file held a while
           await sleep(300);
         } finally {
           await held.close();
@@ -877,6 +878,7 @@ describe('a link that goes through a service', () => {
     expect(paused.failure).toBeNull();
     expect(paused.via).toBe('alldebrid');
     const asked = alldebrid.requests.length;
+    // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: a stretch to watch
     await new Promise((resolve) => setTimeout(resolve, 50));
     // The wait above is the case itself: nothing more is asked once it is paused.
     expect(alldebrid.requests.length).toBeLessThanOrEqual(asked + 1);
@@ -1136,6 +1138,7 @@ describe('a link that goes through a service', () => {
       ) {
         syncing += 1;
         try {
+          // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: a slow sync
           await new Promise((resolve) => setTimeout(resolve, 400));
           await sync.call(this);
         } finally {

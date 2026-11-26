@@ -256,6 +256,7 @@ describe('Integrations', () => {
       read: (name) => kept.read(name),
       write: async (name, key) => {
         // The first write is the slow one: were they not in turn, the second would land first.
+        // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: a slow first write
         if (key === KEY) await new Promise((resolve) => setTimeout(resolve, 60));
         await kept.write(name, key);
         done.push(`write ${key}`);

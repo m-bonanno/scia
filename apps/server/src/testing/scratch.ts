@@ -79,7 +79,7 @@ export function sparseFlagOf(path: string): string {
 
 // Waits for something a download does in its own time, without a fixed sleep.
 // The condition may have to ask something to know. On `performance.now()`: the system's clock
-// steps (.claude/gotchas.md, Engine).
+// steps (.claude/gotchas.md, #44).
 export async function until(
   condition: () => boolean | Promise<boolean>,
   limitMs = 10_000,
