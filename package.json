@@ -35,7 +35,8 @@
     "test:quarantine": "node scripts/quarantine.mjs",
     "gates": "node scripts/gates.mjs",
     "pr:open": "node scripts/open-pr.mjs",
-    "check:adr": "node scripts/adr-numbers.mjs"
+    "check:adr": "node scripts/adr-numbers.mjs",
+    "check:merge": "node scripts/merge-check.mjs"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

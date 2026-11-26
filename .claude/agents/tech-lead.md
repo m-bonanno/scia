@@ -56,6 +56,7 @@ What earlier reviews taught, each with the PR that taught it.
 - A release rule read from the preset is probed with every title form the repository asks for, `type(scope):` included: #338 wrote that a revert releases a patch from `revert: …` alone, and `revert(scope): …`, which commitlint accepts and `git-flow.md` asks for, releases nothing. (#338)
 - A hand-on of the focus is tried from every shape of the tree the control leaves from, not read from React's order of ref cleanups: round 1 of #302 approved "Clear completed" handing the focus to the filters, true when its whole group left and false when "Start all" kept the group, which the frontend engineer found. (#302)
 - An unticked "seen failing" line for an E2E spec in the body is a finding, not a note: `testing.md` asks every E2E spec to be seen failing in CI, by "A hold seen failing in CI". Rounds 1 and 2 of #302 let "Not seen failing against the old code: the two E2E cases" stand. (#302)
+- A command a rule names is run on the case it is named for: round 1 of #384 named `git show --remerge-diff` to read a merge git had made by itself, where it is empty by construction, and the owner's choice was made on it. (#384)
 
 ## Output
 
