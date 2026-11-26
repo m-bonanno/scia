@@ -38,6 +38,7 @@ describe('labelsOf', () => {
       'scripts/gates.mjs': 'area:ci',
       'docs/development/review-flow.md': 'area:ci',
       '.claude/commands/team-review.md': 'area:ci',
+      '.claude/settings.json': 'area:ci',
       '.claude/agents/tech-lead.md': 'area:ci',
       '.releaserc.json': 'area:ci',
       'vitest.config.ts': 'area:ci',
