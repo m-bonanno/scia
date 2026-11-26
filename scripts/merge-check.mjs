@@ -19,13 +19,12 @@ function ownChangeId(git, range, file) {
   return git(['patch-id', '--stable'], diff).split(' ')[0] ?? '';
 }
 
-// The files whose own change the merge changed: where a line can be left twice.
+// The files whose own change the merge changed: where a line can be left twice, or put back. Beyond
+// develop, a merge git makes by itself changes only files the branch changed.
 function filesChanged(git, before, after) {
-  const names = (range) =>
-    git(['diff', '--no-ext-diff', '--name-only', ...range])
-      .split('\n')
-      .filter(Boolean);
-  const files = [...new Set([...names(before), ...names(after)])];
+  const files = git(['diff', '--no-ext-diff', '--name-only', '-z', ...before])
+    .split('\0')
+    .filter(Boolean);
   return files.filter((file) => ownChangeId(git, before, file) !== ownChangeId(git, after, file));
 }
 
@@ -67,7 +66,7 @@ export function messageOf({ outcome, merge, head, develop, files }) {
   }
   if (outcome === 'changed') {
     const paths = files.join(' ');
-    return `${short(merge)} changed the branch's own diff in ${paths}. Read what the merge brought there for a line left twice, \`git diff ${short(head)} ${short(merge)} -- ${paths}\`; ${after}`;
+    return `${short(merge)} changed the branch's own diff in ${paths}. Read what the merge brought there for a line left twice or put back, \`git diff ${short(head)} ${short(merge)} -- ${paths}\`; ${after}`;
   }
   return `${short(merge)} is not the merge git makes by itself: a conflict resolved by hand, or a merge edited. Read the hand's work, \`git show --remerge-diff ${short(merge)}\`; ${after}`;
 }

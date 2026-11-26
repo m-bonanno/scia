@@ -128,6 +128,50 @@ describe('checkMerge', () => {
     );
   });
 
+  it(`answers changed when ${DECISIONS}' driver puts back a line the branch took out`, () => {
+    onBothSides(
+      () => edit(DECISIONS, '- #2: two.\n', ''),
+      () => edit(DECISIONS, '- #2: two.\n', '- #2: two.\n- #4: develop’s.\n'),
+    );
+
+    expect(mergeDevelop()).toBe(true);
+    expect(read(DECISIONS)).toContain('- #2: two.\n');
+    const result = checkMerge(repo);
+    expect(result).toMatchObject({ outcome: 'changed', files: [DECISIONS] });
+    expect(git('diff', result.head, result.merge, '--', ...result.files)).toContain(
+      '\n+- #2: two.\n',
+    );
+  });
+
+  it('names only the files whose own diff the merge changed', () => {
+    onBothSides(
+      () => {
+        edit(CODE, 'a = 1', 'a = 2');
+        edit(DECISIONS, '- #2: two.\n', '- #2: two. Changed on 27 November 2026 (#5).\n');
+      },
+      () => edit(DECISIONS, '- #2: two.\n', '- #2: two.\n- #4: develop’s.\n'),
+    );
+    mergeDevelop();
+
+    expect(checkMerge(repo)).toMatchObject({ outcome: 'changed', files: [DECISIONS] });
+  });
+
+  it('reads a path git would quote, one with a letter outside ASCII', () => {
+    const accented = 'docs/café.md';
+    git('checkout', '-q', 'develop');
+    write(accented, 'one\ntwo\nthree\nfour\nfive\n');
+    commit('an accented path');
+    git('checkout', '-q', '-B', 'feature', 'develop');
+    onBothSides(
+      () => edit(accented, 'two', 'TWO'),
+      () => write(accented, 'one\nTWO\nthree\nfour\nFIVE\n'),
+    );
+    expect(mergeDevelop()).toBe(true);
+
+    // The branch's own change came in from develop too: its own diff of the file is gone.
+    expect(checkMerge(repo)).toMatchObject({ outcome: 'changed', files: [accented] });
+  });
+
   it(`leaves ${GOTCHAS} to conflict, and sends the conflict resolved by hand to the tech lead`, () => {
     onBothSides(
       () => edit(GOTCHAS, '- → Second.\n', '- → Second.\n- → The branch’s own.\n'),

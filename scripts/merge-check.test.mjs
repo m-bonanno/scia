@@ -20,7 +20,7 @@ describe('messageOf', () => {
 
     expect(line).toBe(
       "a54e8b3 changed the branch's own diff in docs/product/decisions.md. Read what the merge " +
-        'brought there for a line left twice, `git diff 946f90f a54e8b3 -- docs/product/decisions.md`; ' +
+        'brought there for a line left twice or put back, `git diff 946f90f a54e8b3 -- docs/product/decisions.md`; ' +
         'after an approval, the tech lead does (docs/development/review-flow.md, "Rules").',
     );
     expect(line).not.toContain('holds');
