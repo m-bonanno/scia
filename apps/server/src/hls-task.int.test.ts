@@ -320,6 +320,7 @@ describe('HlsTask against a real HTTP host', () => {
     const askedAtStop = server.asked.length;
     // A stretch in which a connection that went on would ask for piece after piece, at the host's
     // 100 ms a piece: the wait is the case itself.
+    // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: a stretch to watch
     await new Promise((resolve) => setTimeout(resolve, 800));
 
     // A request a connection sent just before the stop can reach the host after the task ended:

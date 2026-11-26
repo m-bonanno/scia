@@ -103,6 +103,7 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
       // adapter's time at most, far inside a longer limit.
       for (let step = 0; step < 40 && !hasSettled(); step += 1) {
         vi.advanceTimersByTime(50);
+        // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: the reader's grace
         await sleep(50);
       }
       await until(hasSettled);
@@ -321,6 +322,7 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
       expect(existsSync(join(tempDir, run ?? ''))).toBe(true);
       // The case itself: held a moment past the first try, as Windows may hold a closed file. Tries
       // made with no wait between them would all be spent by then.
+      // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: past the first try
       await sleep(200);
       await letGo();
 
@@ -662,6 +664,7 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
         // adapter's time at most, far inside a longer limit.
         for (let step = 0; step < 40 && outcome === 'reading'; step += 1) {
           vi.advanceTimersByTime(50);
+          // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: the reader's grace
           await sleep(100);
         }
         expect(outcome).toBe(PageFailure.SiteBusy);

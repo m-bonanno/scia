@@ -47,6 +47,7 @@ describe('the real app, with a key kept by the system (#69)', () => {
     // At main's own pace: a file read every few milliseconds is one its writer cannot rename onto
     // (.claude/gotchas.md, Specs).
     const sealOnDisk = async () => {
+      // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: a read at main's pace
       await sleep(250);
       return holdsSealingKey(
         await readFile(join(profile.path, 'Local State'), 'utf8').catch(() => ''),

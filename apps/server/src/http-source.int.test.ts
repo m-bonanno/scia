@@ -60,6 +60,7 @@ describe('HttpSource.open and a host that goes silent', () => {
       chunks.push(chunk);
       // What a speed limit has a connection do, for longer than a host may stay silent. The
       // pause is the case itself, not a wait for something to happen.
+      // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: a connection silent
       if (chunks.length === 1) await sleep(IDLE_MS * 4);
     }
 

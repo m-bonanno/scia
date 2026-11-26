@@ -83,6 +83,7 @@ describe('followDownloads against a real host, with the real fetch', () => {
       answerLimitMs: 2000,
       silenceLimitMs: 250,
       retryMs: 20,
+      // eslint-disable-next-line scia/no-fixed-sleep -- the sleep port of the code under test
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       log,
     });
@@ -139,6 +140,7 @@ describe('followDownloads against a real host, with the real fetch', () => {
       answerLimitMs: 50,
       silenceLimitMs: 2000,
       retryMs: 20,
+      // eslint-disable-next-line scia/no-fixed-sleep -- the sleep port of the code under test
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       log: { warn: (message) => warnings.push(message), info: () => undefined },
     });
