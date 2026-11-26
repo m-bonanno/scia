@@ -184,10 +184,8 @@ export function AccountMagnets({ id, again, onClose, tell }: AccountMagnetsProps
         <IconButton
           label="Close"
           className="ml-auto"
-          onKeyDown={(event) => {
-            // Close hands the focus to the button that opens the panel: a held Enter would open it.
-            if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
-          }}
+          // Close hands the focus to the button that opens the panel: a held Enter would open it.
+          onKeyDown={swallowHeldEnter}
           onClick={onClose}
         >
           <X size={16} aria-hidden="true" />

@@ -240,9 +240,7 @@ function TimedNotice({
         label="Dismiss"
         onTonal
         // The focus moves to the next notice's ×: Enter held down would dismiss them all.
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
-        }}
+        onKeyDown={swallowHeldEnter}
         onClick={(event) => {
           if (event.detail > 0) onPointerPress();
           onDismiss(id);
