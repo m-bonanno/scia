@@ -7,12 +7,15 @@
       "channel": "beta"
     }
   ],
+  "preset": "conventionalcommits",
   "plugins": [
     [
       "@semantic-release/commit-analyzer",
       {
-        "preset": "angular",
-        "releaseRules": [{ "type": "hotfix", "release": "patch" }]
+        "releaseRules": [
+          { "breaking": true, "release": "major" },
+          { "type": "hotfix", "release": "patch" }
+        ]
       }
     ],
     "@semantic-release/release-notes-generator",

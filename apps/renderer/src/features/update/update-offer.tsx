@@ -155,7 +155,7 @@ export function UpdateOffer({
       }}
       onKeyDown={(event) => {
         // A press of Enter moves the focus, or opens the question: its repeats answer nothing.
-        if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
+        swallowHeldEnter(event);
         if (event.key === 'Escape' && open) close(true);
       }}
     >

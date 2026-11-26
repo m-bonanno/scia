@@ -366,13 +366,7 @@ function IntegrationRow({
   return (
     // Most presses here move the focus — to the code's buttons, to Cancel, back to the row:
     // Enter held on one would press the next (#136).
-    <li
-      ref={row}
-      className="flex flex-col gap-3"
-      onKeyDown={(event) => {
-        if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
-      }}
-    >
+    <li ref={row} className="flex flex-col gap-3" onKeyDown={swallowHeldEnter}>
       <div className="flex items-center justify-between gap-4">
         <div className="min-w-0">
           <p className="text-sm font-medium">{name}</p>
