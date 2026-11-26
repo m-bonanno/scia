@@ -104,11 +104,36 @@ describe('raw colours in the renderer (apps/renderer/CLAUDE.md)', () => {
     ['caret'],
     ['divide'],
     ['placeholder'],
-  ])('flags each utility of Tailwind that takes its palette: %s-red-500', async (utility) => {
-    for (const path of PAGE) {
-      expect(await flagsOf(path, asText(`${utility}-red-500`))).toEqual([RAW_COLOUR]);
-    }
-  });
+    ['border-bs'],
+    ['border-be'],
+    ['scrollbar-thumb'],
+    ['scrollbar-track'],
+    ['mask-t-from'],
+    ['mask-r-from'],
+    ['mask-b-from'],
+    ['mask-l-from'],
+    ['mask-x-from'],
+    ['mask-y-from'],
+    ['mask-linear-from'],
+    ['mask-radial-from'],
+    ['mask-conic-from'],
+    ['mask-t-to'],
+    ['mask-r-to'],
+    ['mask-b-to'],
+    ['mask-l-to'],
+    ['mask-x-to'],
+    ['mask-y-to'],
+    ['mask-linear-to'],
+    ['mask-radial-to'],
+    ['mask-conic-to'],
+  ])(
+    'flags each utility of the installed Tailwind (4.3.5) that takes its palette: %s-red-500',
+    async (utility) => {
+      for (const path of PAGE) {
+        expect(await flagsOf(path, asText(`${utility}-red-500`))).toEqual([RAW_COLOUR]);
+      }
+    },
+  );
 
   it.each([
     ['slate'],
@@ -185,6 +210,7 @@ describe('raw colours in the renderer (apps/renderer/CLAUDE.md)', () => {
     ['note#fff'],
     ['1#fff'],
     ['x-#fff'],
+    ['x-text-white'],
   ])('leaves a token, and a hex that does not stand alone, alone: %s', async (text) => {
     for (const path of PAGE) expect(await flagsOf(path, asText(text))).toEqual([]);
   });
@@ -199,6 +225,7 @@ describe('the `dark:` variant in the renderer (apps/renderer/CLAUDE.md)', () => 
     ["export const a = 'dark:bg-surface';"],
     ["export const a = 'bg-surface dark:bg-background';"],
     ["export const a = 'hover:dark:text-foreground';"],
+    ["export const a = 'not-dark:bg-surface';"],
     ['export const a = (on: boolean) => `${on ? "x" : ""} dark:text-foreground`;'],
   ])('flags %s', async (code) => {
     for (const path of PAGE) expect(await flagsOf(path, code)).toEqual([DARK]);
@@ -270,6 +297,10 @@ describe('a fixed sleep in a spec (docs/development/testing.md)', () => {
     ['await new Promise((resolve) => setTimeout(resolve, 50));'],
     ['await new Promise((resolve) => {\n  setTimeout(resolve, 50);\n});'],
     ['await new Promise(function (resolve) {\n  setTimeout(resolve, 50);\n});'],
+    ['await new Promise(function wait(resolve) {\n  setTimeout(resolve, 50);\n});'],
+    [
+      'await new Promise<void>((resolve) => {\n  setTimeout(function () {\n    resolve();\n  }, 50);\n});',
+    ],
     [
       'let done;\nawait new Promise((resolve) => {\n  done = resolve;\n  setTimeout(resolve, 50);\n});',
     ],
@@ -364,6 +395,10 @@ describe('a fixed sleep in a spec (docs/development/testing.md)', () => {
     ['declare const held: { close(): void };\nsetTimeout(() => {\n  held.close();\n}, 300);'],
     ['declare const until: (done: () => boolean) => Promise<void>;\nawait until(() => true);'],
     ['declare const run: (resolve: () => void) => void;\nawait new Promise<void>(run);'],
+    [
+      'await new Promise<void>(({ call }: () => void, resolve: () => void) => {\n  setTimeout(call, 50);\n});',
+    ],
+    ['await new Promise<void>((resolve) => setTimeout(() => undefined, 50, resolve));'],
     [
       'declare const ready: boolean;\nawait new Promise<void>((resolve) => {\n  if (ready) resolve();\n});',
     ],

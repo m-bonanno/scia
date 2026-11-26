@@ -31,13 +31,14 @@ const RENDERER_SYNTAX = [
     RAW_COLOUR,
   ),
   ...inText(String.raw`/\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix)\(/`, RAW_COLOUR),
-  // Tailwind's own palette, each utility that takes one: a class the page's tokens did not name.
+  // Tailwind's own palette, each utility of the Tailwind this repository installs (4.3.5) that takes
+  // one, its masks among them: a class the page's tokens did not name.
   ...inText(
-    `/${ALONE_BEFORE}(?:bg|text|border(?:-[xytrblse])?|outline|ring(?:-offset)?|inset-ring|shadow|inset-shadow|text-shadow|drop-shadow|fill|stroke|from|via|to|decoration|accent|caret|divide|placeholder)-(?:white|black|(?:slate|gray|zinc|neutral|stone|mauve|olive|mist|taupe|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\\d{2,3})${ALONE_AFTER}/`,
+    `/${ALONE_BEFORE}(?:bg|text|border(?:-(?:[xytrblse]|bs|be))?|outline|ring(?:-offset)?|inset-ring|shadow|inset-shadow|text-shadow|drop-shadow|fill|stroke|from|via|to|decoration|accent|caret|divide|placeholder|scrollbar-(?:thumb|track)|mask-(?:[trblxy]|linear|radial|conic)-(?:from|to))-(?:white|black|(?:slate|gray|zinc|neutral|stone|mauve|olive|mist|taupe|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose)-\\d{2,3})${ALONE_AFTER}/`,
     RAW_COLOUR,
   ),
   ...inText(
-    `/${ALONE_BEFORE}dark:/`,
+    `/${ALONE_BEFORE}(?:not-)?dark:/`,
     'No `dark:` variant: a colour that changes is a token, defined by every theme in its dark and in its light variant (apps/renderer/CLAUDE.md, "Tokens, never raw colours").',
   ),
   {
