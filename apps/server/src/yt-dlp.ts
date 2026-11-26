@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
+import { lstat, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { AUDIO_CONTAINERS, type AudioContainer, PageFailure, titleOfVideo } from '@scia/core';
@@ -295,15 +295,26 @@ export class YtDlp implements PageReader {
 
   // The reader as the engine starts it: the folders its runs before left are removed first, at a
   // time no read runs from them. One that cannot be removed — a process no tree reached still
-  // running from it (#174) — is left for a later start, never a reason not to start. A link of
-  // that name is removed, never followed: `rm` does not.
+  // running from it (#174) — is left for a later start, never a reason not to start.
   static async open(options: YtDlpOptions): Promise<YtDlp> {
     const { tempDir, runPrefix, logger } = options;
+    // Where the system has accounts: this one's (Windows gives each its own temporary folder).
+    const account = process.getuid?.();
     // A folder not there yet holds nothing; one that cannot be read is said by the first read.
     const entries = await readdir(tempDir).catch(() => []);
     for (const entry of entries.filter((name) => name.startsWith(runPrefix))) {
+      const path = join(tempDir, entry);
       try {
-        await rm(join(tempDir, entry), { recursive: true, force: true });
+        // On Linux every account writes in the system's temporary folder, and anyone can make one
+        // of this name: removed by its name, what is in it could be swapped for a link while `rm`
+        // walks it, and the person's own files removed (CVE-2022-21658). Only a folder this account
+        // made is removed — a run's, made by `mkdtemp`, which no other account can write in.
+        const found = await lstat(path);
+        if (!found.isDirectory() || (account !== undefined && found.uid !== account)) {
+          logger.warn('yt_dlp_run_not_ours', { entry });
+          continue;
+        }
+        await rm(path, { recursive: true, force: true });
       } catch (error) {
         logger.warn('yt_dlp_run_not_removed', { entry, error: describeFailure(error) });
       }

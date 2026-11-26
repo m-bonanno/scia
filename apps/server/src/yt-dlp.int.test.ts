@@ -1,6 +1,6 @@
 import type * as ChildProcesses from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { chmod, mkdir, readdir, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { PageFailure, TITLE_MOST_CHARS } from '@scia/core';
@@ -376,18 +376,45 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
       }
     }, 30_000);
 
-    it('never follows a link named as one of its runs: what it points to stays', async () => {
-      // On Linux every user writes in the system's temporary folder, and another could leave one.
-      const theirs = join(folder.path, 'the-person’s-files');
-      await mkdir(theirs);
-      await writeFile(join(theirs, 'kept.txt'), 'theirs');
+    // On Linux every account writes in the system's temporary folder, and anyone can make an entry
+    // of its runs' name there: only a folder this account made is removed (CVE-2022-21658).
+    const leftAlone = (logger: ReturnType<typeof recordingLogger>, entry: string) => {
+      const lines = logger.lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(lines).toEqual([{ level: 'warn', event: 'yt_dlp_run_not_ours', entry }]);
+    };
+
+    it('leaves alone a link named as one of its runs, and what it points to', async () => {
+      const logger = recordingLogger();
+      const files = join(folder.path, 'the-person’s-files');
+      await mkdir(files);
+      await writeFile(join(files, 'kept.txt'), 'theirs');
       await mkdir(tempDir);
-      await symlink(theirs, join(tempDir, `${PREFIX}link`), 'junction');
+      await symlink(files, join(tempDir, `${PREFIX}link`), 'junction');
 
-      await opened();
+      await opened(logger);
 
-      expect(await readdir(theirs)).toEqual(['kept.txt']);
+      expect((await lstat(join(tempDir, `${PREFIX}link`))).isSymbolicLink()).toBe(true);
+      expect(await readdir(files)).toEqual(['kept.txt']);
+      leftAlone(logger, `${PREFIX}link`);
     });
+
+    it.runIf(process.getuid !== undefined)(
+      'leaves alone a folder of its runs’ name that another account made',
+      async () => {
+        const logger = recordingLogger();
+        await unpackedIn(`${PREFIX}theirs`);
+        const account = process.getuid?.() ?? 0;
+        vi.spyOn(process as Required<typeof process>, 'getuid').mockReturnValue(account + 1);
+        try {
+          await opened(logger);
+        } finally {
+          vi.restoreAllMocks();
+        }
+
+        expect(await readdir(tempDir)).toEqual([`${PREFIX}theirs`]);
+        leftAlone(logger, `${PREFIX}theirs`);
+      },
+    );
 
     it('starts with no temporary folder yet, and makes it at the first read', async () => {
       const reader = await opened();
