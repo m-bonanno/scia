@@ -64,10 +64,14 @@ export type HlsPlaylist =
   | { readonly kind: 'media'; readonly ends: boolean; readonly segments: readonly HlsSegment[] }
   | { readonly kind: 'master'; readonly variants: readonly HlsVariant[] };
 
-// `KEY=value,KEY="quoted, with commas"`.
+// `KEY=value,KEY="quoted, with commas"`. A name starts the list or follows a character no name
+// has: free to start anywhere, a long name never given a value is read again from each of its
+// characters, and a site's playlist can make that take seconds (#383).
+const ATTRIBUTE = /(?:^|[^A-Z0-9-])([A-Z0-9-]+)=("[^"]*"|[^,]*)/g;
+
 function attributesOf(list: string): ReadonlyMap<string, string> {
   const attributes = new Map<string, string>();
-  for (const match of list.matchAll(/([A-Z0-9-]+)=("[^"]*"|[^,]*)/g)) {
+  for (const match of list.matchAll(ATTRIBUTE)) {
     const [, name = '', raw = ''] = match;
     attributes.set(name, raw.startsWith('"') ? raw.slice(1, -1) : raw);
   }

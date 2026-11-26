@@ -9,6 +9,12 @@ import {
   uniqueFileName,
 } from './file-name.ts';
 
+// A name a host chooses (#383). Read again from each character of the run, it takes seconds; read
+// once, a few milliseconds. The bound is the spec's own time limit, which Vitest holds also of a
+// spec that never yields.
+const LONG_RUN = 100_000;
+const BOUND_MS = 1000;
+
 describe('sanitizeFileName', () => {
   it('replaces what Windows refuses in a name', () => {
     expect(sanitizeFileName('a<b>c:d"e/f\\g|h?i*j.txt')).toBe('a_b_c_d_e_f_g_h_i_j.txt');
@@ -32,6 +38,14 @@ describe('sanitizeFileName', () => {
   it('falls back when nothing is left', () => {
     expect(sanitizeFileName(' .. ')).toBe(FALLBACK_FILE_NAME);
   });
+
+  it(
+    'reads a long run of dots inside a name once, not again from each of them',
+    () => {
+      expect(sanitizeFileName(`a${'.'.repeat(LONG_RUN)}x`)).toBe(`a${'.'.repeat(197)}.x`);
+    },
+    BOUND_MS,
+  );
 });
 
 describe('fileNameFromUrl', () => {

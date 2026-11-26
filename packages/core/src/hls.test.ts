@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { HlsRefusal, ivOfSegment, parsePlaylist } from './hls.ts';
 
+// A playlist a site serves (#383). Read again from each character of the run, it takes seconds;
+// read once, a few milliseconds. The bound is the spec's own time limit, which Vitest holds also of a
+// spec that never yields.
+const LONG_RUN = 100_000;
+const BOUND_MS = 1000;
+
 const vod = [
   '#EXTM3U',
   '#EXT-X-VERSION:3',
@@ -193,6 +199,18 @@ describe('parsePlaylist', () => {
       ),
     ).toThrow(HlsRefusal.Protected);
   });
+
+  it(
+    'reads a long attribute name that never gets its value once, not again from each character',
+    () => {
+      expect(parsePlaylist(`#EXTM3U\n#EXT-X-KEY:${'-'.repeat(LONG_RUN)}`)).toEqual({
+        kind: 'media',
+        ends: false,
+        segments: [],
+      });
+    },
+    BOUND_MS,
+  );
 });
 
 describe('ivOfSegment', () => {

@@ -1,3 +1,4 @@
+import { withoutTrailing } from '@scia/core';
 import { z } from 'zod';
 
 // An address the engine takes: http or https, nothing else.
@@ -5,7 +6,7 @@ export const httpUrl = z.url({ protocol: /^https?$/ });
 
 const LINK = /https?:\/\/[^\s<>"'`]+/gi;
 // Punctuation that ends a sentence around a link, not the link.
-const TRAILING = /[.,;:!?)\]}]+$/;
+const TRAILING = '.,;:!?)]}';
 
 // Every http(s) address in a text — pasted in the page, or copied and read by main — once each,
 // in the order they appear, each one the engine takes.
@@ -13,7 +14,7 @@ export function extractLinks(text: string): string[] {
   const links = new Set<string>();
   // A magnet's trackers are its own, never links of their own.
   for (const match of text.replace(MAGNET_IN_TEXT, ' ').matchAll(LINK)) {
-    const link = match[0].replace(TRAILING, '');
+    const link = withoutTrailing(match[0], TRAILING);
     if (httpUrl.safeParse(link).success) links.add(link);
   }
   return [...links];
@@ -33,7 +34,7 @@ const MAGNET_IN_TEXT = /magnet:\?[^\s<>"'`]+/gi;
 export function extractMagnets(text: string): string[] {
   const magnets = new Set<string>();
   for (const match of text.matchAll(MAGNET_IN_TEXT)) {
-    const magnet = match[0].replace(TRAILING, '');
+    const magnet = withoutTrailing(match[0], TRAILING);
     if (magnetUri.safeParse(magnet).success) magnets.add(magnet);
   }
   return [...magnets];

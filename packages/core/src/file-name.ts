@@ -1,4 +1,8 @@
+import { withoutTrailing } from './text.ts';
+
 export const FALLBACK_FILE_NAME = 'download';
+// Windows drops these at the end of a name, silently: "setup.exe. " is "setup.exe" to it.
+export const WINDOWS_DROPS_AT_THE_END = '. ';
 
 const MAX_LENGTH = 200;
 // Windows refuses these in a name; Linux refuses only the slash, and one name must do for both.
@@ -30,11 +34,10 @@ function lastPathSegment(path: string): string {
 }
 
 export function sanitizeFileName(raw: string): string {
-  const cleaned = raw
-    .replace(FORBIDDEN, '_')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .replace(/[. ]+$/, '');
+  const cleaned = withoutTrailing(
+    raw.replace(FORBIDDEN, '_').replace(/\s+/g, ' ').trim(),
+    WINDOWS_DROPS_AT_THE_END,
+  );
   if (cleaned === '') return FALLBACK_FILE_NAME;
   const { stem, extension } = splitExtension(cleaned);
   const safeStem = RESERVED.test(stem) ? `_${stem}` : stem;

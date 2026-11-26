@@ -1,6 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { extractLinks, extractMagnets, magnetUri } from './links.ts';
 
+// A text a site or a paste hands over (#383). Read again from each mark of the run, it takes
+// seconds; read once, a few milliseconds. The bound is the spec's own time limit, which Vitest holds
+// also of a spec that never yields.
+const LONG_RUN = 100_000;
+const BOUND_MS = 1000;
+
 describe('extractLinks', () => {
   it('finds every address in a pasted text, once each', () => {
     const text = `Here are the files:
@@ -22,6 +28,15 @@ describe('extractLinks', () => {
     expect(extractLinks('ftp://example.com/a.zip, file:///c:/x, hello')).toEqual([]);
     expect(extractLinks('')).toEqual([]);
   });
+
+  it(
+    'reads a long run of punctuation inside a link once, not again from each of its marks',
+    () => {
+      const link = `https://example.com/${'!'.repeat(LONG_RUN)}x`;
+      expect(extractLinks(link)).toEqual([link]);
+    },
+    BOUND_MS,
+  );
 });
 
 describe('extractMagnets', () => {
@@ -42,6 +57,15 @@ describe('extractMagnets', () => {
   it('leaves the magnets out of the links, and the links out of the magnets', () => {
     expect(extractLinks(`magnet:?xt=urn:btih:${HASH}`)).toEqual([]);
   });
+
+  it(
+    'reads a long run of punctuation inside a magnet once, not again from each of its marks',
+    () => {
+      const magnet = `magnet:?xt=urn:btih:${HASH}&dn=${'!'.repeat(LONG_RUN)}x`;
+      expect(extractMagnets(magnet)).toEqual([]);
+    },
+    BOUND_MS,
+  );
 
   it("takes no tracker of a magnet for a link: it is the magnet's, not a file", () => {
     const magnet = `magnet:?xt=urn:btih:${HASH}&tr=http://tracker.example.org:6969/announce&tr=udp://open.example:1337`;
