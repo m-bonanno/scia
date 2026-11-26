@@ -24,11 +24,16 @@ it("refuses every road to a host outside this computer under a mutation run's co
     args: [...PROBE.args, '--reporter=json', `--outputFile=${report}`],
   });
 
-  expect(code).toBe(0);
-  const outcomes = JSON.parse(readFileSync(report, 'utf8')).testResults.flatMap((file) =>
-    file.assertionResults.map(({ title, status }) => [title, status]),
+  const cases = JSON.parse(readFileSync(report, 'utf8')).testResults.flatMap(
+    (file) => file.assertionResults,
   );
-  expect(outcomes).toEqual([
+  const outcomes = cases.map(({ title, status }) => [title, status]);
+  // What a case that failed said, so that a run on CI's runners names its cause.
+  const failures = cases
+    .filter(({ status }) => status !== 'passed')
+    .map(({ title, failureMessages }) => `${title}: ${failureMessages.join(' | ')}`)
+    .join('\n');
+  expect(outcomes, failures).toEqual([
     ["refuses Node's fetch, given a text, a URL or a Request", 'passed'],
     ['refuses http and https', 'passed'],
     ['refuses a socket, whichever way it is given its host', 'passed'],
@@ -41,4 +46,5 @@ it("refuses every road to a host outside this computer under a mutation run's co
     ['lets a pipe on this computer answer', 'passed'],
     ['lets a host on this computer answer, Node and a program that is not', 'passed'],
   ]);
+  expect(code).toBe(0);
 });
