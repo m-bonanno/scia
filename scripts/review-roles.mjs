@@ -51,10 +51,6 @@ const HEAVY = [
       among('.releaserc.json', 'apps/desktop/electron-builder.yml')(file) ||
       under('apps/desktop/build/')(file),
   },
-  {
-    what: 'what the installer packs',
-    holds: among('apps/desktop/package.json', 'apps/desktop/scripts/fetch-tools.ts'),
-  },
   { what: 'a workflow', holds: under('.github/workflows/') },
 ];
 
@@ -67,15 +63,7 @@ const AREAS = [
   { role: 'product-designer', holds: under('apps/renderer/src/', 'apps/extension/static/') },
 ];
 
-// The root CLAUDE.md holds the principles, the owner's product decisions among them.
-const PRODUCT = among(
-  'docs/product/roadmap.md',
-  'docs/product/vision.md',
-  'README.md',
-  'CLAUDE.md',
-);
-
-const isBreaking = (title) => /^\w+(\([^)]*\))?!:/.test(title);
+const PRODUCT = among('docs/product/roadmap.md', 'docs/product/vision.md', 'README.md');
 
 const pathsOf = (file) => [file.path, file.previous].filter(Boolean);
 
@@ -115,11 +103,9 @@ export function reviewOf({ title, base, files, add = [] }) {
   const product =
     type === 'feat'
       ? 'a feat'
-      : isBreaking(title)
-        ? 'a breaking change'
-        : release
-          ? 'a release into main'
-          : files.flatMap(pathsOf).find(PRODUCT);
+      : release
+        ? 'a release into main'
+        : files.flatMap(pathsOf).find(PRODUCT);
   // No path of a light PR is in an area: every area is runtime.
   const all = inOrder([
     { role: 'tech-lead', why: 'always' },

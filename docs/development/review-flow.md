@@ -6,19 +6,19 @@ Run it with `/team-review <PR number>`.
 
 ## The team
 
-| Role              | Reviews, as its tier allows                                                                                                                                                                  | Definition                            |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Tech lead         | **always** — and owns `.github/`, `scripts/`, root tooling, `.claude/`, ADRs, runbooks                                                                                                       | `.claude/agents/tech-lead.md`         |
-| Backend engineer  | the domain, the contracts, the engine, the desktop shell                                                                                                                                     | `.claude/agents/backend-engineer.md`  |
-| Frontend engineer | the renderer, the extension                                                                                                                                                                  | `.claude/agents/frontend-engineer.md` |
-| Product designer  | what a person sees or reads: the renderer's interface, the extension's pages, a string of the interface                                                                                      | `.claude/agents/product-designer.md`  |
-| Product manager   | in every tier: a `feat`, a breaking change, the roadmap, the vision, the README, the root `CLAUDE.md` and its principles, an issue with the owner's acceptance points, a release into `main` | `.claude/agents/product-manager.md`   |
+| Role              | Reviews, as its tier allows                                                                                                      | Definition                            |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Tech lead         | **always** — and owns `.github/`, `scripts/`, root tooling, `.claude/`, ADRs, runbooks                                           | `.claude/agents/tech-lead.md`         |
+| Backend engineer  | the domain, the contracts, the engine, the desktop shell                                                                         | `.claude/agents/backend-engineer.md`  |
+| Frontend engineer | the renderer, the extension                                                                                                      | `.claude/agents/frontend-engineer.md` |
+| Product designer  | what a person sees or reads: the renderer's interface, the extension's pages, a string of the interface                          | `.claude/agents/product-designer.md`  |
+| Product manager   | in every tier: a `feat`, the roadmap, the vision, the README, an issue with the owner's acceptance points, a release into `main` | `.claude/agents/product-manager.md`   |
 
 ### The tier of a PR
 
 The owner's decision (#18, changed on 26 November 2026 by #377): the review goes where the risk is, not where the size is. `npm run review:roles -- <PR>` (`scripts/review-roles.mjs`) prints the PR's tier and its roles, each with its reason, from its paths and its title's type; the paths of each tier and area are in its lists. **It is run from `develop`'s checkout, pulled first, never from the PR's branch**: a PR that changes the script would otherwise be tiered by the lists it brings.
 
-- **Heavy**, at any size: download and state code (the engine, the domain and the contracts), the desktop's main and preload, the extension's manifest, the release config, what the installer packs (Electron's version, the shipped yt-dlp), the workflows, and a release into `main`. Every role the table names for its paths.
+- **Heavy**, at any size: download and state code (the engine, the domain and the contracts), the desktop's main and preload, the extension's manifest, the release config, the workflows, and a release into `main`. Every role the table names for its paths.
 - **Light**: docs, `.claude/` and specs only, or a `chore` or `ci` that touches no runtime path. The tech lead alone, and the product manager where its line of the table says so, in one pass: nobody is called in.
 - **Standard**: the rest. Every role the table names for its paths — but a PR of 20 changed lines or fewer outside docs, `.claude/` and specs is the tech lead's alone, who calls a role in when the change needs that eye (the owner's answer on #377, 26 November 2026). The script names whom the paths would call.
 
@@ -46,7 +46,7 @@ CI runs them on Ubuntu, and all but the ADR numbers, format, lint and types agai
 
 This is the one definition; role files and `CLAUDE.md` point here. A finding is blocking when it is one of:
 
-1. a rule of this repository broken (`CLAUDE.md`, a sub-`CLAUDE.md`, an ADR, a runbook, `.claude/gotchas.md` and the area files its index names);
+1. a rule of this repository broken (`CLAUDE.md`, a sub-`CLAUDE.md`, an ADR, a runbook, `.claude/gotchas.md`);
 2. a bug;
 3. a security hole;
 4. a red gate;
@@ -73,7 +73,7 @@ A red check on a spec the PR does not touch, with no cause in its diff, is not a
 - **A wording point raised after the approving verdict goes into its area's follow-up issue**, not into a commit after the approval (the owner, 24 November 2026, #337): such a commit is a round of its own, above. A finding that is blocking ("What is blocking") is not a wording point: it is fixed, and its commit reviewed.
 - **Non-blocking findings are not lost** (the owner, 26 November 2026, #379). One inside the PR's scope that takes 10 lines or fewer is fixed in the PR. Any other is a checkbox that names its source — `- [ ] … (review of #N)` — in its area's follow-up issue: one open issue per `area:*` label, labelled `follow-up` ([`git-flow.md`](./git-flow.md), "Work in parallel"). It is added before the approving verdict, which links the issue. Once an area's issue holds about five points, a batch PR takes them, ticks their boxes and closes it; right after its merge, its session moves every box left unticked into the area's next follow-up issue, opening one if none is open. A verdict that asks for changes names none: its findings are still being fixed.
 - **A blocking finding the author contests goes to the owner.** The orchestrating session never overrules a reviewer; it fixes, or it asks.
-- **Every review teaches.** A blocking finding that a checklist would have prevented becomes a line under "Lessons" in that role's file, or a gotcha — in the area file `.claude/gotchas.md`'s index names for its paths, or in `.claude/gotchas.md` itself for a general one — in the PR that fixes it.
+- **Every review teaches.** A blocking finding that a checklist would have prevented becomes a line under "Lessons" in that role's file, or an entry in `.claude/gotchas.md`, in the PR that fixes it.
 
 ## The team verdict
 

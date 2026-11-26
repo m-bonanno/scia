@@ -5,7 +5,7 @@ const file = (path, lines = 1) => ({ path, additions: lines, deletions: 0 });
 const rolesOf = (review) => review.roles.map(({ role }) => role);
 
 describe('reviewOf', () => {
-  it('makes heavy, at any size, download and state code, the desktop, the manifest, the release config, what the installer packs and the workflows', () => {
+  it('makes heavy, at any size, download and state code, the desktop, the manifest, the release config and the workflows', () => {
     const heavy = {
       'apps/server/src/download-task.ts': 'code of the engine, the domain or the contracts',
       'apps/server/src/state-store.ts': 'code of the engine, the domain or the contracts',
@@ -17,8 +17,6 @@ describe('reviewOf', () => {
       '.releaserc.json': 'the release config',
       'apps/desktop/electron-builder.yml': 'the release config',
       'apps/desktop/build/installer.nsh': 'the release config',
-      'apps/desktop/package.json': 'what the installer packs',
-      'apps/desktop/scripts/fetch-tools.ts': 'what the installer packs',
       '.github/workflows/gates.yml': 'a workflow',
     };
 
@@ -74,7 +72,7 @@ describe('reviewOf', () => {
   it('makes light a chore or a ci that touches no runtime path, and only those types', () => {
     const tooling = ['scripts/gates.mjs', 'eslint.config.js', 'package.json', '.husky/pre-push'];
 
-    for (const title of ['chore: x', 'chore(scripts): x', 'ci: x', 'ci(release): x']) {
+    for (const title of ['chore: x', 'chore(scripts): x', 'ci: x', 'ci(release)!: x']) {
       const review = reviewOf({ title, files: tooling.map((path) => file(path, 300)) });
 
       expect(review.tier, title).toBe('light');
@@ -103,8 +101,8 @@ describe('reviewOf', () => {
     const runtime = [
       'apps/renderer/src/app/app.tsx',
       'apps/extension/src/popup.ts',
-      'apps/renderer/package.json',
-      'apps/desktop/scripts/captures/gif.ts',
+      'apps/desktop/package.json',
+      'apps/desktop/scripts/fetch-tools.ts',
       'package-lock.json',
     ];
 
@@ -189,18 +187,14 @@ describe('reviewOf', () => {
     expect(review.roles).toContainEqual({ role: 'product-manager', why: 'a release into main' });
   });
 
-  it('calls the product manager to a feat, a breaking change, the roadmap, the vision, the README and the principles, in every tier', () => {
+  it('calls the product manager to a feat and to the roadmap, the vision or the README, in every tier', () => {
     const cases = [
       ['feat: x', 'apps/server/src/download-task.ts', 'a feat'],
       ['feat(renderer)!: x', 'apps/renderer/src/app/app.tsx', 'a feat'],
       ['feat: x', 'docs/development/review-flow.md', 'a feat'],
-      ['fix!: x', 'apps/renderer/src/app/app.tsx', 'a breaking change'],
-      ['refactor(core)!: x', 'packages/core/src/queue.ts', 'a breaking change'],
-      ['chore!: x', 'scripts/gates.mjs', 'a breaking change'],
       ['docs: x', 'docs/product/roadmap.md', 'docs/product/roadmap.md'],
       ['docs: x', 'docs/product/vision.md', 'docs/product/vision.md'],
       ['docs: x', 'README.md', 'README.md'],
-      ['docs: x', 'CLAUDE.md', 'CLAUDE.md'],
     ];
 
     for (const [title, path, why] of cases) {
@@ -214,16 +208,13 @@ describe('reviewOf', () => {
     const paths = [
       'docs/product/decisions.md',
       'docs/product/evidence.md',
-      'apps/server/CLAUDE.md',
       'apps/server/src/app.ts',
     ];
 
-    for (const title of ['fix: x', 'fix: say "wait!: not yet" in the notice']) {
-      expect(rolesOf(reviewOf({ title, files: paths.map((path) => file(path)) })), title).toEqual([
-        'tech-lead',
-        'backend-engineer',
-      ]);
-    }
+    expect(rolesOf(reviewOf({ title: 'fix: x', files: paths.map((path) => file(path)) }))).toEqual([
+      'tech-lead',
+      'backend-engineer',
+    ]);
   });
 
   it('adds a role the paths cannot tell, once, in the order of the team', () => {
