@@ -21,7 +21,7 @@ describe('issueStep', () => {
       kind: 'open',
       title: TITLE,
       body: bodyOf([redos, hash]),
-      labels: ['bug', 'area:engine', 'status:accepted'],
+      labels: ['bug', 'area:engine', 'status:triage'],
       assignees: ['owner'],
     });
   });
@@ -54,7 +54,7 @@ describe('issueStep', () => {
       kind: 'edit',
       number: 400,
       body: bodyOf([hash, workflow]),
-      labels: ['bug', 'area:engine', 'area:ci', 'status:accepted'],
+      labels: ['bug', 'area:engine', 'area:ci'],
       comment: `The alerts changed with ${scan}. New: #7. No longer open: #1.`,
     });
   });
@@ -77,7 +77,7 @@ describe('issueStep', () => {
       kind: 'edit',
       number: 400,
       body: bodyOf([moved, hash]),
-      labels: ['bug', 'area:engine', 'status:accepted'],
+      labels: ['bug', 'area:engine'],
       comment: undefined,
     });
   });

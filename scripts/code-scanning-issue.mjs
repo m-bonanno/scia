@@ -38,10 +38,17 @@ const named = (numbers) => numbers.map((number) => `#${String(number)}`).join(',
 
 // What becomes of the issue: opened, edited, closed, or left as it is.
 export function issueStep({ alerts, issue, owner, scan }) {
-  const labels = labelsOf({ title: TITLE, paths: alerts.map(pathOf), extra: ['status:accepted'] });
+  // The owner has not read a new list yet; once read, its status is the owner's, never set again.
+  const labels = labelsOf({ title: TITLE, paths: alerts.map(pathOf) });
   if (issue === undefined) {
     if (alerts.length === 0) return { kind: 'none' };
-    return { kind: 'open', title: TITLE, body: bodyOf(alerts), labels, assignees: [owner] };
+    return {
+      kind: 'open',
+      title: TITLE,
+      body: bodyOf(alerts),
+      labels: [...labels, 'status:triage'],
+      assignees: [owner],
+    };
   }
   if (alerts.length === 0) {
     return {
@@ -116,7 +123,8 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
         '--paginate',
         `repos/${repo}/issues?state=open&per_page=100`,
         '--jq',
-        '.[] | select(.pull_request == null) | {number, body, user: {login: .user.login}} | tojson',
+        // The bodies of every open issue would outgrow execFileSync's buffer of 1 MiB.
+        `.[] | select(.pull_request == null and .user.login == "${BOT}") | {number, body, user: {login: .user.login}} | tojson`,
       ]),
     ),
   );

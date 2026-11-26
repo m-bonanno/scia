@@ -34,6 +34,8 @@ describe('startFolderServer', () => {
     await mkdir(root);
     await writeFile(join(root, 'piece.ts'), 'a piece');
     await writeFile(join(scratch.path, 'secret.txt'), 'beside the folder');
+    await mkdir(join(scratch.path, 'site-other'));
+    await writeFile(join(scratch.path, 'site-other', 'secret.txt'), 'in a folder named like it');
     const server = await startFolderServer({ root });
     cleanups.push(() => server.close());
     return server;
@@ -51,5 +53,19 @@ describe('startFolderServer', () => {
     const answer = await ask(server, 'http://127.0.0.1/../../../secret.txt');
 
     expect(answer).toEqual({ status: 403, body: '' });
+  });
+
+  it('refuses a path into a folder beside it whose name begins with its own', async () => {
+    const server = await serving();
+
+    const answer = await ask(server, 'http://127.0.0.1/../../../site-other/secret.txt');
+
+    expect(answer).toEqual({ status: 403, body: '' });
+  });
+
+  it('answers 400 to a path that is no encoding', async () => {
+    const server = await serving();
+
+    expect(await ask(server, '/%E0%A4%A')).toEqual({ status: 400, body: '' });
   });
 });

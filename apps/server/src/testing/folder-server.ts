@@ -27,7 +27,13 @@ export async function startFolderServer(options: FolderServerOptions): Promise<F
   const failing = new Set(options.failOnce ?? []);
   const server = createServer((request, response) => {
     void (async () => {
-      const path = decodeURIComponent((request.url ?? '/').split('?')[0] ?? '/');
+      let path: string;
+      try {
+        path = decodeURIComponent((request.url ?? '/').split('?')[0] ?? '/');
+      } catch {
+        response.writeHead(400).end();
+        return;
+      }
       asked.push(path);
       if (failing.delete(path)) {
         response.writeHead(503).end();
