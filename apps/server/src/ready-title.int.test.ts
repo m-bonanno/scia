@@ -6,14 +6,13 @@ import { DownloadStatus, PageFailure, TITLE_MOST_CHARS } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { DownloadManager, type ManagerDeps } from './download-manager.ts';
 import { HttpSource } from './http-source.ts';
-import type { Logger } from './logger.ts';
 import type { MagnetService } from './magnet-service.ts';
 import { PageError, type PageFormat } from './media-choice.ts';
 import type { PageMedia, PageReader } from './page-reader.ts';
 import type { RemoteSource } from './remote-source.ts';
 import { JsonStateStore, type PersistedState, type StateStore } from './state-store.ts';
 import { type RangeServer, startRangeServer } from './testing/range-server.ts';
-import { scratchFolder, until } from './testing/scratch.ts';
+import { recordingLogger, scratchFolder, silentLogger, until } from './testing/scratch.ts';
 import { silentSource } from './testing/silent-source.ts';
 import { YtDlp } from './yt-dlp.ts';
 
@@ -87,14 +86,6 @@ function aReader(
 
 function never<T>(): Promise<T> {
   return new Promise(() => undefined);
-}
-
-function recordingLogger(): Logger & { readonly lines: string[] } {
-  const lines: string[] = [];
-  const log = (level: string) => (event: string, details?: object) => {
-    lines.push(JSON.stringify({ level, event, ...details }));
-  };
-  return { lines, info: log('info'), warn: log('warn'), error: log('error') };
 }
 
 describe('the title of a video’s page added ready (#285)', () => {
@@ -411,6 +402,8 @@ describe('the title of a video’s page added ready (#285)', () => {
         prefix: [FAKE_YT_DLP, join(folder.path, 'given.json')],
         timeoutMs: 10_000,
         tempDir: join(folder.path, 'temp'),
+        runPrefix: 'scia-yt-dlp-spec-',
+        logger: silentLogger,
       });
       const downloads = await open({ pageReader: reader });
 
@@ -438,6 +431,8 @@ describe('the title of a video’s page added ready (#285)', () => {
         prefix: [FAKE_YT_DLP, givenFile],
         timeoutMs: 60_000,
         tempDir,
+        runPrefix: 'scia-yt-dlp-spec-',
+        logger: silentLogger,
       });
       const downloads = await open({ pageReader: reader });
       // As yt-dlp's Windows build reads: a second process holds the output (#170).

@@ -1,12 +1,18 @@
 import type * as ChildProcesses from 'node:child_process';
 import { existsSync, readFileSync } from 'node:fs';
-import { readdir, rm } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { setTimeout as sleep } from 'node:timers/promises';
 import { PageFailure, TITLE_MOST_CHARS } from '@scia/core';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PageError } from './media-choice.ts';
-import { scratchFolder, until } from './testing/scratch.ts';
+import {
+  holdingFolder,
+  recordingLogger,
+  scratchFolder,
+  silentLogger,
+  until,
+} from './testing/scratch.ts';
 import { YtDlp, type YtDlpOptions } from './yt-dlp.ts';
 
 // Every program the adapter starts runs as it would; a spec reads what it was given.
@@ -25,6 +31,9 @@ vi.mock('node:child_process', async (original) => {
 });
 
 const FAKE = join(import.meta.dirname, 'testing', 'fake-yt-dlp.mjs');
+// What the specs' runs' folders are named with, as a profile's are (`runPrefixOf`).
+const PREFIX = 'scia-yt-dlp-spec-';
+const HOLDS = 'https://site.example/holds-its-folder';
 
 function isRunning(pid: number): boolean {
   try {
@@ -56,6 +65,8 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
       prefix: [FAKE, givenFile],
       timeoutMs: 10_000,
       tempDir,
+      runPrefix: PREFIX,
+      logger: silentLogger,
       ...options,
     });
   const given = () =>
@@ -202,7 +213,7 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     expect(JSON.stringify(env)).not.toContain('the-engine-token-0000');
     expect(Object.keys(env).filter((name) => name.startsWith('SCIA_'))).toEqual([]);
     // Each system's name for it: yt-dlp's builds unpack themselves there before they start.
-    expect(env.TEMP?.startsWith(join(tempDir, 'scia-yt-dlp-'))).toBe(true);
+    expect(env.TEMP?.startsWith(join(tempDir, PREFIX))).toBe(true);
     expect(env.TMP).toBe(env.TEMP);
     expect(env.TMPDIR).toBe(env.TEMP);
   });
@@ -224,6 +235,198 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
     await expect(reading).rejects.toThrow('paused');
     expect(await readdir(tempDir)).toEqual([]);
   }, 20_000);
+
+  describe('a reader whose folder is still held once it has ended (#174)', () => {
+    const held = () => `${givenFile}.held`;
+    // What the stand-in wrote beside its file: the holder to end, or the folder to give back.
+    const letGo = async () => {
+      if (!existsSync(held())) return;
+      const { pid, folder: kept } = JSON.parse(readFileSync(held(), 'utf8')) as {
+        pid?: number;
+        folder?: string;
+      };
+      if (pid !== undefined) {
+        if (isRunning(pid)) process.kill(pid);
+        await until(() => !isRunning(pid));
+      }
+      if (kept !== undefined && existsSync(kept)) await chmod(kept, 0o755);
+    };
+    afterEach(letGo);
+    const holding = () => until(() => existsSync(held()));
+
+    // The folder stayed, and the log says so once, with no path: the person's account is in it.
+    async function stayed(logger: ReturnType<typeof recordingLogger>) {
+      expect(await readdir(tempDir)).toHaveLength(1);
+      const lines = logger.lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(lines.filter(({ event }) => event === 'yt_dlp_run_not_removed')).toEqual([
+        {
+          level: 'warn',
+          event: 'yt_dlp_run_not_removed',
+          error: {
+            name: 'Error',
+            code: expect.any(String) as unknown,
+            syscall: expect.any(String) as unknown,
+          },
+        },
+      ]);
+      expect(logger.lines.join('\n')).not.toContain(folder.path);
+    }
+
+    it('keeps a read it gave up as a site that is busy, and says in the log that its folder stayed', async () => {
+      const logger = recordingLogger();
+
+      expect(
+        await givenUpAt(
+          1000,
+          () => reader({ logger, timeoutMs: 1000 }).read(HOLDS, never),
+          holding,
+        ),
+      ).toBe(PageFailure.SiteBusy);
+      await stayed(logger);
+    }, 30_000);
+
+    it('keeps what a read answered, and says in the log that its folder stayed', async () => {
+      const logger = recordingLogger();
+
+      const media = await reader({ logger }).read(`${HOLDS}?answers`, never);
+
+      expect(media?.formats.length).toBeGreaterThan(0);
+      await stayed(logger);
+    }, 30_000);
+
+    it('keeps a read stopped as stopped, and lets its folder go within the wait main gives a quit', async () => {
+      const logger = recordingLogger();
+      const stopped = new AbortController();
+      const reading = reader({ logger }).read(HOLDS, stopped.signal);
+      await holding();
+      stopped.abort(new Error('paused'));
+      const stoppedAt = performance.now();
+
+      await expect(reading).rejects.toThrow('paused');
+      // Main stops an engine that has not ended five seconds after a quit (`STOP_LIMIT_MS`), and
+      // the quit waits for its reads. `rm`'s own retries took over a minute on Windows.
+      expect(performance.now() - stoppedAt).toBeLessThan(5000);
+      await stayed(logger);
+    }, 30_000);
+
+    it('tries its folder again a while: one let go after the first try is removed, and nothing is logged', async () => {
+      const logger = recordingLogger();
+      const stopped = new AbortController();
+      const reading = reader({ logger }).read(HOLDS, stopped.signal);
+      await holding();
+      const [run] = await readdir(tempDir);
+      stopped.abort(new Error('paused'));
+      // What the first removal could remove is gone: it has been tried, and the folder stayed.
+      await until(() => !existsSync(join(tempDir, run ?? '', 'first-to-go')));
+      expect(existsSync(join(tempDir, run ?? ''))).toBe(true);
+      // The case itself: held a moment past the first try, as Windows may hold a closed file. Tries
+      // made with no wait between them would all be spent by then.
+      await sleep(200);
+      await letGo();
+
+      await expect(reading).rejects.toThrow('paused');
+      expect(await readdir(tempDir)).toEqual([]);
+      expect(logger.lines).toEqual([]);
+    }, 30_000);
+  });
+
+  describe('the folders of its runs, as the engine starts (#174)', () => {
+    const opened = (logger = silentLogger) =>
+      YtDlp.open({
+        command: process.execPath,
+        prefix: [FAKE, givenFile],
+        timeoutMs: 10_000,
+        tempDir,
+        runPrefix: PREFIX,
+        logger,
+      });
+    const unpackedIn = async (run: string) => {
+      await mkdir(join(tempDir, run, '_MEI1'), { recursive: true });
+      await writeFile(join(tempDir, run, '_MEI1', 'python.dll'), 'unpacked');
+    };
+
+    it('removes what its runs before left, and nothing else, and starts when one cannot be removed', async () => {
+      const logger = recordingLogger();
+      await unpackedIn(`${PREFIX}left`);
+      await unpackedIn(`${PREFIX}held`);
+      // Another profile's run, and what is not a run of Scia's: never this engine's to remove.
+      await unpackedIn('scia-yt-dlp-another-reading');
+      await unpackedIn('someone-else');
+      const letGo = await holdingFolder(join(tempDir, `${PREFIX}held`, '_MEI1'));
+      try {
+        const reader = await opened(logger);
+
+        expect((await readdir(tempDir)).sort()).toEqual(
+          [`${PREFIX}held`, 'scia-yt-dlp-another-reading', 'someone-else'].sort(),
+        );
+        const lines = logger.lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+        expect(lines.filter(({ event }) => event === 'yt_dlp_run_not_removed')).toEqual([
+          {
+            level: 'warn',
+            event: 'yt_dlp_run_not_removed',
+            entry: `${PREFIX}held`,
+            error: {
+              name: 'Error',
+              code: expect.any(String) as unknown,
+              syscall: expect.any(String) as unknown,
+            },
+          },
+        ]);
+        expect(logger.lines.join('\n')).not.toContain(folder.path);
+        expect(await reader.read('https://site.example/video/1', never)).toBeDefined();
+      } finally {
+        await letGo();
+      }
+    }, 30_000);
+
+    // On Linux every account writes in the system's temporary folder, and anyone can make an entry
+    // of its runs' name there: only a folder this account made is removed (CVE-2022-21658).
+    const leftAlone = (logger: ReturnType<typeof recordingLogger>, entry: string) => {
+      const lines = logger.lines.map((line) => JSON.parse(line) as Record<string, unknown>);
+      expect(lines).toEqual([{ level: 'warn', event: 'yt_dlp_run_not_ours', entry }]);
+    };
+
+    it('leaves alone a link named as one of its runs, and what it points to', async () => {
+      const logger = recordingLogger();
+      const files = join(folder.path, 'the-person’s-files');
+      await mkdir(files);
+      await writeFile(join(files, 'kept.txt'), 'theirs');
+      await mkdir(tempDir);
+      await symlink(files, join(tempDir, `${PREFIX}link`), 'junction');
+
+      await opened(logger);
+
+      expect((await lstat(join(tempDir, `${PREFIX}link`))).isSymbolicLink()).toBe(true);
+      expect(await readdir(files)).toEqual(['kept.txt']);
+      leftAlone(logger, `${PREFIX}link`);
+    });
+
+    it.runIf(process.getuid !== undefined)(
+      'leaves alone a folder of its runs’ name that another account made',
+      async () => {
+        const logger = recordingLogger();
+        await unpackedIn(`${PREFIX}theirs`);
+        const account = process.getuid?.() ?? 0;
+        vi.spyOn(process as Required<typeof process>, 'getuid').mockReturnValue(account + 1);
+        try {
+          await opened(logger);
+        } finally {
+          vi.restoreAllMocks();
+        }
+
+        expect(await readdir(tempDir)).toEqual([`${PREFIX}theirs`]);
+        leftAlone(logger, `${PREFIX}theirs`);
+      },
+    );
+
+    it('starts with no temporary folder yet, and makes it at the first read', async () => {
+      const reader = await opened();
+
+      expect(existsSync(tempDir)).toBe(false);
+      expect(await reader.read('https://site.example/video/1', never)).toBeDefined();
+      expect(await readdir(tempDir)).toEqual([]);
+    });
+  });
 
   it('answers nothing for a page of a site it does not know, so that the page is fetched as it stands', async () => {
     expect(await reader().read('https://other.example/unknown', never)).toBeUndefined();
@@ -324,6 +527,8 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
       command: join(folder.path, 'no-such-program.exe'),
       timeoutMs: 5000,
       tempDir,
+      runPrefix: PREFIX,
+      logger: silentLogger,
     });
     expect(await failureOf(missing.read('https://site.example/video/1', never))).toBe(
       PageFailure.Unreadable,
@@ -385,7 +590,7 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
       ).toBe(false);
       expect(args.slice(-2)).toEqual(['--', 'https://site.example/video/1']);
       expect(JSON.stringify(env)).not.toContain('the-engine-token-0000');
-      expect(env.TEMP?.startsWith(join(tempDir, 'scia-yt-dlp-'))).toBe(true);
+      expect(env.TEMP?.startsWith(join(tempDir, PREFIX))).toBe(true);
       expect(await readdir(tempDir)).toEqual([]);
     });
 

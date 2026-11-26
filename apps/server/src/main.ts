@@ -16,7 +16,7 @@ import { signingKeyOf } from './openpgp.ts';
 import type { PageReader } from './page-reader.ts';
 import { parentPort } from './parent-port.ts';
 import { JsonStateStore } from './state-store.ts';
-import { YtDlp } from './yt-dlp.ts';
+import { runPrefixOf, YtDlp } from './yt-dlp.ts';
 import { YtDlpReleases } from './yt-dlp-releases.ts';
 import { YT_DLP_SIGNING_KEY } from './yt-dlp-signing-key.ts';
 import { openYtDlpUpdates, type YtDlpUpdates } from './yt-dlp-updates.ts';
@@ -50,7 +50,7 @@ const PAGE_READ_LIMIT_MS = 90_000;
 // A yt-dlp that is named and missing reads no page: pages are fetched as they stand, as without
 // one, rather than every page failing for a program that is not there. One that main says the
 // release of is brought up to date (docs/adr/0011), and each read runs the build in use then.
-async function pageReaderOf(
+export async function pageReaderOf(
   config: Pick<
     ServerConfig,
     'ytDlp' | 'ytDlpUpdates' | 'ytDlpReleases' | 'tempDir' | 'dataDir' | 'version'
@@ -77,10 +77,12 @@ async function pageReaderOf(
           signingKey: signingKeyOf(YT_DLP_SIGNING_KEY),
           logger,
         });
-  const pageReader = new YtDlp({
+  const pageReader = await YtDlp.open({
     command: () => updates?.command() ?? shipped,
     timeoutMs: PAGE_READ_LIMIT_MS,
     tempDir: config.tempDir,
+    runPrefix: runPrefixOf(config.dataDir),
+    logger,
   });
   return updates === undefined ? { pageReader } : { pageReader, updates };
 }

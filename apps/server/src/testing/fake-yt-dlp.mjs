@@ -3,7 +3,7 @@
 // its process id — since the adapter hands it no environment of the spec's. Like yt-dlp's builds,
 // it unpacks itself into its TEMP first, and leaves that there when it is stopped.
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const [given, ...args] = process.argv.slice(2);
@@ -332,5 +332,33 @@ else if (
   if (!url.includes('/orphaned-holder')) writeWhole(holderPidFile, String(second.pid));
   // `/first-gone`: the first process ends by itself and leaves the second reading.
   if (url.includes('/first-gone')) second.unref();
+  else hang();
+} else if (url.includes('/holds-its-folder')) {
+  // What yt-dlp's second process may do when no tree reaches it (#174): outlive the stop, and
+  // keep the folder it unpacked into from being removed. On Windows a process working in a folder
+  // does, started by one that ends at once so that taskkill's tree misses it; elsewhere nothing a
+  // process does stops a removal, and a folder that cannot be written stands in for it. What it
+  // writes beside its file says how to let go: the holder to end, or the folder to give back.
+  // `first-to-go` is removed by the first removal tried: a spec sees that it has been tried. What
+  // is held is two levels down, where yt-dlp's build keeps its runtime (`_MEI…/python3xx.dll`).
+  const unpacked = join(process.env.TEMP ?? '', '_MEI1', 'lib');
+  mkdirSync(unpacked, { recursive: true });
+  writeFileSync(join(unpacked, 'python3.dll'), 'unpacked');
+  writeFileSync(join(process.env.TEMP ?? '', 'first-to-go'), '');
+  const held = `${given}.held`;
+  if (process.platform === 'win32') {
+    // Written by the holder once it runs, in its folder: then the folder is held.
+    const holder = `const { existsSync, renameSync, rmSync, writeFileSync } = require('node:fs');
+      const writeWhole = ${String(writeWhole)};
+      writeWhole(${JSON.stringify(held)}, JSON.stringify({ pid: process.pid }));
+      setTimeout(() => undefined, 30_000);`;
+    const code = `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(holder)}], { cwd: ${JSON.stringify(unpacked)}, detached: true, stdio: 'ignore' }).unref();`;
+    spawn(process.execPath, ['-e', code], { stdio: 'ignore', detached: true });
+  } else {
+    chmodSync(unpacked, 0o555);
+    writeWhole(held, JSON.stringify({ folder: unpacked }));
+  }
+  // `?answers`: it reads the page, and its folder stays held once it has ended by itself.
+  if (url.includes('?answers')) process.stdout.write(JSON.stringify(video));
   else hang();
 } else fail('[Example] v1: something no rule knows');

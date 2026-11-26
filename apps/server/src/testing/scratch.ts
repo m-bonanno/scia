@@ -1,4 +1,5 @@
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { once } from 'node:events';
 import { chmod, mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,9 +12,22 @@ export const silentLogger: Logger = {
   error: () => undefined,
 };
 
+// Keeps every line logged, each as the JSON object a line of the engine's log is.
+export function recordingLogger(): Logger & { readonly lines: string[] } {
+  const lines: string[] = [];
+  const log = (level: string) => (event: string, details?: object) => {
+    lines.push(JSON.stringify({ level, event, ...details }));
+  };
+  return { lines, info: log('info'), warn: log('warn'), error: log('error') };
+}
+
 export async function scratchFolder(): Promise<{ path: string; remove(): Promise<void> }> {
   const path = await mkdtemp(join(tmpdir(), 'scia-test-'));
-  return { path, remove: () => rm(path, { recursive: true, force: true }) };
+  // Tried again a while: on Windows a process a spec just ended may let go of it a moment late.
+  return {
+    path,
+    remove: () => rm(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
+  };
 }
 
 // Makes an existing folder refuse new files, as a read-only share or a system folder does;
@@ -31,6 +45,29 @@ export async function refusingFiles(folder: string): Promise<() => Promise<void>
   }
   await chmod(folder, 0o500);
   return () => chmod(folder, 0o700);
+}
+
+// Keeps a folder from being removed, as a program still running from it does; the function it
+// answers lets it go. On Windows a process working in the folder holds it; elsewhere nothing a
+// process does stops a removal, and a folder that cannot be written stands in for it.
+export async function holdingFolder(folder: string): Promise<() => Promise<void>> {
+  if (process.platform === 'win32') {
+    // Started is not yet in its folder: it says so once it runs, and then it holds the folder.
+    const holder = spawn(
+      process.execPath,
+      ['-e', "process.stdout.write('held'); setTimeout(() => undefined, 30_000)"],
+      { cwd: folder, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    await once(holder.stdout, 'data');
+    return async () => {
+      if (holder.exitCode !== null || holder.signalCode !== null) return;
+      const exited = once(holder, 'exit');
+      holder.kill();
+      await exited;
+    };
+  }
+  await chmod(folder, 0o555);
+  return () => chmod(folder, 0o755);
 }
 
 // What Windows' fsutil says of a file's sparse flag, in the system's words: a spec tells one

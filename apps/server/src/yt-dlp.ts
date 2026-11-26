@@ -1,9 +1,12 @@
 import { type ChildProcess, spawn } from 'node:child_process';
-import { mkdir, mkdtemp, rm } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import { lstat, mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { AUDIO_CONTAINERS, type AudioContainer, PageFailure, titleOfVideo } from '@scia/core';
 import { mediaSchema } from '@scia/contracts';
 import { z } from 'zod';
+import { describeFailure, type Logger } from './logger.ts';
 import { PageError, type PageFormat } from './media-choice.ts';
 import type { PageMedia, PageReader } from './page-reader.ts';
 
@@ -184,7 +187,21 @@ export interface YtDlpOptions {
   // Where each run gets a folder of its own for its temporary files, removed when it ends: the
   // builds of yt-dlp unpack themselves there — 30 MB — and leave it behind when they are stopped.
   readonly tempDir: string;
+  // What this engine's runs' folders are named with (`runPrefixOf`): those left as it starts were
+  // left by its runs before.
+  readonly runPrefix: string;
   readonly mostOutputBytes?: number;
+  readonly logger: Logger;
+}
+
+// The name a profile's runs' folders begin with, in the system's temporary folder, which every
+// Scia on the computer shares: what one engine clears as it starts is never another's read. A hash
+// of the profile's folder, whose path names the person's account. Each folder is still made by
+// `mkdtemp`, whole and unforeseeable, never in a folder of a known name: on Linux every user shares
+// the temporary folder, and another could make that folder first, or a link in its place (#174).
+export function runPrefixOf(dataDir: string): string {
+  const profile = createHash('sha256').update(dataDir).digest('hex').slice(0, 16);
+  return `scia-yt-dlp-${profile}-`;
 }
 
 // yt-dlp's whole environment, built from nothing: the engine's own holds the API's token, which
@@ -248,12 +265,61 @@ function endTree(child: ChildProcess): void {
 // parent gone — is not waited for.
 const OUTPUT_GRACE_MS = 1000;
 
+// Windows may hold the files of a process that has just closed a moment longer: a run's folder is
+// tried again a while, whole each time — a second and a half in all, well inside the five seconds
+// main gives the engine to stop at a quit (`STOP_LIMIT_MS`), which waits for its reads. Never by
+// `rm`'s own retries, which it makes again at every level of the tree, and which multiply: a
+// folder held for good took over a minute to give up (#174), and one held deeper, minutes.
+const REMOVAL_TRIES = 6;
+const REMOVAL_BACKOFF_MS = 100;
+
+async function removeRun(folder: string): Promise<void> {
+  for (let tries = 1; ; tries += 1) {
+    try {
+      await rm(folder, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (tries >= REMOVAL_TRIES) throw error;
+      await sleep(tries * REMOVAL_BACKOFF_MS);
+    }
+  }
+}
+
 // The adapter of PageReader over yt-dlp, run once per page (docs/adr/0009).
 export class YtDlp implements PageReader {
   readonly #options: YtDlpOptions;
 
   constructor(options: YtDlpOptions) {
     this.#options = options;
+  }
+
+  // The reader as the engine starts it: the folders its runs before left are removed first, at a
+  // time no read runs from them. One that cannot be removed — a process no tree reached still
+  // running from it (#174) — is left for a later start, never a reason not to start.
+  static async open(options: YtDlpOptions): Promise<YtDlp> {
+    const { tempDir, runPrefix, logger } = options;
+    // Where the system has accounts: this one's (Windows gives each its own temporary folder).
+    const account = process.getuid?.();
+    // A folder not there yet holds nothing; one that cannot be read is said by the first read.
+    const entries = await readdir(tempDir).catch(() => []);
+    for (const entry of entries.filter((name) => name.startsWith(runPrefix))) {
+      const path = join(tempDir, entry);
+      try {
+        // On Linux every account writes in the system's temporary folder, and anyone can make one
+        // of this name: removed by its name, what is in it could be swapped for a link while `rm`
+        // walks it, and the person's own files removed (CVE-2022-21658). Only a folder this account
+        // made is removed — a run's, made by `mkdtemp`, which no other account can write in.
+        const found = await lstat(path);
+        if (!found.isDirectory() || (account !== undefined && found.uid !== account)) {
+          logger.warn('yt_dlp_run_not_ours', { entry });
+          continue;
+        }
+        await rm(path, { recursive: true, force: true });
+      } catch (error) {
+        logger.warn('yt_dlp_run_not_removed', { entry, error: describeFailure(error) });
+      }
+    }
+    return new YtDlp(options);
   }
 
   async read(url: string, signal: AbortSignal): Promise<PageMedia | undefined> {
@@ -333,12 +399,17 @@ export class YtDlp implements PageReader {
   async #inFolderOfItsOwn(url: string, signal: AbortSignal, ask: Ask): Promise<Run> {
     signal.throwIfAborted();
     await mkdir(this.#options.tempDir, { recursive: true });
-    const temp = await mkdtemp(join(this.#options.tempDir, 'scia-yt-dlp-'));
+    const temp = await mkdtemp(join(this.#options.tempDir, this.#options.runPrefix));
     try {
       return await this.#run(url, temp, signal, ask);
     } finally {
-      // After the process has closed, whatever ended it: Windows may hold its files a moment.
-      await rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+      // After the process has closed, whatever ended it. A process no tree reached may still run
+      // from it (#174): the read keeps what became of it, and the folder is left to the next start.
+      try {
+        await removeRun(temp);
+      } catch (error) {
+        this.#options.logger.warn('yt_dlp_run_not_removed', { error: describeFailure(error) });
+      }
     }
   }
 
