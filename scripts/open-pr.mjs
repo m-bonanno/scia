@@ -13,6 +13,9 @@ const BASE = 'develop';
 const TYPE_LABELS = { feat: 'enhancement', fix: 'bug', hotfix: 'bug', docs: 'docs', test: 'test' };
 const OTHER_TYPE_LABEL = 'chore';
 
+// Every label that names a PR's type: one of them is on every PR (scripts/claude-guard.mjs reads it).
+export const TYPE_LABEL_NAMES = new Set([...Object.values(TYPE_LABELS), OTHER_TYPE_LABEL]);
+
 const under =
   (...prefixes) =>
   (file) =>
@@ -39,6 +42,7 @@ const AREAS = [
         'docs/development/',
         '.claude/agents/',
         '.claude/commands/',
+        '.claude/settings.json',
       )(file),
   },
 ];
