@@ -218,10 +218,12 @@ describe('reviewOf', () => {
       'apps/server/src/app.ts',
     ];
 
-    expect(rolesOf(reviewOf({ title: 'fix: x', files: paths.map((path) => file(path)) }))).toEqual([
-      'tech-lead',
-      'backend-engineer',
-    ]);
+    for (const title of ['fix: x', 'fix: say "wait!: not yet" in the notice']) {
+      expect(rolesOf(reviewOf({ title, files: paths.map((path) => file(path)) })), title).toEqual([
+        'tech-lead',
+        'backend-engineer',
+      ]);
+    }
   });
 
   it('adds a role the paths cannot tell, once, in the order of the team', () => {
