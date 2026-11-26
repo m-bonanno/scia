@@ -107,7 +107,11 @@ describe('splitCommand', () => {
     expect(splitCommand('a "$x" b')).toEqual({ segments: [['a', '$x', 'b']], inner: [] });
   });
 
-  it('reads a trailing backslash and a comment that runs to the end', () => {
+  it('reads a trailing backslash, a comment that runs to the end, and an ANSI-C quoted word', () => {
+    expect(words("a $'b\\nc\\td\\\\e\\'f\\\"g\\x'")).toEqual([['a', 'b\nc\td\\e\'f"g\\x']]);
+    expect(words("a $'b")).toEqual([['a', 'b']]);
+    expect(words("a $'b\\rc'")).toEqual([['a', 'b\rc']]);
+    expect(words("a $'b\\")).toEqual([['a', 'b\\']]);
     expect(words('a \\')).toEqual([['a', '']]);
     expect(words('a # b')).toEqual([['a']]);
   });
@@ -274,6 +278,15 @@ describe('protected branches', () => {
   it('reads a heredoc body as text, not as a command', () => {
     expectAllow("cat > note.md <<'EOF'\ngit push origin develop\nEOF");
   });
+
+  it('reads the rest of the line that opens a heredoc', () => {
+    expectDeny('protected-branch', "cat <<'EOF' | git commit -F -\nchore: x\nEOF", { cwd: DEV });
+    expectDeny(
+      'protected-branch',
+      "git commit -F - <<'EOF' && git push origin develop\nchore: x\nEOF",
+    );
+    expectDeny('no-verify', "cat > b.md <<'EOF'; HUSKY=0 git commit -m x\nbody\nEOF");
+  });
 });
 
 describe('the hooks of git', () => {
@@ -287,6 +300,9 @@ describe('the hooks of git', () => {
       'export HUSKY=0; git commit -m "chore: x"',
       'env HUSKY=0 git push',
       'git -c core.hooksPath=/dev/null commit -m x',
+      'git -c core.hooksPath=/dev/null push origin chore/1-work',
+      'git -c core.hooksPath=/dev/null merge chore/0-old',
+      'git -c core.hooksPath=/dev/null pull',
       'git config core.hooksPath /tmp/none',
       'git config --unset core.hooksPath',
       'HUSKY=0',
@@ -306,6 +322,9 @@ describe('the hooks of git', () => {
     expectAllow('export HUSKY=1');
     expectAllow('git -c alias.x=core.hooksPath commit -m y');
     expectAllow('git -c alias.x=core.hooksPath=y commit -m z');
+    expectAllow('git -c core.hooksPath=/dev/null worktree add --detach /tmp/pr-1 abc123');
+    expectAllow('git -c core.hooksPath=/dev/null checkout chore/1-work');
+    expectAllow('git -C core.hooksPath=x commit -m y');
     expectAllow('git commit -m HUSKY=0');
     expectAllow('echo HUSKY=0');
     expectAllow('git config alias.core.hookspath x');
@@ -360,6 +379,14 @@ describe('merging a pull request', () => {
     );
     expectAllow('gh pr merge 375 --squash --match-head-commit=1f3849a');
     expectDeny('merge-head', 'gh pr --repo=m-bonanno/scia merge 1 --squash');
+    expectDeny('merge-head', 'gh pr -R m-bonanno/scia merge 1 --squash');
+    expectDeny('pr-review', 'gh pr --repo m-bonanno/scia review 1 --approve');
+    expectDeny('tags', 'gh release -R m-bonanno/scia create v9.9.9');
+    expectDeny('issue-assignee', 'gh issue -R m-bonanno/scia create -t "fix: x"');
+    expectDeny(
+      'body-file',
+      'gh pr -R m-bonanno/scia create --body text --assignee @me --label chore',
+    );
   });
 
   it('asks the owner for a merge commit, which is a release or its way back', () => {
@@ -439,6 +466,9 @@ describe('AI attribution', () => {
     expectDeny('attribution', `git commit -F - <<'EOF'\nchore: x\n\n${trailer}\nEOF`);
     expectDeny('attribution', `git commit -m "$(cat <<'EOF'\nchore: x\n\n${trailer}\nEOF\n)"`);
     expectDeny('attribution', `gh issue create -a @me --body "${trailer}"`);
+    expectDeny('attribution', `cat <<'EOF' | git commit -F -\nchore: x\n\n${trailer}\nEOF`);
+    expectDeny('attribution', `git commit -m x --trailer="${trailer}"`);
+    expectDeny('attribution', `git commit -m $'chore: x\\n\\n${trailer}'`);
     expectDeny(
       'attribution',
       'gh pr create --title "chore: x" --body-file b.md --assignee @me --label chore',
@@ -455,6 +485,22 @@ describe('AI attribution', () => {
   });
 
   it('reads each command that writes a message, and the files it hands over', () => {
+    const body = { [inWork('c.md')]: `x\n${trailer}\n` };
+    for (const command of [
+      'gh pr create --title "chore: x" --assignee @me --label chore',
+      'gh pr edit 1',
+      'gh pr comment 1',
+      'gh pr merge 1 --squash --match-head-commit abc1234',
+      'gh pr close 1',
+      'gh pr reopen 1',
+      'gh issue create -a @me',
+      'gh issue edit 1',
+      'gh issue comment 1',
+      'gh issue close 1',
+      'gh issue reopen 1',
+    ]) {
+      expectDeny('attribution', `${command} --body-file c.md`, { files: body });
+    }
     for (const sub of ['am', 'cherry-pick', 'commit', 'merge', 'notes', 'revert', 'tag']) {
       expectDeny('attribution', `git ${sub} -m "${trailer}"`);
     }
@@ -506,7 +552,13 @@ describe('AI attribution', () => {
     }
     expectAllow(`git commit -m "docs: say that no ${trailer} line is written"`);
     expectAllow(`echo "${trailer}"`);
+    expectAllow("git commit -m $'chore: x\\n\\nA body.'");
     expectAllow(`git log --grep "${trailer}"`);
+    expectAllow(`gh pr view 388 --json body --jq .body | grep -c "${trailer}"`);
+    expectAllow(`gh issue list --search "${trailer}"`);
+    expectAllow(
+      `gh api repos/m-bonanno/scia/issues/1/comments --jq '.[] | select(.body == "${trailer}")'`,
+    );
   });
 });
 

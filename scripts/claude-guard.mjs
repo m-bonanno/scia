@@ -26,7 +26,7 @@ const REASONS = {
   'body-file':
     'write the body to .claude/pr-bodies/<branch>.md and pass --body-file (git-flow.md, "A pull request").',
   'issue-assignee':
-    'an issue is assigned to whoever opens it: --assignee @me for the team (git-flow.md).',
+    'an issue is assigned to whoever opens it: --assignee @me for one the team opens (git-flow.md, "A pull request").',
   'pr-assignee':
     'a pull request is assigned and labelled with its type when it opens: npm run pr:open -- "<title>" does both (git-flow.md).',
   attribution:
@@ -57,10 +57,13 @@ const TOKENS = [
 const ATTRIBUTION =
   /^[\t ]*(?:\p{Extended_Pictographic}\uFE0F?[\t ]*)?(?:co-authored-by:[^\n]*(?:\bclaude\b|anthropic\.com)|claude-session:|generated (?:with|by) \[?claude\b)/imu;
 
-// Group 1, a backslash, or 2, a quote, makes the delimiter quoted; 3 is the delimiter, 4 the body.
+// Group 1, a backslash, or 2, a quote, makes the delimiter quoted; 3 is the delimiter, 4 the rest of
+// the line that opens the heredoc, which is still a command, and 5 the body.
 const HEREDOC =
-  /<<-?[\t ]*(\\?)(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2[^\n]*\n((?:[\s\S]*?\n)??)\t*\3(?=\n|$)/g;
+  /<<-?[\t ]*(\\?)(['"]?)([A-Za-z_][A-Za-z0-9_]*)\2([^\n]*)\n((?:[\s\S]*?\n)??)\t*\3(?=\n|$)/g;
 
+// The escapes of an ANSI-C quoted word ($'…') that can make a line of a message; any other stays as written.
+const ANSI_C = { n: '\n', t: '\t', r: '\r', '\\': '\\', "'": "'", '"': '"' };
 const WRAPPERS = new Set(['builtin', 'command', 'env', 'exec', 'nohup', 'sudo', 'time', 'xargs']);
 const SHELLS = new Set(['bash', 'dash', 'ksh', 'sh', 'zsh']);
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
@@ -77,6 +80,7 @@ const GIT_WRITES_MESSAGE = new Set([
   'tag',
 ]);
 const GIT_ON_PROTECTED = new Set(['am', 'cherry-pick', 'commit', 'rebase', 'revert']);
+const GIT_RUNS_HOOKS = new Set([...GIT_ON_PROTECTED, 'merge', 'pull', 'push']);
 // Short options of `git commit` that take a value: an `n` after one of them is part of that value.
 const COMMIT_SHORT_WITH_VALUE = new Set(['m', 'F', 'C', 'c', 't', 'u', 'S']);
 const GH_API_WITH_VALUE = new Set([
@@ -96,6 +100,9 @@ const GH_API_WITH_VALUE = new Set([
   '--hostname',
   '--cache',
 ]);
+const GH_WITH_VALUE = new Set(['-R', '--repo']);
+const GH_PR_WRITES = new Set(['create', 'edit', 'comment', 'merge', 'close', 'reopen']);
+const GH_ISSUE_WRITES = new Set(['create', 'edit', 'comment', 'close', 'reopen']);
 const GH_RELEASE_WRITES = new Set(['create', 'edit', 'delete', 'upload', 'delete-asset']);
 const GH_REPO_WRITES = new Set(['edit', 'rename', 'archive', 'unarchive', 'delete']);
 const TAG_ENDPOINT = /\/git\/(refs\/)?tags(\/|$)|\/releases(\/|$)/;
@@ -205,6 +212,20 @@ export function splitCommand(text) {
     } else if (c === '\\') {
       if (text[i + 1] !== '\n') add(text[i + 1] ?? '');
       i += 2;
+    } else if (c === '$' && text[i + 1] === "'") {
+      let j = i + 2;
+      let value = '';
+      while (j < text.length && text[j] !== "'") {
+        if (text[j] === '\\' && j + 1 < text.length) {
+          value += ANSI_C[text[j + 1]] ?? `\\${text[j + 1]}`;
+          j += 2;
+        } else {
+          value += text[j];
+          j++;
+        }
+      }
+      add(value);
+      i = j + 1;
     } else if (opensSubstitution(i)) {
       const end = substitution(i);
       add(text.slice(i, end));
@@ -229,11 +250,12 @@ export function splitCommand(text) {
 
 function checkGit(args, cwd, state) {
   let repo = cwd;
+  let hooksOff = false;
   let i = 0;
   while (args[i]?.startsWith('-')) {
     if (GIT_GLOBAL_WITH_VALUE.has(args[i]) && i + 1 < args.length) {
       if (args[i] === '-C') repo = resolveIn(repo, args[i + 1]);
-      if (args[i] === '-c' && /^core\.hookspath=/i.test(args[i + 1])) state.deny('no-verify');
+      if (args[i] === '-c' && /^core\.hookspath=/i.test(args[i + 1])) hooksOff = true;
       i += 2;
     } else i++;
   }
@@ -246,7 +268,8 @@ function checkGit(args, cwd, state) {
 
   const branch = state.branches.get(repo) ?? state.branchOf(repo);
 
-  if (rest.includes('--no-verify')) state.deny('no-verify');
+  if (rest.includes('--no-verify') || (hooksOff && GIT_RUNS_HOOKS.has(sub)))
+    state.deny('no-verify');
   if (sub === 'commit' && skipsHooks(rest)) state.deny('no-verify');
   if (sub === 'config' && positionals(rest).some((arg) => /^core\.hookspath$/i.test(arg))) {
     state.deny('no-verify');
@@ -314,13 +337,15 @@ function checkPush(rest, branch, state) {
   }
 }
 
+// A command that writes a message is read for attribution, with the files it hands over; a read
+// (view, list, diff, a GET) writes nothing, whatever its words hold.
 function noteBody(rest, cwd, state) {
   state.writes = true;
   state.files.push(...valuesOf(rest, '--body-file', '-F').map((file) => [cwd, file]));
 }
 
 function checkPr(rest, action, cwd, state) {
-  noteBody(rest, cwd, state);
+  if (GH_PR_WRITES.has(action)) noteBody(rest, cwd, state);
   if (action === 'merge') {
     if (hasFlag(rest, '--rebase', '-r') || !hasFlag(rest, '--match-head-commit'))
       state.deny('merge-head');
@@ -339,28 +364,29 @@ function checkPr(rest, action, cwd, state) {
 }
 
 function checkIssue(rest, action, cwd, state) {
-  noteBody(rest, cwd, state);
+  if (GH_ISSUE_WRITES.has(action)) noteBody(rest, cwd, state);
   if (action === 'create' && !hasFlag(rest, '--assignee', '-a')) state.deny('issue-assignee');
 }
 
 function checkApi(rest, action, cwd, state) {
-  state.writes = true;
   const typed = valuesOf(rest, '-F', '--field');
   const fields = [...valuesOf(rest, '-f', '--raw-field'), ...typed];
-  for (const field of typed) {
-    const file = /=@(.+)$/.exec(field)?.[1];
-    if (file) state.files.push([cwd, file]);
-  }
-  state.files.push(...valuesOf(rest, '--input').map((file) => [cwd, file]));
-
   // Without a method, gh sends a GET, or a POST when the request carries fields or an input.
   const named =
     valuesOf(rest, '-X', '--method')[0] ?? rest.find((arg) => /^-X\w/.test(arg))?.slice(2);
   const writes = named
     ? named.toUpperCase() !== 'GET'
     : fields.length > 0 || hasFlag(rest, '--input');
+  if (!writes) return;
+
+  state.writes = true;
+  for (const field of typed) {
+    const file = /=@(.+)$/.exec(field)?.[1];
+    if (file) state.files.push([cwd, file]);
+  }
+  state.files.push(...valuesOf(rest, '--input').map((file) => [cwd, file]));
   const endpoint = positionals(rest, GH_API_WITH_VALUE)[0]?.split('?')[0];
-  if (!writes || endpoint === undefined) return;
+  if (endpoint === undefined) return;
 
   // A tag made as a ref: POST …/git/refs with ref=refs/tags/….
   const tagRef =
@@ -388,7 +414,7 @@ const GH = new Map([
 ]);
 
 function analyze(command, cwd, state) {
-  const { segments, inner } = splitCommand(command.replace(HEREDOC, '\n'));
+  const { segments, inner } = splitCommand(command.replace(HEREDOC, (...match) => match[4]));
   for (const words of segments) {
     state.words.push(...words);
     const start = words.findIndex((word) => !ASSIGNMENT.test(word) && !WRAPPERS.has(word));
@@ -401,13 +427,11 @@ function analyze(command, cwd, state) {
     if (name === 'export' && args.includes('HUSKY=0')) state.deny('no-verify');
     if (name === 'eval') analyze(args.join(' '), cwd, state);
     if (name === 'git') checkGit(args, cwd, state);
-    if (name === 'gh')
-      GH.get(args[0])?.(
-        args.slice(1),
-        args.slice(1).find((arg) => !arg.startsWith('-')),
-        cwd,
-        state,
-      );
+    if (name === 'gh') {
+      // `gh pr -R <repo> merge 1`: --repo's value is neither the group nor the action.
+      const [group, action] = positionals(args, GH_WITH_VALUE);
+      GH.get(group)?.(args.slice(args.indexOf(group) + 1), action, cwd, state);
+    }
     const flag = args.findIndex((arg) => /^-[A-Za-z]*c[A-Za-z]*$/.test(arg));
     if (SHELLS.has(name) && flag !== -1 && flag + 1 < args.length)
       analyze(args[flag + 1], cwd, state);
@@ -428,13 +452,14 @@ export function decide(command, { cwd, branchOf, readText }) {
   };
 
   if (TOKENS.some((token) => token.test(command))) state.deny('token');
-  for (const [, backslash, quote, , body] of command.matchAll(HEREDOC)) {
+  for (const [, backslash, quote, , , body] of command.matchAll(HEREDOC)) {
     if (!backslash && !quote && body.includes('`')) state.deny('heredoc');
   }
   analyze(command, cwd, state);
   if (state.writes) {
     const files = state.files.map(([dir, file]) => readText(resolveIn(dir, file)));
-    if ([command, ...state.words, ...files].some((text) => ATTRIBUTION.test(text))) {
+    const values = state.words.map((word) => word.replace(/^--[\w-]+=/, ''));
+    if ([command, ...state.words, ...values, ...files].some((text) => ATTRIBUTION.test(text))) {
       state.deny('attribution');
     }
   }
