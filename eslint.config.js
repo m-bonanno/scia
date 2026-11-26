@@ -25,6 +25,7 @@ export default tseslint.config(
       '**/release/**',
       '**/coverage/**',
       '**/test-results/**',
+      '.stryker-tmp/**',
       '**/.dev/**',
       '**/.dev-profile/**',
       '.claude/**',
@@ -41,6 +42,7 @@ export default tseslint.config(
           allowDefaultProject: [
             'vitest.config.ts',
             'vitest.workers.ts',
+            'vitest.stryker.config.ts',
             'apps/renderer/vite.config.ts',
             'apps/renderer/vitest.config.ts',
           ],
