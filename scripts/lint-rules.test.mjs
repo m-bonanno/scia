@@ -122,6 +122,8 @@ describe('a hard-coded `\\` separator in a spec (docs/development/testing.md)', 
 
   it.each([
     ["export const p = 'C:\\\\Windows';"],
+    ['export const p = `C:\\\\Windows\\\\`;'],
+    ['export const p = `\\\\\\\\server\\\\share`;'],
     ['export const p = (line: string) => `${line}\\n`;'],
     ["import { join } from 'node:path';\nexport const p = (dir: string) => join(dir, 'file.txt');"],
   ])('leaves a path that is a value, or built with `join`, alone: %s', async (code) => {
@@ -144,6 +146,8 @@ describe('a fixed sleep in a spec (docs/development/testing.md)', () => {
     ["import { setTimeout as sleep } from 'node:timers/promises';\nawait sleep(50);"],
     ["import { setTimeout } from 'timers/promises';\nawait setTimeout(50);"],
     ["import * as timers from 'node:timers/promises';\nawait timers.setTimeout(50);"],
+    ["import { setTimeout as sleep } from 'node:timers/promises';\nexport const pause = sleep;"],
+    ["import * as timers from 'node:timers/promises';\nexport const pause = timers.setTimeout;"],
   ])('flags %s', async (code) => {
     expect(await flagsOf(ENGINE_SPEC, code)).toEqual([SLEEP]);
   });
@@ -172,8 +176,18 @@ describe('a fixed sleep in a spec (docs/development/testing.md)', () => {
   it.each([
     ['await new Promise((resolve) => setTimeout(resolve, 0));'],
     ["import { setTimeout as sleep } from 'node:timers/promises';\nawait sleep(0);"],
+    ["import { setImmediate } from 'node:timers/promises';\nawait setImmediate();"],
+    ["import * as timers from 'node:timers/promises';\nawait timers.setImmediate();"],
+    ['await new Promise((resolve) => setImmediate(resolve));'],
+    [
+      'declare const page: { waitForTimeout(ms: number): Promise<void> };\nawait page.waitForTimeout(0);',
+    ],
     ['declare const held: { close(): void };\nsetTimeout(() => {\n  held.close();\n}, 300);'],
     ['declare const until: (done: () => boolean) => Promise<void>;\nawait until(() => true);'],
+    ['declare const run: (resolve: () => void) => void;\nawait new Promise<void>(run);'],
+    [
+      'declare const ready: boolean;\nawait new Promise<void>((resolve) => {\n  if (ready) resolve();\n});',
+    ],
     ["import { setTimeout } from 'node:timers';\nsetTimeout(() => undefined, 50);"],
   ])('leaves a turn, a timer that acts and a wait for a state alone: %s', async (code) => {
     expect(await flagsOf(ENGINE_SPEC, code)).toEqual([]);
@@ -220,6 +234,8 @@ describe('a folder of a fixed name in the system’s temporary folder (#371)', (
     expect(await flagsOf(E2E_HELPER, code)).toEqual([TEMP_FOLDER]);
     expect(await flagsOf(SCRIPT, code)).toEqual([TEMP_FOLDER]);
     expect(await flagsOf(SCRIPT_SPEC, code)).toEqual([TEMP_FOLDER]);
+    expect(await flagsOf(CORE, code)).toEqual([TEMP_FOLDER]);
+    expect(await flagsOf(COMPONENT, code)).toEqual([TEMP_FOLDER]);
   });
 
   it.each([
@@ -234,6 +250,13 @@ describe('a folder of a fixed name in the system’s temporary folder (#371)', (
     ],
     ["import { tmpdir } from 'node:os';\nexport const f = tmpdir();"],
   ])('leaves a folder made whole by `mkdtemp` alone: %s', async (code) => {
+    expect(await flagsOf(ENGINE, code)).toEqual([]);
+  });
+
+  it('leaves a name built with a value to the review: the rule is the literal name', async () => {
+    const code =
+      "import { tmpdir } from 'node:os';\nimport { join } from 'node:path';\nexport const f = (id: string) => join(tmpdir(), `scia-${id}`);";
+
     expect(await flagsOf(ENGINE, code)).toEqual([]);
   });
 });

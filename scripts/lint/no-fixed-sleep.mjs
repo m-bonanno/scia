@@ -8,6 +8,16 @@ const isTurn = (delay) => delay?.type === 'Literal' && delay.value === 0;
 
 const isCallOf = (node, callee) => node.type === 'CallExpression' && node.callee === callee;
 
+// `timers.setTimeout` of a namespace or a default import; undefined for any other member.
+function setTimeoutOf(namespace) {
+  const { parent } = namespace;
+  return parent.type === 'MemberExpression' &&
+    parent.object === namespace &&
+    parent.property.name === 'setTimeout'
+    ? parent
+    : undefined;
+}
+
 const statementsOf = (executor) =>
   executor.body.type === 'BlockStatement'
     ? executor.body.body.map((statement) => statement.expression)
@@ -43,16 +53,12 @@ export default {
           const specifier = variable.defs[0].node;
           const whole = specifier.type !== 'ImportSpecifier';
           if (!whole && specifier.imported.name !== 'setTimeout') continue;
+          // Every use of the sleep, a call or an alias handed on (`.map(sleep)`), but a turn.
           for (const { identifier } of variable.references) {
-            const { parent } = identifier;
-            const call = whole
-              ? parent.type === 'MemberExpression' &&
-                parent.object === identifier &&
-                parent.property.name === 'setTimeout' &&
-                isCallOf(parent.parent, parent) &&
-                parent.parent
-              : isCallOf(parent, identifier) && parent;
-            if (call && !isTurn(call.arguments[0])) report(call);
+            const sleep = whole ? setTimeoutOf(identifier) : identifier;
+            if (sleep === undefined) continue;
+            const call = isCallOf(sleep.parent, sleep) ? sleep.parent : undefined;
+            if (!isTurn(call?.arguments[0])) report(call ?? sleep);
           }
         }
       },
