@@ -21,6 +21,10 @@ updates:
           ]
       react:
         patterns: ['react', 'react-dom', '@types/react*']
+    # The preset's 10 needs the notes writer of semantic-release 26: they move together (#368).
+    ignore:
+      - dependency-name: conventional-changelog-conventionalcommits
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     target-branch: develop
