@@ -16,7 +16,8 @@ function release(event: KeyboardEvent): void {
 export function swallowHeldEnter(event: { readonly key: string }): void {
   if (event.key !== 'Enter') return;
   armed = true;
-  // A listener already there is not added again.
+  // Heard at the window before anything under it, which cannot keep the key to itself. A listener
+  // already there is not added again.
   window.addEventListener('keydown', swallow, true);
   window.addEventListener('keyup', release, true);
 }

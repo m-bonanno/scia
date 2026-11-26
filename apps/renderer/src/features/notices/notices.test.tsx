@@ -320,6 +320,35 @@ describe('Notices', () => {
     expect(screen.getByText('Three')).toBeInTheDocument();
   });
 
+  it('dismisses one notice for an Enter held elsewhere whose repeats land on its ×', async () => {
+    vi.useRealTimers();
+    render(
+      <>
+        <button
+          type="button"
+          onClick={() => {
+            screen.getAllByRole('button', { name: 'Dismiss' })[0]?.focus();
+          }}
+        >
+          Press
+        </button>
+        <Page told={['One', 'Two', 'Three']} />
+      </>,
+    );
+    for (const text of ['One', 'Two', 'Three']) {
+      fireEvent.click(screen.getByRole('button', { name: `tell ${text}` }));
+    }
+    act(() => {
+      screen.getByRole('button', { name: 'Press' }).focus();
+    });
+
+    await userEvent.keyboard('{Enter>4/}');
+
+    expect(screen.queryByText('One')).not.toBeInTheDocument();
+    expect(screen.getByText('Two')).toBeInTheDocument();
+    expect(screen.getByText('Three')).toBeInTheDocument();
+  });
+
   it('lets a held Tab walk on while the Enter that dismissed a notice is still down', async () => {
     vi.useRealTimers();
     render(<Page told={['One', 'Two', 'Three']} />);
@@ -358,7 +387,39 @@ describe('Notices', () => {
     });
 
     expect(repeat).toBe(false);
-    await userEvent.keyboard('{/Enter}');
+  });
+
+  it('lets go of a held Enter also where a control keeps its release to itself', async () => {
+    vi.useRealTimers();
+    const pressed = vi.fn();
+    render(
+      <>
+        <div
+          onKeyUp={(event) => {
+            event.stopPropagation();
+          }}
+        >
+          <button type="button">Keep</button>
+        </div>
+        <button type="button" onClick={pressed}>
+          Press
+        </button>
+        <Page told={['One']} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'tell One' }));
+    act(() => {
+      screen.getByRole('button', { name: 'Dismiss' }).focus();
+    });
+    await userEvent.keyboard('{Enter>}');
+    fireEvent.keyUp(screen.getByRole('button', { name: 'Keep' }), { key: 'Enter' });
+    act(() => {
+      screen.getByRole('button', { name: 'Press' }).focus();
+    });
+
+    await userEvent.keyboard('{Enter>3/}');
+
+    expect(pressed).toHaveBeenCalledTimes(3);
   });
 
   it('swallows nothing once the Enter that dismissed a notice is let go', async () => {
