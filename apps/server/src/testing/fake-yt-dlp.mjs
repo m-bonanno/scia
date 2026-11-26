@@ -337,20 +337,23 @@ else if (
   // What yt-dlp's second process may do when no tree reaches it (#174): outlive the stop, and
   // keep the folder it unpacked into from being removed. On Windows a process working in a folder
   // does, started by one that ends at once so that taskkill's tree misses it; elsewhere nothing a
-  // process does stops a removal, and a folder that cannot be written stands in for it. The spec
-  // gives it back by what is written beside its file.
+  // process does stops a removal, and a folder that cannot be written stands in for it. What it
+  // writes beside its file says how to let go: the holder to end, or the folder to give back.
+  // `first-to-go` is removed by the first removal tried: a spec sees that it has been tried.
   const unpacked = join(process.env.TEMP ?? '', '_MEI1');
+  writeFileSync(join(process.env.TEMP ?? '', 'first-to-go'), '');
+  const held = `${given}.held`;
   if (process.platform === 'win32') {
-    const code = `const { spawn } = require('node:child_process');
-      const held = spawn(process.execPath, ['-e', 'setTimeout(() => undefined, 30_000)'], { cwd: ${JSON.stringify(unpacked)}, detached: true, stdio: 'ignore' });
-      held.unref();
-      const { existsSync, renameSync, rmSync, writeFileSync } = require('node:fs');
+    // Written by the holder once it runs, in its folder: then the folder is held.
+    const holder = `const { existsSync, renameSync, rmSync, writeFileSync } = require('node:fs');
       const writeWhole = ${String(writeWhole)};
-      writeWhole(process.argv[1], JSON.stringify({ pid: held.pid }));`;
-    spawn(process.execPath, ['-e', code, `${given}.held`], { stdio: 'ignore', detached: true });
+      writeWhole(${JSON.stringify(held)}, JSON.stringify({ pid: process.pid }));
+      setTimeout(() => undefined, 30_000);`;
+    const code = `require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(holder)}], { cwd: ${JSON.stringify(unpacked)}, detached: true, stdio: 'ignore' }).unref();`;
+    spawn(process.execPath, ['-e', code], { stdio: 'ignore', detached: true });
   } else {
     chmodSync(unpacked, 0o555);
-    writeWhole(`${given}.held`, JSON.stringify({ folder: unpacked }));
+    writeWhole(held, JSON.stringify({ folder: unpacked }));
   }
   hang();
 } else fail('[Example] v1: something no rule knows');

@@ -23,7 +23,11 @@ export function recordingLogger(): Logger & { readonly lines: string[] } {
 
 export async function scratchFolder(): Promise<{ path: string; remove(): Promise<void> }> {
   const path = await mkdtemp(join(tmpdir(), 'scia-test-'));
-  return { path, remove: () => rm(path, { recursive: true, force: true }) };
+  // Tried again a while: on Windows a process a spec just ended may let go of it a moment late.
+  return {
+    path,
+    remove: () => rm(path, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }),
+  };
 }
 
 // Makes an existing folder refuse new files, as a read-only share or a system folder does;
@@ -48,14 +52,17 @@ export async function refusingFiles(folder: string): Promise<() => Promise<void>
 // process does stops a removal, and a folder that cannot be written stands in for it.
 export async function holdingFolder(folder: string): Promise<() => Promise<void>> {
   if (process.platform === 'win32') {
-    const holder = spawn(process.execPath, ['-e', 'setTimeout(() => undefined, 30_000)'], {
-      cwd: folder,
-      stdio: 'ignore',
-    });
-    await once(holder, 'spawn');
+    // Started is not yet in its folder: it says so once it runs, and then it holds the folder.
+    const holder = spawn(
+      process.execPath,
+      ['-e', "process.stdout.write('held'); setTimeout(() => undefined, 30_000)"],
+      { cwd: folder, stdio: ['ignore', 'pipe', 'ignore'] },
+    );
+    await once(holder.stdout, 'data');
     return async () => {
+      if (holder.exitCode !== null || holder.signalCode !== null) return;
       const exited = once(holder, 'exit');
-      if (holder.exitCode === null && holder.signalCode === null) holder.kill();
+      holder.kill();
       await exited;
     };
   }

@@ -2,6 +2,7 @@ import { type ChildProcess, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { setTimeout as sleep } from 'node:timers/promises';
 import { AUDIO_CONTAINERS, type AudioContainer, PageFailure, titleOfVideo } from '@scia/core';
 import { mediaSchema } from '@scia/contracts';
 import { z } from 'zod';
@@ -260,6 +261,25 @@ function endTree(child: ChildProcess): void {
 // parent gone — is not waited for.
 const OUTPUT_GRACE_MS = 1000;
 
+// Windows may hold the files of a process that has just closed a moment longer: a run's folder is
+// tried again a while, whole each time. Never by `rm`'s own retries, which it makes again at every
+// level of the tree, and which multiply: a folder held for good took over a minute to give up
+// (#174), and one held deeper, minutes.
+const REMOVAL_TRIES = 10;
+const REMOVAL_BACKOFF_MS = 100;
+
+async function removeRun(folder: string): Promise<void> {
+  for (let tries = 1; ; tries += 1) {
+    try {
+      await rm(folder, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (tries >= REMOVAL_TRIES) throw error;
+      await sleep(tries * REMOVAL_BACKOFF_MS);
+    }
+  }
+}
+
 // The adapter of PageReader over yt-dlp, run once per page (docs/adr/0009).
 export class YtDlp implements PageReader {
   readonly #options: YtDlpOptions;
@@ -365,11 +385,10 @@ export class YtDlp implements PageReader {
     try {
       return await this.#run(url, temp, signal, ask);
     } finally {
-      // After the process has closed, whatever ended it: Windows may hold its files a moment. A
-      // process no tree reached may still run from it (#174): the read keeps what became of it,
-      // and the folder is left to the next start.
+      // After the process has closed, whatever ended it. A process no tree reached may still run
+      // from it (#174): the read keeps what became of it, and the folder is left to the next start.
       try {
-        await rm(temp, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+        await removeRun(temp);
       } catch (error) {
         this.#options.logger.warn('yt_dlp_run_not_removed', { error: describeFailure(error) });
       }

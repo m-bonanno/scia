@@ -245,7 +245,7 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
         if (isRunning(pid)) process.kill(pid);
         await until(() => !isRunning(pid));
       }
-      if (kept !== undefined) await chmod(kept, 0o755);
+      if (kept !== undefined && existsSync(kept)) await chmod(kept, 0o755);
     };
     afterEach(letGo);
 
@@ -258,8 +258,12 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
       );
       await until(() => existsSync(`${givenFile}.held`));
       stopped.abort(new Error('paused'));
+      const stoppedAt = performance.now();
 
       await expect(reading).rejects.toThrow('paused');
+      // Given up within its few seconds of tries: `rm`'s own retries, made again at every level
+      // of the folder, took over a minute on Windows.
+      expect(performance.now() - stoppedAt).toBeLessThan(15_000);
       // The premise: the folder could not be removed.
       expect(await readdir(tempDir)).toHaveLength(1);
       const lines = logger.lines.map((line) => JSON.parse(line) as Record<string, unknown>);
@@ -275,6 +279,26 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
         },
       ]);
       expect(logger.lines.join('\n')).not.toContain(folder.path);
+    }, 30_000);
+
+    it('tries its folder again a while: one let go after the first try is removed, and nothing is logged', async () => {
+      const logger = recordingLogger();
+      const stopped = new AbortController();
+      const reading = reader({ logger }).read(
+        'https://site.example/holds-its-folder',
+        stopped.signal,
+      );
+      await until(() => existsSync(`${givenFile}.held`));
+      const [run] = await readdir(tempDir);
+      stopped.abort(new Error('paused'));
+      // What the first removal could remove is gone: it has been tried, and the folder stayed.
+      await until(() => !existsSync(join(tempDir, run ?? '', 'first-to-go')));
+      expect(existsSync(join(tempDir, run ?? ''))).toBe(true);
+      await letGo();
+
+      await expect(reading).rejects.toThrow('paused');
+      expect(await readdir(tempDir)).toEqual([]);
+      expect(logger.lines).toEqual([]);
     }, 30_000);
   });
 
