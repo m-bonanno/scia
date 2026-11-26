@@ -198,6 +198,35 @@ describe('checkMerge', () => {
     });
   });
 
+  it("reads the diffs as git writes them, whatever the person's colours or diff tool", () => {
+    onBothSides(
+      () => edit(GOTCHAS, '- → Second.\n', '- → Second. #375 again.\n'),
+      () => edit(GOTCHAS, '- → Second.\n', '- → Second.\n- → Develop’s own.\n'),
+    );
+    mergeDevelop();
+    writeFileSync(
+      path.join(box, 'gitconfig'),
+      '[color]\n\tui = always\n\tdiff = always\n[diff]\n\texternal = false\n',
+    );
+
+    expect(checkMerge(repo)).toMatchObject({ outcome: 'changed' });
+  });
+
+  it('refuses a merge of more than two commits', () => {
+    git('checkout', '-q', '-b', 'other', 'develop');
+    edit(GOTCHAS, '- → Third.\n', '- → Third.\n- → Other’s own.\n');
+    commit('other');
+    git('checkout', '-q', 'develop');
+    edit(GOTCHAS, '- → First.\n', '- → First.\n- → Develop’s own.\n');
+    commit('develop');
+    git('checkout', '-q', 'feature');
+    edit(CODE, 'a = 1', 'a = 2');
+    commit('feature');
+    git('merge', '-q', '--no-edit', 'develop', 'other');
+
+    expect(() => checkMerge(repo)).toThrow(/not a merge of two commits/);
+  });
+
   it('refuses a commit that is not a merge', () => {
     edit(CODE, 'a = 1', 'a = 2');
     commit('feature');
