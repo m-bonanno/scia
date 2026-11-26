@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { TYPE_LABEL_NAMES } from './open-pr.mjs';
+import { TYPE_LABEL_NAMES, bodyFileOf } from './open-pr.mjs';
 
 // Scia's guard. Claude Code runs it before each shell command of a session (.claude/settings.json):
 // it refuses what docs/development/ forbids and asks the owner for what is the owner's to do. It reads
@@ -57,7 +57,7 @@ const TOKENS = [
 // A trailer or a line that names the assistant as an author, at the start of a line: a sentence that
 // only describes the rule (in backticks, quotes or a list) is not one.
 const ATTRIBUTION =
-  /^[\t ]*(?:\p{Extended_Pictographic}\uFE0F?[\t ]*)?(?:co-authored-by:[^\n]*(?:\bclaude\b|anthropic\.com)|claude-session:|generated (?:with|by) \[?claude\b)/imu;
+  /^[\t ]*(?:\p{Extended_Pictographic}\uFE0F?[\t ]*)?(?:co-authored-by[\t ]*[:=][^\n]*(?:\bclaude\b|anthropic\.com)|claude-session[\t ]*[:=]|generated (?:with|by) \[?claude\b)/imu;
 
 // Group 1, a backslash, or 2, a quote, makes the delimiter quoted; 3 is the delimiter, 4 the rest of
 // the line that opens the heredoc, which is still a command, and 5 the body.
@@ -68,6 +68,7 @@ const HEREDOC =
 const ANSI_C = { n: '\n', t: '\t', r: '\r', '\\': '\\', "'": "'", '"': '"' };
 const WRAPPERS = new Set(['builtin', 'command', 'env', 'exec', 'nohup', 'sudo', 'time', 'xargs']);
 const SHELLS = new Set(['bash', 'dash', 'ksh', 'sh', 'zsh']);
+const PACKAGE_RUNNERS = new Set(['npm', 'pnpm', 'yarn']);
 const ASSIGNMENT = /^[A-Za-z_][A-Za-z0-9_]*=/;
 
 const GIT_GLOBAL_WITH_VALUE = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace']);
@@ -434,6 +435,15 @@ function analyze(command, cwd, state) {
     if (name === 'export' && args.includes('HUSKY=0')) state.deny('no-verify');
     if (name === 'eval') analyze(args.join(' '), cwd, state);
     if (name === 'git') checkGit(args, cwd, state);
+    const opensPr =
+      (PACKAGE_RUNNERS.has(name) &&
+        ['run', 'run-script'].includes(args[0]) &&
+        args[1] === 'pr:open') ||
+      (name === 'node' && /(^|[/\\])open-pr\.mjs$/.test(args[0]));
+    if (opensPr) {
+      state.writes = true;
+      state.files.push([cwd, bodyFileOf(cwd, state.branches.get(cwd) ?? state.branchOf(cwd))]);
+    }
     if (name === 'gh') {
       // `gh pr -R <repo> merge 1`: --repo's value is neither the group nor the action.
       const [group, action] = positionals(args, GH_WITH_VALUE);
