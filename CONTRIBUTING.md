@@ -31,12 +31,12 @@ Do not paste private links, keys of a service or tokens in an issue: describe th
 
 Every issue carries a status:
 
-| Label               | Means                                                                              |
-| ------------------- | ---------------------------------------------------------------------------------- |
-| `status:triage`     | New: the owner has not read it yet. The forms add it.                              |
-| `status:needs-info` | The owner needs an answer from you: a version, the steps, the kind of link.        |
-| `status:accepted`   | The owner takes it up. The team will build it, and the issue says when it is done. |
-| `status:declined`   | Not taken, with the reason on the issue, which is closed.                          |
+| Label               | Means                                                                                                             |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `status:triage`     | New: the owner has not read it yet. The forms add it, and so does the workflow that lists code scanning's alerts. |
+| `status:needs-info` | The owner needs an answer from you: a version, the steps, the kind of link.                                       |
+| `status:accepted`   | The owner takes it up. The team will build it, and the issue says when it is done.                                |
+| `status:declined`   | Not taken, with the reason on the issue, which is closed.                                                         |
 
 ## Pull requests come from the team
 
