@@ -2,11 +2,19 @@ import { readFileSync } from 'node:fs';
 
 // Stryker copies the repository into `.stryker-tmp/sandbox-*` and mutates the copy. It leaves out
 // what git leaves out: CI runs every spec from a clean clone, so no spec needs it, and in the
-// checkout `.claude/worktrees/` holds whole other copies of the repository.
+// checkout `.claude/worktrees/` holds whole other copies of the repository. Git reads a folder's
+// line with no other slash (`dist/`) at any depth, and Stryker only at the root. A negation is left
+// as it is: Stryker reads `!**/…` as a way back into every folder, `node_modules` among them.
+function asGitMeansIt(pattern) {
+  const isFolderByName = /^[^!/][^/]*\/$/.test(pattern);
+  return isFolderByName ? `**/${pattern}` : pattern;
+}
+
 const ignoredByGit = readFileSync(new URL('.gitignore', import.meta.url), 'utf8')
   .split(/\r?\n/)
   .map((line) => line.trim())
-  .filter((line) => line !== '' && !line.startsWith('#'));
+  .filter((line) => line !== '' && !line.startsWith('#'))
+  .map(asGitMeansIt);
 
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
 export default {

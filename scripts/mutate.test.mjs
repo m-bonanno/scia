@@ -220,13 +220,23 @@ describe("stryker.config.mjs's files", () => {
     expect(args).toEqual(sources);
   });
 
-  it('copies into the sandbox what git tracks: the lines of .gitignore, without its comments', () => {
-    expect(config.ignorePatterns).toContain('.claude/worktrees/');
-    expect(config.ignorePatterns).toContain('node_modules/');
-    expect(config.ignorePatterns).toContain('!.env.example');
-    expect(
-      config.ignorePatterns.filter((pattern) => pattern === '' || pattern.startsWith('#')),
-    ).toEqual([]);
+  it('leaves out of the sandbox what .gitignore leaves out, at the depth git reads each line', () => {
+    expect(config.ignorePatterns).toEqual(
+      expect.arrayContaining([
+        '.claude/worktrees/',
+        'apps/desktop/tools/',
+        '.vscode/*',
+        '!.vscode/extensions.json',
+        '**/dist/',
+        '**/node_modules/',
+        '*.log',
+        '!.env.example',
+      ]),
+    );
+    expect(config.ignorePatterns.filter((pattern) => pattern.startsWith('!**'))).toEqual([]);
+    expect(config.ignorePatterns.filter((pattern) => /^!?(\*\*\/)?(#|$)/.test(pattern))).toEqual(
+      [],
+    );
   });
 });
 
