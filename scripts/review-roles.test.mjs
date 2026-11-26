@@ -6,23 +6,26 @@ const rolesOf = (review) => review.roles.map(({ role }) => role);
 
 describe('reviewOf', () => {
   it('makes heavy, at any size, download and state code, the desktop, the manifest, the release config and the workflows', () => {
-    const heavy = [
-      'apps/server/src/download-task.ts',
-      'apps/server/src/state-store.ts',
-      'packages/core/src/segments.ts',
-      'packages/contracts/src/settings.ts',
-      'apps/desktop/src/main.ts',
-      'apps/desktop/src/preload.cts',
-      'apps/extension/static/manifest.json',
-      '.releaserc.json',
-      'apps/desktop/electron-builder.yml',
-      'apps/desktop/build/installer.nsh',
-      '.github/workflows/gates.yml',
-    ];
+    const heavy = {
+      'apps/server/src/download-task.ts': 'download and state code',
+      'apps/server/src/state-store.ts': 'download and state code',
+      'packages/core/src/segments.ts': 'download and state code',
+      'packages/contracts/src/settings.ts': 'download and state code',
+      'apps/desktop/src/main.ts': "the desktop's main or preload",
+      'apps/desktop/src/preload.cts': "the desktop's main or preload",
+      'apps/extension/static/manifest.json': "the extension's manifest",
+      '.releaserc.json': 'the release config',
+      'apps/desktop/electron-builder.yml': 'the release config',
+      'apps/desktop/build/installer.nsh': 'the release config',
+      '.github/workflows/gates.yml': 'a workflow',
+    };
 
-    for (const path of heavy) {
+    for (const [path, what] of Object.entries(heavy)) {
       for (const title of ['fix: x', 'chore: x', 'ci: x']) {
-        expect(reviewOf({ title, files: [file(path)] }).tier, `${title} ${path}`).toBe('heavy');
+        expect(reviewOf({ title, files: [file(path)] }), `${title} ${path}`).toMatchObject({
+          tier: 'heavy',
+          why: `${path} is ${what}`,
+        });
       }
     }
   });
@@ -92,8 +95,18 @@ describe('reviewOf', () => {
     ];
 
     for (const path of runtime) {
-      expect(reviewOf({ title: 'chore: x', files: [file(path)] }).tier, path).toBe('standard');
+      const files = [file(path), file('scripts/gates.mjs'), file('docs/x.md')];
+
+      expect(reviewOf({ title: 'chore: x', files }).tier, path).toBe('standard');
+      expect(reviewOf({ title: 'fix: x', files }).tier, path).toBe('standard');
     }
+  });
+
+  it('reads a title with no type as neither a chore nor a feat', () => {
+    const review = reviewOf({ title: '', files: [file('scripts/gates.mjs')] });
+
+    expect(review.tier).toBe('standard');
+    expect(rolesOf(review)).toEqual(['tech-lead']);
   });
 
   it('leaves a standard PR of 20 lines or fewer to the tech lead, who may call its areas in', () => {
@@ -142,16 +155,23 @@ describe('reviewOf', () => {
 
   it('weighs the path a renamed file leaves as well as the one it takes', () => {
     const files = [
-      { path: 'docs/notes.md', previous: 'apps/desktop/src/tray.ts', additions: 0, deletions: 0 },
+      { path: 'docs/notes.md', previous: 'apps/desktop/src/tray.ts', additions: 3, deletions: 2 },
     ];
 
-    expect(reviewOf({ title: 'chore: x', files }).tier).toBe('heavy');
+    expect(reviewOf({ title: 'chore: x', files })).toMatchObject({
+      tier: 'heavy',
+      lines: 5,
+      roles: [
+        { role: 'tech-lead', why: 'always' },
+        { role: 'backend-engineer', why: 'apps/desktop/src/tray.ts' },
+      ],
+    });
   });
 
   it('makes a release into main heavy, its product manager included', () => {
     const review = reviewOf({ title: 'release: v1.0.0', base: 'main', files: [file('docs/x.md')] });
 
-    expect(review.tier).toBe('heavy');
+    expect(review).toMatchObject({ tier: 'heavy', why: 'a release into main' });
     expect(review.roles).toContainEqual({ role: 'product-manager', why: 'a release into main' });
   });
 
@@ -200,11 +220,24 @@ describe('reviewOf', () => {
     ]);
   });
 
+  it('calls in no role the session already added', () => {
+    const review = reviewOf({
+      title: 'fix: x',
+      files: [file('apps/renderer/src/app/app.tsx')],
+      add: ['frontend-engineer'],
+    });
+
+    expect(rolesOf(review)).toEqual(['tech-lead', 'frontend-engineer']);
+    expect(review.callIn).toEqual([
+      { role: 'product-designer', why: 'apps/renderer/src/app/app.tsx' },
+    ]);
+  });
+
   it('refuses a role the team does not have', () => {
     expect(() =>
-      reviewOf({ title: 'fix: x', files: [file('README.md')], add: ['designer'] }),
+      reviewOf({ title: 'fix: x', files: [file('README.md')], add: ['designer', 'qa'] }),
     ).toThrow(
-      'No role designer. The roles: tech-lead, backend-engineer, frontend-engineer, product-designer, product-manager.',
+      'No role designer, qa. The roles: tech-lead, backend-engineer, frontend-engineer, product-designer, product-manager.',
     );
   });
 });

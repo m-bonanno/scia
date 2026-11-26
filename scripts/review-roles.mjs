@@ -80,9 +80,10 @@ function tierOf({ release, type, files }) {
   return { tier: 'standard' };
 }
 
+// A role named twice keeps its first reason.
 const inOrder = (roles) => ROLES.flatMap((name) => roles.find(({ role }) => role === name) ?? []);
 
-export function reviewOf({ title, base = 'develop', files, add = [] }) {
+export function reviewOf({ title, base, files, add = [] }) {
   const unknown = add.filter((role) => !ROLES.includes(role));
   if (unknown.length > 0)
     throw new Error(`No role ${unknown.join(', ')}. The roles: ${ROLES.join(', ')}.`);
@@ -92,7 +93,7 @@ export function reviewOf({ title, base = 'develop', files, add = [] }) {
   const { tier, why } = tierOf({ release, type, files });
   const weighed = files.filter((file) => pathsOf(file).some((path) => !isLight(path)));
   const lines = weighed.reduce((sum, file) => sum + file.additions + file.deletions, 0);
-  const weighedPaths = weighed.flatMap(pathsOf).filter((path) => !isLight(path));
+  const weighedPaths = files.flatMap(pathsOf).filter((path) => !isLight(path));
   const byArea = AREAS.flatMap(({ role, holds }) => {
     const path = weighedPaths.find(holds);
     return path ? [{ role, why: path }] : [];
@@ -105,15 +106,13 @@ export function reviewOf({ title, base = 'develop', files, add = [] }) {
       : release
         ? 'a release into main'
         : files.flatMap(pathsOf).find(PRODUCT);
-  const roles = [
+  // No path of a light PR is in an area: every area is runtime.
+  const all = inOrder([
     { role: 'tech-lead', why: 'always' },
-    ...(tier === 'light' || few ? [] : byArea),
+    ...(few ? [] : byArea),
     ...(product ? [{ role: 'product-manager', why: product }] : []),
-  ];
-  const added = add
-    .filter((role) => !roles.some((taken) => taken.role === role))
-    .map((role) => ({ role, why: 'added by hand' }));
-  const all = inOrder([...roles, ...added]);
+    ...add.map((role) => ({ role, why: 'added by hand' })),
+  ]);
 
   const counted = `${lines} lines outside docs, .claude/ and specs`;
   return {
