@@ -386,6 +386,58 @@ describe('Notices', () => {
     expect(pressed).toHaveBeenCalledTimes(3);
   });
 
+  it('swallows nothing after a notice dismissed with Space', async () => {
+    vi.useRealTimers();
+    const pressed = vi.fn();
+    render(
+      <>
+        <button type="button" onClick={pressed}>
+          Press
+        </button>
+        <Page told={['One']} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'tell One' }));
+    act(() => {
+      screen.getByRole('button', { name: 'Dismiss' }).focus();
+    });
+    await userEvent.keyboard(' ');
+    expect(screen.queryByText('One')).not.toBeInTheDocument();
+    act(() => {
+      screen.getByRole('button', { name: 'Press' }).focus();
+    });
+
+    await userEvent.keyboard('{Enter>3/}');
+
+    expect(pressed).toHaveBeenCalledTimes(3);
+  });
+
+  it('swallows no fresh press of Enter after one whose release never came', async () => {
+    vi.useRealTimers();
+    const pressed = vi.fn();
+    render(
+      <>
+        <button type="button" onClick={pressed}>
+          Press
+        </button>
+        <Page told={['One']} />
+      </>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'tell One' }));
+    act(() => {
+      screen.getByRole('button', { name: 'Dismiss' }).focus();
+    });
+    // Held as the window lost the focus (Alt+Tab): the key is let go in another window.
+    await userEvent.keyboard('{Enter>}');
+    act(() => {
+      screen.getByRole('button', { name: 'Press' }).focus();
+    });
+
+    await userEvent.keyboard('{Enter}');
+
+    expect(pressed).toHaveBeenCalledOnce();
+  });
+
   it('hands the focus of a middle notice, dismissed, to the one after it', () => {
     render(<Page told={['One', 'Two', 'Three']} />);
     for (const text of ['One', 'Two', 'Three']) {

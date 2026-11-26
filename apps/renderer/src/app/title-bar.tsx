@@ -58,10 +58,8 @@ export function TitleBar({
             className="no-drag aria-expanded:bg-tonal"
             aria-expanded={magnets.open}
             aria-controls={magnets.open ? magnets.panelId : undefined}
-            onKeyDown={(event) => {
-              // Pressed, it moves the focus into the panel or back: a held Enter would press on.
-              if (event.key === 'Enter' && !event.repeat) swallowHeldEnter();
-            }}
+            // Pressed, it moves the focus into the panel or back: a held Enter would press on.
+            onKeyDown={swallowHeldEnter}
             onClick={magnets.onToggle}
           >
             <Magnet size={16} aria-hidden="true" />
