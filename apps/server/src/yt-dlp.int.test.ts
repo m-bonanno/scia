@@ -319,6 +319,9 @@ describe('YtDlp against a process that answers as yt-dlp does', () => {
       // What the first removal could remove is gone: it has been tried, and the folder stayed.
       await until(() => !existsSync(join(tempDir, run ?? '', 'first-to-go')));
       expect(existsSync(join(tempDir, run ?? ''))).toBe(true);
+      // The case itself: held a moment past the first try, as Windows may hold a closed file. Tries
+      // made with no wait between them would all be spent by then.
+      await sleep(200);
       await letGo();
 
       await expect(reading).rejects.toThrow('paused');
