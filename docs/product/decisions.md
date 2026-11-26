@@ -181,6 +181,12 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 
 - #382, proposal 9 of the owner's retrospective of the flow, approved and then widened by the owner: **a Claude session in Scia is guarded by Scia's own hook, which carries the owner's other project's guards adapted to Scia's rules** (the list is the comment of 26 November on #382). `.claude/settings.json` runs `scripts/claude-guard.mjs` before each of a session's shell commands ([`git-flow.md`](../development/git-flow.md)). Once it is merged, the owner moves the other project's guard out of the global settings by hand. The same day the owner said that **an issue is assigned to whoever opens it**: the owner for one the team opens, its author for one opened from outside (`git-flow.md`, "A pull request").
 
+- #377, proposal 4 of the owner's retrospective of the flow, approved: **a PR's reviewers are chosen by its risk, not its size**, changing the owner's decision of 19 November 2026 on #18, that a PR of documentation only or of a few lines is the tech lead's alone. **Heavy at any size** — download and state code, the desktop's main and preload, the extension's manifest, the release config, the workflows — every role of its areas. **Light** — docs, `.claude/`, specs only, or a `chore` or `ci` that touches no runtime path — the tech lead alone, in one pass. **The product manager** reviews a `feat`, a change to the roadmap, the vision or the README, and an issue that carries the owner's acceptance points. `npm run review:roles` prints a PR's tier and roles ([`review-flow.md`](../development/review-flow.md), "The tier of a PR").
+
+- #379, proposal 6 of the owner's retrospective of the flow, approved: **a finding inside a PR's scope that takes 10 lines or fewer is fixed in the PR**; any other goes into one rolling `follow-up` issue per area, as a checkbox with its source, and a batch PR closes an area's issue once it holds about five points ([`review-flow.md`](../development/review-flow.md), "Rules").
+
+- #380, proposal 7 of the owner's retrospective of the flow, approved: **the tech lead reads CI's run on the head in the first round too**, instead of running the gates on the owner's machine, extending #187 ([`review-flow.md`](../development/review-flow.md), "Rules"). CI's jobs chosen by a PR's paths, and a workflow for the runs that show a hold failing, come in a later PR of #380.
+
 ## Undated in the roadmap
 
 The roadmap gave these without a date; the issue holds it.
