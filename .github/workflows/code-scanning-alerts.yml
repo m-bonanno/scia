@@ -1,0 +1,37 @@
+name: Code scanning alerts
+
+# CodeQL fails a pull request only for the alerts it brings: an alert already on develop blocks
+# nothing, and six sat there for two days, seen by nobody (#383). Each week this lists the alerts
+# open on develop in one issue: it opens the issue when there is one at least, edits it when they
+# change, and closes it when none is left (scripts/code-scanning-issue.mjs). develop is scanned at
+# every push, and GitHub names no hour for its own weekly scan: the log says which scan was read.
+on:
+  schedule:
+    - cron: '23 6 * * 1'
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: code-scanning-alerts
+  cancel-in-progress: false
+
+jobs:
+  alerts:
+    name: The open alerts of develop, in one issue
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      security-events: read
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      OWNER: ${{ github.repository_owner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Open, edit or close the issue
+        run: node scripts/code-scanning-issue.mjs

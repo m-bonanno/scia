@@ -1,4 +1,5 @@
-import { fileNameFromUrl } from './file-name.ts';
+import { fileNameFromUrl, WINDOWS_DROPS_AT_THE_END } from './file-name.ts';
+import { withoutTrailing } from './text.ts';
 
 export const FileKind = {
   Video: 'video',
@@ -43,7 +44,7 @@ const KIND_OF_EXTENSION = new Map<string, FileKind>(
 // ("holiday.jpg.scr", "setup.tar.exe", a bare ".cmd"), and Windows first drops the dots and
 // spaces a name ends with. A host chooses the name: the kind is read as the system will.
 function lastExtension(name: string): string {
-  const read = name.replace(/[. ]+$/, '');
+  const read = withoutTrailing(name, WINDOWS_DROPS_AT_THE_END);
   const dot = read.lastIndexOf('.');
   return dot < 0 ? '' : read.slice(dot + 1).toLowerCase();
 }

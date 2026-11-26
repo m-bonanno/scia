@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { capturableMediaKind, FileKind, fileKindOfName, MIN_MEDIA_BYTES } from './file-kind.ts';
 
+// A name a host chooses (#383). Read again from each character of the run, it takes seconds; read
+// once, a few milliseconds.
+const LONG_RUN = 100_000;
+const BOUND_MS = 1000;
+
 describe('fileKindOfName', () => {
   it('tells the kind from the extension, whatever its case', () => {
     expect(fileKindOfName('Film.MKV')).toBe(FileKind.Video);
@@ -41,6 +46,12 @@ describe('fileKindOfName', () => {
     expect(fileKindOfName('setup.exe. .')).toBe(FileKind.Program);
     expect(fileKindOfName('backup.tar.xz')).toBe(FileKind.Archive);
     expect(fileKindOfName('a-very-long-extension.exeexeexeexe')).toBe(FileKind.Other);
+  });
+
+  it('reads a long run of spaces inside a name once, not again from each of them', () => {
+    const started = Date.now();
+    expect(fileKindOfName(`a${' '.repeat(LONG_RUN)}x`)).toBe(FileKind.Other);
+    expect(Date.now() - started).toBeLessThan(BOUND_MS);
   });
 
   it('answers "other" for what it does not know', () => {
