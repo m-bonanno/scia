@@ -181,6 +181,8 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 
 - #382, proposal 9 of the owner's retrospective of the flow, approved and then widened by the owner: **a Claude session in Scia is guarded by Scia's own hook, which carries the owner's other project's guards adapted to Scia's rules** (the list is the comment of 26 November on #382). `.claude/settings.json` runs `scripts/claude-guard.mjs` before each of a session's shell commands ([`git-flow.md`](../development/git-flow.md)). Once it is merged, the owner moves the other project's guard out of the global settings by hand. The same day the owner said that **an issue is assigned to whoever opens it**: the owner for one the team opens, its author for one opened from outside (`git-flow.md`, "A pull request").
 
+- #378, proposal 5 of the owner's retrospective of the flow, approved: **the rules a tool can check are lint rules**, each held by a spec (`scripts/lint-rules.test.mjs`): raw colours, `dark:` and `toFixed` in the renderer; fixed sleeps and hard-coded `\` separators in specs; a folder of a fixed name in the system's temporary folder. **The gotchas are split by area**: `.claude/gotchas/<area>.md`, with `.claude/gotchas.md` keeping the general entries and the index of the areas; each entry is one or two sentences, and its story stays in the issues it names — in place of the archive of stories #188 chose on 21 November 2026. The gotchas have no `union` driver (#384), and the roles' and the gotchas' pointers to `npm run mutate` are #387, after this issue.
+
 ## Undated in the roadmap
 
 The roadmap gave these without a date; the issue holds it.
