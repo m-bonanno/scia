@@ -47,6 +47,7 @@ async function heldWhileWritten(
   try {
     await write();
     await until(async () => (await readdir(folder)).includes(`${name}.tmp`));
+    // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: the file held a while
     await sleep(300);
   } finally {
     await reader.close();

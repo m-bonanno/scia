@@ -54,12 +54,12 @@ A new job of the gates becomes a required check of `develop` and `main` only onc
 - The name of a spec is the rule it holds: `'never overwrites a file already in the folder'`.
 - One behaviour per spec; arrange, act, assert, with a blank line between.
 - Integration specs compare **bytes** (`Buffer.compare`), not counters that could agree by accident.
-- No fixed sleeps. Wait for a state with `until(() => …)` (`apps/server/src/testing/scratch.ts`); inject delays (`retryDelayMs`). A wait that is the case itself is not a wait for an outcome — a reader that stays away from a host, the stretch over which a rate is measured — and says so where it stands.
+- No fixed sleeps. Wait for a state with `until(() => …)` (`apps/server/src/testing/scratch.ts`); inject delays (`retryDelayMs`). A wait that is the case itself is not a wait for an outcome — a reader that stays away from a host, the stretch over which a rate is measured — and says so where it stands, in the disable comment of the lint rule that holds this one: `// eslint-disable-next-line scia/no-fixed-sleep -- the case itself: <why>` (`scripts/lint/no-fixed-sleep.mjs`).
 - An integration spec has 15 s before Vitest gives it up (`vitest.config.ts`), not the default 5: real hosts, processes and disks wait on a machine shared by several sessions. What a spec asserts of time it bounds itself (`expect(took).toBeLessThan(…)`), never through Vitest's limit.
-- Each spec gets its own temp folder and its own host (`startRangeServer`), and removes them.
+- Each spec gets its own temp folder and its own host (`startRangeServer`), and removes them. A temp folder is made whole by `mkdtemp`: lint refuses `join(tmpdir(), '<literal>')`, a name anyone can make first.
 - A host that misbehaves is an option of `startRangeServer` (`drops`, `ranges: false`, `status`, `announcesLength: false`), not a mock of `http`.
 - A service Scia connects to is a local host as well: `startAllDebridServer` (`apps/server/src/testing/alldebrid-server.ts`) answers as AllDebrid's documentation says, and refuses or misbehaves when told to. Every key in a spec is made up; no spec and no run uses a real one.
-- Never hardcode a Windows path separator in a spec: build paths with `path.join`. CI runs every spec on Linux and on Windows.
+- Never hardcode a Windows path separator in a spec: build paths with `path.join`. CI runs every spec on Linux and on Windows. Lint refuses a `\` beside a template's `${…}` or a `+`, or given to `join` and `split`; a Windows path that is a value, such as a setting's folder, is left alone.
 
 ## E2E
 

@@ -1,5 +1,4 @@
 import { mkdir } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Locator, Page } from 'playwright-core';
 import { until } from './scia.ts';
@@ -95,9 +94,11 @@ export async function tap(page: Page, x: number, y: number): Promise<void> {
   await protocol.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
 }
 
-// Where the captures of a run go: the E2E job uploads the folder it names (gates.yml).
+// Where the captures of a run go: the E2E job uploads the folder it names (gates.yml). A local run
+// keeps them in the checkout, ignored by git, rather than in a temporary folder of a fixed name.
 export async function captureTo(name: string): Promise<string> {
-  const folder = process.env.SCIA_CAPTURES ?? join(tmpdir(), 'scia-captures');
+  const folder =
+    process.env.SCIA_CAPTURES ?? join(import.meta.dirname, '..', 'test-results', 'captures');
   await mkdir(folder, { recursive: true });
   return join(folder, name);
 }

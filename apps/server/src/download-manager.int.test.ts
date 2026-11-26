@@ -980,6 +980,7 @@ describe('DownloadManager', () => {
       const begun = (syncsBegun += 1);
       const before = existsSync(partPath) ? readFileSync(partPath) : undefined;
       // A slow disk: the connections write on while the sync runs.
+      // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: a slow disk
       await new Promise((resolve) => setTimeout(resolve, 150));
       await datasync.call(this);
       if (begun > coveredFrom) {
@@ -1114,6 +1115,7 @@ describe('DownloadManager', () => {
     ) {
       syncing += 1;
       try {
+        // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: a slow sync
         await new Promise((resolve) => setTimeout(resolve, 300));
         await sync.call(this);
       } finally {
@@ -1128,6 +1130,7 @@ describe('DownloadManager', () => {
       checkpointMs: 5,
       // The mark and the rename that end a run, as long as Windows' stream and an antivirus may
       // make them: a checkpoint's sync ends while the file is put in place.
+      // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: a slow mark and rename
       markDownloaded: () => new Promise((resolve) => setTimeout(resolve, 250)),
     });
     const [added] = downloads.add({ urls: [url] });

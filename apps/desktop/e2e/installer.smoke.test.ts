@@ -47,6 +47,7 @@ const uninstallKey = async () => {
   return key;
 };
 
+// eslint-disable-next-line no-restricted-syntax -- a registry key: a spec for Windows only
 const appKey = (uninstall: string) => `HKCU\\Software\\${uninstall.split('\\').at(-1)!}`;
 
 const displayVersion = async (key: string) =>

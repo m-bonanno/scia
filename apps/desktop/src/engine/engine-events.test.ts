@@ -364,6 +364,7 @@ describe('followDownloads', () => {
 
     // Twice the bound and more, a comment every seventh of it: a busy machine has room.
     for (let comments = 0; comments < 15; comments += 1) {
+      // eslint-disable-next-line scia/no-fixed-sleep -- the case itself: comments at a pace
       await new Promise((resolve) => setTimeout(resolve, 60));
       stream.say(': idle\n\n');
     }
