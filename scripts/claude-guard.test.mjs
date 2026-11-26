@@ -343,10 +343,6 @@ describe('tags and releases', () => {
       'git push origin v1.10.0',
       'git push origin v1.0.0:release-copy',
       'git push origin refs/tags/v1.0.0-beta.56',
-      'git push --delete origin v1.0.0-beta.5',
-      'git tag -d v1.0.0',
-      'git tag --delete v1.0.0',
-      'gh api -X DELETE repos/m-bonanno/scia/git/refs/tags/v1.0.0',
       'gh api -X POST repos/m-bonanno/scia/git/tags -f tag=v9.9.9',
       'gh api -X POST repos/m-bonanno/scia/git/refs -f ref=refs/tags/v9.9.9 -f sha=abc',
       'gh api -X PATCH repos/m-bonanno/scia/releases/123 -f draft=false',
@@ -357,6 +353,21 @@ describe('tags and releases', () => {
     for (const action of ['create', 'edit', 'delete', 'upload', 'delete-asset']) {
       expectDeny('tags', `gh release ${action} v1.0.0`);
     }
+  });
+
+  it("asks the owner before a tag is deleted: only one semantic-release pushed and never released, on the owner's word", () => {
+    for (const command of [
+      'git push --delete origin v1.0.0-beta.57',
+      'git push -d origin v1.0.0-beta.57',
+      'git push origin :refs/tags/v1.0.0-beta.57',
+      'git push origin --delete refs/tags/v1.0.0-beta.57',
+      'git tag -d v1.0.0-beta.57',
+      'git tag --delete v1.0.0-beta.57',
+      'gh api -X DELETE repos/m-bonanno/scia/git/refs/tags/v1.0.0-beta.57',
+    ]) {
+      expectAsk('owner-tag', command);
+    }
+    expectDeny('tags', 'gh api -X PATCH repos/m-bonanno/scia/git/refs/tags/v1.0.0 -f sha=abc');
   });
 
   it('allows reading them, and a branch whose name only starts like one', () => {

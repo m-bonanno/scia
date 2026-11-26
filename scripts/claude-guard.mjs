@@ -16,6 +16,8 @@ const REASONS = {
   'no-verify':
     'it skips the git hooks (husky): commitlint and the protected-branch guard. Fix what the hook refuses instead.',
   tags: 'semantic-release creates the tags and the releases, never a hand (release-flow.md).',
+  'owner-tag':
+    'a tag is deleted by hand only when semantic-release pushed it and never released it, on the owner\'s word (release-flow.md, "A tag pushed without its notes").',
   'merge-head':
     'merge only the head the team approved, squashed: gh pr merge <n> --squash --admin --match-head-commit <head> (review-flow.md, "Merging").',
   'owner-merge':
@@ -282,7 +284,7 @@ function checkGit(args, cwd, state) {
     state.branches.set(repo, created[0] ?? plain);
   }
   if (sub === 'push') checkPush(rest, branch, state);
-  if (sub === 'tag' && hasFlag(rest, '-d', '--delete')) state.deny('tags');
+  if (sub === 'tag' && hasFlag(rest, '-d', '--delete')) state.ask('owner-tag');
   const moves = hasFlag(
     rest,
     '-d',
@@ -329,10 +331,13 @@ function checkPush(rest, branch, state) {
   if (hasFlag(rest, '--tags', '--follow-tags')) state.deny('tags');
   const refspecs = positionals(rest, GIT_PUSH_WITH_VALUE).slice(1);
   if (refspecs.length === 0 && isProtected(branch)) state.deny('protected-branch');
+  const deletes = hasFlag(rest, '--delete', '-d');
   for (const refspec of refspecs) {
     const plain = refspec.replace(/^\+/, '');
     const [source, target = source] = plain.split(':');
-    if (isTag(source) || isTag(target)) state.deny('tags');
+    // A push that deletes a tag (--delete, or an empty source) is the owner's word; any other is a tag by hand.
+    if (isTag(target) && (deletes || source === '')) state.ask('owner-tag');
+    else if (isTag(source) || isTag(target)) state.deny('tags');
     if (isProtected(target === 'HEAD' ? branch : target)) state.deny('protected-branch');
   }
 }
@@ -391,7 +396,9 @@ function checkApi(rest, action, cwd, state) {
   // A tag made as a ref: POST …/git/refs with ref=refs/tags/….
   const tagRef =
     /\/git\/refs\/?$/.test(endpoint) && fields.some((field) => field.includes('refs/tags/'));
-  if (TAG_ENDPOINT.test(endpoint) || tagRef) state.deny('tags');
+  if (named?.toUpperCase() === 'DELETE' && /\/git\/refs\/tags\//.test(endpoint))
+    state.ask('owner-tag');
+  else if (TAG_ENDPOINT.test(endpoint) || tagRef) state.deny('tags');
   if (SETTINGS_ENDPOINT.test(endpoint.replace(/^\//, ''))) state.ask('owner-settings');
 }
 
