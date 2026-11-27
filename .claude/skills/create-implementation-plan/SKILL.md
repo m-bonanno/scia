@@ -1,0 +1,230 @@
+---
+name: create-implementation-plan
+description: Turn a refined requirements document into a structured implementation PLAN.md a fresh session can execute. Planning only — decides the "how", not the "what". Invoke manually only.
+license: MIT
+metadata:
+  version: "1.24"
+---
+
+# Create Implementation Plan
+
+## In Scia
+
+The rules of [`../README.md`](../README.md), "In Scia: rules for every skill here", and the points below win over this file wherever they differ; `CLAUDE.md` and its sub-files win over both.
+
+- **Test first.** Each step that changes behaviour writes its failing test first, in every layer the change touches (`CLAUDE.md`, "Test-Driven Development"), and its How says which test is seen failing before the code is written. "Code before its tests" in step 3 does not apply. A runtime change carries an E2E spec where the suite can hold it, and names the manual run `testing.md` asks for where it cannot.
+- An open PR or a recently active branch that touches the plan's files is read with `gh pr list` and `git log origin/<branch>`, read-only.
+- Every group of work that will be its own PR closes an issue: the plan names it, or says that one is opened first, as `git-flow.md` says.
+- The validation in the "Execute the plan" hand-off is `SCIA_TEST_WORKERS=2 npm run gates`, and the session that executes commits on the issue's branch instead of "report, never commit".
+
+**Planning only** — no code changes, no implementing. You produce one document: an implementation
+plan that is the contract for a later execution session.
+
+This is the **"how", not the "what"**. The "what" was settled in an earlier refinement step and
+lives in the requirements document you're given; do not redefine scope. But you **must flag** any
+gap, ambiguity, or inconsistency you find in the requirements — surface it, never paper over it.
+
+## Golden rule
+
+**Never guess — ask.** With one limit: anything resolvable by reading the codebase, resolve by
+reading the codebase; only questions the code cannot settle go to the user.
+
+## Steps
+
+Your task is to **produce the implementation plan**. The steps below build toward it; grilling the
+user — interviewing relentlessly to resolve anything the code can't settle — is woven through the
+design, not a separate phase that runs before planning starts.
+
+1. **Read the requirements document** the user references (e.g. a `*.REQUIREMENTS.md`). If the path
+   is ambiguous, ask. Its Open questions are forks to grill in step 3, each with its tentative
+   answer as the recommendation; none stays open in the plan. Its Overrides carry over into part
+   2's Overrides.
+
+2. **Verify against the actual codebase.** Open the files the requirements cite and confirm the
+   prior-art references still hold; note anything that has shifted since the requirements were
+   written. The requirements may also carry verified codebase facts — use any that are there to
+   save re-discovery work, aware the code may have moved meanwhile (a pinned commit makes the
+   check cheap: `git diff <commit>..HEAD -- <cited paths>`). If the requirements gate
+   implementation on missing data or upstream work, verify that gate independently — stale gating
+   claims are a common failure mode and easily inflate into a plan's first step when the data is
+   in fact already addressable. Check, read-only, which open PRs and recently active branches
+   touch the files the plan will edit (those the requirements cite, and again any step 3 adds);
+   each overlap goes in the How of the step editing that file, with how that step keeps the later
+   rebase small.
+
+3. **Work out the approach.** This is the core of the task: design the "how" — what existing code to
+   reuse, what to introduce, where each change goes, and the order of operations that avoids broken
+   intermediate states (data model before its consumers, code before its tests, a bug's regression
+   test aside: see the Plan file's Steps). Track dependencies between steps. Working this out
+   surfaces the **decision tree**: the forks where more than one reasonable approach exists.
+   Typical forks to design through (and grill on when the code can't settle them): whether to
+   refactor existing code to reuse it or build anew; which API or interface to call; which unit
+   tests to add; code style, file names, and folder structure.
+
+   **Docs generally outrank prior art.** A mirrored analogue doesn't override a documented rule,
+   and a rule's rationale doesn't license exceptions to it — existing code may predate the rule.
+   When docs and prior art conflict and you're unsure how to resolve it, ask the user; a deviation
+   the user approves is recorded in the plan's Overrides section, so the execution session knows
+   it's deliberate.
+
+   **Prior art models shape, not content.** Its settings fit its own runtime, tooling and purpose
+   and may predate the current ones, so before a step reuses a file, check each setting against
+   the new component's target and prescribe only what fits, citing the file for shape; "copy X
+   verbatim" is a decision settled line by line, never by the file's existence. A technical claim
+   a step rests on ("X needs exactly Y") is verified against a doc, a compile or a test, never
+   read off what the prior art happens to do. A command a step tells the session to run is such a
+   claim. Run it first, as written, from the directory the step names, on today's code, when it
+   is cheap and safe: it only reads or validates (a lint, a test, a build), writes nothing shared
+   (a database, a service), and is small (one package or module, expected to finish in a minute or
+   two; every package in a repo, or a large project as a whole, is too much). One that fails for a
+   cause the planned changes would not fix (an unrelated module that fails to build, missing test
+   data) is rescoped in that step's How with its reason, never left for the session to discover. One
+   that changes state (a generator, a migration, a deploy), costs more than that, or runs on
+   something an earlier step creates is never run while planning: check only that it resolves (the
+   tool is installed, the flag exists).
+
+   **Deletions tend to cascade.** When a step deletes code, look for what that code was the last
+   user of (a module, helper, template, constant, package) by searching for each one's other users,
+   and consider naming it for deletion too, repeating for every piece newly orphaned; one the
+   search cannot clear (an export, a name resolved at runtime) is a fork to grill. Each test
+   deleted with its code gets a verdict by behaviour: the part that checks something the surviving
+   code still does moves to a test the step names in its Where, and only the rest is deleted. A
+   step that moves or renames code searches docs, agent instructions, CI workflows, build scripts
+   and config for the old name in every form it is written (case and separator variants) and
+   lists every hit in its Where.
+
+   **Walk every point a run can stop** when steps change live state in stages (a deploy, a
+   migration, a swap): each step, an abort, a timeout, a lost worker, an automatic re-run or
+   restart. At each, settle what the target is left in and what the log, notifications and any
+   manual-fix advice say there. Hazards recorded in related plans' decisions logs are prior art.
+
+   **Parts released separately each meet the other's live version** (a backend and its frontend,
+   a service and its callers, a schema and its code): prefer a shape it tolerates — additions
+   optional, defaulting to the pre-change behaviour; removals and renames only once no live
+   version still uses them. None reasonable → a fork to grill; the plan's Conventions then state
+   the release order.
+
+   **Grill the user along the way.** Whenever the approach hits a fork you can't settle from the
+   code, stop and resolve it with the user before continuing — don't guess, and don't defer the
+   decision into the plan. Interview relentlessly until you reach shared understanding, walking each
+   branch of the decision tree and resolving dependencies between decisions:
+   - One question at a time, each with your recommended answer and its reason, worded so that
+     "yes" accepts it, via `explain-in-simple-language` when available.
+   - Facts are yours to find (codebase, docs, tool output, what the user's own edits show): look
+     them up, never ask. Decisions are the user's: put each one to them and wait.
+   - Cover every gap, ambiguity, or inconsistency surfaced while reading, verifying, and designing.
+
+4. **Write the plan** (below) — once the approach is settled, no open question remains, every step
+   serves an AC or a convention, and identifiers and signatures match across steps.
+
+## Plan file
+
+The output must be self-contained and ready for a **fresh session** that reads **only the plan
+file** and starts implementing — it should not need to read the requirements document or the
+ticket. This is the single most important constraint. Anything the execution session needs
+(acceptance criteria, prior-art citations, file paths, naming/string conventions, type signatures,
+override notes) must appear in the plan itself. Repetition from the requirements is intentional:
+the plan is the contract, not a diff against the requirements.
+
+Create the file in the **same directory as the requirements document**, named by replacing
+`.REQUIREMENTS` with `.PLAN` (e.g. `FOO.REQUIREMENTS.md` → `FOO.PLAN.md`). If the input doesn't
+follow that convention, append `.PLAN` before `.md`. `<id>-<slug>` is the plan filename without
+`.PLAN.md` (`123-report-approval`); the id is absent when the task has no ticket.
+
+Structure — five parts:
+
+1. **Summary** — 1–3 sentences: what this plan implements and the overall shape of the change (which
+   areas are touched).
+2. **Conventions and overrides** — two distinct kinds of cross-cutting context:
+   - **Conventions**: open with the commit the citations were verified at (short hash, dirty-tree
+     note); then rules that apply across all steps — naming patterns, user-facing string rules,
+     the testing approach (what to test, following existing test conventions in the codebase). Copy
+     from the requirements verbatim where applicable.
+   - **Overrides**: one-time corrections where the requirements deliberately diverge from a default
+     or prior assumption. Each entry: what was assumed, what the actual requirement is, and why. The
+     execution session applies each only where it fits.
+3. **Steps** — ordered implementation steps. Each is concrete enough to act on but doesn't dictate
+   every line, and is one change a fresh session finishes with context to spare; a bigger change
+   is several steps. Each step has:
+   - **What** — a short imperative.
+   - **Where** — concrete file paths and identifiers.
+   - **How** — the approach in prose. Reuse decisions go here, with `path:line-range` citations for
+     prior art.
+   - **Snippet** — *only* when prose is genuinely more ambiguous than code (a non-obvious type
+     signature, a tricky nested structure, an unfamiliar call shape). Default to omitting; keep
+     under ~10 lines.
+   - **Depends on** — earlier step numbers this one requires, if any.
+
+   Each step is self-contained — readable without scrolling back. No "as in step 2" without
+   restating what step 2 did. Step 1 must never be discovery work ("find the field names", "explore
+   where this lives") — discovery already happened in the steps above. A small deterministic sanity
+   check of a known fact is fine; open-ended investigation is not.
+
+   When the requirements carry a Reproduction part, step 1 is a regression test or a scripted
+   reproduction asserting the expected behaviour that part records, whether or not the bug was
+   reproduced, so it is not discovery; the fix follows in later steps. It is the smallest test that
+   shows the bug (unit before integration before e2e), a larger one only when the bug lies in how
+   parts connect. Its How says (the executor may know no such rule) that the test must be seen
+   failing on the bug before the fix is written (its assertion, or the error the bug raises; a
+   broken import or fixture is no failure seen), the failure seen is reported in one line, and a
+   test that cannot be made to fail that way stops the run before any fix, with the reason
+   reported. The step writing the fix says to rerun that test afterwards and see it pass.
+4. **Acceptance criteria** — flat `- [ ] AC-n` checklist the implementation must satisfy, copied
+   from the requirements' AC section. If unnumbered, number them (`AC-1`, …). Each references the
+   step number(s) that satisfy it (e.g. "AC-3 → steps 4, 7"). Tag any AC that needs manual
+   verification only `(manual — leave unticked, report as pending)`. The execution session uses
+   this as its done-check and ticks the rest. A "none left" AC (a removal, a doc sweep) carries its
+   exact search — each removed name as a whole word, in every form it is written (case and
+   separator variants) — with an allow-list of legitimate hits and the hits outside that list it
+   finds on the default branch today, as a regression test is seen failing first (Steps). When the
+   requirements give no search or no hits, the planner runs the search on the default branch and
+   records them here; one that finds none is widened to the forms the name is actually written in,
+   and still none means the AC records that nothing is left to remove.
+5. **Decisions log** — a standing instruction copied into the plan for the execution session:
+   "When a settled decision deviates from or extends this plan, append one line — the decision
+   and its why — to `<id>-<slug>.DECISIONS.md` beside this plan, the moment it's settled." Without
+   it, the why behind mid-implementation pivots is lost to later handover and review.
+
+The plan must capture **all the thinking** — every decision needed to implement the feature, so the
+execution session re-derives nothing. It may omit only mechanical, locally-reversible detail with no
+cross-cutting consequence (a variable name, the exact wording of a log line). Anything that spans
+files, depends on knowing the codebase, or is costly to get wrong (which utility to reuse, what
+order to change things in, what new types to introduce) belongs in the plan. When unsure whether
+something is a decision or a mechanical detail, put it in.
+
+## Boundaries
+
+- Do **not** modify any source files. The only file you write is the plan; the checks run while
+  working out the approach may leave side outputs (a build folder, a cache) only in scratch space or
+  git-ignored paths; one that would write elsewhere is not run.
+- Do **not** start implementing.
+- When preparing the plan from a `*.REQUIREMENTS.md` file, you normally shouldn't need to go back to
+  the `*.TICKET.md` — close any gaps with the user instead. Never assume a requirement; ask.
+- Write the plan to disk only after every open question is resolved.
+
+When done, state that the plan file is ready, by its **project-relative path** (relative to the
+working directory, never absolute), and offer these ways forward, each as its own fenced block under
+the label quoted below, holding the bare prompt, after one line saying to run one in a fresh session
+or after clearing this one (`/clear` is only the example):
+
+1. "Execute the plan:" — reads **only the plan file**. `<validation>` is the project's own
+   checks: the commands its governing docs name, else the toolchain's (lint, tests, build — only
+   those that exist); nothing runnable → drop the clause:
+
+   ```
+   Execute the plan .agents/plans/123-report-approval/123-report-approval.PLAN.md, then run <validation>; report, never commit
+   ```
+
+2. "or split it into tasks first, for small reviewable increments:" — when `split-plan-tasks` is
+   available:
+
+   ```
+   /split-plan-tasks .agents/plans/123-report-approval/123-report-approval.PLAN.md
+   ```
+
+3. "or harden it first, so a fresh reviewer challenges it before anything is built:" — when
+   `harden-artifact` is available:
+
+   ```
+   /harden-artifact .agents/plans/123-report-approval/123-report-approval.PLAN.md
+   ```

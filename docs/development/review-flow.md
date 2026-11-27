@@ -4,6 +4,24 @@ Every pull request is reviewed by a team of senior roles before it is merged, wi
 
 Run it with `/team-review <PR number>`.
 
+## Before the code: the plan phase
+
+The owner's decision of 27 November 2026 (#413): a phase before the code, from the skills of [eai-org/agent-toolkit](https://github.com/eai-org/agent-toolkit) vendored in `.claude/skills/`, so that a reader with a fresh context checks the requirements and the plan before any code is written, and the work lands in small PRs. Review rounds on a written PR cost CI and several roles each, up to four or five per PR on 24 November 2026 (#337). The review on the PR stays as this runbook says.
+
+```text
+issue → requirements, hardened → plan, hardened → tasks, grouped by PR → one task per session → PR → /team-review
+```
+
+1. **Requirements**: `/refine-ticket <N>` reads the issue and the code, asks what neither settles, and writes the "what".
+2. **Hardened**: `/harden-artifact <path>`, in a session that did not write it, has a fresh reviewer check it against the issue and the code.
+3. **Plan**: `/create-implementation-plan <path>` writes the "how", test first in every step, and is hardened the same way.
+4. **Tasks**: `/split-plan-tasks <path>` groups the plan's steps into tasks, each group one PR, so one issue and one branch ([`git-flow.md`](./git-flow.md)).
+5. **Built**: `/execute-plan-tasks <path>`, one task per session, committed on the group's branch once the gates are green; at the end of a group, `handover` writes the PR body and the PR is opened and reviewed with `/team-review`.
+
+Requirements, plans and their decisions logs live in the issue's planning home, `.claude/plans/<N>-<slug>/` in the main checkout, which every worktree shares and git ignores: they can hold a private link, so nothing of them is committed or pasted into an issue, a PR or a comment. What a skill changes for Scia, and the skills left out with their reasons: [`.claude/skills/README.md`](../../.claude/skills/README.md).
+
+The phase runs before the code of an issue whose PR will be of the standard or heavy tier ("The tier of a PR"); a light one goes straight to its branch. Which issues it covers is the team's reading of the owner's word, theirs to change. It is tried first on #412, whose session plans with it: the review rounds and blocking findings of #412's PRs have to be compared with those of the PRs before, in #412.
+
 ## The team
 
 | Role              | Reviews, as its tier allows                                                                                                                                                                                            | Definition                            |

@@ -6,3 +6,5 @@ test-results/
 package-lock.json
 .dev/
 .dev-profile/
+# Skills vendored from agent-toolkit, kept as its text (.claude/skills/README.md)
+.claude/skills/*/

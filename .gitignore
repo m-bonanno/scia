@@ -35,6 +35,9 @@ Thumbs.db
 .claude/settings.local.json
 .claude/worktrees/
 
+# Requirements, plans and decisions logs of the plan phase, kept off the public repository (.claude/skills/README.md)
+.claude/plans/
+
 # PR bodies are per-branch scratch files
 .claude/pr-bodies/*
 !.claude/pr-bodies/README.md
