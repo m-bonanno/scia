@@ -890,6 +890,8 @@ describe('a Bunkr album', () => {
         // The API's 400 says that it was sent no id, not that the file is gone.
         [400, DownloadFailure.HttpStatus],
         [418, DownloadFailure.HttpStatus],
+        // A success that is not the answer: no body to read as one.
+        [204, DownloadFailure.HttpStatus],
       ] as const) {
         await site?.close();
         const on = await bunkr({ status: { [path]: status } });
@@ -913,7 +915,7 @@ describe('a Bunkr album', () => {
       // A path the download page could not decode to have it signed.
       { apiAnswer: JSON.stringify({ mediafiles: 'http://127.0.0.1:9', path: '/a%zz.bin' }) },
       // The answer of the API the download page asked until November 2026: a link no longer read.
-      { apiAnswer: JSON.stringify({ encrypted: false, url: 'https://c3.example.net/a.mp4' }) },
+      { apiAnswer: JSON.stringify({ encrypted: false, url: 'http://127.0.0.1:9/a.mp4' }) },
       { apiAnswer: 'not JSON' },
       { redirects: { '/api/_001_v2': '/api/elsewhere' } },
       { signAnswer: JSON.stringify({ ex: 1_795_766_400 }) },
