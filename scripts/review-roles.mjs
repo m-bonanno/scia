@@ -33,7 +33,8 @@ const isSpec = (file) =>
 
 const isLight = (file) => isSpec(file) || file.endsWith('.md') || under('docs/', '.claude/')(file);
 
-// The lockfile decides what the installer packs.
+// The lockfile moves what the installer packs, so a chore of it is not light; it is not heavy,
+// since the owner's answer on #397 made heavy two files of the installer, and not it.
 const isRuntime = (file) =>
   !isLight(file) && (under('apps/', 'packages/')(file) || file === 'package-lock.json');
 

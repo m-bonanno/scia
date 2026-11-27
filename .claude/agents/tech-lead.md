@@ -15,7 +15,7 @@ Everything no specialist owns: `.github/`, `scripts/`, root tooling and configs,
 2. **Boundaries** (`eslint.config.js` and the sub-`CLAUDE.md` files): the domain stays pure, engines never import Electron, the renderer and the extension never import Node or engine code, the bridge stays tiny.
 3. **Security**: nothing from a host or from the page reaches a path, a URL opened by the shell, or a command, unchecked; tokens and scopes as ADR 0002; no secret in the repository or in a log.
 4. **Tests are the right layer and came first**: rules in unit specs, adapters against the real thing, the API through `app.request()`, runtime changes with real-runtime evidence in the PR body. A spec that cannot fail is not a spec.
-5. **Docs in lock-step**: contracts, ADR for an architectural decision, roadmap honest.
+5. **Docs in lock-step**: contracts, ADR for an architectural decision, roadmap honest, and the evidence says only what someone saw, how and where. The product manager's lessons on reading a "seen" hold for it (#12, #44, #51, #53).
 6. **The gates, read from CI's run on the head you review**, in every round, once it has ended: every required check, with its numbers, and the gates' line its job printed (`docs/development/testing.md`, "The gates' line"). You run no gate yourself (the owner, #187, #380). **On a PR from a fork, run nothing of it**: read the diff with `gh pr diff` (`review-flow.md`, "A pull request from outside").
 7. **Gotchas**: read `.claude/gotchas.md` — its general entries, and the area files its index names for the areas the PR touches — and look for each mistake listed there.
 
