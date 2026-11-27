@@ -84,7 +84,7 @@ Scia downloads from the hosts of the links you give it, and from the servers tho
 
 - **AllDebrid**, once you connect it in Settings. Its key is kept where the system protects it. Scia sends it file hosts' links and folders, protectors' and shorteners' links, and magnets, and no other link of yours; their files come from its servers. Connecting with a code asks it for a code, with no key, then every five seconds whether you confirmed it on its site. Otherwise, with no service connected, Scia asks it only for its public list of file hosts, with no key and nothing of your links.
 - **yt-dlp**, shipped with Scia, reads a video's page on its site, and whatever that site's reader asks in turn. Scia downloads the video from the servers its answer names. With the clipboard on, a video's page you copy is read for its title at once, even if you never start it.
-- **Bunkr**, read by a reader of Scia's own: its pages, its API, and the file servers it names.
+- **Bunkr**, read by a reader of Scia's own: its pages, the API of its download page, its signing service, and the file servers the API names.
 - **GitHub**, for Scia's updates and yt-dlp's.
 
 What each one adds, what it is sent, and how far it was seen: [`docs/product/integrations.md`](docs/product/integrations.md). Scia collects nothing.
