@@ -1,6 +1,6 @@
 # ADR 0024 — A Bunkr album is read by a reader of Scia's own, and its files go into a folder of its own
 
-- **Status**: accepted
+- **Status**: accepted; points 3, 4 and 5 amended below, "Amendment — a file's link asked as Bunkr's download page asks it" (#398)
 - **Date**: 2026-11-23
 
 ## Context
@@ -73,3 +73,33 @@ Nothing here was read from Bunkr itself: no request was made to it to learn its 
 - A pause, a removal or a shutdown while an album's page is read stops the read, and adds no file; the album is read again when it is resumed or at the next start.
 - An album link copied to the clipboard is not offered ([ADR 0012](./0012-links-taken-from-the-clipboard.md)): `offeredAs` knows files and videos' pages, not lists.
 - #214 makes the album one row.
+
+## Amendment — a file's link asked as Bunkr's download page asks it (2026-11-27, #398)
+
+In the owner's sitting of #334 (26 November 2026, `v1.0.0-beta.57` on Windows), every file of a real public album of 64 failed at its Start with `ALBUM_LINK_FAILED` and a 403, pictures and videos alike. A run against the same album on a Mac, on 27 November 2026, showed why. These were the first requests made to Bunkr to learn its pages, and they read what any visitor's browser reads:
+
+- **The album and file pages are as point 3's sources said**: `og:title`, `window.albumFiles` one field a line, `data-file-id` and the first `<h1>`. Each file is named as the album names it. The seven videos the sitting saw as `download.mp4` … `download (6).mp4` are named so, numbers included, by the album itself (their `original` is `download.mp4`, `download (1).mp4` … `download (6).mp4`) and by their own pages.
+- **The download page has moved.** Each file's page links its Download button to `https://dl.bunkr.cr/file/<id>`, on every domain tried (`bunkr.cr`, `.si`, `.fi`, `.ph`, `.ws`). That page asks its own API, `POST /api/_001_v2` with `{"id": "<id>"}`, which answers `{ "mediafiles": "<a file server>", "original": "<name>", "path": "<its path there>" }`, with no XOR. An id of no file is answered `200` with an empty `mediafiles`; a body with no id is answered `400`.
+- **The page has the file's link signed before it opens it.** It joins `mediafiles` and `path` into the link and adds the name (`n`). It then asks `GET https://glb-apisign.cdn.cr/sign?path=<the path, decoded, then written into the query>`, with no cookie (`credentials: 'omit'`) and no key. "Decoded" is read in the page's script (`decodeURIComponent(orig.pathname)`, then `encodeURIComponent` into the query): the run could not tell it, since none of the album's paths had an escape in it. The service answers `{ "ex": <seconds>, "token": "…" }`, two hours ahead. The page adds `token` and `ex` to the link and opens it.
+- **The file server refuses a link that is not signed**: 403 without a signature for its path, whatever the `Referer`; 206 with one, whatever the `Referer`, and also without `n`. `apidl.bunkr.ru`, which Scia asked, still answers in point 3's shape, with a link of another path, which the file server refuses even signed. gallery-dl's reader on `master` the same day still asks `apidl.bunkr.ru`, as point 3 says.
+
+Points 3, 4 and 5 are amended, the team's design of 27 November 2026 (#398), under "Respect the hosts" as `CLAUDE.md` states it from the owner's decisions on #228 and #274: **a file's link is asked as Bunkr's download page asks it**. What follows — the signing service asked, `n` left out, an empty `mediafiles` read as gone and the API's `400` as a status — is the team's, not the owner's:
+
+- the file's page, for its id;
+- then the download page's API, `POST https://dl.bunkr.cr/api/_001_v2` with `{"id": "<id>"}`, `Referer: https://dl.bunkr.cr/file/<id>` and `Origin: https://dl.bunkr.cr`;
+- the link joined from `mediafiles` and `path`, a path that starts at the root, http(s) only;
+- then the signing service for the path of the joined link, decoded — not the API's `path` as it stands, which the address parser may change (`.` and `..` segments, `%2F`, a `?` or a `#`) — with `Origin: https://dl.bunkr.cr` and `Referer: https://dl.bunkr.cr/`, as a browser sends them from that page to another host;
+- `token` and `ex` added to the link, which is fetched with `Referer: https://dl.bunkr.cr/`.
+
+- **No XOR is undone**: the answer carries none.
+- **`n` is not added**: Scia names its files itself. With `n`, the file server names the file after it, which would hide a maintenance video's own name (`maint.mp4`) from point 5's check.
+- **What fails**: an empty `mediafiles` is `ALBUM_GONE`. The API's `400` says that it was sent no id, not that the file is gone, and is `HTTP_STATUS`. The signing service is read as the API is: never a redirect, 64 KB at most, a 4xx final, what heals asked again. A signature Scia cannot read is `ALBUM_UNREADABLE`.
+
+**Within "Respect the hosts"**: the signing service is asked as the download page asks it in every visitor's browser, with nothing of the person's and no account behind it. That is the rule of `CLAUDE.md`, that Scia's own readers make the requests the site's own page makes (#274, #331). It is no challenge: it does not tell a program from a person, and nothing is solved.
+
+### Consequences of the amendment
+
+- A file takes three requests to Bunkr before its bytes: its page, the API and the signing service.
+- A signature is good for two hours. A file whose download runs longer fails `ALBUM_LINK_FAILED` with a 403, and "Retry" asks for a new signature, going on from its bytes, as the consequence above says of any link.
+- The local host (`testing/bunkr-server.ts`) answers as the download page's API and the signing service answered on 27 November 2026, and its file servers refuse a link that is not signed (`isSigned`, the range server's `accepts`). The album and file pages are still the shapes gallery-dl reads, which matched what Bunkr served that day.
+- Held against Bunkr itself once: the same album of 65 files, pasted into the built app on a Mac, downloaded whole, each file under the album's name (#398). The owner's sitting on Windows is still to come (#266).

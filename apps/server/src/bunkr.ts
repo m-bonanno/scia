@@ -7,14 +7,17 @@ import {
   linkOfAnswer,
   readAlbumPage,
   readFilePage,
+  signatureOf,
 } from './bunkr-pages.ts';
 import { RemoteError, type RequestHeaders } from './remote-source.ts';
 
-// Bunkr's API, which gives a file's link (docs/adr/0024).
-const API = 'https://apidl.bunkr.ru/api/_001_v2';
-// The page of Bunkr's that offers a file's download: what its API and its file servers are told
-// a file is asked from.
-const DOWNLOAD_PAGE = 'https://get.bunkrr.su';
+// The page of Bunkr's that offers a file's download, which every file's page links to (#398): what
+// its API, its signing service and its file servers are told a file is asked from.
+const DOWNLOAD_PAGE = 'https://dl.bunkr.cr';
+// That page's API, which says where a file is, and the service that signs a file's link for its
+// file server, which refuses a link not signed (docs/adr/0024, #398).
+const API = `${DOWNLOAD_PAGE}/api/_001_v2`;
+const SIGN = 'https://glb-apisign.cdn.cr/sign';
 // The longest Scia waits for a page or an answer, and the most it reads of one.
 const READ_LIMIT_MS = 30_000;
 const ALBUM_PAGE_BYTES = 16 * 1024 * 1024;
@@ -36,15 +39,19 @@ export interface BunkrOptions {
   // Scia's own, as its downloads send it: never a browser's.
   readonly userAgent: string;
   // A host that answers as Bunkr does, on this computer (`SCIA_BUNKR`, a spec's): Bunkr's links
-  // are those of its name, and its API is at the same path as Bunkr's. Bunkr's own otherwise.
+  // are those of its name, and its API and its signing service are at the same paths as Bunkr's.
+  // Bunkr's own otherwise.
   readonly site?: string;
   readonly timeoutMs?: number;
   readonly retryDelayMs?: (attempt: number) => number;
 }
 
-// Where Bunkr's API is: its own address, or the same path on a run's local host.
-export function apiOf(site: string | undefined): string {
-  return site === undefined ? API : new URL(new URL(API).pathname, site).href;
+// Where Bunkr's API and its signing service are: their own addresses, or the same paths on a
+// run's local host.
+export function addressesOf(site: string | undefined): { api: string; sign: string } {
+  const on = (address: string) =>
+    site === undefined ? address : new URL(new URL(address).pathname, site).href;
+  return { api: on(API), sign: on(SIGN) };
 }
 
 export interface Album {
@@ -56,7 +63,8 @@ export interface Album {
 }
 
 export interface BunkrFile {
-  // The file's link, as Bunkr's API gave it: fetched as any file, and kept nowhere.
+  // The file's link, as Bunkr's API placed it and its signing service signed it: fetched as any
+  // file, and kept nowhere.
   readonly url: string;
   readonly headers: RequestHeaders;
   // The name its page gives it, a name from a host; nothing when it gives none.
@@ -116,13 +124,15 @@ async function textOf(response: Response, limit: number): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-// Bunkr's album and file pages, read as gallery-dl's reader reads them (docs/adr/0024): which
-// files an album lists, and the link of each. Nothing is fetched of a file here: its link is
-// fetched as any download, under the speed limit.
+// Bunkr's album and file pages, read as gallery-dl's reader reads them, and its download page's
+// requests, made as that page makes them (docs/adr/0024, #398): which files an album lists, and
+// the link of each. Nothing is fetched of a file here: its link is fetched as any download, under
+// the speed limit.
 export class Bunkr {
   readonly #userAgent: string;
   readonly #domains: readonly string[];
   readonly #api: string;
+  readonly #sign: string;
   readonly #timeoutMs: number;
   readonly #retryDelayMs: (attempt: number) => number;
 
@@ -130,7 +140,9 @@ export class Bunkr {
     this.#userAgent = options.userAgent;
     const site = options.site === undefined ? undefined : new URL(options.site);
     this.#domains = site === undefined ? BUNKR_DOMAINS : [site.hostname];
-    this.#api = apiOf(options.site);
+    const { api, sign } = addressesOf(options.site);
+    this.#api = api;
+    this.#sign = sign;
     this.#timeoutMs = options.timeoutMs ?? READ_LIMIT_MS;
     this.#retryDelayMs = options.retryDelayMs ?? defaultRetryDelayMs;
   }
@@ -178,44 +190,73 @@ export class Bunkr {
     return { name: album.title ?? id, files };
   }
 
-  // The link of a file's page, read again at every run: its page for its id, then the API.
+  // The link of a file's page, read again at every run, as Bunkr's download page makes it (#398):
+  // its page for its id, then the API for where the file is, then the signing service for the
+  // signature of its path, which its file server asks of the link.
   async locateFile(url: string, signal: AbortSignal): Promise<BunkrFile> {
     const link = bunkrLinkOf(url, this.#domains);
     if (link?.kind !== 'file') throw unreadable('Not a file of Bunkr.');
     const { text } = await this.#page(`${link.origin}${link.path}`, FILE_PAGE_BYTES, signal);
     const page = readFilePage(text);
     if (page === undefined) throw unreadable('The page of the file names no file.');
-    const referer = `${DOWNLOAD_PAGE}/file/${page.id}`;
-    const response = await this.#fetch(
-      this.#api,
-      {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          accept: 'application/json',
-          referer,
-          origin: DOWNLOAD_PAGE,
+    const where = linkOfAnswer(
+      await this.#answer(
+        this.#api,
+        {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            accept: 'application/json',
+            referer: `${DOWNLOAD_PAGE}/file/${page.id}`,
+            origin: DOWNLOAD_PAGE,
+          },
+          body: JSON.stringify({ id: page.id }),
         },
-        body: JSON.stringify({ id: page.id }),
-      },
-      signal,
-      async (answer) => {
-        if (REDIRECTS.has(answer.status)) throw unreadable('The API sent Scia elsewhere.');
-        // A file the API does not know: what gallery-dl reads as an album deleted.
-        if (answer.status === 400) throw failure(AlbumFailure.Gone, 'Not on the site.');
-        if (answer.status !== 200) throw refusalOf(answer.status);
-        return textOf(answer, ANSWER_BYTES);
-      },
+        signal,
+      ),
     );
-    let parsed: unknown;
+    if (where === 'unknown') throw failure(AlbumFailure.Gone, 'Not on the site.');
+    if (where === undefined) throw unreadable('The API gave no link Scia can read.');
+    const address = new URL(where.link);
+    // The path as the download page has it signed: decoded, then written into the query.
+    let path: string;
     try {
-      parsed = JSON.parse(response);
+      path = decodeURIComponent(address.pathname);
     } catch {
-      throw unreadable('The API answered something that is not JSON.');
+      throw unreadable('The API gave a path Scia cannot read.');
     }
-    const address = linkOfAnswer(parsed);
-    if (address === undefined) throw unreadable('The API gave no link Scia can read.');
-    return { url: address, headers: { referer }, name: page.name };
+    // From the download page, a request to another host: its address alone, as a browser sends it.
+    const referer = `${DOWNLOAD_PAGE}/`;
+    const signature = signatureOf(
+      await this.#answer(
+        `${this.#sign}?path=${encodeURIComponent(path)}`,
+        { method: 'GET', headers: { accept: 'application/json', referer, origin: DOWNLOAD_PAGE } },
+        signal,
+      ),
+    );
+    if (signature === undefined) throw unreadable('The signing service gave no signature.');
+    address.searchParams.set('token', signature.token);
+    address.searchParams.set('ex', String(signature.expiry));
+    return { url: address.href, headers: { referer }, name: page.name };
+  }
+
+  // An answer of the API or of the signing service, as JSON: never a redirect, a refusal said as
+  // the row will say it, 64 KiB at most.
+  async #answer(
+    url: string,
+    init: { readonly method: string; readonly headers: RequestHeaders; readonly body?: string },
+    signal: AbortSignal,
+  ): Promise<unknown> {
+    const text = await this.#fetch(url, init, signal, async (answer) => {
+      if (REDIRECTS.has(answer.status)) throw unreadable('Bunkr sent Scia elsewhere.');
+      if (answer.status !== 200) throw refusalOf(answer.status);
+      return textOf(answer, ANSWER_BYTES);
+    });
+    try {
+      return JSON.parse(text);
+    } catch {
+      throw unreadable('Bunkr answered something that is not JSON.');
+    }
   }
 
   // A page of Bunkr's, following its redirects to a host of the list, five at most. `at`: where

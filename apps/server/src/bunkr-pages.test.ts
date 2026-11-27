@@ -6,6 +6,7 @@ import {
   linkOfAnswer,
   readAlbumPage,
   readFilePage,
+  signatureOf,
 } from './bunkr-pages.ts';
 import { albumPageOf, filePageOf } from './testing/bunkr-server.ts';
 
@@ -197,20 +198,30 @@ describe('readFilePage', () => {
 });
 
 describe('linkOfAnswer', () => {
-  // Made with gallery-dl's decrypt_xor read backwards: each byte XOR'd with the bytes of
-  // `SECRET_KEY_498611` (1795000000 ÷ 3600), then base64.
-  const ENCRYPTED = 'OzE3IjZucGQmanFRQVlbQV02ay03MXsbKjx5bhl4WnVVHz41d20raRsqPHxtBAg=';
+  // An answer in the shape of the download page's API on 27 November 2026 (#398), made up.
+  const ANSWER = {
+    mediafiles: 'https://c3.example.net',
+    original: 'Day 1.mp4',
+    path: '/storage/media/5f2c1e0a-7b3d-4c11-9a2e-0123456789ab.mp4',
+  };
 
-  it('undoes the XOR of a link with the key its answer dates', () => {
-    expect(linkOfAnswer({ encrypted: true, timestamp: 1795000000, url: ENCRYPTED })).toBe(
-      'https://c3.example.net/Day%201-AbCd.mp4?n=Day%201',
-    );
+  it("joins the file's server and its path into its link, as the download page does", () => {
+    expect(linkOfAnswer(ANSWER)).toEqual({
+      link: 'https://c3.example.net/storage/media/5f2c1e0a-7b3d-4c11-9a2e-0123456789ab.mp4',
+    });
+    expect(linkOfAnswer({ mediafiles: 'https://c1.example.net', path: '/a b%20c.jpg' })).toEqual({
+      link: 'https://c1.example.net/a%20b%20c.jpg',
+    });
   });
 
-  it('takes a link the answer gives as it stands', () => {
-    expect(linkOfAnswer({ encrypted: false, url: 'https://c3.example.net/a.mp4' })).toBe(
-      'https://c3.example.net/a.mp4',
-    );
+  it('says that the API knows no such file when it names no file server', () => {
+    expect(
+      linkOfAnswer({
+        mediafiles: '',
+        original: 'dev_original.mp4',
+        path: '/storage/media/dev_original_1.mp4',
+      }),
+    ).toBe('unknown');
   });
 
   it('reads nothing of an answer that is not one, or a link that is not http', () => {
@@ -218,24 +229,46 @@ describe('linkOfAnswer', () => {
       null,
       'https://c3.example.net/a.mp4',
       {},
-      { encrypted: false },
-      { encrypted: false, url: 7 },
-      { encrypted: false, url: 'javascript:alert(1)' },
-      { encrypted: false, url: 'file:///C:/Windows/win.ini' },
-      { encrypted: false, url: '/a.mp4' },
-      { encrypted: true, url: ENCRYPTED },
-      { encrypted: true, timestamp: '1795000000', url: ENCRYPTED },
-      // An address hidden under the key of a time before 1970: read, it would be an address.
-      { encrypted: true, timestamp: -3600, url: 'OzE3IjZucGQmanFISTIoMz4gejEuMXY+A1wjcQ==' },
-      // Only `true` says the address is hidden: read as hidden, this one would be an address.
-      { encrypted: 'true', timestamp: 1795000000, url: ENCRYPTED },
-      // Another key: what comes out is no address.
-      { encrypted: true, timestamp: 0, url: ENCRYPTED },
-      { encrypted: true, timestamp: 1795000000, url: 'not base64!' },
-      // Bytes that are no UTF-8 after the XOR: read leniently, they end in U+FFFD, an address.
-      { encrypted: true, timestamp: 1795000000, url: 'OzE3IjZucGQmanFRQVlbQV02ay03MXs+tA==' },
+      { mediafiles: ANSWER.mediafiles },
+      { path: ANSWER.path },
+      { mediafiles: 7, path: ANSWER.path },
+      { mediafiles: ANSWER.mediafiles, path: 7 },
+      { mediafiles: 'not an address', path: ANSWER.path },
+      { mediafiles: 'javascript:alert(1)//', path: '/a.mp4' },
+      { mediafiles: 'file:///C:/Windows', path: '/win.ini' },
+      // A path is joined as it stands: one that does not start at the root would name another host.
+      { mediafiles: ANSWER.mediafiles, path: '.example.net/a.mp4' },
+      // The answer of the API the download page asked until November 2026.
+      { encrypted: false, url: 'https://c3.example.net/a.mp4' },
     ]) {
       expect(linkOfAnswer(answer), JSON.stringify(answer)).toBeUndefined();
+    }
+  });
+});
+
+describe('signatureOf', () => {
+  it('reads the token the signing service gives a path, and when it expires', () => {
+    expect(signatureOf({ ex: 1_795_766_400, token: 'a1b2c3' })).toEqual({
+      token: 'a1b2c3',
+      expiry: 1_795_766_400,
+    });
+  });
+
+  it('reads nothing of an answer that is not one', () => {
+    for (const answer of [
+      null,
+      'a1b2c3',
+      {},
+      { token: 'a1b2c3' },
+      { ex: 1_795_766_400 },
+      { ex: 1_795_766_400, token: '' },
+      { ex: 1_795_766_400, token: 7 },
+      { ex: '1795766400', token: 'a1b2c3' },
+      { ex: -1, token: 'a1b2c3' },
+      { ex: 1.5, token: 'a1b2c3' },
+      { ex: 2 ** 53, token: 'a1b2c3' },
+    ]) {
+      expect(signatureOf(answer), JSON.stringify(answer)).toBeUndefined();
     }
   });
 });

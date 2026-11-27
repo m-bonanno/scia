@@ -1,6 +1,7 @@
 // What Scia reads of Bunkr's pages (docs/adr/0024): which links are its albums and its files'
-// pages, and what those pages and its API say. The shapes are the ones gallery-dl's reader of
-// Bunkr reads; nothing here was learned from Bunkr itself.
+// pages, and what those pages, its API and its signing service say. The pages' shapes are the ones
+// gallery-dl's reader of Bunkr reads; the answers' are those Bunkr's own download page read on
+// 27 November 2026 (#398).
 
 // The domains Bunkr has used, the old ones among them: the one list (the owner, #228). A link of
 // one of them, or of one under `app.`, is Bunkr's; Bunkr on a new domain is a new entry here.
@@ -211,34 +212,37 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-// The link the API gives for a file: as it stands, or — `encrypted` — each byte XOR'd with
-// `SECRET_KEY_<the answer's hour>`, in base64, which is what Bunkr's download page undoes in every
-// visitor's browser. Undefined for an answer that is not one, or a link that is not http(s).
-export function linkOfAnswer(answer: unknown): string | undefined {
-  if (!isRecord(answer) || typeof answer.url !== 'string') return undefined;
-  let link = answer.url;
-  if (answer.encrypted === true) {
-    const { timestamp } = answer;
-    if (typeof timestamp !== 'number' || !Number.isSafeInteger(timestamp) || timestamp < 0) {
-      return undefined;
-    }
-    // What is not base64 is passed over by the decoding, and what comes out is no address.
-    const key = Buffer.from(`SECRET_KEY_${String(Math.floor(timestamp / 3600))}`);
-    const bytes = Buffer.from(link, 'base64');
-    try {
-      link = new TextDecoder('utf-8', { fatal: true }).decode(
-        bytes.map((byte, index) => byte ^ (key[index % key.length] ?? 0)),
-      );
-    } catch {
-      return undefined;
-    }
-  }
-  try {
-    const address = new URL(link);
-    return address.protocol === 'http:' || address.protocol === 'https:' ? address.href : undefined;
-  } catch {
+// The link of a file, from what the download page's API answers (#398): its file server
+// (`mediafiles`) and its path there, joined as that page joins them. `unknown` for a file the API
+// does not know, which it answers with no file server; undefined for an answer that is not one,
+// or a link that is not http(s).
+export function linkOfAnswer(answer: unknown): { readonly link: string } | 'unknown' | undefined {
+  if (!isRecord(answer)) return undefined;
+  const { mediafiles, path } = answer;
+  if (mediafiles === '') return 'unknown';
+  if (typeof mediafiles !== 'string' || typeof path !== 'string' || !path.startsWith('/')) {
     return undefined;
   }
+  const address = URL.parse(`${mediafiles}${path}`);
+  return address?.protocol === 'http:' || address?.protocol === 'https:'
+    ? { link: address.href }
+    : undefined;
+}
+
+export interface Signature {
+  readonly token: string;
+  // When it expires, in seconds since 1970.
+  readonly expiry: number;
+}
+
+// What Bunkr's signing service answers for a file's path: the token its file server asks of the
+// link, and when it expires (`ex`). Undefined for an answer that is not one.
+export function signatureOf(answer: unknown): Signature | undefined {
+  if (!isRecord(answer)) return undefined;
+  const { token, ex } = answer;
+  if (typeof token !== 'string' || token === '') return undefined;
+  if (typeof ex !== 'number' || !Number.isSafeInteger(ex) || ex < 0) return undefined;
+  return { token, expiry: ex };
 }
 
 // The names a file's link lands on while Bunkr's file server is in maintenance, as gallery-dl

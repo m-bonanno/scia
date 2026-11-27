@@ -1,7 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { readdir, readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { startBunkrServer } from '@scia/server/testing/bunkr-server.ts';
+import { isSigned, startBunkrServer } from '@scia/server/testing/bunkr-server.ts';
 import { startRangeServer } from '@scia/server/testing/range-server.ts';
 import { describe, expect, it } from 'vitest';
 import { allCompleted, downloadsOf, paste, until, useRun } from './scia.ts';
@@ -17,8 +17,9 @@ describe('the real app, with a Bunkr album', () => {
     const profile = await run.profile();
     const film = randomBytes(512 * KIB);
     const notes = randomBytes(3 * KIB);
-    const filmHost = run.keep(await startRangeServer({ body: film }));
-    const notesHost = run.keep(await startRangeServer({ body: notes }));
+    // Bunkr's file servers: a link their signing service did not sign is refused (#398).
+    const filmHost = run.keep(await startRangeServer({ body: film, accepts: isSigned }));
+    const notesHost = run.keep(await startRangeServer({ body: notes, accepts: isSigned }));
     const site = run.keep(
       await startBunkrServer({
         albums: {
@@ -46,6 +47,7 @@ describe('the real app, with a Bunkr album', () => {
     expect(Buffer.compare(await readFile(join(folder, 'notes.txt')), notes)).toBe(0);
     // Read as Bunkr's own pages ask, with Scia's own user agent; the album is in no line of the log.
     expect(site.asked.some(({ path }) => path === '/api/_001_v2')).toBe(true);
+    expect(site.asked.filter(({ path }) => path === '/sign')).toHaveLength(2);
     for (const { userAgent } of site.asked) expect(userAgent).toMatch(/Scia\//);
     expect(await profile.log()).not.toContain('AbCd12');
   });
