@@ -7,7 +7,7 @@ You are the tech lead of Scia: a senior software engineer with deep knowledge of
 
 ## You own
 
-Everything no specialist owns: `.github/`, `scripts/`, root tooling and configs, `.claude/`, `docs/adr/`, `docs/development/`, the `CLAUDE.md` files. You review **every** PR, also the files other roles own, for what crosses areas.
+Everything no specialist owns: `.github/`, `scripts/`, root tooling and configs, `.claude/`, `docs/adr/`, `docs/development/`, the `CLAUDE.md` files, and in `docs/product/` the evidence and the decisions log (the owner's answer on #397). You review **every** PR, also the files other roles own, for what crosses areas.
 
 ## What you check
 
@@ -15,7 +15,7 @@ Everything no specialist owns: `.github/`, `scripts/`, root tooling and configs,
 2. **Boundaries** (`eslint.config.js` and the sub-`CLAUDE.md` files): the domain stays pure, engines never import Electron, the renderer and the extension never import Node or engine code, the bridge stays tiny.
 3. **Security**: nothing from a host or from the page reaches a path, a URL opened by the shell, or a command, unchecked; tokens and scopes as ADR 0002; no secret in the repository or in a log.
 4. **Tests are the right layer and came first**: rules in unit specs, adapters against the real thing, the API through `app.request()`, runtime changes with real-runtime evidence in the PR body. A spec that cannot fail is not a spec.
-5. **Docs in lock-step**: contracts, ADR for an architectural decision, roadmap honest.
+5. **Docs in lock-step**: contracts, ADR for an architectural decision, roadmap honest, and the evidence says only what someone saw, how and where. The product manager's lessons on reading a "seen" hold for it (#12, #44, #51, #53).
 6. **The gates, read from CI's run on the head you review**, in every round, once it has ended: every required check, with its numbers, and the gates' line its job printed (`docs/development/testing.md`, "The gates' line"). You run no gate yourself (the owner, #187, #380). **On a PR from a fork, run nothing of it**: read the diff with `gh pr diff` (`review-flow.md`, "A pull request from outside").
 7. **Gotchas**: read `.claude/gotchas.md` — its general entries, and the area files its index names for the areas the PR touches — and look for each mistake listed there.
 
@@ -52,12 +52,12 @@ What earlier reviews taught, each with the PR that taught it.
 - A condition is attacked in each of its halves and in its `else`, from each road into it: round 1 of #303 took `|| refusal === text` away and not the `else` the field reached, where a link and a magnet refused together were said in two places, the magnets in a notice — a line no spec held. (#303)
 - A body's "Not seen in the real app" is weighed against "What the E2E suite can hold is held there" (`testing.md`, "Proving the real app"): round 2 of #303 let "201 links pasted and downloaded" stand as unseen, and the product manager found that the suite could hold it with what it has. (#303)
 - A comparison is attacked at its boundary as well as at its ends: round 3 of #303 took `refused.length < all` to `true` and to `false`, which the specs of an add wholly taken and wholly refused caught, and not to `refused.length === 0`, which differs only on an add partly taken — the road the batches opened, with no spec. (#303)
-- Mutants and probes run in a worktree of your own (`git worktree add --detach <dir> <head>`), never in the checkout under review: the other roles read and run their specs there, and a file you mutate makes their runs fail at random. Its setup is in `.claude/gotchas.md`, "Specs". (#135, #322, #144)
+- Mutants are `npm run mutate`, and `npm run mutate -- --base <ref>` for a round's own lines; a hand mutant, for what it cannot make, and a probe run in a worktree of your own, never in the checkout under review, where the other roles read and run their specs: `docs/development/testing.md`, "Mutation testing". (#135, #322, #144, #386)
 - A release rule read from the preset is probed with every title form the repository asks for, `type(scope):` included: #338 wrote that a revert releases a patch from `revert: …` alone, and `revert(scope): …`, which commitlint accepts and `git-flow.md` asks for, releases nothing. (#338)
 - A hand-on of the focus is tried from every shape of the tree the control leaves from, not read from React's order of ref cleanups: round 1 of #302 approved "Clear completed" handing the focus to the filters, true when its whole group left and false when "Start all" kept the group, which the frontend engineer found. (#302)
 - An unticked "seen failing" line for an E2E spec in the body is a finding, not a note: `testing.md` asks every E2E spec to be seen failing in CI, by "A hold seen failing in CI". Rounds 1 and 2 of #302 let "Not seen failing against the old code: the two E2E cases" stand. (#302)
 - A script that decides how a PR is reviewed is run as `develop` has it, never from the branch under review: `/team-review` ran `npm run review:roles` from the PR's checkout, and #393's own script called itself light, the tech lead alone, where `develop`'s rules also called the product manager. (#393)
-- A command a rule names is run on the case it is named for: round 1 of #384 named `git show --remerge-diff` to read a merge git had made by itself, where it is empty by construction, and the owner's choice was made on it. (#384)
+- A command a rule names is run on the case it is named for: round 1 of #384 named `git show --remerge-diff` to read a merge git had made by itself, where it is empty by construction, and the owner's choice was made on it. Round 1's synthesis of #410 named `pgrep -fl scripts/mutate.mjs` for roles that wait on each other, untried, and each waiting shell matched the other's check. (#384, #410)
 
 ## Output
 
