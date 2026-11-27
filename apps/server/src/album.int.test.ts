@@ -211,23 +211,30 @@ describe('a Bunkr album', () => {
     const files: SimulatedFile[] = [
       { id: '1', slug: 'a', original: 'a.bin', link: await fileServer(notes) },
     ];
-    const on = await bunkr({ albums: { x: { title: 'Signed', files } } });
+    // A path with a space: the signing service signs it decoded, as the download page sends it.
+    const server = new URL(files[0]!.link).origin;
+    const on = await bunkr({
+      albums: { x: { title: 'Signed', files } },
+      apiAnswer: JSON.stringify({ mediafiles: server, original: 'a.bin', path: '/files/a b.bin' }),
+    });
     const downloads = await open(on);
     // What Bunkr's file servers do since November 2026, made here: a link not signed is refused.
-    expect((await fetch(files[0]!.link)).status).toBe(403);
+    expect((await fetch(`${server}/files/a%20b.bin`)).status).toBe(403);
 
     downloads.add({ urls: [`${on.url}/a/x`] });
     await until(() => allDone(downloads, 1));
 
     expect(Buffer.compare(await readFile(inDownloads('Signed', 'a.bin')), notes)).toBe(0);
-    const [server] = hosts;
-    const asked = server?.asked.slice(1) ?? [];
+    expect(on.asked.filter(({ path }) => path === '/sign').map(({ query }) => query)).toEqual([
+      '?path=%2Ffiles%2Fa%20b.bin',
+    ]);
+    const asked = hosts[0]?.asked.slice(1) ?? [];
     expect(asked.length).toBeGreaterThan(0);
     for (const { link } of asked) {
       const address = new URL(link ?? '', on.url);
       // The file's server and path, as the API gave them, and the signature for that path alone:
       // nothing more of the page's link (`n`, the name it was uploaded with).
-      expect(address.pathname).toBe('/files/sample.bin');
+      expect(address.pathname).toBe('/files/a%20b.bin');
       expect([...address.searchParams.keys()]).toEqual(['token', 'ex']);
       expect(isSigned(link ?? '')).toBe(true);
     }
@@ -903,6 +910,8 @@ describe('a Bunkr album', () => {
   it("says what Scia cannot read of the API's and the signing service's answers, and follows none of their redirects", async () => {
     for (const options of [
       { apiAnswer: JSON.stringify({ mediafiles: 'file:///C:', path: '/x' }) },
+      // A path the download page could not decode to have it signed.
+      { apiAnswer: JSON.stringify({ mediafiles: 'http://127.0.0.1:9', path: '/a%zz.bin' }) },
       // The answer of the API the download page asked until November 2026: a link no longer read.
       { apiAnswer: JSON.stringify({ encrypted: false, url: 'https://c3.example.net/a.mp4' }) },
       { apiAnswer: 'not JSON' },
