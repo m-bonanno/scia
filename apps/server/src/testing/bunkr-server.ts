@@ -1,9 +1,10 @@
+import { createHmac } from 'node:crypto';
 import { createServer, type IncomingMessage } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { setTimeout as sleep } from 'node:timers/promises';
 
 // A file of a simulated album: its page's slug, the id its page and the API know it by, and
-// where its bytes are (a local host's link).
+// where its bytes are (a local host's link, which the API gives as its server and its path).
 export interface SimulatedFile {
   readonly id: string;
   readonly slug: string;
@@ -13,8 +14,6 @@ export interface SimulatedFile {
   // What its own page's heading says, when not the name it was uploaded with.
   readonly heading?: string;
   readonly link: string;
-  // False for an API answer that gives the link as it stands.
-  readonly encrypted?: boolean;
 }
 
 export interface SimulatedAlbum {
@@ -25,8 +24,8 @@ export interface SimulatedAlbum {
 export interface BunkrServerOptions {
   // By id: the album at `/a/<id>`.
   readonly albums: Readonly<Record<string, SimulatedAlbum>>;
-  // Paths answered with this status and no body, the API's (`/api/_001_v2`) among them. Read at
-  // every request: a spec changes it to mend the host.
+  // Paths answered with this status and no body, the API's (`/api/_001_v2`) and the signing
+  // service's (`/sign`) among them. Read at every request: a spec changes it to mend the host.
   readonly status?: Record<string, number>;
   // A wait before every answer.
   readonly delayMs?: number;
@@ -34,23 +33,21 @@ export interface BunkrServerOptions {
   readonly redirects?: Readonly<Record<string, string>>;
   // Paths answered with this page, as it stands.
   readonly pages?: Readonly<Record<string, string>>;
-  // What the API answers instead of a file's link.
+  // What the API answers instead of a file's server and path, and the signing service instead of
+  // a signature.
   readonly apiAnswer?: string;
+  readonly signAnswer?: string;
   // By path, what the first requests to it meet, one each, in order: a status with no body (and a
   // `Retry-After`, when given), or a connection dropped before any answer. Then it answers.
   readonly troubles?: Readonly<
     Record<string, readonly ({ status: number; retryAfter?: string } | 'drop')[]>
   >;
-  // Every link the API gives carries `?given=<n>`, a new address at every answer: a link that
-  // expired is not given again.
-  readonly freshLinks?: boolean;
 }
 
 export interface BunkrServer {
-  // The site's address: albums at `<url>/a/<id>`, files at `<url>/f/<slug>`.
+  // The site's address: albums at `<url>/a/<id>`, files at `<url>/f/<slug>`, its API at
+  // `<url>/api/_001_v2` and its signing service at `<url>/sign`.
   readonly url: string;
-  // Its API's, as Scia is told it.
-  readonly api: string;
   // Every request, in order.
   readonly asked: {
     readonly method: string | undefined;
@@ -67,8 +64,28 @@ export interface BunkrServer {
   close(): Promise<void>;
 }
 
-// What the API dates its answers with; the key that undoes its XOR is of the same hour.
-const TIMESTAMP = 1_795_000_000;
+// When the first signature expires, in seconds, as the signing service says it: each one after
+// it a second later, so that a link signed again is a new address.
+const FIRST_EXPIRY = 1_795_766_400;
+// What signs a path here: Bunkr's own key is its file servers' and its signing service's.
+const SIGNING_KEY = 'a key of the spec';
+
+function tokenOf(path: string, expiry: string): string {
+  return createHmac('sha256', SIGNING_KEY).update(`${path}\n${expiry}`).digest('hex').slice(0, 40);
+}
+
+// Whether a link a file server was asked — its path and query — carries the signature the
+// signing service gives for its path: Bunkr's file servers answer 403 to any other (#398).
+export function isSigned(link: string): boolean {
+  const address = new URL(link, 'http://127.0.0.1');
+  const token = address.searchParams.get('token');
+  const expiry = address.searchParams.get('ex');
+  return (
+    token !== null &&
+    expiry !== null &&
+    token === tokenOf(decodeURIComponent(address.pathname), expiry)
+  );
+}
 
 function escapeHtml(text: string): string {
   return text
@@ -123,27 +140,20 @@ export function albumPageOf(album: SimulatedAlbum): string {
   ].join('\n');
 }
 
-// A file's page, as gallery-dl reads one: its id in `data-file-id`, its name in the first `<h1>`.
-// `name` is written as it stands: HTML, escaped or not.
+// A file's page, as gallery-dl reads one: its id in `data-file-id`, its name in the first `<h1>`,
+// and its Download button to Bunkr's download page (#398). `name` is written as it stands: HTML,
+// escaped or not.
 export function filePageOf(file: { readonly id: string; readonly name: string }): string {
   return [
     '<!DOCTYPE html>',
     '<html lang="en">',
     '<body>',
     `<h1 class="text-subs font-semibold">${file.name}</h1>`,
-    `<a class="btn" href="https://get.bunkrr.su/file/${file.id}" data-file-id="${file.id}">Download</a>`,
+    `<div id="fileTracker" data-file-id="${file.id}" style="display: none;"></div>`,
+    `<a class="btn" href="https://dl.bunkr.cr/file/${file.id}" target="_blank">Download</a>`,
     '</body>',
     '</html>',
   ].join('\n');
-}
-
-// The link as the API hides it: each byte XOR'd with `SECRET_KEY_<hour of the answer>`, in base64.
-function hidden(link: string): string {
-  const key = Buffer.from(`SECRET_KEY_${String(Math.floor(TIMESTAMP / 3600))}`);
-  const bytes = Buffer.from(link);
-  return Buffer.from(bytes.map((byte, index) => byte ^ (key[index % key.length] ?? 0))).toString(
-    'base64',
-  );
 }
 
 async function bodyOf(request: IncomingMessage): Promise<string> {
@@ -152,19 +162,44 @@ async function bodyOf(request: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-// A real HTTP host that answers as Bunkr does, as far as gallery-dl's source says (docs/adr/0024):
-// its album pages, its files' pages and its API, on a free local port. Never the real site.
+function idOf(body: string): string | undefined {
+  try {
+    const { id } = JSON.parse(body) as { id?: unknown };
+    return typeof id === 'string' ? id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+// Where the API says a file is: its file server and its path there, and the name it was uploaded
+// with. An id of no file is answered as Bunkr answered one on 27 November 2026: with no file
+// server, and a name and a path of its own.
+function whereOf(file: SimulatedFile | undefined): object {
+  if (file === undefined) {
+    return {
+      mediafiles: '',
+      original: 'dev_original.mp4',
+      path: '/storage/media/dev_original_1.mp4',
+    };
+  }
+  const link = new URL(file.link);
+  return {
+    mediafiles: link.origin,
+    ...(file.original === undefined ? {} : { original: file.original }),
+    path: link.pathname,
+  };
+}
+
+// A real HTTP host that answers as Bunkr does, on a free local port. Never the real site. Its
+// album and file pages as gallery-dl's source says (docs/adr/0024); its download page's API and
+// signing service as Bunkr's own download page asked them on 27 November 2026 (#398).
 export async function startBunkrServer(options: BunkrServerOptions): Promise<BunkrServer> {
   const asked: BunkrServer['asked'][number][] = [];
   const files = Object.values(options.albums).flatMap((album) => album.files);
   const troubles = new Map(
     Object.entries(options.troubles ?? {}).map(([path, list]) => [path, [...list]]),
   );
-  let given = 0;
-  const linkOf = (file: SimulatedFile) => {
-    given += 1;
-    return options.freshLinks === true ? `${file.link}?given=${String(given)}` : file.link;
-  };
+  let signatures = 0;
   const decoded = (segment: string) => {
     try {
       return decodeURIComponent(segment);
@@ -221,24 +256,32 @@ export async function startBunkrServer(options: BunkrServerOptions): Promise<Bun
         html(page);
         return;
       }
+      const json = (answer: string) => {
+        response.writeHead(200, { 'content-type': 'application/json' }).end(answer);
+      };
+      const refuse = (text: string) => {
+        response.writeHead(400, { 'content-type': 'text/plain' }).end(`${text}\n`);
+      };
       if (request.method === 'POST' && path === '/api/_001_v2') {
-        const answer =
-          options.apiAnswer ??
-          (() => {
-            const id = (JSON.parse(body) as { id?: unknown }).id;
-            const file = files.find((each) => each.id === id);
-            if (file === undefined) return undefined;
-            return JSON.stringify(
-              file.encrypted === false
-                ? { encrypted: false, url: linkOf(file) }
-                : { encrypted: true, timestamp: TIMESTAMP, url: hidden(linkOf(file)) },
-            );
-          })();
-        if (answer === undefined) {
-          response.writeHead(400).end();
+        const id = idOf(body);
+        if (options.apiAnswer !== undefined) json(options.apiAnswer);
+        else if (id === undefined) refuse('ID not provided');
+        else json(JSON.stringify(whereOf(files.find((each) => each.id === id))));
+        return;
+      }
+      if (request.method === 'GET' && path === '/sign') {
+        const signed = new URLSearchParams(address.slice(path.length)).get('path') ?? '';
+        if (options.signAnswer !== undefined) {
+          json(options.signAnswer);
           return;
         }
-        response.writeHead(200, { 'content-type': 'application/json' }).end(answer);
+        if (signed === '') {
+          refuse('path required');
+          return;
+        }
+        const expiry = FIRST_EXPIRY + signatures;
+        signatures += 1;
+        json(JSON.stringify({ ex: expiry, token: tokenOf(signed, String(expiry)) }));
         return;
       }
       const album = /^\/a\/([^/]+)$/.exec(path);
@@ -267,7 +310,6 @@ export async function startBunkrServer(options: BunkrServerOptions): Promise<Bun
   const url = `http://127.0.0.1:${String(port)}`;
   return {
     url,
-    api: `${url}/api/_001_v2`,
     asked,
     close: () =>
       new Promise((resolve) => {

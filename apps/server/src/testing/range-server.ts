@@ -16,6 +16,9 @@ export interface RangeServerOptions {
   readonly dropAfterBytes?: number;
   // Answers every request with this status and no body.
   readonly status?: number;
+  // Answers 403 and no body to a link — a path and query — this does not accept: as Bunkr's file
+  // servers answer one their signing service did not sign (#398).
+  readonly accepts?: (link: string) => boolean;
   // Answers every request but the first byte's with this status and no body: a link that says
   // what the file is, and gives none of it.
   readonly refusesRanges?: number;
@@ -108,8 +111,12 @@ export async function startRangeServer(options: RangeServerOptions): Promise<Ran
       acceptEncoding: request.headers['accept-encoding'],
     });
     const firstByte = request.headers.range === 'bytes=0-0';
+    const refused = options.accepts === undefined || options.accepts(link) ? undefined : 403;
     const status =
-      options.status ?? expired.get(link) ?? (firstByte ? undefined : options.refusesRanges);
+      options.status ??
+      refused ??
+      expired.get(link) ??
+      (firstByte ? undefined : options.refusesRanges);
     if (status === 'page') {
       const page = Buffer.from('<!doctype html><title>This link has expired</title>');
       response

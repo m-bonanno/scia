@@ -17,6 +17,7 @@ import {
   type SimulatedFile,
   albumPageOf,
   filePageOf,
+  isSigned,
   startBunkrServer,
 } from './testing/bunkr-server.ts';
 import {
@@ -27,8 +28,8 @@ import {
 import { scratchFolder, until } from './testing/scratch.ts';
 
 const MIB = 1024 * 1024;
-// What the API's link is fetched with: Bunkr's own page of the file (docs/adr/0024).
-const refererOf = (id: string) => `https://get.bunkrr.su/file/${id}`;
+// The page of Bunkr's that offers a file's download, which every file's page links to (#398).
+const DOWNLOAD_PAGE = 'https://dl.bunkr.cr';
 
 // An album pasted, from the paste to its files on disk: the manager, Bunkr's reader and the
 // downloader, against a local host that answers as Bunkr does and local hosts of the files.
@@ -68,25 +69,28 @@ describe('a Bunkr album', () => {
     return started.url;
   }
 
-  // Three files, each on a host of its own; the last one the API gives as it stands. The notes
-  // are named otherwise by their server and by their own page: the album's name wins.
+  // A file server of Bunkr's: it refuses a link its signing service did not sign (#398).
+  const fileServer = (body: Buffer, options: Partial<RangeServerOptions> = {}) =>
+    host(body, { accepts: isSigned, ...options });
+
+  // Three files, each on a server of its own. The notes are named otherwise by their server and
+  // by their own page: the album's name wins.
   async function holiday(options: Partial<RangeServerOptions> = {}): Promise<SimulatedFile[]> {
     return [
-      { id: '101', slug: 'Day-1-AbCd', original: 'Day 1.mp4', link: await host(film, options) },
+      {
+        id: '101',
+        slug: 'Day-1-AbCd',
+        original: 'Day 1.mp4',
+        link: await fileServer(film, options),
+      },
       {
         id: '102',
         slug: 'notes-EfGh',
         original: "Ada's notes.txt",
         heading: 'Notes of the trip.txt',
-        link: await host(notes, { fileName: '5f2c-0123456789ab.txt' }),
+        link: await fileServer(notes, { fileName: '5f2c-0123456789ab.txt' }),
       },
-      {
-        id: '103',
-        slug: 'photo-IjKl',
-        name: 'photo-IjKl.jpg',
-        link: await host(photo),
-        encrypted: false,
-      },
+      { id: '103', slug: 'photo-IjKl', name: 'photo-IjKl.jpg', link: await fileServer(photo) },
     ];
   }
 
@@ -164,7 +168,7 @@ describe('a Bunkr album', () => {
     expect(list.every(({ via }) => via === null)).toBe(true);
   });
 
-  it("asks Bunkr's pages and its API as its own pages do, and fetches each file with its page as referrer", async () => {
+  it("asks Bunkr's pages, its API and its signing service as its own pages do, and fetches each file with its download page as referrer", async () => {
     const on = await bunkr();
     const downloads = await open(on);
 
@@ -175,6 +179,7 @@ describe('a Bunkr album', () => {
     expect(on.asked.filter(({ path }) => path === '/a/AbCd12').map(({ query }) => query)).toEqual([
       '?advanced=1',
     ]);
+    // The API of the download page, asked from that page.
     const api = on.asked.filter(({ path }) => path === '/api/_001_v2');
     expect(api.map(({ method }) => method)).toEqual(['POST', 'POST', 'POST']);
     const ids = api.map(({ body }) => (JSON.parse(body) as { id: string }).id);
@@ -182,15 +187,50 @@ describe('a Bunkr album', () => {
     for (const { body, referer, origin } of api) {
       const { id } = JSON.parse(body) as { id: string };
       expect(JSON.parse(body)).toEqual({ id });
-      expect(referer).toBe(refererOf(id));
-      expect(origin).toBe('https://get.bunkrr.su');
+      expect(referer).toBe(`${DOWNLOAD_PAGE}/file/${id}`);
+      expect(origin).toBe(DOWNLOAD_PAGE);
+    }
+    // The signing service, asked from the download page for each file's path, as it asks it.
+    const signs = on.asked.filter(({ path }) => path === '/sign');
+    expect(signs.map(({ method, query }) => [method, query])).toEqual(
+      Array.from({ length: 3 }, () => ['GET', '?path=%2Ffiles%2Fsample.bin']),
+    );
+    for (const { referer, origin, body } of signs) {
+      expect([referer, origin, body]).toEqual([`${DOWNLOAD_PAGE}/`, DOWNLOAD_PAGE, '']);
     }
     // Scia's own user agent, never a browser's.
     expect(new Set(on.asked.map(({ userAgent }) => userAgent))).toEqual(new Set(['Scia/spec']));
-    const [filmHost] = hosts;
-    expect(new Set(filmHost?.asked.map(({ referer }) => referer))).toEqual(
-      new Set([refererOf('101')]),
-    );
+    for (const server of hosts) {
+      expect(new Set(server.asked.map(({ referer }) => referer))).toEqual(
+        new Set([`${DOWNLOAD_PAGE}/`]),
+      );
+    }
+  });
+
+  it('fetches each file at the link its download page signs, which its server refuses unsigned (#398)', async () => {
+    const files: SimulatedFile[] = [
+      { id: '1', slug: 'a', original: 'a.bin', link: await fileServer(notes) },
+    ];
+    const on = await bunkr({ albums: { x: { title: 'Signed', files } } });
+    const downloads = await open(on);
+    // What Bunkr's file servers do since November 2026, made here: a link not signed is refused.
+    expect((await fetch(files[0]!.link)).status).toBe(403);
+
+    downloads.add({ urls: [`${on.url}/a/x`] });
+    await until(() => allDone(downloads, 1));
+
+    expect(Buffer.compare(await readFile(inDownloads('Signed', 'a.bin')), notes)).toBe(0);
+    const [server] = hosts;
+    const asked = server?.asked.slice(1) ?? [];
+    expect(asked.length).toBeGreaterThan(0);
+    for (const { link } of asked) {
+      const address = new URL(link ?? '', on.url);
+      // The file's server and path, as the API gave them, and the signature for that path alone:
+      // nothing more of the page's link (`n`, the name it was uploaded with).
+      expect(address.pathname).toBe('/files/sample.bin');
+      expect([...address.searchParams.keys()]).toEqual(['token', 'ex']);
+      expect(isSigned(link ?? '')).toBe(true);
+    }
   });
 
   it('says in the log how many files an album gave, never the album or a link', async () => {
@@ -209,15 +249,15 @@ describe('a Bunkr album', () => {
 
   it('keeps every name inside the album folder, and the folder inside the download folder', async () => {
     const files: SimulatedFile[] = [
-      { id: '1', slug: 'a', original: '..\\..\\evil.exe', link: await host(notes) },
-      { id: '2', slug: 'b', original: '../../../escape.txt', link: await host(notes) },
-      { id: '3', slug: 'c', original: 'CON.txt', link: await host(notes) },
+      { id: '1', slug: 'a', original: '..\\..\\evil.exe', link: await fileServer(notes) },
+      { id: '2', slug: 'b', original: '../../../escape.txt', link: await fileServer(notes) },
+      { id: '3', slug: 'c', original: 'CON.txt', link: await fileServer(notes) },
     ];
     const live: SimulatedFile = {
       id: '4',
       slug: 'd',
       original: 'set.mp3',
-      link: await host(notes),
+      link: await fileServer(notes),
     };
     const on = await bunkr({
       albums: { x: { title: '..', files }, y: { title: '../AC/DC: live', files: [live] } },
@@ -239,7 +279,7 @@ describe('a Bunkr album', () => {
 
   it('names the folder after the album id when the album has no title, and a file by its stored name when it has no other', async () => {
     const files: SimulatedFile[] = [
-      { id: '1', slug: 'a', name: 'a-0123456789ab.bin', link: await host(notes) },
+      { id: '1', slug: 'a', name: 'a-0123456789ab.bin', link: await fileServer(notes) },
     ];
     const on = await bunkr({ albums: { Qz9: { files } } });
     const downloads = await open(on);
@@ -253,8 +293,8 @@ describe('a Bunkr album', () => {
   it('never overwrites: two files of one name, a file where the folder would be, a file already in the folder', async () => {
     const same = randomBytes(3000);
     const files: SimulatedFile[] = [
-      { id: '1', slug: 'a', original: 'clip.mp4', link: await host(notes) },
-      { id: '2', slug: 'b', original: 'clip.mp4', link: await host(same) },
+      { id: '1', slug: 'a', original: 'clip.mp4', link: await fileServer(notes) },
+      { id: '2', slug: 'b', original: 'clip.mp4', link: await fileServer(same) },
     ];
     const on = await bunkr({
       albums: { a1: { title: 'Trip', files }, a2: { title: 'Mix', files } },
@@ -285,8 +325,8 @@ describe('a Bunkr album', () => {
 
   it('holds the files of an album under the speed limit', async () => {
     const files: SimulatedFile[] = [
-      { id: '1', slug: 'a', original: 'a.bin', link: await host(randomBytes(MIB / 2)) },
-      { id: '2', slug: 'b', original: 'b.bin', link: await host(randomBytes(MIB / 2)) },
+      { id: '1', slug: 'a', original: 'a.bin', link: await fileServer(randomBytes(MIB / 2)) },
+      { id: '2', slug: 'b', original: 'b.bin', link: await fileServer(randomBytes(MIB / 2)) },
     ];
     const on = await bunkr({ albums: { x: { title: 'Limited', files } } });
     const downloads = await open(on);
@@ -307,7 +347,7 @@ describe('a Bunkr album', () => {
         id: '101',
         slug: 'Day-1-AbCd',
         original: 'Day 1.mp4',
-        link: await host(film, { chunkDelayMs: 5 }),
+        link: await fileServer(film, { chunkDelayMs: 5 }),
       },
     ];
     const on = await bunkr({ albums: { x: { title: 'Slow', files } } });
@@ -340,10 +380,10 @@ describe('a Bunkr album', () => {
   });
 
   it('says that the link the site gave stopped working partway, and goes on from the bytes at a retry, with a new link', async () => {
-    const file = await host(film, { chunkDelayMs: 5 });
+    const file = await fileServer(film, { chunkDelayMs: 5 });
     const [fileHost] = hosts;
     const files: SimulatedFile[] = [{ id: '1', slug: 'a', original: 'a.bin', link: file }];
-    const on = await bunkr({ albums: { x: { title: 'Expiring', files } }, freshLinks: true });
+    const on = await bunkr({ albums: { x: { title: 'Expiring', files } } });
     const downloads = await open(on);
     downloads.add({ urls: [`${on.url}/a/x`] });
     await until(() => (downloads.snapshot().downloads[0]?.downloadedBytes ?? 0) > MIB / 4);
@@ -359,12 +399,17 @@ describe('a Bunkr album', () => {
     downloads.resume(row!.id);
     await until(() => downloads.find(row!.id).status === DownloadStatus.Completed);
     expect(Buffer.compare(await readFile(inDownloads('Expiring', 'a.bin')), film)).toBe(0);
-    // The page and the API asked again, a new link given, and only what was missing asked of it.
+    // The page, the API and the signing service asked again, the link signed anew, and only what
+    // was missing asked of it.
     expect(on.asked.filter(({ path }) => path === '/api/_001_v2')).toHaveLength(2);
+    expect(on.asked.filter(({ path }) => path === '/sign')).toHaveLength(2);
+    const first = fileHost?.asked[0]?.link;
     const resumed = (fileHost?.asked.slice(askedBefore) ?? []).filter(
       ({ range }) => range !== 'bytes=0-0',
     );
-    expect(resumed.every(({ link }) => link?.endsWith('?given=2') === true)).toBe(true);
+    expect(resumed.length).toBeGreaterThan(0);
+    for (const { link } of resumed)
+      expect([link !== first, isSigned(link ?? '')]).toEqual([true, true]);
     for (const { range } of resumed) {
       expect(Number(/^bytes=(\d+)-/.exec(range ?? '')?.[1])).toBeGreaterThanOrEqual(kept);
     }
@@ -372,7 +417,7 @@ describe('a Bunkr album', () => {
 
   it('goes on with the files of an album after the engine stops and starts again', async () => {
     const files: SimulatedFile[] = [
-      { id: '1', slug: 'a', original: 'a.bin', link: await host(film, { chunkDelayMs: 5 }) },
+      { id: '1', slug: 'a', original: 'a.bin', link: await fileServer(film, { chunkDelayMs: 5 }) },
     ];
     const on = await bunkr({ albums: { x: { title: 'Again', files } } });
     const first = await open(on);
@@ -440,7 +485,7 @@ describe('a Bunkr album', () => {
 
   it('keeps a file pasted by itself in the download folder, whatever its page calls it', async () => {
     const files: SimulatedFile[] = [
-      { id: '7', slug: 'esc', heading: '..\\..\\escape.txt', link: await host(notes) },
+      { id: '7', slug: 'esc', heading: '..\\..\\escape.txt', link: await fileServer(notes) },
     ];
     const on = await bunkr({ albums: { x: { files } } });
     const downloads = await open(on);
@@ -472,7 +517,7 @@ describe('a Bunkr album', () => {
 
   it('writes a slug into the address of its page, and reads an album id out of its own', async () => {
     const files: SimulatedFile[] = [
-      { id: '1', slug: 'Day 1#x?y', original: 'x.bin', link: await host(notes) },
+      { id: '1', slug: 'Day 1#x?y', original: 'x.bin', link: await fileServer(notes) },
     ];
     const on = await bunkr({ albums: { 'My album': { files } } });
     const downloads = await open(on);
@@ -498,21 +543,31 @@ describe('a Bunkr album', () => {
     await manager?.close();
     manager = undefined;
 
-    for (const [padding, completes] of [
-      [60 * KIB, true],
-      [65 * KIB, false],
+    // The API's answer and the signing service's, each 64 KiB at most; the file on a server that
+    // takes any signature, the spec's made-up one too.
+    for (const [answered, padding, completes] of [
+      ['api', 60 * KIB, true],
+      ['api', 65 * KIB, false],
+      ['sign', 60 * KIB, true],
+      ['sign', 65 * KIB, false],
     ] as const) {
       await site?.close();
-      const link = await host(notes);
+      const link = new URL(await host(notes));
+      const where = { mediafiles: link.origin, path: link.pathname };
+      const padded = (answer: object, by: 'api' | 'sign') =>
+        `${JSON.stringify(answer)}${' '.repeat(answered === by ? padding : 0)}`;
       const api = await bunkr({
-        apiAnswer: `${JSON.stringify({ encrypted: false, url: link })}${' '.repeat(padding)}`,
+        apiAnswer: padded(where, 'api'),
+        signAnswer: padded({ ex: 1_795_766_400, token: 'a-token' }, 'sign'),
       });
       const again = await open(api);
       const [file] = again.add({ urls: [`${api.url}/f/notes-EfGh`] });
       if (completes) {
         await until(() => again.find(file!.id).status === DownloadStatus.Completed);
       } else {
-        expect(await failureOf(again, file!.id)).toBe(AlbumFailure.Unrecognised);
+        expect(await failureOf(again, file!.id), `${answered} ${String(padding)}`).toBe(
+          AlbumFailure.Unrecognised,
+        );
       }
       await again.close();
     }
@@ -649,6 +704,7 @@ describe('a Bunkr album', () => {
         '/a/AbCd12': [{ status: 503 }, 'drop'],
         '/f/notes-EfGh': [{ status: 502 }],
         '/api/_001_v2': [{ status: 429, retryAfter: '1' }],
+        '/sign': ['drop', { status: 500 }],
       },
     });
     const downloads = await open(on);
@@ -659,6 +715,7 @@ describe('a Bunkr album', () => {
     expect(await readdir(inDownloads('Holiday 2026'))).toHaveLength(3);
     expect(on.asked.filter(({ path }) => path === '/a/AbCd12')).toHaveLength(3);
     expect(on.asked.filter(({ path }) => path === '/f/notes-EfGh')).toHaveLength(2);
+    expect(on.asked.filter(({ path }) => path === '/sign')).toHaveLength(5);
     // The file the 429 was for was asked again no sooner than the host said, not after Scia's
     // own wait (a millisecond here).
     const api = on.asked.filter(({ path }) => path === '/api/_001_v2');
@@ -674,7 +731,7 @@ describe('a Bunkr album', () => {
         id: '1',
         slug: 'norange',
         original: 'norange.bin',
-        link: await host(notes, { ignoresRangesAfterProbe: true }),
+        link: await fileServer(notes, { ignoresRangesAfterProbe: true }),
       },
     ];
     const on = await bunkr({ albums: { x: { files } } });
@@ -751,17 +808,28 @@ describe('a Bunkr album', () => {
       contentType: 'text/html',
     });
     const files: SimulatedFile[] = [
-      { id: '1', slug: 'gone', original: 'gone.bin', link: await host(notes) },
-      { id: '2', slug: 'refused', original: 'refused.bin', link: await host(notes) },
-      { id: '3', slug: 'noid', original: 'noid.bin', link: await host(notes) },
+      { id: '1', slug: 'gone', original: 'gone.bin', link: await fileServer(notes) },
+      { id: '2', slug: 'refused', original: 'refused.bin', link: await fileServer(notes) },
+      { id: '3', slug: 'noid', original: 'noid.bin', link: await fileServer(notes) },
       { id: '4', slug: 'maint', original: 'maint.bin', link: `${server.url}/cdn/maint` },
       { id: '5', slug: 'html', original: 'html.bin', link: page },
       // The link the API gives is refused at its first byte.
-      { id: '8', slug: 'nolink', original: 'nolink.bin', link: await host(notes, { status: 404 }) },
+      {
+        id: '8',
+        slug: 'nolink',
+        original: 'nolink.bin',
+        link: await fileServer(notes, { status: 404 }),
+      },
       // A busy file server is not a link that stopped working: the row says what a busy server is.
-      { id: '9', slug: 'busy', original: 'busy.bin', link: await host(notes, { status: 503 }) },
-      // The API knows no file of this id: gallery-dl's sign of an album deleted.
-      { id: '6', slug: 'unknown', original: 'unknown.bin', link: await host(notes) },
+      {
+        id: '9',
+        slug: 'busy',
+        original: 'busy.bin',
+        link: await fileServer(notes, { status: 503 }),
+      },
+      // The API knows no file of this id: it names no file server, as Bunkr's did for an id of no
+      // file on 27 November 2026.
+      { id: '6', slug: 'unknown', original: 'unknown.bin', link: await fileServer(notes) },
     ];
     const on = await bunkr({
       albums: { x: { title: 'Broken', files } },
@@ -806,33 +874,42 @@ describe('a Bunkr album', () => {
     }
   });
 
-  it("says what the API's refusals mean", async () => {
-    for (const [status, failure] of [
-      [403, AlbumFailure.Refused],
-      [503, PageFailure.SiteBusy],
-      [429, PageFailure.SiteBusy],
-      [418, DownloadFailure.HttpStatus],
-    ] as const) {
-      await site?.close();
-      const on = await bunkr({ status: { '/api/_001_v2': status } });
-      const downloads = await open(on);
+  it("says what the API's and the signing service's refusals mean", async () => {
+    for (const path of ['/api/_001_v2', '/sign']) {
+      for (const [status, failure] of [
+        [403, AlbumFailure.Refused],
+        [503, PageFailure.SiteBusy],
+        [429, PageFailure.SiteBusy],
+        // The API's 400 says that it was sent no id, not that the file is gone.
+        [400, DownloadFailure.HttpStatus],
+        [418, DownloadFailure.HttpStatus],
+      ] as const) {
+        await site?.close();
+        const on = await bunkr({ status: { [path]: status } });
+        const downloads = await open(on);
 
-      const [file] = downloads.add({ urls: [`${on.url}/f/notes-EfGh`] });
+        const [file] = downloads.add({ urls: [`${on.url}/f/notes-EfGh`] });
 
-      expect(await failureOf(downloads, file!.id), String(status)).toBe(failure);
-      if (failure === DownloadFailure.HttpStatus) {
-        expect(downloads.find(file!.id).failureStatus).toBe(status);
+        expect(await failureOf(downloads, file!.id), `${path} ${String(status)}`).toBe(failure);
+        if (failure === DownloadFailure.HttpStatus) {
+          expect(downloads.find(file!.id).failureStatus).toBe(status);
+        }
+        await manager?.close();
+        manager = undefined;
       }
-      await manager?.close();
-      manager = undefined;
     }
   });
 
-  it("says what Scia cannot read of the API's answer, and follows none of its redirects", async () => {
+  it("says what Scia cannot read of the API's and the signing service's answers, and follows none of their redirects", async () => {
     for (const options of [
-      { apiAnswer: JSON.stringify({ encrypted: false, url: 'file:///C:/x' }) },
+      { apiAnswer: JSON.stringify({ mediafiles: 'file:///C:', path: '/x' }) },
+      // The answer of the API the download page asked until November 2026: a link no longer read.
+      { apiAnswer: JSON.stringify({ encrypted: false, url: 'https://c3.example.net/a.mp4' }) },
       { apiAnswer: 'not JSON' },
       { redirects: { '/api/_001_v2': '/api/elsewhere' } },
+      { signAnswer: JSON.stringify({ ex: 1_795_766_400 }) },
+      { signAnswer: 'not JSON' },
+      { redirects: { '/sign': '/api/elsewhere' } },
     ]) {
       await site?.close();
       const on = await bunkr(options);
