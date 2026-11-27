@@ -27,7 +27,7 @@ What earlier reviews taught, each with the PR that taught it.
 
 - Every control of a form is pressed while its request is on its way: "Cancel" during a check left the answer to land on a row whose field was gone — a key kept after a cancel, a refusal under no field. A throwaway spec with a promise held open shows it. (#53)
 - A mutant counted as caught names the spec that failed it, and a failure on a loaded machine is not a catch: round 2 of #303 counted `refused.length === 0` for the filter's `refused.length < all` as caught by the whole project, from failures that were not that line's, and no spec held an add only partly taken. (#303)
-- Mutants and probes run in a worktree of your own (`git worktree add --detach <dir> <head>`), never in the checkout under review: the other roles read and run their specs there, and a file you mutate makes their runs fail at random. Its setup is in `.claude/gotchas.md`, "Specs". (#135, #322, #144)
+- Mutants are `npm run mutate`, and `npm run mutate -- --base <ref>` for a round's own lines; a hand mutant, for what it cannot make, and a probe run in a worktree of your own, never in the checkout under review, where the other roles read and run their specs: `docs/development/testing.md`, "Mutation testing". (#135, #322, #144, #386)
 
 ## Output
 

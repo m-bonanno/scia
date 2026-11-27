@@ -52,7 +52,7 @@ CI runs them on Ubuntu, and all but the ADR numbers, format, lint and types agai
 
 This is the one definition; role files and `CLAUDE.md` point here. A finding is blocking when it is one of:
 
-1. a rule of this repository broken (`CLAUDE.md`, a sub-`CLAUDE.md`, an ADR, a runbook, `.claude/gotchas.md`);
+1. a rule of this repository broken (`CLAUDE.md`, a sub-`CLAUDE.md`, an ADR, a runbook, `.claude/gotchas.md` and the area files its index names);
 2. a bug;
 3. a security hole;
 4. a red gate;
@@ -79,7 +79,7 @@ A red check on a spec the PR does not touch, with no cause in its diff, is not a
 - **A wording point raised after the approving verdict goes into its area's follow-up issue**, not into a commit after the approval (the owner, 24 November 2026, #337): such a commit is a round of its own, above. A finding that is blocking ("What is blocking") is not a wording point: it is fixed, and its commit reviewed.
 - **Non-blocking findings are not lost** (the owner, 26 November 2026, #379). One inside the PR's scope that takes 10 lines or fewer is fixed in the PR. Any other is a checkbox that names its source — `- [ ] … (review of #N)` — in its area's follow-up issue: one open issue per `area:*` label, labelled `follow-up` ([`git-flow.md`](./git-flow.md), "Work in parallel"). It is added before the approving verdict, which links the issue. Once an area's issue holds about five points, a batch PR takes them, ticks their boxes and closes it; right after its merge, its session moves every box left unticked into the area's next follow-up issue, opening one if none is open. A verdict that asks for changes names none: its findings are still being fixed.
 - **A blocking finding the author contests goes to the owner.** The orchestrating session never overrules a reviewer; it fixes, or it asks.
-- **Every review teaches.** A blocking finding that a checklist would have prevented becomes a line under "Lessons" in that role's file, or an entry in `.claude/gotchas.md`, in the PR that fixes it.
+- **Every review teaches.** A blocking finding that a checklist would have prevented becomes a line under "Lessons" in that role's file, or a gotcha, in the PR that fixes it: an entry in the area file `.claude/gotchas.md`'s index names for its paths, or in `.claude/gotchas.md` itself for a general one.
 
 ## The team verdict
 
