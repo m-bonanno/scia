@@ -189,6 +189,10 @@ The owner's decisions on what Scia does and when, by date, each with its issue. 
 
 - #378, proposal 5 of the owner's retrospective of the flow, approved: **the rules a tool can check are lint rules**, each held by a spec (`scripts/lint-rules.test.mjs`): raw colours, `dark:` and `toFixed` in the renderer; fixed sleeps and hard-coded `\` separators in specs; a folder of a fixed name in the system's temporary folder. **The gotchas are split by area**: `.claude/gotchas/<area>.md`, with `.claude/gotchas.md` keeping the general entries and the index of the areas; each entry is one or two sentences, and its story stays in the issues it names — in place of the archive of stories #188 chose on 21 November 2026. The gotchas have no `union` driver (#384), and the roles' and the gotchas' pointers to `npm run mutate` are #387, after this issue.
 
+## 27 November 2026
+
+- #397, the four questions the review of #393 left on the tiers of a review, answered by the owner ("a sì, B2, c sì", then "Sì, solo quelli": the comments of 27 November on #397). They change #377's entry of 26 November on what calls the product manager and what is heavy. **A breaking change** — a `!` of any type — calls the product manager and keeps its tier. **A principle of the root `CLAUDE.md`** calls the product manager only when the session adds it (`--add product-manager`): the file itself calls nobody, since about a quarter of the PRs touch it, most for the flow and the tooling ("B2", over the whole file, "B1", and never, "B3"). **What the installer packs** — Electron's version in `apps/desktop/package.json`, and `apps/desktop/scripts/fetch-tools.ts`, which fetches the shipped yt-dlp and checks its checksum before it is packed — is heavy. **The product manager owns, in `docs/product/`, the vision, the roadmap and `integrations.md`**, each of which calls it; the evidence and the decisions log are the tech lead's ([`review-flow.md`](../development/review-flow.md), "The tier of a PR").
+
 ## Undated in the roadmap
 
 The roadmap gave these without a date; the issue holds it.

@@ -6,23 +6,29 @@ Run it with `/team-review <PR number>`.
 
 ## The team
 
-| Role              | Reviews, as its tier allows                                                                                                      | Definition                            |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| Tech lead         | **always** — and owns `.github/`, `scripts/`, root tooling, `.claude/`, ADRs, runbooks                                           | `.claude/agents/tech-lead.md`         |
-| Backend engineer  | the domain, the contracts, the engine, the desktop shell                                                                         | `.claude/agents/backend-engineer.md`  |
-| Frontend engineer | the renderer, the extension                                                                                                      | `.claude/agents/frontend-engineer.md` |
-| Product designer  | what a person sees or reads: the renderer's interface, the extension's pages, a string of the interface                          | `.claude/agents/product-designer.md`  |
-| Product manager   | in every tier: a `feat`, the roadmap, the vision, the README, an issue with the owner's acceptance points, a release into `main` | `.claude/agents/product-manager.md`   |
+| Role              | Reviews, as its tier allows                                                                                                                                                                                            | Definition                            |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| Tech lead         | **always** — and owns `.github/`, `scripts/`, root tooling, `.claude/`, ADRs, runbooks, the evidence and the decisions log                                                                                             | `.claude/agents/tech-lead.md`         |
+| Backend engineer  | the domain, the contracts, the engine, the desktop shell                                                                                                                                                               | `.claude/agents/backend-engineer.md`  |
+| Frontend engineer | the renderer, the extension                                                                                                                                                                                            | `.claude/agents/frontend-engineer.md` |
+| Product designer  | what a person sees or reads: the renderer's interface, the extension's pages, a string of the interface                                                                                                                | `.claude/agents/product-designer.md`  |
+| Product manager   | in every tier: a `feat`, a breaking change of any type, the roadmap, the vision, the integrations, the README, an issue with the owner's acceptance points, a principle of the root `CLAUDE.md`, a release into `main` | `.claude/agents/product-manager.md`   |
 
 ### The tier of a PR
 
 The owner's decision (#18, changed on 26 November 2026 by #377): the review goes where the risk is, not where the size is. `npm run review:roles -- <PR>` (`scripts/review-roles.mjs`) prints the PR's tier and its roles, each with its reason, from its paths and its title's type; the paths of each tier and area are in its lists. **It is run from `develop`'s checkout, pulled first, never from the PR's branch**: a PR that changes the script would otherwise be tiered by the lists it brings.
 
-- **Heavy**, at any size: download and state code (the engine, the domain and the contracts), the desktop's main and preload, the extension's manifest, the release config, the workflows, and a release into `main`. Every role the table names for its paths.
+- **Heavy**, at any size: download and state code (the engine, the domain and the contracts), the desktop's main and preload, the extension's manifest, the release config, what the installer packs (Electron's version, and the script that fetches the shipped yt-dlp: the owner's answer on #397, 27 November 2026), the workflows, and a release into `main`. Every role the table names for its paths.
 - **Light**: docs, `.claude/` and specs only, or a `chore` or `ci` that touches no runtime path. The tech lead alone, and the product manager where its line of the table says so, in one pass: nobody is called in.
 - **Standard**: the rest. Every role the table names for its paths — but a PR of 20 changed lines or fewer outside docs, `.claude/` and specs is the tech lead's alone, who calls a role in when the change needs that eye (the owner's answer on #377, 26 November 2026). The script names whom the paths would call.
 
-Two things no path tells are added by the session, `--add <role>`: an issue with the owner's acceptance points — a point the owner must see, try or say before the merge — → `product-manager`; a string of the interface outside the renderer's and the extension's pages → `product-designer`.
+A breaking change — a `!` before the title's colon, whatever its type — keeps its tier and calls the product manager (the owner's answer on #397, 27 November 2026).
+
+Three things no path tells are added by the session, `--add <role>`:
+
+- an issue with the owner's acceptance points — a point the owner must see, try or say before the merge — → `product-manager`;
+- a change to a principle of the root `CLAUDE.md` → `product-manager`. The file itself calls nobody: about a quarter of the PRs since 19 November 2026 touched it, most for the flow and the tooling (the owner's answer on #397, 27 November 2026);
+- a string of the interface outside the renderer's and the extension's pages → `product-designer`.
 
 A call-in is a line of its own at the top of the tech lead's review — `Call in: product designer — the add bar's placeholder now says what a link may be` — and is repeated in its answer. The orchestrating session starts that role in the same round, before the verdict; the role reviews as in any other PR, and its verdict counts.
 

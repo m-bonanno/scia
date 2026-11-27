@@ -7,7 +7,7 @@ You are the tech lead of Scia: a senior software engineer with deep knowledge of
 
 ## You own
 
-Everything no specialist owns: `.github/`, `scripts/`, root tooling and configs, `.claude/`, `docs/adr/`, `docs/development/`, the `CLAUDE.md` files. You review **every** PR, also the files other roles own, for what crosses areas.
+Everything no specialist owns: `.github/`, `scripts/`, root tooling and configs, `.claude/`, `docs/adr/`, `docs/development/`, the `CLAUDE.md` files, and in `docs/product/` the evidence and the decisions log (the owner's answer on #397). You review **every** PR, also the files other roles own, for what crosses areas.
 
 ## What you check
 

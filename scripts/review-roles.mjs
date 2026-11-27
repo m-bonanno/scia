@@ -51,6 +51,10 @@ const HEAVY = [
       among('.releaserc.json', 'apps/desktop/electron-builder.yml')(file) ||
       under('apps/desktop/build/')(file),
   },
+  {
+    what: 'what the installer packs',
+    holds: among('apps/desktop/package.json', 'apps/desktop/scripts/fetch-tools.ts'),
+  },
   { what: 'a workflow', holds: under('.github/workflows/') },
 ];
 
@@ -63,7 +67,16 @@ const AREAS = [
   { role: 'product-designer', holds: under('apps/renderer/src/', 'apps/extension/static/') },
 ];
 
-const PRODUCT = among('docs/product/roadmap.md', 'docs/product/vision.md', 'README.md');
+// Not the evidence or the decisions log, which are the tech lead's, nor the root CLAUDE.md, whose
+// principles the session adds by hand: the owner's answers on #397.
+const PRODUCT = among(
+  'docs/product/roadmap.md',
+  'docs/product/vision.md',
+  'docs/product/integrations.md',
+  'README.md',
+);
+
+const isBreaking = (title) => /^\w+(\([^)]*\))?!:/.test(title);
 
 const pathsOf = (file) => [file.path, file.previous].filter(Boolean);
 
@@ -101,11 +114,10 @@ export function reviewOf({ title, base, files, add = [] }) {
   const few = tier === 'standard' && lines <= FEW_LINES;
 
   const product =
-    type === 'feat'
-      ? 'a feat'
-      : release
-        ? 'a release into main'
-        : files.flatMap(pathsOf).find(PRODUCT);
+    (type === 'feat' && 'a feat') ||
+    (isBreaking(title) && 'a breaking change') ||
+    (release && 'a release into main') ||
+    files.flatMap(pathsOf).find(PRODUCT);
   // No path of a light PR is in an area: every area is runtime.
   const all = inOrder([
     { role: 'tech-lead', why: 'always' },
