@@ -57,7 +57,7 @@ What earlier reviews taught, each with the PR that taught it.
 - A hand-on of the focus is tried from every shape of the tree the control leaves from, not read from React's order of ref cleanups: round 1 of #302 approved "Clear completed" handing the focus to the filters, true when its whole group left and false when "Start all" kept the group, which the frontend engineer found. (#302)
 - An unticked "seen failing" line for an E2E spec in the body is a finding, not a note: `testing.md` asks every E2E spec to be seen failing in CI, by "A hold seen failing in CI". Rounds 1 and 2 of #302 let "Not seen failing against the old code: the two E2E cases" stand. (#302)
 - A script that decides how a PR is reviewed is run as `develop` has it, never from the branch under review: `/team-review` ran `npm run review:roles` from the PR's checkout, and #393's own script called itself light, the tech lead alone, where `develop`'s rules also called the product manager. (#393)
-- A command a rule names is run on the case it is named for: round 1 of #384 named `git show --remerge-diff` to read a merge git had made by itself, where it is empty by construction, and the owner's choice was made on it. (#384)
+- A command a rule names is run on the case it is named for: round 1 of #384 named `git show --remerge-diff` to read a merge git had made by itself, where it is empty by construction, and the owner's choice was made on it. Round 1's synthesis of #410 named `pgrep -fl scripts/mutate.mjs` for roles that wait on each other, untried, and each waiting shell matched the other's check. (#384, #410)
 
 ## Output
 
