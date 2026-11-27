@@ -34,7 +34,7 @@ What a line leaves "to be seen" is a line of #334, the owner's sitting ("The own
 - [ ] A large download that starts at once: its part file made sparse, its room looked at instead of reserved, the engine given more disk threads (#182; `v1.0.0` waits for it, the owner, 23 November 2026): built, held by specs and by CI's E2E suite in the built app ([ADR 0026](../adr/0026-a-part-file-made-sparse.md)), measured with the engine's own task; a large file in the app, and on a USB hard disk, to be seen (#265).
 - [x] The installer refuses an older version (#172, #177).
 - [ ] A video's page taken from the clipboard named by its title, read by yt-dlp the moment it is taken (#285; `v1.0.0` waits for it, the owner, 23 November 2026): built ([ADR 0012](../adr/0012-links-taken-from-the-clipboard.md), amended), held by specs against a stand-in for yt-dlp and, for the row, by CI's E2E suite in the built app; a real site's title to be seen in the owner's sitting below.
-- [ ] Every file of a Bunkr album downloaded into a folder of its own, by a reader of Scia's own (#228): built ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md)) and held by specs, and by CI's E2E suite on the built app, against a local host that answers as Bunkr does; to be seen against the real Bunkr (#266).
+- [ ] Every file of a Bunkr album downloaded into a folder of its own, by a reader of Scia's own (#228): built ([ADR 0024](../adr/0024-a-bunkr-album-read-by-scia.md)) and held by specs, and by CI's E2E suite on the built app, against a local host that answers as Bunkr does; seen against the real Bunkr on a Mac, in the built app, once its download page had changed (#398); to be seen on Windows, in the owner's hands (#266).
 
 ### The owner's hands
 
@@ -121,7 +121,7 @@ Settled on 21, 23, 24 and 25 November 2026 ([decisions.md](./decisions.md#25-nov
 | [Pages, playlists and channels](./evidence.md#pages-playlists-and-channels)                         | #8        | no      | —           | —                                | no        |
 | [A fallback port, found by the extension](./evidence.md#a-fallback-port)                            | —         | no      | —           | —                                | no        |
 | [A reader of sites of Scia's own](./evidence.md#the-video-of-one-page)                              | #102      | no      | —           | —                                | no        |
-| [A Bunkr album into a folder of its own](./evidence.md#a-bunkr-album)                               | #228      | yes     | Specs, E2E  | the real Bunkr (#266)            | yes       |
+| [A Bunkr album into a folder of its own](./evidence.md#a-bunkr-album)                               | #228      | yes     | Specs, E2E  | the real Bunkr on Windows (#266) | yes       |
 
 ## M3 — Integrations: debrid services
 

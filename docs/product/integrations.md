@@ -59,9 +59,9 @@ ADRs: [0009](../adr/0009-the-video-of-a-page.md), [0010](../adr/0010-a-stream-ma
 
 What it adds: every file of a public album, into a folder named after the album, each file a download of its own — resumable, under the speed limit. A file's page pasted by itself is downloaded the same way. Its domains are kept as data in one list. No second program is shipped, and no service is asked about a Bunkr link.
 
-ADR: [0024](../adr/0024-a-bunkr-album-read-by-scia.md). Issues: #228, #266.
+ADR: [0024](../adr/0024-a-bunkr-album-read-by-scia.md), and its amendment. Issues: #228, #266, #398.
 
-**State:** held by specs, and by CI's E2E suite on the built app, against a local host that answers as Bunkr does; not seen against the real Bunkr (#266). What it reads of Bunkr's pages and its API was learned from gallery-dl's public source, not from the site ([evidence.md](./evidence.md#a-bunkr-album)).
+**State:** held by specs, and by CI's E2E suite on the built app, against a local host that answers as Bunkr does. Seen against the real Bunkr once, on a Mac: a public album of 65 files downloaded whole in the built app (#398). Not yet seen in the owner's hands on Windows (#266). The album and file pages are read as gallery-dl's public source reads them. Each file's link is asked as Bunkr's own download page asked it on 27 November 2026: its API, then a signing service for the link, which Bunkr's file servers ask for ([evidence.md](./evidence.md#a-bunkr-album)).
 
 ## What Scia asks of GitHub
 
