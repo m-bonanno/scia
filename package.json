@@ -35,6 +35,7 @@
     "test:quarantine": "node scripts/quarantine.mjs",
     "gates": "node scripts/gates.mjs",
     "pr:open": "node scripts/open-pr.mjs",
+    "review:roles": "node scripts/review-roles.mjs",
     "mutate": "node scripts/mutate.mjs",
     "check:adr": "node scripts/adr-numbers.mjs",
     "check:merge": "node scripts/merge-check.mjs"

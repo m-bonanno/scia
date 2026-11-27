@@ -47,7 +47,7 @@ const AREAS = [
   },
 ];
 
-const typeOf = (title) => /^(\w+)/.exec(title)?.[1] ?? '';
+export const typeOf = (title) => /^(\w+)/.exec(title)?.[1] ?? '';
 
 export function labelsOf({ title, paths, extra = [] }) {
   const type = TYPE_LABELS[typeOf(title)] ?? OTHER_TYPE_LABEL;
