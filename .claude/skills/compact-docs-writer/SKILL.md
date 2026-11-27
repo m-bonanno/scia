@@ -1,0 +1,113 @@
+---
+name: compact-docs-writer
+description: Draft, rewrite, or refine a doc for maximum token economy without losing any rule or intent. Use for docs kept in version control and regularly re-read by agents; skip throwaway docs like plans.
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash
+license: MIT
+metadata:
+  version: "1.11"
+---
+
+# Compact docs writer
+
+## In Scia
+
+The rules of [`../README.md`](../README.md), "In Scia: rules for every skill here", and the points below win over this file wherever they differ; `CLAUDE.md` and its sub-files win over both.
+
+- Who decided, the issue and the date are durable in Scia, never state to cut: "(the owner, 26 November 2026, #374)" stays wherever a rule carries it, and an owner's quoted words are never reworded. `docs/product/decisions.md` and the ADRs are records, never rewritten.
+- After a rewrite, `npm run format` and `npm run format:check`: Prettier formats the docs.
+
+Rewrite a doc — or draft a new one — for **token economy**: carry **all** its rules and intent in
+the **least text possible**, because the doc loads into agent context and is paid for on every
+read. Then prove nothing was lost: present the change with a word delta measured from the files,
+and apply only on approval.
+
+## Core principle
+
+Write each piece of information with the least text that still preserves every rule, constraint,
+edge case, and intent. Two directions, equally binding:
+
+- Cut duplication, filler, and anything restatable more briefly.
+- **Never** drop text whose removal loses information or instruction, just to be shorter.
+
+Recurring reflex: *"Can this exact rule be said in fewer words?"* — if yes, do it.
+
+The **no-op test** licenses one more deletion. Ask of each sentence, in isolation: *"does it
+change the agent's behaviour versus its default?"* If not, it's a no-op — the agent already acts
+this way, so removing it loses nothing: delete the whole sentence rather than trimming words from
+it.
+
+**Durable only.** No state that changes as work moves on (status, progress, a decision's date,
+current counts, "so far" lists) outside a doc that exists to record it (a decision record, a
+changelog, a progress log), and no unrequested rule or name for a case that has not come up: a draft
+adds none and writes a decision as the rule it sets; state already in the doc is proposed for a move
+to where the project keeps state. ("Auth: `src/auth/`", not "Auth: `src/auth/` (12 files; reviewed
+in full on 3 Mar)".)
+
+Compaction counts words and information density, not whitespace. Blank lines between distinct chunks
+cost effectively nothing and aid the human reader, so keep them where they help; never collapse a
+long passage into one dense block to look shorter. The same economy runs both ways: a
+human-readability gain that is free or near-free in tokens — a blank line, a line break, a
+semicolon-chained enumeration rendered as a bullet list — is always applied, never skipped to look
+compact.
+
+Structure follows the same economy: **co-locate** a concept — its rule, exceptions, and caveats
+under one heading, never scattered — so a reader who jumps to one part gets the others with it.
+
+## Leading words
+
+When one concept keeps getting restated, collapse it into a single **leading word** the model
+already carries from pretraining, and reuse that word wherever the concept applies: it anchors the
+same behaviour in one token and reads sharper than any paraphrase. The collapse still obeys the
+core principle — the word must carry every constraint it replaces, and whatever it doesn't carry
+stays spelled out: "fast, low-overhead feedback" collapses into a *tight* loop, but a
+"deterministic" requirement isn't inside *tight*, so it survives as its own word. Hunt for these
+collapses in every pass.
+
+## Workflow
+
+1. **Compact.** Rewrite the target to meet the core principle in one pass — a first draft already
+   meets the standard; don't ship a loose draft expecting a later pass to tighten it. If a chunk is
+   needed only in a sub-case and is big enough to tax every read, you *may* suggest extracting it
+   into a referenced file — never force it; the enforced standard is compact text, not splitting.
+2. **Self-review** before presenting (terse yes/no):
+   - Every original rule, instruction, edge case, and intent still present?
+   - Every surviving rule in the fewest words — tight phrasing, not just free of redundancy?
+     Answer by drafting a shorter rival phrasing for each new or rewritten sentence, not by
+     re-reading: an unchallenged yes is a rubber stamp.
+   - Removal audit against the **rendered diff, not memory**: read every removed line — and every
+     reordered or merged one, which count as removals — and confirm each drops only duplication,
+     filler, or a verified no-op, never a load-bearing rule, instruction, edge case, or nuance.
+     After a merge, re-verify the result still carries every item from both sources.
+   - Addition audit against the same rendered diff: every added sentence must pass the no-op
+     test — cut any that fail; a ban on what the agent may add on its own says it never drops
+     what the user or agreed requirements asked for.
+   - Changed a passage's meaning, not only its wording, renamed a term or heading, removed or
+     renamed a file, or changed how one caller runs a shared script or check (a new mode, flag or
+     argument)? Search the target's repo for one distinctive phrase of each such passage's old
+     wording, each form of the old name (case, separator, singular/plural, `&`/`and`, anchor slug),
+     the file's old path and name as docs link it, or the script's name; each copy or citation
+     (inline in another doc, or a companion rule), each doc linking the file, and each other caller
+     with the same gap, takes the same change in the same diff and joins the draft set, under its
+     own doc's conventions (a skill's version bump), except where that contradicts its doc's
+     rules, which the presentation names.
+   - [scripts/check-doc.sh](scripts/check-doc.sh) passes on each draft, those that search added
+     included, run with `CHECK_DOC_AS=<its target path>` while it sits in scratch? Wrap and link
+     conventions a script can hold; fix every failure. Links then resolve in the working tree too,
+     so when the draft set removes or renames a file, add `CHECK_DOC_DRAFT_LINKS=1` and lay the
+     drafts out in a scratch tree with every unchanged file their links reach, at repo-relative
+     paths, never a removed file or a renamed file's old path.
+   - Restructured files an agent navigates by (an entry file and the docs it links)? When the
+     harness has subagents, offer a fresh-reader test in the presentation: read-only subagents on
+     a cheaper model answer realistic task questions from the docs alone ("you must add X: what do
+     you read first, where does it go?"), starting at the drafted entry file in a scratch tree of
+     the drafts and every unchanged doc their links reach, at repo-relative paths; each miss goes
+     back into the draft.
+3. **Present & confirm.** Show the change as a unified diff inside a fenced `diff` code block —
+   every removed line prefixed `-`, every added line `+`, so they render red/green — and when a
+   long line changes by only a few words, add a word-level view (`[-removed-]{+added+}`)
+   pinpointing them. Include a word/token delta **measured from the files, never estimated**:
+   write the not-yet-applied draft to a scratch file (in the session's temp/scratch dir, never the
+   working tree) and `wc -w` it against the original. Label it not yet applied and awaiting
+   approval; apply only on approval; after applying, say so plainly. Ask for approval in the
+   presentation text or in a later turn, never via a question tool call in the same turn: text
+   emitted before a tool call may not be displayed, so the question would land without the draft.
