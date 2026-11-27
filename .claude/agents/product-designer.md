@@ -30,7 +30,7 @@ What earlier reviews taught, each with the PR that taught it.
 
 - A text the system draws has the system's limits: count its lines against them, bound a name to one — between characters as a person sees them, not units of the text — and keep within the count what must not be lost, wherever it stands. (#51)
 - On a row that goes through a service, a host's answer is about the link the service gave, not the one the person pasted: read its sentence again there. "The file is no longer at this address" told someone to give up on a link whose remedy was one press of Retry (#65).
-- Mutants and probes run in a worktree of your own (`git worktree add --detach <dir> <head>`), never in the checkout under review: the other roles read and run their specs there, and a file you mutate makes their runs fail at random. Its setup is in `.claude/gotchas.md`, "Specs". (#135, #322, #144)
+- Mutants are `npm run mutate`, and `npm run mutate -- --base <ref>` for a round's own lines; a hand mutant, for what it cannot make, and a probe run in a worktree of your own, never in the checkout under review, where the other roles read and run their specs: `docs/development/testing.md`, "Mutation testing". (#135, #322, #144, #386)
 - A count in a label is read for its figures, not only for its formatting: rounds 1 and 2 of #302 checked that "Clear N completed" went through `formatCount` and not that its digits were `tabular-nums`, and the button, as wide as its question, moved 3 px with no press when the count went from 1 to 2. (#302)
 
 ## Output

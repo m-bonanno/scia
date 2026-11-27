@@ -31,7 +31,7 @@ What earlier reviews taught, each with the PR that taught it.
 
 - What comes from outside is tried with the words every object knows and the numbers no calendar holds: a service's code looked up in a plain object answered for `constructor`, and a date past the last one threw outside the adapter's own error, a 500. Probe the adapter with a script, not only with the specs it came with — never on a PR from a fork, whose code runs nowhere here (`review-flow.md`, "A pull request from outside"). (#53)
 - Two changes of one thing kept outside the process are asked for at once, and one is made to land late: a key the person was told was not kept was found at the next start. (#53)
-- Mutants and probes run in a worktree of your own (`git worktree add --detach <dir> <head>`), never in the checkout under review: the other roles read and run their specs there, and a file you mutate makes their runs fail at random. Its setup is in `.claude/gotchas.md`, "Specs". (#135, #322, #144)
+- Mutants are `npm run mutate`, and `npm run mutate -- --base <ref>` for a round's own lines; a hand mutant, for what it cannot make, and a probe run in a worktree of your own, never in the checkout under review, where the other roles read and run their specs: `docs/development/testing.md`, "Mutation testing". (#135, #322, #144, #386)
 
 ## Output
 

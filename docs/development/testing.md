@@ -61,6 +61,31 @@ A new job of the gates becomes a required check of `develop` and `main` only onc
 - A service Scia connects to is a local host as well: `startAllDebridServer` (`apps/server/src/testing/alldebrid-server.ts`) answers as AllDebrid's documentation says, and refuses or misbehaves when told to. Every key in a spec is made up; no spec and no run uses a real one.
 - Never hardcode a Windows path separator in a spec: build paths with `path.join`. CI runs every spec on Linux and on Windows. Lint refuses a `\` beside a template's `${…}` or a `+`, or given to `join` and `split`; a Windows path that is a value, such as a setting's folder, is left alone.
 
+## Mutation testing
+
+**`npm run mutate`** (`scripts/mutate.mjs`, #381, #386) runs Stryker on the lines the branch changed since it left `origin/develop` — its commits, the tree's changes not committed, and its untracked files whole — in the source files `stryker.config.mjs`'s `mutate` patterns take: a changed line of a spec, a doc or a tooling config at the root (`stryker.config.mjs`, `vitest.config.ts` …) is never mutated. **`npm run mutate -- --base <ref>`** compares with another ref: a round's own lines, from the head of the round before (#137). After a merge of `develop` in the round, that diff also holds what the merge brought in, and a survivor on a line outside the PR's own diff is not the PR's. Every other argument is Stryker's, such as `--concurrency 1` on a busy machine. Each mutant is reported with its status and the spec that killed it, in `test-results/mutation/mutation.html` and `mutation.json`: a count is read from that report (`.claude/gotchas/docs.md`, #367).
+
+- **One run at a time on the machine**: a run starts only once `pgrep -f 'scripts/[m]utate[.]mjs'` lists none, the bracket keeping a shell that waits on the same check from matching it (`.claude/gotchas.md`, #410). Its report has one place in the checkout, which the next run writes over, and two runs at once load the machine into timeouts, which Stryker counts as caught (#303). Right after the run ends, its report is copied out — a role's into its own review folder — and its counts are read from that copy. A run that ends with "Nothing to mutate", with a failed probe or with an error of Stryker's writes no report: nothing is copied or counted for it, since the file in place is an earlier run's.
+- **What the run holds by itself**:
+  - **A sandbox of its own.** Stryker mutates a copy of the repository under `.stryker-tmp/`, never the checkout, so the run needs no worktree of its own to keep its mutants away from the checkout other roles read and run specs in (#144, #322).
+  - **The network guard** (`scripts/testing/net-guard.mjs`), loaded into every Node process of the run, those a spec starts too; a program that is not Node has its requests sent to a proxy nothing listens on, and git speaks to folders only. Its probe sees every road to a host outside this computer refused before a mutant runs, and when it fails nothing is mutated (#228, #259, #286).
+  - **A script's main block is never mutated** (`scripts/testing/stryker-main-blocks.mjs`): a mutant of it ran the script's tools from its spec, `gh` and Stryker itself among them.
+- **What still takes a hand mutant**, since Stryker cannot make it (the spike on #381):
+  - a number, or a stated bound, changed (#259);
+  - one call swapped for another, `lstat` for `stat`;
+  - a condition added, `|| event.repeat`;
+  - one class of several taken away, such as a class name that decides what is drawn (#302);
+  - the attack a guard stops, not its deletion.
+
+  A hand mutant, or a probe, edits or adds a file: it is made in a worktree of its own, never in the checkout under review, where mutants failed other roles' runs (#135, #144, #322). The worktree is `git worktree add --detach <dir> <head>` at a short path, then `npm ci`, `node node_modules/electron/install.js` when `electron/dist` is empty, and the shipped yt-dlp (`node apps/desktop/scripts/fetch-tools.ts`). Its specs run behind the run's own guard: the guard's probe first, `npx vitest run --config vitest.stryker.config.ts --project net-guard`, then the specs through the same config.
+
+- **What a reader judges**, since the run cannot:
+  - an equivalent mutant: a survivor that no input tells apart from the code;
+  - a line only Windows takes, which survives on macOS (`process.getuid?.()`);
+  - a mutant reached only in a process a spec starts — the engine main's specs start, a script its spec runs — which Stryker never switches on: it shows as surviving, or as not covered;
+  - `killedBy`, which names one spec, the first that failed, unless the run is made with `npm run mutate -- --disableBail`.
+- **The E2E suite is in no run**: an E2E spec's holds are seen failing in CI ("A hold seen failing in CI", below).
+
 ## E2E
 
 `apps/desktop/e2e/`, run by Vitest as the project `e2e` with `playwright-core`'s Electron driver ([ADR 0008](../adr/0008-the-delivery-pipeline.md)). It starts the app `npm run build` made, as `npm start` does — not the packaged exe, whose installer is the smoke test's (below).
@@ -91,7 +116,7 @@ The E2E suite runs in CI alone, so an E2E spec's holds are seen failing there, o
 
 - **When**: for the holds of an E2E spec, on a PR of the team. The other layers run on this computer, and their holds are seen failing here. A variant, or a line of the app, whose run fails beside its hold, or not at it, proves nothing of it: it is mended, and the run made again on the mended commit. The spec itself failing in the variants' run is a failure of the spec, handled as "No retries" says (above).
 - **Not a burn-in**: the workflow only carries the runs. They are meant to be red, count toward no job's ten green runs, and their failures are the evidence the PR body gives, not a failed burn-in: no issue is filed for them.
-- **A network guard**: none is needed when nothing put back on the branch can reach past the runner — every line put back is one CI has already run, on an earlier head of the PR or on `develop`, and none touches where a run points: an address, a host `launchScia` names, a link fetched as it stands. Unlike a mutation run on this computer (`.claude/gotchas.md`, "Specs"), a run of Burn-in has no guard loaded into its processes, so a line that would need one is not put back this way: such a line is held by a spec of another layer too, one that asks nothing of the network (the address a `site` gives, read back), and that spec is seen failing on this computer, behind the guard.
+- **A network guard**: none is needed when nothing put back on the branch can reach past the runner — every line put back is one CI has already run, on an earlier head of the PR or on `develop`, and none touches where a run points: an address, a host `launchScia` names, a link fetched as it stands. Unlike a mutation run on this computer ("Mutation testing", above), a run of Burn-in has no guard loaded into its processes, so a line that would need one is not put back this way: such a line is held by a spec of another layer too, one that asks nothing of the network (the address a `site` gives, read back), and that spec is seen failing on this computer, behind the guard.
 
 ## The installer's smoke test
 
