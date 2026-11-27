@@ -88,7 +88,7 @@ Points 3, 4 and 5 are amended, the team's design of 27 November 2026 (#398), und
 - the file's page, for its id;
 - then the download page's API, `POST https://dl.bunkr.cr/api/_001_v2` with `{"id": "<id>"}`, `Referer: https://dl.bunkr.cr/file/<id>` and `Origin: https://dl.bunkr.cr`;
 - the link joined from `mediafiles` and `path`, a path that starts at the root, http(s) only;
-- then the signing service for that path, with `Origin: https://dl.bunkr.cr` and `Referer: https://dl.bunkr.cr/`, as a browser sends them from that page to another host;
+- then the signing service for the path of the joined link, decoded — not the API's `path` as it stands, which the address parser may change (`.` and `..` segments, `%2F`, a `?` or a `#`) — with `Origin: https://dl.bunkr.cr` and `Referer: https://dl.bunkr.cr/`, as a browser sends them from that page to another host;
 - `token` and `ex` added to the link, which is fetched with `Referer: https://dl.bunkr.cr/`.
 
 - **No XOR is undone**: the answer carries none.
